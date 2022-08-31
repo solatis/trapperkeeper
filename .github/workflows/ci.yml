@@ -5,7 +5,7 @@ name: CI
 
 jobs:
   build_and_test:
-    name: Rust project
+    name: build_and_test
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout sources
