@@ -1,4 +1,5 @@
 use diesel::prelude::*;
+use diesel::result::Error;
 
 use crate::models::{App, NewApp};
 
@@ -21,4 +22,16 @@ pub fn get_app_by_id(conn: &mut SqliteConnection, id: i32) -> App {
         .filter(apps::id.eq(id))
         .get_result::<App>(conn)
         .unwrap();
+}
+
+pub fn check_app_by_id(conn: &mut SqliteConnection, id: i32) -> Result<bool, Error> {
+    use crate::schema::apps;
+
+    let r = apps::table.filter(apps::id.eq(id)).get_result::<App>(conn);
+
+    match r {
+        Ok(_) => Ok(true),
+        Err(Error::NotFound) => Ok(false),
+        Err(e) => Err(e),
+    }
 }

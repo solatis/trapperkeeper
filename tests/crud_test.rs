@@ -12,8 +12,12 @@ pub fn conn() -> SqliteConnection {
 }
 
 #[fixture]
-pub fn app(mut conn: SqliteConnection) -> App {
-    let app_id = crud::create_app(&mut conn, "foo");
+pub fn app_id(mut conn: SqliteConnection) -> i32 {
+    return crud::create_app(&mut conn, "foo");
+}
+
+#[fixture]
+pub fn app(mut conn: SqliteConnection, app_id: i32) -> App {
     return crud::get_app_by_id(&mut conn, app_id);
 }
 
@@ -24,12 +28,21 @@ fn can_create_app(mut conn: SqliteConnection) {
 }
 
 #[rstest]
-fn can_get_app(mut conn: SqliteConnection) {
-    let app_id = crud::create_app(&mut conn, "foo");
+fn can_get_app(mut conn: SqliteConnection, app_id: i32) {
     let app = crud::get_app_by_id(&mut conn, app_id);
 
     assert!(app.id.is_some());
     assert_eq!(app.id.unwrap(), app_id);
+}
+
+#[rstest]
+fn can_check_app_exists(mut conn: SqliteConnection, app_id: i32) {
+    assert_eq!(crud::check_app_by_id(&mut conn, app_id).unwrap(), true);
+}
+
+#[rstest]
+fn can_check_app_not_exists(mut conn: SqliteConnection) {
+    assert_eq!(crud::check_app_by_id(&mut conn, -1).unwrap(), false);
 }
 
 #[rstest]
