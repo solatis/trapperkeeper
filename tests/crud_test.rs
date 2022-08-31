@@ -21,11 +21,19 @@ pub fn app(mut conn: SqliteConnection, app_id: i32) -> App {
     return crud::get_app_by_id(&mut conn, app_id);
 }
 
+////
+// Creation
+//
+
 #[rstest]
 fn can_create_app(mut conn: SqliteConnection) {
     let app_id = crud::create_app(&mut conn, "foo");
     ma::assert_gt!(app_id, 0)
 }
+
+////
+// Get
+//
 
 #[rstest]
 fn can_get_app(mut conn: SqliteConnection, app_id: i32) {
@@ -36,17 +44,33 @@ fn can_get_app(mut conn: SqliteConnection, app_id: i32) {
 }
 
 #[rstest]
+#[should_panic]
+fn get_nonexisting_app_should_panic(mut conn: SqliteConnection) {
+    crud::get_app_by_id(&mut conn, -1);
+}
+
+////
+// Check exists
+//
+
+#[rstest]
 fn can_check_app_exists(mut conn: SqliteConnection, app_id: i32) {
-    assert_eq!(crud::check_app_by_id(&mut conn, app_id).unwrap(), true);
+    assert_eq!(crud::check_app_by_id(&mut conn, app_id), Ok(true));
 }
 
 #[rstest]
 fn can_check_app_not_exists(mut conn: SqliteConnection) {
-    assert_eq!(crud::check_app_by_id(&mut conn, -1).unwrap(), false);
+    assert_eq!(crud::check_app_by_id(&mut conn, -1), Ok(false));
 }
 
+////
+// Deletion
+//
+
 #[rstest]
-#[should_panic]
-fn get_nonexisting_app_should_panic(mut conn: SqliteConnection) {
-    crud::get_app_by_id(&mut conn, -1);
+fn can_delete_app(mut conn: SqliteConnection, app_id: i32) {
+    assert_eq!(crud::check_app_by_id(&mut conn, app_id), Ok(true));
+    assert_eq!(crud::delete_app_by_id(&mut conn, app_id), Ok(true));
+    assert_eq!(crud::check_app_by_id(&mut conn, app_id), Ok(false));
+    assert_eq!(crud::delete_app_by_id(&mut conn, app_id), Ok(false));
 }
