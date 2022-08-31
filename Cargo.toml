@@ -1,0 +1,16 @@
+[package]
+name = "trapperkeeper"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = []
+std = []
+generic_const_exprs = []
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+diesel = { version = "2.0.0", features = ["sqlite", "returning_clauses_for_sqlite_3_35"] }
+dotenvy = "0.15"
+more-asserts = "0.3.0"
