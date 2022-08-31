@@ -13,4 +13,7 @@ generic_const_exprs = []
 [dependencies]
 diesel = { version = "2.0.0", features = ["sqlite", "returning_clauses_for_sqlite_3_35"] }
 dotenvy = "0.15"
+
+[dev-dependencies]
 more-asserts = "0.3.0"
+rstest = "0.15.0"

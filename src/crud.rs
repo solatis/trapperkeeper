@@ -13,3 +13,12 @@ pub fn create_app(conn: &mut SqliteConnection, title: &str) -> i32 {
 
     inserted_app.id.unwrap()
 }
+
+pub fn get_app_by_id(conn: &mut SqliteConnection, id: i32) -> App {
+    use crate::schema::apps;
+
+    return apps::table
+        .filter(apps::id.eq(id))
+        .get_result::<App>(conn)
+        .unwrap();
+}
