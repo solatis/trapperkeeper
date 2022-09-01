@@ -31,6 +31,18 @@ fn can_create_app(mut conn: SqliteConnection) {
     ma::assert_gt!(app_id, 0)
 }
 
+#[rstest]
+fn can_create_auth_token(mut conn: SqliteConnection, app_id: i32) {
+    let auth_token_id = crud::create_auth_token(&mut conn, app_id, &String::from("foo"));
+    assert_eq!(auth_token_id.is_ok(), true)
+}
+
+#[rstest]
+fn cannot_create_auth_token_when_app_doesnt_exist(mut conn: SqliteConnection) {
+    let auth_token_id = crud::create_auth_token(&mut conn, -2, &String::from("foo"));
+    assert_eq!(auth_token_id.is_ok(), false)
+}
+
 ////
 // Get
 //
