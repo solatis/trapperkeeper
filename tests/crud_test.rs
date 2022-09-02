@@ -1,4 +1,3 @@
-use diesel::connection::SimpleConnection; // for batch_execute
 use diesel::prelude::SqliteConnection;
 use more_asserts as ma;
 use rstest::*;
@@ -9,11 +8,7 @@ use trapperkeeper::models::App;
 
 #[fixture]
 pub fn conn() -> SqliteConnection {
-    let mut conn = database::establish_connection();
-    conn.batch_execute("PRAGMA foreign_keys = ON")
-        .expect("Unable to enable foreign keys");
-
-    return conn;
+    return database::establish_connection();
 }
 
 #[fixture]
