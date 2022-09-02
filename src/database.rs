@@ -11,6 +11,12 @@ pub fn establish_connection() -> Result<SqliteConnection, diesel::result::Error>
     dotenv().ok();
 
     let url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    establish_connection_from_url(url)
+}
+
+pub fn establish_connection_from_url(
+    url: String,
+) -> Result<SqliteConnection, diesel::result::Error> {
     let mut conn = SqliteConnection::establish(&url)
         .unwrap_or_else(|_| panic!("Unable to open database {}", url));
 

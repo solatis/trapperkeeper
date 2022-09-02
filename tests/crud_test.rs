@@ -8,7 +8,10 @@ use trapperkeeper::models::App;
 
 #[fixture]
 pub fn conn() -> SqliteConnection {
-    return database::establish_connection().unwrap();
+    let mut conn =
+        database::establish_connection_from_url(String::from("sqlite://./test.sqlite")).unwrap();
+    database::run_migrations(&mut conn);
+    conn
 }
 
 #[fixture]
