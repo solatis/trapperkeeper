@@ -17,6 +17,7 @@ diesel_migrations = { version = "2.0.0", features = ["sqlite"] }
 dotenvy = "0.15"
 rand = "0.8"
 hex = "0.4.3"
+actix-web = "4"
 
 [dev-dependencies]
 more-asserts = "0.3.0"
