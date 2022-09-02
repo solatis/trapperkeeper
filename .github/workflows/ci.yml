@@ -35,11 +35,11 @@ jobs:
           cargo --version
           rustc --version
 
-      - name: Install diesel cli
-        run: cargo install diesel_cli --no-default-features --features sqlite
+      # - name: Install diesel cli
+      #   run: cargo install diesel_cli --no-default-features --features sqlite
 
-      - name: Create tables & schema
-        run: diesel migration run
+      # - name: Create tables & schema
+      #   run: diesel migration run
 
       - name: Run trapperkeeper_tests
         run: cargo test
