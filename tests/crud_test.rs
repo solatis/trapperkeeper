@@ -26,6 +26,11 @@ pub fn app(mut conn: SqliteConnection, app_id: i32) -> App {
     return crud::get_app_by_id(&mut conn, app_id);
 }
 
+#[fixture]
+pub fn auth_token_id(mut conn: SqliteConnection, app_id: i32) -> String {
+    return crud::create_auth_token(&mut conn, app_id, &String::from("foo")).unwrap();
+}
+
 ////
 // Creation
 //
@@ -66,6 +71,14 @@ fn get_nonexisting_app_should_panic(mut conn: SqliteConnection) {
     crud::get_app_by_id(&mut conn, -1);
 }
 
+#[rstest]
+fn can_get_auth_token(mut conn: SqliteConnection, auth_token_id: String) {
+    let auth_token = crud::get_auth_token_by_id(&mut conn, &auth_token_id);
+
+    assert!(auth_token.is_ok());
+    assert_eq!(auth_token.unwrap().id, auth_token_id);
+}
+
 ////
 // Check exists
 //
@@ -80,6 +93,49 @@ fn can_check_app_not_exists(mut conn: SqliteConnection) {
     assert_eq!(crud::check_app_by_id(&mut conn, -1), Ok(false));
 }
 
+#[rstest]
+fn can_check_auth_token_exists(mut conn: SqliteConnection, auth_token_id: String) {
+    assert_eq!(
+        crud::check_auth_token_by_id(&mut conn, &auth_token_id),
+        Ok(true)
+    );
+}
+
+#[rstest]
+fn can_check_auth_token_not_exists(mut conn: SqliteConnection) {
+    assert_eq!(
+        crud::check_auth_token_by_id(&mut conn, &String::from("adsfiugdsfigdsf")),
+        Ok(false)
+    );
+}
+
+#[rstest]
+fn can_check_app_auth_token_exists(mut conn: SqliteConnection, auth_token_id: String) {
+    let auth_token = crud::get_auth_token_by_id(&mut conn, &auth_token_id).unwrap();
+    let app_id: i32 = auth_token.app_id;
+    assert_eq!(
+        crud::check_auth_token_by_app_and_id(&mut conn, app_id, &auth_token_id),
+        Ok(true)
+    );
+}
+
+#[rstest]
+fn can_check_app_auth_token_not_exists(
+    mut conn: SqliteConnection,
+    app_id: i32,
+    auth_token_id: String,
+) {
+    // Test the tests: app_id and auth_token_id follow to separate "chains" of fixtures, and
+    // as such should never share the same app id.
+    let auth_token = crud::get_auth_token_by_id(&mut conn, &auth_token_id).unwrap();
+    assert_ne!(auth_token.app_id, app_id);
+
+    assert_eq!(
+        crud::check_auth_token_by_app_and_id(&mut conn, app_id, &auth_token_id),
+        Ok(false)
+    );
+}
+
 ////
 // Deletion
 //
@@ -90,4 +146,24 @@ fn can_delete_app(mut conn: SqliteConnection, app_id: i32) {
     assert_eq!(crud::delete_app_by_id(&mut conn, app_id), Ok(true));
     assert_eq!(crud::check_app_by_id(&mut conn, app_id), Ok(false));
     assert_eq!(crud::delete_app_by_id(&mut conn, app_id), Ok(false));
+}
+
+#[rstest]
+fn can_delete_auth_token(mut conn: SqliteConnection, auth_token_id: String) {
+    assert_eq!(
+        crud::check_auth_token_by_id(&mut conn, &auth_token_id),
+        Ok(true)
+    );
+    assert_eq!(
+        crud::delete_auth_token_by_id(&mut conn, &auth_token_id),
+        Ok(true)
+    );
+    assert_eq!(
+        crud::check_auth_token_by_id(&mut conn, &auth_token_id),
+        Ok(false)
+    );
+    assert_eq!(
+        crud::delete_auth_token_by_id(&mut conn, &auth_token_id),
+        Ok(false)
+    );
 }
