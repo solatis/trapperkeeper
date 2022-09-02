@@ -12,6 +12,8 @@ generic_const_exprs = []
 
 [dependencies]
 diesel = { version = "2.0.0", features = ["sqlite", "returning_clauses_for_sqlite_3_35"] }
+diesel_migrations = { version = "2.0.0", features = ["sqlite"] }
+
 dotenvy = "0.15"
 rand = "0.8"
 hex = "0.4.3"

@@ -17,7 +17,4 @@ diesel::table! {
 
 diesel::joinable!(auth_tokens -> apps (app_id));
 
-diesel::allow_tables_to_appear_in_same_query!(
-    apps,
-    auth_tokens,
-);
+diesel::allow_tables_to_appear_in_same_query!(apps, auth_tokens,);
