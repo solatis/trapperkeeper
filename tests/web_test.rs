@@ -8,7 +8,7 @@ use trapperkeeper::web::add_state;
 
 use trapperkeeper::models;
 
-pub async fn test_get(route: &str) -> ServiceResponse {
+pub async fn test_get(route: &String) -> ServiceResponse {
     let mut app = test::init_service(App::new().configure(add_state).configure(add_routes)).await;
 
     test::call_service(&mut app, test::TestRequest::get().uri(route).to_request()).await
@@ -31,19 +31,40 @@ where
 }
 
 #[fixture]
-pub fn app() -> models::NewApp {
+pub fn new_app() -> models::NewApp {
     models::NewApp::new("foo")
+}
+
+#[fixture]
+pub async fn app() -> models::App {
+    let new_app = models::NewApp::new("foo");
+    let resp = test_post("/api/v1/app", &new_app).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    test::read_body_json(resp).await
 }
 
 #[rstest]
 #[actix_web::test]
-async fn test_app_create(app: models::NewApp) {
-    let resp = test_post("/api/v1/app", &app).await;
+async fn test_app_create(new_app: models::NewApp) {
+    let resp = test_post("/api/v1/app", &new_app).await;
 
     assert_eq!(resp.status(), StatusCode::OK);
 
-    let app_: models::App = test::read_body_json(resp).await;
+    let app: models::App = test::read_body_json(resp).await;
 
-    assert_eq!(app_.name, app.name);
-    ma::assert_gt!(app_.id, Some(0))
+    assert_eq!(app.name, new_app.name);
+    ma::assert_gt!(app.id, Some(0))
+}
+
+#[rstest]
+#[actix_web::test]
+async fn test_app_get(#[future] app: models::App) {
+    let app_in = app.await;
+    let uri = format!("/api/v1/app/{}", app_in.id.unwrap());
+
+    let get_response = test_get(&uri).await;
+    let app_out: models::App = test::read_body_json(get_response).await;
+
+    assert_eq!(app_in, app_out);
 }
