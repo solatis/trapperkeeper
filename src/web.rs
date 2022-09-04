@@ -24,16 +24,22 @@ async fn create_app(
     Ok(HttpResponse::Ok().json(app))
 }
 
+pub fn add_routes(cfg: &mut web::ServiceConfig) {
+    cfg.service(web::scope("/api/v1").route("/app", web::post().to(create_app)));
+}
+
+pub fn add_state(cfg: &mut web::ServiceConfig) {
+    let pool = database::pool();
+
+    cfg.app_data(web::Data::new(State {
+        db_pool: pool.clone(),
+    }));
+}
+
 #[actix_web::main]
-pub async fn run(pool: database::DbPool) -> std::io::Result<()> {
-    HttpServer::new(move || {
-        App::new()
-            .app_data(web::Data::new(State {
-                db_pool: pool.clone(),
-            }))
-            .service(web::scope("/api/v1").route("/app", web::post().to(create_app)))
-    })
-    .bind(("127.0.0.1", 8080))?
-    .run()
-    .await
+pub async fn run() -> std::io::Result<()> {
+    HttpServer::new(move || App::new().configure(add_state).configure(add_routes))
+        .bind(("127.0.0.1", 8080))?
+        .run()
+        .await
 }

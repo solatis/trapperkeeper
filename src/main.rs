@@ -13,7 +13,7 @@ fn run() -> std::result::Result<(), Box<dyn Error>> {
     let mut conn = pool.get()?;
 
     database::run_migrations(&mut conn)?;
-    web::run(pool)?;
+    web::run()?;
 
     Ok(())
 }
