@@ -3,25 +3,29 @@ use diesel::result::Error;
 
 use crate::models::{App, AuthToken, NewApp};
 
-pub fn create_app(conn: &mut SqliteConnection, title: &str) -> i32 {
+// type DbError = Box<dyn std::error::Error + Send + Sync>;
+
+pub fn create_app(conn: &mut SqliteConnection, title: &str) -> Result<App, Error> {
     use crate::schema::apps;
     let new_app = &NewApp::new(title);
 
     let inserted_app = diesel::insert_into(apps::table)
         .values(new_app)
-        .get_result::<App>(conn)
-        .unwrap();
+        .get_result::<App>(conn)?;
 
-    inserted_app.id.unwrap()
+    Ok(inserted_app)
 }
 
-pub fn get_app_by_id(conn: &mut SqliteConnection, id: i32) -> App {
+pub fn get_app_by_id(conn: &mut SqliteConnection, id: i32) -> Result<Option<App>, Error> {
     use crate::schema::apps;
 
-    return apps::table
-        .filter(apps::id.eq(id))
-        .get_result::<App>(conn)
-        .unwrap();
+    let result = apps::table.filter(apps::id.eq(id)).get_result::<App>(conn);
+
+    match result {
+        Ok(app) => Ok(Some(app)),
+        Err(Error::NotFound) => Ok(None),
+        Err(e) => Err(e),
+    }
 }
 
 pub fn check_app_by_id(conn: &mut SqliteConnection, id: i32) -> Result<bool, Error> {
@@ -52,28 +56,29 @@ pub fn create_auth_token(
     conn: &mut SqliteConnection,
     app_id: i32,
     title: &String,
-) -> Result<String, Error> {
+) -> Result<AuthToken, Error> {
     use crate::schema::auth_tokens;
 
     let auth_token = AuthToken::new(app_id, title);
 
-    let result = diesel::insert_into(auth_tokens::table)
+    diesel::insert_into(auth_tokens::table)
         .values(&auth_token)
-        .execute(conn);
+        .execute(conn)?;
 
-    match result {
-        Ok(1) => Ok(auth_token.id),
-        Ok(n) => panic!("insertion error: {}", n),
-        Err(e) => Err(e),
-    }
+    Ok(auth_token)
 }
 
-pub fn get_auth_token_by_id(conn: &mut SqliteConnection, id: &String) -> Result<AuthToken, Error> {
+pub fn get_auth_token_by_id(
+    conn: &mut SqliteConnection,
+    id: &String,
+) -> Result<Option<AuthToken>, Error> {
     use crate::schema::auth_tokens;
 
-    return auth_tokens::table
+    let auth_token = auth_tokens::table
         .filter(auth_tokens::id.eq(id))
-        .get_result::<AuthToken>(conn);
+        .get_result::<AuthToken>(conn)?;
+
+    Ok(Some(auth_token))
 }
 
 pub fn check_auth_token_by_id(conn: &mut SqliteConnection, id: &String) -> Result<bool, Error> {

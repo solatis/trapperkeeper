@@ -1,8 +1,9 @@
 use crate::schema::{apps, auth_tokens};
 use crate::utils;
 use diesel::prelude::*;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Queryable, Insertable)]
+#[derive(Deserialize, Queryable, Insertable)]
 #[diesel(table_name = apps)]
 pub struct NewApp {
     pub name: String,
@@ -16,14 +17,14 @@ impl NewApp {
     }
 }
 
-#[derive(Queryable)]
+#[derive(Debug, PartialEq, Queryable, Serialize)]
 #[diesel(table_name = apps)]
 pub struct App {
     pub id: Option<i32>,
     pub name: String,
 }
 
-#[derive(Queryable, Insertable)]
+#[derive(Debug, PartialEq, Queryable, Insertable)]
 #[diesel(table_name = auth_tokens)]
 pub struct AuthToken {
     pub id: String,

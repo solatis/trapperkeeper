@@ -3,11 +3,21 @@ mod database;
 mod models;
 mod schema;
 mod utils;
+mod web;
+
+use std::error::Error;
+
+fn run() -> std::result::Result<(), Box<dyn Error>> {
+    let pool = database::pool();
+
+    let mut conn = pool.get()?;
+
+    database::run_migrations(&mut conn)?;
+    web::run(pool)?;
+
+    Ok(())
+}
 
 fn main() {
-    let mut conn = &mut database::establish_connection().unwrap();
-
-    database::run_migrations(&mut conn);
-
-    self::crud::create_app(conn, "foo");
+    run().unwrap();
 }
