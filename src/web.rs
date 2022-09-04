@@ -30,6 +30,7 @@ pub fn add_routes(cfg: &mut web::ServiceConfig) {
 
 pub fn add_state(cfg: &mut web::ServiceConfig) {
     let pool = database::pool();
+    database::run_migrations(&mut pool.get().unwrap()).expect("Unable to run migrations");
 
     cfg.app_data(web::Data::new(State {
         db_pool: pool.clone(),
