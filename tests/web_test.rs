@@ -68,3 +68,10 @@ async fn test_app_get(#[future] app: models::App) {
 
     assert_eq!(app_in, app_out);
 }
+
+#[rstest]
+#[actix_web::test]
+async fn test_app_get_nonexisting_app() {
+    let resp = test_get(&String::from("/api/v1/app/0")).await;
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+}

@@ -24,19 +24,21 @@ async fn create_app(
     Ok(HttpResponse::Ok().json(app))
 }
 
-async fn get_app(s: web::Data<State>, req: HttpRequest) -> Result<HttpResponse, Error> {
+async fn get_app(s: web::Data<State>, app_id: web::Path<i32>) -> Result<HttpResponse, Error> {
     let mut conn = s
         .db_pool
         .get()
         .expect("could not get database connection from pool");
 
-    let app_id: i32 = req.match_info().get("app_id").unwrap().parse().unwrap();
-
+    let app_id = app_id.into_inner();
     let app = web::block(move || crud::get_app_by_id(&mut conn, app_id))
         .await?
         .map_err(actix_web::error::ErrorInternalServerError)?;
 
-    Ok(HttpResponse::Ok().json(app))
+    match app {
+        Some(x) => Ok(HttpResponse::Ok().json(x)),
+        None => Ok(HttpResponse::NotFound().finish()),
+    }
 }
 
 pub fn add_routes(cfg: &mut web::ServiceConfig) {
