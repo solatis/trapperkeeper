@@ -41,11 +41,29 @@ async fn get_app(s: web::Data<State>, app_id: web::Path<i32>) -> Result<HttpResp
     }
 }
 
+async fn delete_app(s: web::Data<State>, app_id: web::Path<i32>) -> Result<HttpResponse, Error> {
+    let mut conn = s
+        .db_pool
+        .get()
+        .expect("could not get database connection from pool");
+
+    let app_id = app_id.into_inner();
+    let result = web::block(move || crud::delete_app_by_id(&mut conn, app_id))
+        .await?
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+
+    match result {
+        true => Ok(HttpResponse::Ok().finish()),
+        false => Ok(HttpResponse::NotFound().finish()),
+    }
+}
+
 pub fn add_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/api/v1")
             .route("/app", web::post().to(create_app))
-            .route("/app/{app_id}", web::get().to(get_app)),
+            .route("/app/{app_id}", web::get().to(get_app))
+            .route("/app/{app_id}", web::delete().to(delete_app)),
     );
 }
 
