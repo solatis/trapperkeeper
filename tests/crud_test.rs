@@ -10,13 +10,13 @@ use trapperkeeper::models::{App, AuthToken};
 pub fn conn() -> SqliteConnection {
     let url: String = format!("sqlite://./{}.sqlite", "tests");
     let mut conn = database::establish_connection_from_url(String::from(url)).unwrap();
-    database::run_migrations(&mut conn);
+    database::run_migrations(&mut conn).unwrap();
     conn
 }
 
 #[fixture]
 pub fn app(mut conn: SqliteConnection) -> App {
-    return crud::create_app(&mut conn, "foo").unwrap();
+    return crud::create_app(&mut conn, &String::from("foo")).unwrap();
 }
 
 #[fixture]
@@ -35,7 +35,7 @@ pub fn auth_token(mut conn: SqliteConnection, app_id: i32) -> AuthToken {
 
 #[rstest]
 fn can_create_app(mut conn: SqliteConnection) {
-    let app: App = crud::create_app(&mut conn, "foo").unwrap();
+    let app: App = crud::create_app(&mut conn, &String::from("foo")).unwrap();
     ma::assert_gt!(app.id, Some(0))
 }
 
