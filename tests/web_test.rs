@@ -2,6 +2,7 @@ use actix_web::dev::ServiceResponse;
 use actix_web::{http::StatusCode, test, App};
 use more_asserts as ma;
 use rstest::*;
+use serde::de::DeserializeOwned;
 use serde::Serialize;
 use trapperkeeper::web::add_routes;
 use trapperkeeper::web::add_state;
@@ -12,6 +13,16 @@ pub async fn test_get(route: &String) -> ServiceResponse {
     let mut app = test::init_service(App::new().configure(add_state).configure(add_routes)).await;
 
     test::call_service(&mut app, test::TestRequest::get().uri(route).to_request()).await
+}
+
+pub async fn test_get_json<T>(route: &String) -> T
+where
+    T: DeserializeOwned,
+{
+    let resp = test_get(route).await;
+    assert!(resp.status().is_success());
+
+    test::read_body_json(resp).await
 }
 
 pub async fn test_delete(route: &String) -> ServiceResponse {
@@ -73,8 +84,7 @@ async fn test_app_get(#[future] app: models::App) {
     let app = app.await;
     let uri = format!("/api/v1/app/{}", app.id.unwrap());
 
-    let get_response = test_get(&uri).await;
-    let app_: models::App = test::read_body_json(get_response).await;
+    let app_: models::App = test_get_json(&uri).await;
 
     assert_eq!(app, app_);
 }
