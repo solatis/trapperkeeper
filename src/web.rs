@@ -33,6 +33,8 @@ async fn create_app(
     db_pool: web::Data<database::DbPool>,
     app: web::Json<models::NewApp>,
 ) -> Result<HttpResponse, Error> {
+    log::info!("create_app");
+
     let mut conn = db_pool
         .get()
         .map_err(actix_web::error::ErrorInternalServerError)?;
@@ -48,6 +50,8 @@ async fn get_app(
     db_pool: web::Data<database::DbPool>,
     app_id: web::Path<i32>,
 ) -> Result<HttpResponse, Error> {
+    log::info!("get_app");
+
     let mut conn = db_pool
         .get()
         .map_err(actix_web::error::ErrorInternalServerError)?;
@@ -62,6 +66,7 @@ async fn delete_app(
     db_pool: web::Data<database::DbPool>,
     app_id: web::Path<i32>,
 ) -> Result<HttpResponse, Error> {
+    log::info!("delete_app");
     let mut conn = db_pool
         .get()
         .map_err(actix_web::error::ErrorInternalServerError)?;
@@ -77,6 +82,8 @@ async fn create_auth_token(
     app_id: web::Path<i32>,
     auth_token: web::Json<models::NewAuthToken>,
 ) -> Result<HttpResponse, Error> {
+    log::info!("create_auth_token");
+
     let mut conn = db_pool
         .get()
         .map_err(actix_web::error::ErrorInternalServerError)?;
@@ -97,6 +104,8 @@ async fn get_app_auth_token(
     db_pool: web::Data<database::DbPool>,
     path: web::Path<(i32, String)>,
 ) -> Result<HttpResponse, Error> {
+    log::info!("get_app_auth_token");
+
     let mut conn = db_pool
         .get()
         .map_err(actix_web::error::ErrorInternalServerError)?;
@@ -113,6 +122,8 @@ async fn delete_app_auth_token(
     db_pool: web::Data<database::DbPool>,
     path: web::Path<(i32, String)>,
 ) -> Result<HttpResponse, Error> {
+    log::info!("delete_app_auth_token");
+
     let mut conn = db_pool
         .get()
         .map_err(actix_web::error::ErrorInternalServerError)?;
@@ -130,6 +141,8 @@ async fn delete_auth_token(
     db_pool: web::Data<database::DbPool>,
     path: web::Path<String>,
 ) -> Result<HttpResponse, Error> {
+    log::info!("delete_app_auth_token");
+
     let mut conn = db_pool
         .get()
         .map_err(actix_web::error::ErrorInternalServerError)?;
@@ -145,6 +158,8 @@ async fn get_auth_token(
     db_pool: web::Data<database::DbPool>,
     path: web::Path<String>,
 ) -> Result<HttpResponse, Error> {
+    log::info!("get_auth_token");
+
     let mut conn = db_pool
         .get()
         .map_err(actix_web::error::ErrorInternalServerError)?;

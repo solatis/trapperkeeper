@@ -10,6 +10,12 @@ use trapperkeeper::utils;
 use trapperkeeper::web::add_database;
 use trapperkeeper::web::add_routes;
 
+#[cfg(test)]
+#[ctor::ctor]
+fn init() {
+    let _ = env_logger::builder().is_test(true).try_init();
+}
+
 fn gen_identifier() -> String {
     utils::random_token()
 }

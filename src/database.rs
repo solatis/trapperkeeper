@@ -48,7 +48,7 @@ const DEFAULT_POOL_SIZE: u32 = 8;
 pub fn pool_from_url(url: String, size: Option<u32>) -> DbPool {
     let n = size.unwrap_or(DEFAULT_POOL_SIZE);
 
-    println!("building pool with size {} from url {}", n, url);
+    log::info!("building pool with size {} from url {}", n, url);
     DbPool::builder()
         .max_size(n)
         .build(ConnectionManager::new(url))
