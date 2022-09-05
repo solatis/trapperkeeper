@@ -4,6 +4,31 @@ use crate::crud;
 use crate::database;
 use crate::models;
 
+fn unwrap_get_result<T>(
+    result: Result<Option<T>, diesel::result::Error>,
+) -> Result<HttpResponse, Error>
+where
+    T: serde::Serialize,
+{
+    let result_ = result.map_err(actix_web::error::ErrorInternalServerError)?;
+
+    match result_ {
+        Some(x) => Ok(HttpResponse::Ok().json(x)),
+        None => Ok(HttpResponse::NotFound().finish()),
+    }
+}
+
+fn unwrap_delete_result(
+    result: Result<bool, diesel::result::Error>,
+) -> Result<HttpResponse, Error> {
+    let result_ = result.map_err(actix_web::error::ErrorInternalServerError)?;
+
+    match result_ {
+        true => Ok(HttpResponse::Ok().finish()),
+        false => Ok(HttpResponse::NotFound().finish()),
+    }
+}
+
 async fn create_app(
     db_pool: web::Data<database::DbPool>,
     app: web::Json<models::NewApp>,
@@ -28,14 +53,9 @@ async fn get_app(
         .map_err(actix_web::error::ErrorInternalServerError)?;
 
     let app_id = app_id.into_inner();
-    let app = web::block(move || crud::get_app_by_id(&mut conn, app_id))
-        .await?
-        .map_err(actix_web::error::ErrorInternalServerError)?;
+    let result = web::block(move || crud::get_app_by_id(&mut conn, app_id)).await?;
 
-    match app {
-        Some(x) => Ok(HttpResponse::Ok().json(x)),
-        None => Ok(HttpResponse::NotFound().finish()),
-    }
+    unwrap_get_result(result)
 }
 
 async fn delete_app(
@@ -47,14 +67,9 @@ async fn delete_app(
         .map_err(actix_web::error::ErrorInternalServerError)?;
 
     let app_id = app_id.into_inner();
-    let result = web::block(move || crud::delete_app_by_id(&mut conn, app_id))
-        .await?
-        .map_err(actix_web::error::ErrorInternalServerError)?;
+    let result = web::block(move || crud::delete_app_by_id(&mut conn, app_id)).await?;
 
-    match result {
-        true => Ok(HttpResponse::Ok().finish()),
-        false => Ok(HttpResponse::NotFound().finish()),
-    }
+    unwrap_delete_result(result)
 }
 
 async fn create_auth_token(
@@ -87,16 +102,11 @@ async fn get_app_auth_token(
         .map_err(actix_web::error::ErrorInternalServerError)?;
 
     let (app_id, auth_token_id) = path.into_inner();
-
-    let auth_token =
+    let result =
         web::block(move || crud::get_auth_token_by_app_and_id(&mut conn, app_id, &auth_token_id))
-            .await?
-            .map_err(actix_web::error::ErrorInternalServerError)?;
+            .await?;
 
-    match auth_token {
-        Some(x) => Ok(HttpResponse::Ok().json(x)),
-        None => Ok(HttpResponse::NotFound().finish()),
-    }
+    unwrap_get_result(result)
 }
 
 async fn delete_app_auth_token(
@@ -111,13 +121,9 @@ async fn delete_app_auth_token(
     let result = web::block(move || {
         crud::delete_auth_token_by_app_and_id(&mut conn, app_id, &auth_token_id)
     })
-    .await?
-    .map_err(actix_web::error::ErrorInternalServerError)?;
+    .await?;
 
-    match result {
-        true => Ok(HttpResponse::Ok().finish()),
-        false => Ok(HttpResponse::NotFound().finish()),
-    }
+    unwrap_delete_result(result)
 }
 
 async fn delete_auth_token(
@@ -129,15 +135,10 @@ async fn delete_auth_token(
         .map_err(actix_web::error::ErrorInternalServerError)?;
 
     let auth_token_id = path.into_inner();
+    let result =
+        web::block(move || crud::delete_auth_token_by_id(&mut conn, &auth_token_id)).await?;
 
-    let result = web::block(move || crud::delete_auth_token_by_id(&mut conn, &auth_token_id))
-        .await?
-        .map_err(actix_web::error::ErrorInternalServerError)?;
-
-    match result {
-        true => Ok(HttpResponse::Ok().finish()),
-        false => Ok(HttpResponse::NotFound().finish()),
-    }
+    unwrap_delete_result(result)
 }
 
 async fn get_auth_token(
@@ -149,15 +150,9 @@ async fn get_auth_token(
         .map_err(actix_web::error::ErrorInternalServerError)?;
 
     let auth_token_id = path.into_inner();
+    let result = web::block(move || crud::get_auth_token_by_id(&mut conn, &auth_token_id)).await?;
 
-    let auth_token = web::block(move || crud::get_auth_token_by_id(&mut conn, &auth_token_id))
-        .await?
-        .map_err(actix_web::error::ErrorInternalServerError)?;
-
-    match auth_token {
-        Some(x) => Ok(HttpResponse::Ok().json(x)),
-        None => Ok(HttpResponse::NotFound().finish()),
-    }
+    unwrap_get_result(result)
 }
 
 pub fn add_routes(cfg: &mut web::ServiceConfig) {
