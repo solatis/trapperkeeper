@@ -54,6 +54,17 @@ where
     .await
 }
 
+pub async fn test_post_json<T, D>(route: &str, params: &T) -> D
+where
+    T: Serialize,
+    D: DeserializeOwned,
+{
+    let resp = test_post(route, params).await;
+    assert!(resp.status().is_success());
+
+    test::read_body_json(resp).await
+}
+
 #[fixture]
 pub fn new_app() -> models::NewApp {
     models::NewApp::new("foo")
@@ -66,6 +77,12 @@ pub async fn app() -> models::App {
     assert_eq!(resp.status(), StatusCode::OK);
 
     test::read_body_json(resp).await
+}
+
+#[fixture]
+pub async fn new_auth_token(#[future] app: models::App) -> models::NewAuthToken {
+    let app_: models::App = app.await;
+    models::NewAuthToken::new(app_.id.unwrap(), &String::from("foo"))
 }
 
 #[rstest]
@@ -120,4 +137,27 @@ async fn test_app_delete(#[future] app: models::App) {
     // Delete after delete
     let resp = test_delete(&uri).await;
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+}
+
+#[rstest]
+#[actix_web::test]
+async fn test_auth_token_create(#[future] new_auth_token: models::NewAuthToken) {
+    let new_auth_token = new_auth_token.await;
+    let uri = format!("/api/v1/app/{}/auth_token", new_auth_token.app_id);
+
+    let auth_token: models::AuthToken = test_post_json(&uri, &new_auth_token).await;
+
+    assert_eq!(auth_token.name, new_auth_token.name);
+    assert_eq!(auth_token.app_id, new_auth_token.app_id);
+}
+
+#[rstest]
+#[actix_web::test]
+async fn test_auth_token_create_incorrect_app_id(#[future] new_auth_token: models::NewAuthToken) {
+    let new_auth_token = new_auth_token.await;
+    let uri = String::from("/api/v1/app/1/auth_token");
+
+    let resp = test_post(&uri, &new_auth_token).await;
+
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 }

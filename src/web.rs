@@ -1,4 +1,4 @@
-use actix_web::{get, post, web, App, Error, HttpRequest, HttpResponse, HttpServer, Responder};
+use actix_web::{web, App, Error, HttpResponse, HttpServer};
 
 use crate::crud;
 use crate::database;
@@ -57,12 +57,37 @@ async fn delete_app(
     }
 }
 
+async fn create_auth_token(
+    db_pool: web::Data<database::DbPool>,
+    app_id: web::Path<i32>,
+    auth_token: web::Json<models::NewAuthToken>,
+) -> Result<HttpResponse, Error> {
+    let mut conn = db_pool
+        .get()
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+
+    if app_id.into_inner() != auth_token.app_id {
+        return Ok(HttpResponse::BadRequest().body("app_id in auth_token must match app_id in uri"));
+    }
+
+    let auth_token =
+        web::block(move || crud::create_auth_token(&mut conn, auth_token.app_id, &auth_token.name))
+            .await?
+            .map_err(actix_web::error::ErrorInternalServerError)?;
+
+    Ok(HttpResponse::Ok().json(auth_token))
+}
+
 pub fn add_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/api/v1")
             .route("/app", web::post().to(create_app))
             .route("/app/{app_id}", web::get().to(get_app))
-            .route("/app/{app_id}", web::delete().to(delete_app)),
+            .route("/app/{app_id}", web::delete().to(delete_app))
+            .route(
+                "/app/{app_id}/auth_token",
+                web::post().to(create_auth_token),
+            ),
     );
 }
 

@@ -3,7 +3,7 @@ use crate::utils;
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Queryable, Insertable)]
+#[derive(Debug, Serialize, Deserialize, Queryable, Insertable)]
 #[diesel(table_name = apps)]
 pub struct NewApp {
     pub name: String,
@@ -17,14 +17,14 @@ impl NewApp {
     }
 }
 
-#[derive(Debug, PartialEq, Queryable, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Queryable)]
 #[diesel(table_name = apps)]
 pub struct App {
     pub id: Option<i32>,
     pub name: String,
 }
 
-#[derive(Debug, PartialEq, Queryable, Insertable)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Queryable, Insertable)]
 #[diesel(table_name = auth_tokens)]
 pub struct NewAuthToken {
     pub app_id: i32,
@@ -40,7 +40,7 @@ impl NewAuthToken {
     }
 }
 
-#[derive(Debug, PartialEq, Queryable, Insertable)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Queryable, Insertable)]
 #[diesel(table_name = auth_tokens)]
 pub struct AuthToken {
     pub id: String,
