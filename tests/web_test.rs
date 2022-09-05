@@ -4,13 +4,14 @@ use more_asserts as ma;
 use rstest::*;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use trapperkeeper::web::add_database;
 use trapperkeeper::web::add_routes;
-use trapperkeeper::web::add_state;
 
 use trapperkeeper::models;
 
 pub async fn test_get(route: &String) -> ServiceResponse {
-    let mut app = test::init_service(App::new().configure(add_state).configure(add_routes)).await;
+    let mut app =
+        test::init_service(App::new().configure(add_database).configure(add_routes)).await;
 
     test::call_service(&mut app, test::TestRequest::get().uri(route).to_request()).await
 }
@@ -26,7 +27,8 @@ where
 }
 
 pub async fn test_delete(route: &String) -> ServiceResponse {
-    let mut app = test::init_service(App::new().configure(add_state).configure(add_routes)).await;
+    let mut app =
+        test::init_service(App::new().configure(add_database).configure(add_routes)).await;
 
     test::call_service(
         &mut app,
@@ -39,7 +41,8 @@ pub async fn test_post<T>(route: &str, params: &T) -> ServiceResponse
 where
     T: Serialize,
 {
-    let mut app = test::init_service(App::new().configure(add_state).configure(add_routes)).await;
+    let mut app =
+        test::init_service(App::new().configure(add_database).configure(add_routes)).await;
 
     test::call_service(
         &mut app,
