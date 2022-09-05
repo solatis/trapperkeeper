@@ -5,11 +5,10 @@ use rstest::*;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
+use trapperkeeper::models;
 use trapperkeeper::utils;
 use trapperkeeper::web::add_database;
 use trapperkeeper::web::add_routes;
-
-use trapperkeeper::models;
 
 fn gen_identifier() -> String {
     utils::random_token()
