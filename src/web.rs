@@ -78,6 +78,88 @@ async fn create_auth_token(
     Ok(HttpResponse::Ok().json(auth_token))
 }
 
+async fn get_app_auth_token(
+    db_pool: web::Data<database::DbPool>,
+    path: web::Path<(i32, String)>,
+) -> Result<HttpResponse, Error> {
+    let mut conn = db_pool
+        .get()
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+
+    let (app_id, auth_token_id) = path.into_inner();
+
+    let auth_token =
+        web::block(move || crud::get_auth_token_by_app_and_id(&mut conn, app_id, &auth_token_id))
+            .await?
+            .map_err(actix_web::error::ErrorInternalServerError)?;
+
+    match auth_token {
+        Some(x) => Ok(HttpResponse::Ok().json(x)),
+        None => Ok(HttpResponse::NotFound().finish()),
+    }
+}
+
+async fn delete_app_auth_token(
+    db_pool: web::Data<database::DbPool>,
+    path: web::Path<(i32, String)>,
+) -> Result<HttpResponse, Error> {
+    let mut conn = db_pool
+        .get()
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+
+    let (app_id, auth_token_id) = path.into_inner();
+    let result = web::block(move || {
+        crud::delete_auth_token_by_app_and_id(&mut conn, app_id, &auth_token_id)
+    })
+    .await?
+    .map_err(actix_web::error::ErrorInternalServerError)?;
+
+    match result {
+        true => Ok(HttpResponse::Ok().finish()),
+        false => Ok(HttpResponse::NotFound().finish()),
+    }
+}
+
+async fn delete_auth_token(
+    db_pool: web::Data<database::DbPool>,
+    path: web::Path<String>,
+) -> Result<HttpResponse, Error> {
+    let mut conn = db_pool
+        .get()
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+
+    let auth_token_id = path.into_inner();
+
+    let result = web::block(move || crud::delete_auth_token_by_id(&mut conn, &auth_token_id))
+        .await?
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+
+    match result {
+        true => Ok(HttpResponse::Ok().finish()),
+        false => Ok(HttpResponse::NotFound().finish()),
+    }
+}
+
+async fn get_auth_token(
+    db_pool: web::Data<database::DbPool>,
+    path: web::Path<String>,
+) -> Result<HttpResponse, Error> {
+    let mut conn = db_pool
+        .get()
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+
+    let auth_token_id = path.into_inner();
+
+    let auth_token = web::block(move || crud::get_auth_token_by_id(&mut conn, &auth_token_id))
+        .await?
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+
+    match auth_token {
+        Some(x) => Ok(HttpResponse::Ok().json(x)),
+        None => Ok(HttpResponse::NotFound().finish()),
+    }
+}
+
 pub fn add_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/api/v1")
@@ -87,6 +169,19 @@ pub fn add_routes(cfg: &mut web::ServiceConfig) {
             .route(
                 "/app/{app_id}/auth_token",
                 web::post().to(create_auth_token),
+            )
+            .route(
+                "/app/{app_id}/auth_token/{auth_token_id}",
+                web::get().to(get_app_auth_token),
+            )
+            .route(
+                "/app/{app_id}/auth_token/{auth_token_id}",
+                web::delete().to(delete_app_auth_token),
+            )
+            .route("/auth_token/{auth_token_id}", web::get().to(get_auth_token))
+            .route(
+                "/auth_token/{auth_token_id}",
+                web::delete().to(delete_auth_token),
             ),
     );
 }

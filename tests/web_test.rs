@@ -98,6 +98,14 @@ pub async fn new_auth_token(#[future] app: models::App) -> models::NewAuthToken 
     models::NewAuthToken::new(app_.id.unwrap(), &gen_auth_token_name())
 }
 
+#[fixture]
+pub async fn auth_token(#[future] new_auth_token: models::NewAuthToken) -> models::AuthToken {
+    let new_auth_token = new_auth_token.await;
+    let uri = format!("/api/v1/app/{}/auth_token", new_auth_token.app_id);
+
+    test_post_json(&uri, &new_auth_token).await
+}
+
 #[rstest]
 #[actix_web::test]
 async fn test_app_create(new_app: models::NewApp) {
@@ -173,4 +181,66 @@ async fn test_auth_token_create_incorrect_app_id(#[future] new_auth_token: model
     let resp = test_post(&uri, &new_auth_token).await;
 
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+#[rstest]
+#[actix_web::test]
+async fn test_auth_token_get(#[future] auth_token: models::AuthToken) {
+    let auth_token = auth_token.await;
+
+    let uri1 = format!(
+        "/api/v1/app/{}/auth_token/{}",
+        auth_token.app_id, auth_token.id
+    );
+
+    let uri2 = format!("/api/v1/auth_token/{}", auth_token.id);
+
+    let auth_token1: models::AuthToken = test_get_json(&uri1).await;
+    let auth_token2: models::AuthToken = test_get_json(&uri2).await;
+
+    assert_eq!(auth_token, auth_token1);
+    assert_eq!(auth_token, auth_token2);
+}
+
+#[rstest]
+#[actix_web::test]
+async fn test_auth_token_delete_by_app(#[future] auth_token: models::AuthToken) {
+    let auth_token = auth_token.await;
+
+    let uri = format!(
+        "/api/v1/app/{}/auth_token/{}",
+        auth_token.app_id, auth_token.id
+    );
+
+    let resp = test_get(&uri).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let resp = test_delete(&uri).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let resp = test_get(&uri).await;
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+
+    let resp = test_delete(&uri).await;
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+}
+
+#[rstest]
+#[actix_web::test]
+async fn test_auth_token_delete(#[future] auth_token: models::AuthToken) {
+    let auth_token = auth_token.await;
+
+    let uri = format!("/api/v1/auth_token/{}", auth_token.id);
+
+    let resp = test_get(&uri).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let resp = test_delete(&uri).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let resp = test_get(&uri).await;
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+
+    let resp = test_delete(&uri).await;
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
 }

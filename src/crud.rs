@@ -74,11 +74,34 @@ pub fn get_auth_token_by_id(
 ) -> Result<Option<AuthToken>, Error> {
     use crate::schema::auth_tokens;
 
-    let auth_token = auth_tokens::table
+    let result = auth_tokens::table
         .filter(auth_tokens::id.eq(id))
-        .get_result::<AuthToken>(conn)?;
+        .get_result::<AuthToken>(conn);
 
-    Ok(Some(auth_token))
+    match result {
+        Ok(auth_token) => Ok(Some(auth_token)),
+        Err(Error::NotFound) => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+pub fn get_auth_token_by_app_and_id(
+    conn: &mut SqliteConnection,
+    app_id: i32,
+    id: &String,
+) -> Result<Option<AuthToken>, Error> {
+    use crate::schema::auth_tokens;
+
+    let result = auth_tokens::table
+        .filter(auth_tokens::app_id.eq(app_id))
+        .filter(auth_tokens::id.eq(id))
+        .get_result::<AuthToken>(conn);
+
+    match result {
+        Ok(auth_token) => Ok(Some(auth_token)),
+        Err(Error::NotFound) => Ok(None),
+        Err(e) => Err(e),
+    }
 }
 
 pub fn check_auth_token_by_id(conn: &mut SqliteConnection, id: &String) -> Result<bool, Error> {
@@ -118,6 +141,27 @@ pub fn delete_auth_token_by_id(conn: &mut SqliteConnection, id: &String) -> Resu
     use crate::schema::auth_tokens;
 
     let r = diesel::delete(auth_tokens::table.filter(auth_tokens::id.eq(id))).execute(conn);
+
+    match r {
+        Ok(0) => Ok(false),
+        Ok(_) => Ok(true),
+        Err(e) => Err(e),
+    }
+}
+
+pub fn delete_auth_token_by_app_and_id(
+    conn: &mut SqliteConnection,
+    app_id: i32,
+    id: &String,
+) -> Result<bool, Error> {
+    use crate::schema::auth_tokens;
+
+    let r = diesel::delete(
+        auth_tokens::table
+            .filter(auth_tokens::id.eq(id))
+            .filter(auth_tokens::app_id.eq(app_id)),
+    )
+    .execute(conn);
 
     match r {
         Ok(0) => Ok(false),
