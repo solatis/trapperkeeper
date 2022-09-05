@@ -10,7 +10,7 @@ pub struct NewApp {
 }
 
 impl NewApp {
-    pub fn new(name: &str) -> Self {
+    pub fn new(name: &String) -> Self {
         NewApp {
             name: name.to_string(),
         }

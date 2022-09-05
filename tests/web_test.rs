@@ -4,10 +4,24 @@ use more_asserts as ma;
 use rstest::*;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+
+use trapperkeeper::utils;
 use trapperkeeper::web::add_database;
 use trapperkeeper::web::add_routes;
 
 use trapperkeeper::models;
+
+fn gen_identifier() -> String {
+    utils::random_token()
+}
+
+fn gen_app_name() -> String {
+    gen_identifier()
+}
+
+fn gen_auth_token_name() -> String {
+    gen_identifier()
+}
 
 pub async fn test_get(route: &String) -> ServiceResponse {
     let mut app =
@@ -67,12 +81,11 @@ where
 
 #[fixture]
 pub fn new_app() -> models::NewApp {
-    models::NewApp::new("foo")
+    models::NewApp::new(&gen_app_name())
 }
 
 #[fixture]
-pub async fn app() -> models::App {
-    let new_app = models::NewApp::new("foo");
+pub async fn app(new_app: models::NewApp) -> models::App {
     let resp = test_post("/api/v1/app", &new_app).await;
     assert_eq!(resp.status(), StatusCode::OK);
 
@@ -82,7 +95,7 @@ pub async fn app() -> models::App {
 #[fixture]
 pub async fn new_auth_token(#[future] app: models::App) -> models::NewAuthToken {
     let app_: models::App = app.await;
-    models::NewAuthToken::new(app_.id.unwrap(), &String::from("foo"))
+    models::NewAuthToken::new(app_.id.unwrap(), &gen_auth_token_name())
 }
 
 #[rstest]

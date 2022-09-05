@@ -5,7 +5,7 @@ use crate::models::{App, AuthToken, NewApp};
 
 // type DbError = Box<dyn std::error::Error + Send + Sync>;
 
-pub fn create_app(conn: &mut SqliteConnection, title: &str) -> Result<App, Error> {
+pub fn create_app(conn: &mut SqliteConnection, title: &String) -> Result<App, Error> {
     use crate::schema::apps;
     let new_app = &NewApp::new(title);
 
