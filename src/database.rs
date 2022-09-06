@@ -1,19 +1,13 @@
-use diesel::prelude::*;
 use diesel::r2d2;
 use diesel::sqlite::SqliteConnection;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
-use dotenvy::dotenv;
-use serde::Deserialize;
-use std::env;
 use std::fmt;
 
 use crate::config;
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
-const DEFAULT_POOL_SIZE: u32 = 8;
 
 type ManageConnectionType = r2d2::ConnectionManager<SqliteConnection>;
-type PooledConnectionType = r2d2::PooledConnection<ManageConnectionType>;
 pub type Pool = r2d2::Pool<ManageConnectionType>;
 
 pub struct PoolBuilder {
@@ -25,11 +19,6 @@ impl PoolBuilder {
         PoolBuilder {
             cfg: config::CONFIG.database.clone(),
         }
-    }
-
-    pub fn from_config(&mut self, cfg: config::Database) -> &mut Self {
-        self.cfg = cfg;
-        self
     }
 
     pub fn build(&mut self) -> Pool {
