@@ -1,5 +1,6 @@
 use actix_web::{web, App, Error, HttpResponse, HttpServer};
 
+use crate::config;
 use crate::crud;
 use crate::database;
 use crate::models;
@@ -30,7 +31,7 @@ fn unwrap_delete_result(
 }
 
 async fn create_app(
-    db_pool: web::Data<database::DbPool>,
+    db_pool: web::Data<database::Pool>,
     app: web::Json<models::NewApp>,
 ) -> Result<HttpResponse, Error> {
     log::info!("create_app");
@@ -47,7 +48,7 @@ async fn create_app(
 }
 
 async fn get_app(
-    db_pool: web::Data<database::DbPool>,
+    db_pool: web::Data<database::Pool>,
     app_id: web::Path<i32>,
 ) -> Result<HttpResponse, Error> {
     log::info!("get_app");
@@ -63,7 +64,7 @@ async fn get_app(
 }
 
 async fn delete_app(
-    db_pool: web::Data<database::DbPool>,
+    db_pool: web::Data<database::Pool>,
     app_id: web::Path<i32>,
 ) -> Result<HttpResponse, Error> {
     log::info!("delete_app");
@@ -78,7 +79,7 @@ async fn delete_app(
 }
 
 async fn create_auth_token(
-    db_pool: web::Data<database::DbPool>,
+    db_pool: web::Data<database::Pool>,
     app_id: web::Path<i32>,
     auth_token: web::Json<models::NewAuthToken>,
 ) -> Result<HttpResponse, Error> {
@@ -101,7 +102,7 @@ async fn create_auth_token(
 }
 
 async fn get_app_auth_token(
-    db_pool: web::Data<database::DbPool>,
+    db_pool: web::Data<database::Pool>,
     path: web::Path<(i32, String)>,
 ) -> Result<HttpResponse, Error> {
     log::info!("get_app_auth_token");
@@ -119,7 +120,7 @@ async fn get_app_auth_token(
 }
 
 async fn delete_app_auth_token(
-    db_pool: web::Data<database::DbPool>,
+    db_pool: web::Data<database::Pool>,
     path: web::Path<(i32, String)>,
 ) -> Result<HttpResponse, Error> {
     log::info!("delete_app_auth_token");
@@ -138,7 +139,7 @@ async fn delete_app_auth_token(
 }
 
 async fn delete_auth_token(
-    db_pool: web::Data<database::DbPool>,
+    db_pool: web::Data<database::Pool>,
     path: web::Path<String>,
 ) -> Result<HttpResponse, Error> {
     log::info!("delete_app_auth_token");
@@ -155,7 +156,7 @@ async fn delete_auth_token(
 }
 
 async fn get_auth_token(
-    db_pool: web::Data<database::DbPool>,
+    db_pool: web::Data<database::Pool>,
     path: web::Path<String>,
 ) -> Result<HttpResponse, Error> {
     log::info!("get_auth_token");
@@ -197,7 +198,7 @@ pub fn add_routes(cfg: &mut web::ServiceConfig) {
 }
 
 pub fn add_database(cfg: &mut web::ServiceConfig) {
-    let pool: database::DbPool = database::pool();
+    let pool: database::Pool = database::PoolBuilder::new().build();
     database::run_migrations(&mut pool.get().unwrap()).expect("Unable to run migrations");
 
     cfg.app_data(web::Data::new(pool.clone()));
@@ -205,8 +206,10 @@ pub fn add_database(cfg: &mut web::ServiceConfig) {
 
 #[actix_web::main]
 pub async fn run() -> std::io::Result<()> {
+    let cfg = config::CONFIG.api.clone();
+
     HttpServer::new(move || App::new().configure(add_database).configure(add_routes))
-        .bind(("127.0.0.1", 8080))?
+        .bind((cfg.addr, cfg.port))?
         .run()
         .await
 }

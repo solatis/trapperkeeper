@@ -7,6 +7,6 @@ fn init() {
 }
 
 #[test]
-fn can_establish_connection() {
-    database::establish_connection().unwrap();
+fn can_build_pool_from_env() {
+    database::PoolBuilder::new().build();
 }

@@ -1,0 +1,7 @@
+debug: true
+database:
+  url: "sqlite://./tests.sqlite"
+  pool_size: 8
+api:
+  addr: "127.0.0.1"
+  port: 8080

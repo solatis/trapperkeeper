@@ -1,3 +1,4 @@
+mod config;
 mod crud;
 mod database;
 mod models;
@@ -8,7 +9,7 @@ mod web;
 use std::error::Error;
 
 fn run() -> std::result::Result<(), Box<dyn Error>> {
-    let pool = database::pool();
+    let pool = database::PoolBuilder::new().build();
 
     let mut conn = pool.get()?;
 
