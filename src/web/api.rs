@@ -1,8 +1,5 @@
-use actix_files::{Files, NamedFile};
-use actix_web::{web, App, Error, HttpResponse, HttpServer};
-use askama_actix::{Template, TemplateToResponse};
+use actix_web::{web, Error, HttpResponse};
 
-use crate::config;
 use crate::crud;
 use crate::database;
 use crate::models;
@@ -173,25 +170,7 @@ async fn get_auth_token(
     unwrap_get_result(result)
 }
 
-async fn get_static_file(fname: web::Path<String>) -> actix_web::Result<NamedFile> {
-    let f: std::path::PathBuf = fname.parse()?;
-    log::debug!("get_static_file: {}", fname);
-    Ok(NamedFile::open(f)?)
-}
-
-#[derive(Template)]
-#[template(path = "index.html")]
-struct IndexTemplate<'a> {
-    name: &'a str,
-}
-
-async fn get_admin_index() -> HttpResponse {
-    log::info!("get_admin_index");
-
-    IndexTemplate { name: "TestName" }.to_response()
-}
-
-pub fn add_routes(cfg: &mut web::ServiceConfig) {
+pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/api/v1")
             .route("/app", web::post().to(create_app))
@@ -214,30 +193,5 @@ pub fn add_routes(cfg: &mut web::ServiceConfig) {
                 "/auth_token/{auth_token_id}",
                 web::delete().to(delete_auth_token),
             ),
-    )
-    .service(web::scope("/admin").route("/index", web::get().to(get_admin_index)))
-    .service(Files::new("/static", "./static"));
-}
-
-pub fn add_database(cfg: &mut web::ServiceConfig, pool: database::Pool) {
-    cfg.app_data(web::Data::new(pool.clone()));
-}
-
-#[actix_web::main]
-pub async fn run() -> std::io::Result<()> {
-    let cfg = config::CONFIG.api.clone();
-    let pool: database::Pool = database::PoolBuilder::new().build();
-
-    database::run_migrations(&mut pool.get().unwrap()).expect("Unable to run migrations");
-
-    log::info!("launching api at {}:{}", cfg.addr, cfg.port);
-
-    HttpServer::new(move || {
-        App::new()
-            .configure(|svc| add_database(svc, pool.clone()))
-            .configure(add_routes)
-    })
-    .bind((cfg.addr, cfg.port))?
-    .run()
-    .await
+    );
 }

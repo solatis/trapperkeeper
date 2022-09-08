@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="56.912659mm"
+   height="60.545383mm"
+   viewBox="0 0 56.912659 60.545383"
+   version="1.1"
+   id="svg6752"
+   inkscape:export-filename="bitmap.svg"
+   inkscape:export-xdpi="96"
+   inkscape:export-ydpi="96"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview6754"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="mm"
+     showgrid="false" />
+  <defs
+     id="defs6749" />
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1"
+     transform="translate(-95.606966,-19.468303)">
+    <g
+       transform="matrix(1.1554489,0,0,1.1554489,95.60696,19.468302)"
+       id="g6630">
+      <svg
+         viewBox="0 0 52.399878 52.399878"
+         height="52.399879"
+         width="52.399879"
+         version="1.1"
+         id="svg6628">
+        <g
+           data-palette-color="#8abcd7"
+           id="g6626">
+          <rect
+             width="14.322634"
+             height="52.399879"
+             fill="#8abcd7"
+             stroke="transparent"
+             data-fill-palette-color="accent"
+             x="0"
+             fill-opacity="1"
+             id="rect6620"
+             y="0" />
+          <rect
+             width="14.322634"
+             height="52.399879"
+             fill="#8abcd7"
+             stroke="transparent"
+             data-fill-palette-color="accent"
+             x="17.466625"
+             fill-opacity="0.75"
+             id="rect6622"
+             y="0" />
+          <rect
+             width="14.322634"
+             height="52.399879"
+             fill="#8abcd7"
+             stroke="transparent"
+             data-fill-palette-color="accent"
+             x="34.93325"
+             fill-opacity="0.5"
+             id="rect6624"
+             y="0" />
+        </g>
+      </svg>
+    </g>
+  </g>
+</svg>

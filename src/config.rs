@@ -39,7 +39,7 @@ impl Default for Api {
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct Config {
-    debug: bool,
+    pub debug: bool,
     pub database: Database,
     pub api: Api,
 }
