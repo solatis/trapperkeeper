@@ -7,8 +7,7 @@ use serde::Serialize;
 
 use trapperkeeper::models;
 use trapperkeeper::utils;
-use trapperkeeper::web::add_database;
-use trapperkeeper::web::add_routes;
+use trapperkeeper::web;
 
 #[cfg(test)]
 #[ctor::ctor]
@@ -29,8 +28,9 @@ fn gen_auth_token_name() -> String {
 }
 
 pub async fn test_get(route: &String) -> ServiceResponse {
+    let pool = web::init_pool();
     let mut app =
-        test::init_service(App::new().configure(add_database).configure(add_routes)).await;
+        test::init_service(App::new().configure(|svc| web::configure(svc, pool.clone()))).await;
 
     test::call_service(&mut app, test::TestRequest::get().uri(route).to_request()).await
 }
@@ -46,8 +46,9 @@ where
 }
 
 pub async fn test_delete(route: &String) -> ServiceResponse {
+    let pool = web::init_pool();
     let mut app =
-        test::init_service(App::new().configure(add_database).configure(add_routes)).await;
+        test::init_service(App::new().configure(|svc| web::configure(svc, pool.clone()))).await;
 
     test::call_service(
         &mut app,
@@ -60,8 +61,9 @@ pub async fn test_post<T>(route: &str, params: &T) -> ServiceResponse
 where
     T: Serialize,
 {
+    let pool = web::init_pool();
     let mut app =
-        test::init_service(App::new().configure(add_database).configure(add_routes)).await;
+        test::init_service(App::new().configure(|svc| web::configure(svc, pool.clone()))).await;
 
     test::call_service(
         &mut app,

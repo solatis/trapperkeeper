@@ -7,26 +7,29 @@ use crate::database;
 pub mod admin;
 pub mod api;
 
-pub fn add_database(cfg: &mut ServiceConfig, pool: database::Pool) {
-    cfg.app_data(Data::new(pool.clone()));
+pub fn init_pool() -> database::Pool {
+    let pool: database::Pool = database::PoolBuilder::new().build();
+    database::run_migrations(&mut pool.get().unwrap()).expect("Unable to run migrations");
+
+    pool
+}
+
+pub fn configure(cfg: &mut ServiceConfig, pool: database::Pool) {
+    cfg.app_data(Data::new(pool.clone()))
+        .configure(api::configure)
+        .configure(admin::configure);
 }
 
 #[actix_web::main]
 pub async fn run() -> std::io::Result<()> {
+    // Initialize database pool
     let cfg = config::CONFIG.api.clone();
-    let pool: database::Pool = database::PoolBuilder::new().build();
-
-    database::run_migrations(&mut pool.get().unwrap()).expect("Unable to run migrations");
-
     log::info!("launching api at {}:{}", cfg.addr, cfg.port);
 
-    HttpServer::new(move || {
-        App::new()
-            .configure(|svc| add_database(svc, pool.clone()))
-            .configure(api::configure)
-            .configure(admin::configure)
-    })
-    .bind((cfg.addr, cfg.port))?
-    .run()
-    .await
+    let pool = init_pool();
+
+    HttpServer::new(move || App::new().configure(|svc| configure(svc, pool.clone())))
+        .bind((cfg.addr, cfg.port))?
+        .run()
+        .await
 }
