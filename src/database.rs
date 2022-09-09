@@ -1,3 +1,5 @@
+use diesel::connection::Connection;
+use diesel::connection::SimpleConnection;
 use diesel::r2d2;
 use diesel::sqlite::SqliteConnection;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
@@ -32,6 +34,28 @@ impl PoolBuilder {
             .max_size(self.cfg.pool_size)
             .build(r2d2::ConnectionManager::new(&self.cfg.url))
             .expect("Failed to create database connection pool")
+    }
+}
+
+pub struct ConnectionBuilder {
+    cfg: config::Database,
+}
+
+impl ConnectionBuilder {
+    pub fn new() -> Self {
+        ConnectionBuilder {
+            cfg: config::CONFIG.database.clone(),
+        }
+    }
+
+    pub fn build(&mut self) -> SqliteConnection {
+        let mut conn = SqliteConnection::establish(&self.cfg.url)
+            .expect("unable to establish sqlite connection");
+
+        conn.batch_execute("PRAGMA foreign_keys = ON")
+            .expect("unable to set pragma");
+
+        conn
     }
 }
 

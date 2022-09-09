@@ -8,8 +8,7 @@ use trapperkeeper::models::{App, AuthToken};
 
 #[fixture]
 pub fn conn() -> SqliteConnection {
-    let url: String = format!("sqlite://./{}.sqlite", "tests");
-    let mut conn = database::establish_connection_from_url(String::from(url)).unwrap();
+    let mut conn = database::ConnectionBuilder::new().build();
     database::run_migrations(&mut conn).unwrap();
     conn
 }
@@ -77,85 +76,33 @@ fn can_get_auth_token(mut conn: SqliteConnection, auth_token: AuthToken) {
 }
 
 ////
-// Check exists
-//
-
-#[rstest]
-fn can_check_app_exists(mut conn: SqliteConnection, app_id: i32) {
-    assert_eq!(crud::check_app_by_id(&mut conn, app_id), Ok(true));
-}
-
-#[rstest]
-fn can_check_app_not_exists(mut conn: SqliteConnection) {
-    assert_eq!(crud::check_app_by_id(&mut conn, -1), Ok(false));
-}
-
-#[rstest]
-fn can_check_auth_token_exists(mut conn: SqliteConnection, auth_token: AuthToken) {
-    assert_eq!(
-        crud::check_auth_token_by_id(&mut conn, &auth_token.id),
-        Ok(true)
-    );
-}
-
-#[rstest]
-fn can_check_auth_token_not_exists(mut conn: SqliteConnection) {
-    assert_eq!(
-        crud::check_auth_token_by_id(&mut conn, &String::from("adsfiugdsfigdsf")),
-        Ok(false)
-    );
-}
-
-#[rstest]
-fn can_check_app_auth_token_exists(mut conn: SqliteConnection, auth_token: AuthToken) {
-    assert_eq!(
-        crud::check_auth_token_by_app_and_id(&mut conn, auth_token.app_id, &auth_token.id),
-        Ok(true)
-    );
-}
-
-#[rstest]
-fn can_check_app_auth_token_not_exists(
-    mut conn: SqliteConnection,
-    app_id: i32,
-    auth_token: AuthToken,
-) {
-    // Test the tests: app_id and auth_token_id follow to separate "chains" of fixtures, and
-    // as such should never share the same app id.
-    assert_ne!(auth_token.app_id, app_id);
-
-    assert_eq!(
-        crud::check_auth_token_by_app_and_id(&mut conn, app_id, &auth_token.id),
-        Ok(false)
-    );
-}
-
-////
 // Deletion
 //
 
 #[rstest]
 fn can_delete_app(mut conn: SqliteConnection, app_id: i32) {
-    assert_eq!(crud::check_app_by_id(&mut conn, app_id), Ok(true));
+    assert!(crud::get_app_by_id(&mut conn, app_id)
+        .expect("unable to get app by id")
+        .is_some());
     assert_eq!(crud::delete_app_by_id(&mut conn, app_id), Ok(true));
-    assert_eq!(crud::check_app_by_id(&mut conn, app_id), Ok(false));
+    assert!(crud::get_app_by_id(&mut conn, app_id)
+        .expect("unable to get app by id")
+        .is_none());
     assert_eq!(crud::delete_app_by_id(&mut conn, app_id), Ok(false));
 }
 
 #[rstest]
 fn can_delete_auth_token(mut conn: SqliteConnection, auth_token: AuthToken) {
-    assert_eq!(
-        crud::check_auth_token_by_id(&mut conn, &auth_token.id),
-        Ok(true)
-    );
+    assert!(crud::get_auth_token_by_id(&mut conn, &auth_token.id)
+        .expect("unable to get auth token by id")
+        .is_some());
     assert_eq!(
         crud::delete_auth_token_by_id(&mut conn, &auth_token.id),
         Ok(true)
     );
-    assert_eq!(
-        crud::check_auth_token_by_id(&mut conn, &auth_token.id),
-        Ok(false)
-    );
+    assert!(crud::get_auth_token_by_id(&mut conn, &auth_token.id)
+        .expect("unable to get auth token by id")
+        .is_none());
     assert_eq!(
         crud::delete_auth_token_by_id(&mut conn, &auth_token.id),
         Ok(false)
