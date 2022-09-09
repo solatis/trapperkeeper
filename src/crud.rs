@@ -28,6 +28,18 @@ pub fn get_app_by_id(conn: &mut SqliteConnection, id: i32) -> Result<Option<App>
     }
 }
 
+pub fn check_app_by_id(conn: &mut SqliteConnection, id: i32) -> Result<bool, Error> {
+    use crate::schema::apps;
+
+    let r = apps::table.filter(apps::id.eq(id)).get_result::<App>(conn);
+
+    match r {
+        Ok(_) => Ok(true),
+        Err(Error::NotFound) => Ok(false),
+        Err(e) => Err(e),
+    }
+}
+
 pub fn delete_app_by_id(conn: &mut SqliteConnection, id: i32) -> Result<bool, Error> {
     use crate::schema::apps;
 
@@ -88,6 +100,39 @@ pub fn get_auth_token_by_app_and_id(
     match result {
         Ok(auth_token) => Ok(Some(auth_token)),
         Err(Error::NotFound) => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+pub fn check_auth_token_by_id(conn: &mut SqliteConnection, id: &String) -> Result<bool, Error> {
+    use crate::schema::auth_tokens;
+
+    let r = auth_tokens::table
+        .filter(auth_tokens::id.eq(id))
+        .get_result::<AuthToken>(conn);
+
+    match r {
+        Ok(_) => Ok(true),
+        Err(Error::NotFound) => Ok(false),
+        Err(e) => Err(e),
+    }
+}
+
+pub fn check_auth_token_by_app_and_id(
+    conn: &mut SqliteConnection,
+    app_id: i32,
+    auth_token_id: &String,
+) -> Result<bool, Error> {
+    use crate::schema::auth_tokens;
+
+    let r = auth_tokens::table
+        .filter(auth_tokens::app_id.eq(app_id))
+        .filter(auth_tokens::id.eq(auth_token_id))
+        .get_result::<AuthToken>(conn);
+
+    match r {
+        Ok(_) => Ok(true),
+        Err(Error::NotFound) => Ok(false),
         Err(e) => Err(e),
     }
 }
