@@ -19,6 +19,14 @@ pub fn app(mut conn: SqliteConnection) -> App {
 }
 
 #[fixture]
+pub fn apps(mut conn: SqliteConnection) -> Vec<App> {
+    vec![
+        crud::create_app(&mut conn, &String::from("app1")).unwrap(),
+        crud::create_app(&mut conn, &String::from("app2")).unwrap(),
+    ]
+}
+
+#[fixture]
 pub fn app_id(app: App) -> i32 {
     app.id.unwrap()
 }
@@ -48,6 +56,19 @@ fn can_create_auth_token(mut conn: SqliteConnection, app_id: i32) {
 fn cannot_create_auth_token_when_app_doesnt_exist(mut conn: SqliteConnection) {
     let auth_token_id = crud::create_auth_token(&mut conn, -2, &String::from("foo"));
     assert_eq!(auth_token_id.is_ok(), false)
+}
+
+////
+// List
+//
+
+#[rstest]
+fn can_get_apps(mut conn: SqliteConnection, apps: Vec<App>) {
+    let apps_ = crud::get_apps(&mut conn).expect("unable to list apps");
+
+    // Verify all recently created apps are inside our returned apps_. Likely there
+    // are more.
+    assert!(apps.iter().all(|app| apps_.contains(app)));
 }
 
 ////

@@ -14,6 +14,13 @@ pub fn create_app(conn: &mut SqliteConnection, title: &String) -> Result<App, Er
     Ok(inserted_app)
 }
 
+pub fn get_apps(conn: &mut SqliteConnection) -> Result<Vec<App>, Error> {
+    use crate::schema::apps;
+
+    let result = apps::dsl::apps.load::<App>(conn)?;
+    Ok(result)
+}
+
 pub fn get_app_by_id(conn: &mut SqliteConnection, id: i32) -> Result<Option<App>, Error> {
     use crate::schema::apps;
 
