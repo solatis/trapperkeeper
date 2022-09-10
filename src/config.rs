@@ -1,7 +1,9 @@
-use config;
+use std::env;
+
 use lazy_static::lazy_static;
 use serde::Deserialize;
-use std::env;
+
+use config;
 
 lazy_static! {
     pub static ref CONFIG: Config = Config::new().expect("Unable to read configuration");
