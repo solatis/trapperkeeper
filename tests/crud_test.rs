@@ -1,4 +1,3 @@
-use diesel::prelude::SqliteConnection;
 use more_asserts as ma;
 use rstest::*;
 
@@ -7,19 +6,17 @@ use trapperkeeper::database;
 use trapperkeeper::models::{App, AuthToken};
 
 #[fixture]
-pub fn conn() -> SqliteConnection {
-    let mut conn = database::ConnectionBuilder::new().build();
-    database::run_migrations(&mut conn).unwrap();
-    conn
+pub fn conn() -> database::PooledConnection {
+    database::POOL.get().unwrap()
 }
 
 #[fixture]
-pub fn app(mut conn: SqliteConnection) -> App {
+pub fn app(mut conn: database::PooledConnection) -> App {
     return crud::create_app(&mut conn, &String::from("foo")).unwrap();
 }
 
 #[fixture]
-pub fn apps(mut conn: SqliteConnection) -> Vec<App> {
+pub fn apps(mut conn: database::PooledConnection) -> Vec<App> {
     vec![
         crud::create_app(&mut conn, &String::from("app1")).unwrap(),
         crud::create_app(&mut conn, &String::from("app2")).unwrap(),
@@ -32,7 +29,7 @@ pub fn app_id(app: App) -> i32 {
 }
 
 #[fixture]
-pub fn auth_token(mut conn: SqliteConnection, app_id: i32) -> AuthToken {
+pub fn auth_token(mut conn: database::PooledConnection, app_id: i32) -> AuthToken {
     return crud::create_auth_token(&mut conn, app_id, &String::from("foo")).unwrap();
 }
 
@@ -41,19 +38,19 @@ pub fn auth_token(mut conn: SqliteConnection, app_id: i32) -> AuthToken {
 //
 
 #[rstest]
-fn can_create_app(mut conn: SqliteConnection) {
+fn can_create_app(mut conn: database::PooledConnection) {
     let app: App = crud::create_app(&mut conn, &String::from("foo")).unwrap();
     ma::assert_gt!(app.id, Some(0))
 }
 
 #[rstest]
-fn can_create_auth_token(mut conn: SqliteConnection, app_id: i32) {
+fn can_create_auth_token(mut conn: database::PooledConnection, app_id: i32) {
     let auth_token_id = crud::create_auth_token(&mut conn, app_id, &String::from("foo"));
     assert_eq!(auth_token_id.is_ok(), true)
 }
 
 #[rstest]
-fn cannot_create_auth_token_when_app_doesnt_exist(mut conn: SqliteConnection) {
+fn cannot_create_auth_token_when_app_doesnt_exist(mut conn: database::PooledConnection) {
     let auth_token_id = crud::create_auth_token(&mut conn, -2, &String::from("foo"));
     assert_eq!(auth_token_id.is_ok(), false)
 }
@@ -63,7 +60,7 @@ fn cannot_create_auth_token_when_app_doesnt_exist(mut conn: SqliteConnection) {
 //
 
 #[rstest]
-fn can_get_apps(mut conn: SqliteConnection, apps: Vec<App>) {
+fn can_get_apps(mut conn: database::PooledConnection, apps: Vec<App>) {
     let apps_ = crud::get_apps(&mut conn).expect("unable to list apps");
 
     // Verify all recently created apps are inside our returned apps_. Likely there
@@ -76,21 +73,21 @@ fn can_get_apps(mut conn: SqliteConnection, apps: Vec<App>) {
 //
 
 #[rstest]
-fn can_get_app(mut conn: SqliteConnection, app: App) {
+fn can_get_app(mut conn: database::PooledConnection, app: App) {
     let get = crud::get_app_by_id(&mut conn, app.id.unwrap());
 
     assert_eq!(get, Ok(Some(app)));
 }
 
 #[rstest]
-fn get_nonexisting_app(mut conn: SqliteConnection) {
+fn get_nonexisting_app(mut conn: database::PooledConnection) {
     let get = crud::get_app_by_id(&mut conn, -1);
 
     assert_eq!(get, Ok(None));
 }
 
 #[rstest]
-fn can_get_auth_token(mut conn: SqliteConnection, auth_token: AuthToken) {
+fn can_get_auth_token(mut conn: database::PooledConnection, auth_token: AuthToken) {
     let get = crud::get_auth_token_by_id(&mut conn, &auth_token.id).unwrap();
 
     assert_eq!(get.unwrap(), auth_token);
@@ -101,7 +98,7 @@ fn can_get_auth_token(mut conn: SqliteConnection, auth_token: AuthToken) {
 //
 
 #[rstest]
-fn can_delete_app(mut conn: SqliteConnection, app_id: i32) {
+fn can_delete_app(mut conn: database::PooledConnection, app_id: i32) {
     assert!(crud::get_app_by_id(&mut conn, app_id)
         .expect("unable to get app by id")
         .is_some());
@@ -113,7 +110,7 @@ fn can_delete_app(mut conn: SqliteConnection, app_id: i32) {
 }
 
 #[rstest]
-fn can_delete_auth_token(mut conn: SqliteConnection, auth_token: AuthToken) {
+fn can_delete_auth_token(mut conn: database::PooledConnection, auth_token: AuthToken) {
     assert!(crud::get_auth_token_by_id(&mut conn, &auth_token.id)
         .expect("unable to get auth token by id")
         .is_some());

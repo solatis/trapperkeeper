@@ -29,13 +29,10 @@ fn unwrap_delete_result(
     }
 }
 
-async fn create_app(
-    db_pool: web::Data<database::Pool>,
-    app: web::Json<models::NewApp>,
-) -> Result<HttpResponse, Error> {
+async fn create_app(app: web::Json<models::NewApp>) -> Result<HttpResponse, Error> {
     log::info!("create_app");
 
-    let mut conn = db_pool
+    let mut conn = database::POOL
         .get()
         .map_err(actix_web::error::ErrorInternalServerError)?;
 
@@ -46,13 +43,10 @@ async fn create_app(
     Ok(HttpResponse::Ok().json(app))
 }
 
-async fn get_app(
-    db_pool: web::Data<database::Pool>,
-    app_id: web::Path<i32>,
-) -> Result<HttpResponse, Error> {
+async fn get_app(app_id: web::Path<i32>) -> Result<HttpResponse, Error> {
     log::info!("get_app");
 
-    let mut conn = db_pool
+    let mut conn = database::POOL
         .get()
         .map_err(actix_web::error::ErrorInternalServerError)?;
 
@@ -62,12 +56,9 @@ async fn get_app(
     unwrap_get_result(result)
 }
 
-async fn delete_app(
-    db_pool: web::Data<database::Pool>,
-    app_id: web::Path<i32>,
-) -> Result<HttpResponse, Error> {
+async fn delete_app(app_id: web::Path<i32>) -> Result<HttpResponse, Error> {
     log::info!("delete_app");
-    let mut conn = db_pool
+    let mut conn = database::POOL
         .get()
         .map_err(actix_web::error::ErrorInternalServerError)?;
 
@@ -78,13 +69,12 @@ async fn delete_app(
 }
 
 async fn create_auth_token(
-    db_pool: web::Data<database::Pool>,
     app_id: web::Path<i32>,
     auth_token: web::Json<models::NewAuthToken>,
 ) -> Result<HttpResponse, Error> {
     log::info!("create_auth_token");
 
-    let mut conn = db_pool
+    let mut conn = database::POOL
         .get()
         .map_err(actix_web::error::ErrorInternalServerError)?;
 
@@ -100,13 +90,10 @@ async fn create_auth_token(
     Ok(HttpResponse::Ok().json(auth_token))
 }
 
-async fn get_app_auth_token(
-    db_pool: web::Data<database::Pool>,
-    path: web::Path<(i32, String)>,
-) -> Result<HttpResponse, Error> {
+async fn get_app_auth_token(path: web::Path<(i32, String)>) -> Result<HttpResponse, Error> {
     log::info!("get_app_auth_token");
 
-    let mut conn = db_pool
+    let mut conn = database::POOL
         .get()
         .map_err(actix_web::error::ErrorInternalServerError)?;
 
@@ -118,13 +105,10 @@ async fn get_app_auth_token(
     unwrap_get_result(result)
 }
 
-async fn delete_app_auth_token(
-    db_pool: web::Data<database::Pool>,
-    path: web::Path<(i32, String)>,
-) -> Result<HttpResponse, Error> {
+async fn delete_app_auth_token(path: web::Path<(i32, String)>) -> Result<HttpResponse, Error> {
     log::info!("delete_app_auth_token");
 
-    let mut conn = db_pool
+    let mut conn = database::POOL
         .get()
         .map_err(actix_web::error::ErrorInternalServerError)?;
 
@@ -137,13 +121,10 @@ async fn delete_app_auth_token(
     unwrap_delete_result(result)
 }
 
-async fn delete_auth_token(
-    db_pool: web::Data<database::Pool>,
-    path: web::Path<String>,
-) -> Result<HttpResponse, Error> {
+async fn delete_auth_token(path: web::Path<String>) -> Result<HttpResponse, Error> {
     log::info!("delete_app_auth_token");
 
-    let mut conn = db_pool
+    let mut conn = database::POOL
         .get()
         .map_err(actix_web::error::ErrorInternalServerError)?;
 
@@ -154,13 +135,10 @@ async fn delete_auth_token(
     unwrap_delete_result(result)
 }
 
-async fn get_auth_token(
-    db_pool: web::Data<database::Pool>,
-    path: web::Path<String>,
-) -> Result<HttpResponse, Error> {
+async fn get_auth_token(path: web::Path<String>) -> Result<HttpResponse, Error> {
     log::info!("get_auth_token");
 
-    let mut conn = db_pool
+    let mut conn = database::POOL
         .get()
         .map_err(actix_web::error::ErrorInternalServerError)?;
 
