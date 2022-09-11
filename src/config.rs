@@ -39,11 +39,18 @@ impl Default for Api {
     }
 }
 
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct Admin {
+    pub username: String,
+    pub password: String,
+}
+
 #[derive(Clone, Debug, Deserialize)]
 pub struct Config {
     pub debug: bool,
     pub database: Database,
     pub api: Api,
+    pub admin: Admin,
 }
 
 impl Default for Config {
@@ -52,6 +59,7 @@ impl Default for Config {
             debug: false,
             database: Database::default(),
             api: Api::default(),
+            admin: Admin::default(),
         }
     }
 }
