@@ -29,13 +29,16 @@ fn unwrap_delete_result(
     }
 }
 
+fn get_conn() -> Result<database::PooledConnection, Error> {
+    database::POOL
+        .get()
+        .map_err(actix_web::error::ErrorInternalServerError)
+}
+
 async fn create_app(app: web::Json<models::NewApp>) -> Result<HttpResponse, Error> {
     log::info!("create_app");
 
-    let mut conn = database::POOL
-        .get()
-        .map_err(actix_web::error::ErrorInternalServerError)?;
-
+    let mut conn = get_conn()?;
     let app = web::block(move || crud::create_app(&mut conn, &app.name))
         .await?
         .map_err(actix_web::error::ErrorInternalServerError)?;
@@ -46,11 +49,9 @@ async fn create_app(app: web::Json<models::NewApp>) -> Result<HttpResponse, Erro
 async fn get_app(app_id: web::Path<i32>) -> Result<HttpResponse, Error> {
     log::info!("get_app");
 
-    let mut conn = database::POOL
-        .get()
-        .map_err(actix_web::error::ErrorInternalServerError)?;
-
     let app_id = app_id.into_inner();
+
+    let mut conn = get_conn()?;
     let result = web::block(move || crud::get_app_by_id(&mut conn, app_id)).await?;
 
     unwrap_get_result(result)
@@ -58,11 +59,10 @@ async fn get_app(app_id: web::Path<i32>) -> Result<HttpResponse, Error> {
 
 async fn delete_app(app_id: web::Path<i32>) -> Result<HttpResponse, Error> {
     log::info!("delete_app");
-    let mut conn = database::POOL
-        .get()
-        .map_err(actix_web::error::ErrorInternalServerError)?;
 
     let app_id = app_id.into_inner();
+
+    let mut conn = get_conn()?;
     let result = web::block(move || crud::delete_app_by_id(&mut conn, app_id)).await?;
 
     unwrap_delete_result(result)
@@ -74,14 +74,11 @@ async fn create_auth_token(
 ) -> Result<HttpResponse, Error> {
     log::info!("create_auth_token");
 
-    let mut conn = database::POOL
-        .get()
-        .map_err(actix_web::error::ErrorInternalServerError)?;
-
     if app_id.into_inner() != auth_token.app_id {
         return Ok(HttpResponse::BadRequest().body("app_id in auth_token must match app_id in uri"));
     }
 
+    let mut conn = get_conn()?;
     let auth_token =
         web::block(move || crud::create_auth_token(&mut conn, auth_token.app_id, &auth_token.name))
             .await?
@@ -93,11 +90,9 @@ async fn create_auth_token(
 async fn get_app_auth_token(path: web::Path<(i32, String)>) -> Result<HttpResponse, Error> {
     log::info!("get_app_auth_token");
 
-    let mut conn = database::POOL
-        .get()
-        .map_err(actix_web::error::ErrorInternalServerError)?;
-
     let (app_id, auth_token_id) = path.into_inner();
+
+    let mut conn = get_conn()?;
     let result =
         web::block(move || crud::get_auth_token_by_app_and_id(&mut conn, app_id, &auth_token_id))
             .await?;
@@ -108,11 +103,9 @@ async fn get_app_auth_token(path: web::Path<(i32, String)>) -> Result<HttpRespon
 async fn delete_app_auth_token(path: web::Path<(i32, String)>) -> Result<HttpResponse, Error> {
     log::info!("delete_app_auth_token");
 
-    let mut conn = database::POOL
-        .get()
-        .map_err(actix_web::error::ErrorInternalServerError)?;
-
     let (app_id, auth_token_id) = path.into_inner();
+
+    let mut conn = get_conn()?;
     let result = web::block(move || {
         crud::delete_auth_token_by_app_and_id(&mut conn, app_id, &auth_token_id)
     })
@@ -124,11 +117,9 @@ async fn delete_app_auth_token(path: web::Path<(i32, String)>) -> Result<HttpRes
 async fn delete_auth_token(path: web::Path<String>) -> Result<HttpResponse, Error> {
     log::info!("delete_app_auth_token");
 
-    let mut conn = database::POOL
-        .get()
-        .map_err(actix_web::error::ErrorInternalServerError)?;
-
     let auth_token_id = path.into_inner();
+
+    let mut conn = get_conn()?;
     let result =
         web::block(move || crud::delete_auth_token_by_id(&mut conn, &auth_token_id)).await?;
 
@@ -138,11 +129,9 @@ async fn delete_auth_token(path: web::Path<String>) -> Result<HttpResponse, Erro
 async fn get_auth_token(path: web::Path<String>) -> Result<HttpResponse, Error> {
     log::info!("get_auth_token");
 
-    let mut conn = database::POOL
-        .get()
-        .map_err(actix_web::error::ErrorInternalServerError)?;
-
     let auth_token_id = path.into_inner();
+
+    let mut conn = get_conn()?;
     let result = web::block(move || crud::get_auth_token_by_id(&mut conn, &auth_token_id)).await?;
 
     unwrap_get_result(result)
