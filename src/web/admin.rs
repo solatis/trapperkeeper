@@ -31,11 +31,22 @@ async fn get_index(hb: web::Data<Handlebars<'_>>) -> HttpResponse {
     HttpResponse::Ok().body(body)
 }
 
+/// Templates
+///
+/// Embed all templates inside our template directory so that we do not
+/// need to point to any template directory in production deployments.
+///
 #[derive(RustEmbed)]
 #[folder = "./templates"]
 struct Templates;
 
-pub fn init_templates<'reg>() -> Handlebars<'reg> {
+/// Initialize handlebars templates
+///
+/// In debug mode, reads templates live from directory so that templates
+/// are refreshed without recompilation.
+///
+/// In production mode, uses embedded templates struct initialized above.
+fn init_templates<'reg>() -> Handlebars<'reg> {
     let mut hb = Handlebars::new();
 
     match config::CONFIG.debug {
