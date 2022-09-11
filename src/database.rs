@@ -1,6 +1,5 @@
 use std::fmt;
 
-use diesel::connection::Connection;
 use diesel::connection::SimpleConnection;
 use diesel::r2d2;
 use diesel::r2d2::CustomizeConnection;
