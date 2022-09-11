@@ -1,9 +1,12 @@
+use rand::distributions;
 use rand::prelude::*;
 
-/// Returns a random token of length 16
-pub fn random_token() -> String {
-    let mut rng = rand::thread_rng();
-    let xs: [u8; 16] = rng.gen();
+/// Returns a secure random token of length `n`
+pub fn random_token(n: usize) -> String {
+    let rng = rand::thread_rng();
 
-    return hex::encode(&xs);
+    rng.sample_iter(distributions::Alphanumeric)
+        .take(n)
+        .map(char::from)
+        .collect()
 }
