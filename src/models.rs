@@ -3,6 +3,36 @@ use crate::utils;
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Login {
+    pub username: String,
+    pub password: String,
+}
+
+impl Login {
+    pub fn new(username: &String, password: &String) -> Self {
+        Login {
+            username: username.clone(),
+            password: password.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Session {
+    pub id: String,
+    pub username: String,
+}
+
+impl Session {
+    pub fn new(username: &String) -> Self {
+        Session {
+            id: utils::random_token(32),
+            username: username.clone(),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Queryable, Insertable)]
 #[diesel(table_name = apps)]
 pub struct NewApp {
