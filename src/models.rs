@@ -11,9 +11,7 @@ pub struct NewApp {
 
 impl NewApp {
     pub fn new(name: &String) -> Self {
-        NewApp {
-            name: name.to_string(),
-        }
+        NewApp { name: name.clone() }
     }
 }
 
@@ -35,7 +33,7 @@ impl NewAuthToken {
     pub fn new(app_id: i32, name: &String) -> Self {
         NewAuthToken {
             app_id: app_id,
-            name: name.to_string(),
+            name: name.clone(),
         }
     }
 }
@@ -51,9 +49,9 @@ pub struct AuthToken {
 impl AuthToken {
     pub fn new(app_id: i32, name: &String) -> Self {
         AuthToken {
-            id: utils::random_token(),
+            id: utils::random_token(32),
             app_id: app_id,
-            name: name.to_string(),
+            name: name.clone(),
         }
     }
 }
