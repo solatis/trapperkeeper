@@ -5,8 +5,24 @@ use rust_embed::RustEmbed;
 use serde_json::json;
 
 use crate::config;
+use crate::models;
 
-async fn get_admin_index(hb: web::Data<Handlebars<'_>>) -> HttpResponse {
+/// Authentication for admin
+///
+/// Verifies login credentials, sets JWT token cookie if successful.
+async fn post_login(login: web::Json<models::Login>) -> HttpResponse {
+    let credentials = &config::CONFIG.admin;
+
+    if login.username != credentials.username || login.password != credentials.password {
+        return HttpResponse::Forbidden().finish();
+    }
+
+    let session = models::Session::new(&login.username);
+
+    HttpResponse::Ok().json(session)
+}
+
+async fn get_index(hb: web::Data<Handlebars<'_>>) -> HttpResponse {
     log::info!("get_admin_index");
 
     let data = json!({"name": "Leon Mergen"});
@@ -43,6 +59,10 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     let hb = init_templates();
 
     cfg.app_data(web::Data::new(hb.clone()))
-        .service(web::scope("/admin").route("/index", web::get().to(get_admin_index)))
+        .service(
+            web::scope("/admin")
+                .route("/index", web::get().to(get_index))
+                .route("/login", web::post().to(post_login)),
+        )
         .service(Files::new("/static", "./static"));
 }
