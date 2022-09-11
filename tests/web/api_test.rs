@@ -14,7 +14,7 @@ fn init() {
 }
 
 fn gen_identifier() -> String {
-    random_token()
+    random_token(16)
 }
 
 fn gen_app_name() -> String {
