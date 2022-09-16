@@ -5,12 +5,16 @@ use rust_embed::RustEmbed;
 use serde_json::json;
 
 use crate::config;
+use crate::crypto;
 use crate::models;
 
 /// Authentication for admin
 ///
 /// Verifies login credentials, sets JWT token cookie if successful.
-async fn post_login(login: web::Json<models::Login>) -> HttpResponse {
+async fn post_login(
+    hm: web::Data<crypto::HmacType>,
+    login: web::Json<models::Login>,
+) -> HttpResponse {
     let credentials = &config::CONFIG.admin;
 
     if login.username != credentials.username || login.password != credentials.password {
@@ -18,8 +22,9 @@ async fn post_login(login: web::Json<models::Login>) -> HttpResponse {
     }
 
     let session = models::Session::new(&login.username);
+    let jwt = crypto::jwt_encode(session, &hm);
 
-    HttpResponse::Ok().json(session)
+    HttpResponse::Ok().finish()
 }
 
 async fn get_index(hb: web::Data<Handlebars<'_>>) -> HttpResponse {
@@ -46,6 +51,7 @@ struct Templates;
 /// are refreshed without recompilation.
 ///
 /// In production mode, uses embedded templates struct initialized above.
+///
 fn init_templates<'reg>() -> Handlebars<'reg> {
     let mut hb = Handlebars::new();
 
@@ -68,8 +74,10 @@ fn init_templates<'reg>() -> Handlebars<'reg> {
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     let hb = init_templates();
+    let hm = crypto::random_hmac();
 
     cfg.app_data(web::Data::new(hb.clone()))
+        .app_data(web::Data::new(hm.clone()))
         .service(
             web::scope("/admin")
                 .route("/index", web::get().to(get_index))

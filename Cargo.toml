@@ -9,25 +9,39 @@ std = []
 generic_const_exprs = []
 
 [dependencies]
+
+# ORM
 diesel = { version = "2.0.0", features = ["sqlite", "returning_clauses_for_sqlite_3_35", "r2d2"] }
 diesel_migrations = { version = "2.0.0", features = ["sqlite"] }
 
+# Webserver stuff
 actix-web = "4"
 actix-files = "0.6"
-handlebars = { version = "4.3", features = ["dir_source", "rust-embed"] }
 rust-embed = "6.4"
 
+# Auth / security
+jwt = "0.16"
+sha2 = "0.10"
+hmac = { version = "0.12", features = ["reset"] }
+
+
+# Templating
+handlebars = { version = "4.3", features = ["dir_source", "rust-embed"] }
+
+# Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
-lazy_static = "1.1"
+# Environment / configuration
 config = { version = "0.13", features = ["yaml"] }
-log = "0.4"
 env_logger = "0.9"
 dotenvy = "0.15"
+log = "0.4"
+
+# Utilities
+lazy_static = "1.1"
 rand = "0.8"
 hex = "0.4.3"
-
 
 [dev-dependencies]
 more-asserts = "0.3.0"

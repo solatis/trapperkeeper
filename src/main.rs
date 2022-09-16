@@ -1,5 +1,6 @@
 mod config;
 mod crud;
+mod crypto;
 mod database;
 mod models;
 mod schema;
