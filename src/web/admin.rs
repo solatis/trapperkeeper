@@ -7,27 +7,39 @@ use serde_json::json;
 use crate::config;
 use crate::crypto;
 use crate::models;
+use crate::web::session;
 
 /// Authentication for admin
 ///
 /// Verifies login credentials, sets JWT token cookie if successful.
 async fn post_login(
     hm: web::Data<crypto::HmacType>,
-    login: web::Json<models::Login>,
+    login: web::Form<models::Login>,
 ) -> HttpResponse {
+    log::info!("post_admin_login");
+
     let credentials = &config::CONFIG.admin;
 
     if login.username != credentials.username || login.password != credentials.password {
         return HttpResponse::Forbidden().finish();
     }
 
-    let session = models::Session::new(&login.username);
-    let jwt = crypto::jwt_encode(session, &hm);
+    let mut result = HttpResponse::Ok().finish();
 
-    HttpResponse::Ok().finish()
+    session::inject_session(&hm, models::Session::new(&login.username), &mut result);
+    result
 }
 
-async fn get_index(hb: web::Data<Handlebars<'_>>) -> HttpResponse {
+async fn get_login(hb: web::Data<Handlebars<'_>>) -> HttpResponse {
+    log::info!("get_admin_login");
+
+    let data = json!({});
+    let body = hb.render("login", &data).unwrap();
+
+    HttpResponse::Ok().body(body)
+}
+
+async fn get_index(session: models::Session, hb: web::Data<Handlebars<'_>>) -> HttpResponse {
     log::info!("get_admin_index");
 
     let data = json!({"name": "Leon Mergen"});
@@ -81,6 +93,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(
             web::scope("/admin")
                 .route("/index", web::get().to(get_index))
+                .route("/login", web::get().to(get_login))
                 .route("/login", web::post().to(post_login)),
         )
         .service(Files::new("/static", "./static"));

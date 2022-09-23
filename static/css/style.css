@@ -9267,7 +9267,7 @@ div.tagsinput span.tag a {
 }
 
 .auth .brand-logo img {
-  width: 90px;
+  width: 180px;
 }
 
 .auth form .form-group {
@@ -9310,7 +9310,7 @@ div.tagsinput span.tag a {
   padding-top: 97px;
 }
 
-.page-body-wrapper.full-page-wrapper {
+.full-page-wrapper {
   width: 100%;
   min-height: 100vh;
   padding-top: 0;
@@ -9331,6 +9331,120 @@ div.tagsinput span.tag a {
     margin-left: 0;
     width: 100%;
   }
+}
+
+.auth .login-half-bg {
+  background: url("../../images/auth/login-bg.jpg");
+  background-size: cover;
+}
+
+.auth .register-half-bg {
+  background: url("../../images/auth/register-bg.jpg");
+  background-size: cover;
+}
+
+.auth.lock-full-bg {
+  background: url("../../images/auth/lockscreen-bg.jpg");
+  background-size: cover;
+}
+
+.auth .lock-profile-img {
+  width: 90px;
+  height: 90px;
+  border-radius: 100%;
+}
+
+.auth .auth-form-light {
+  background: #ffffff;
+}
+
+.auth .auth-form-light select {
+  color: #c9c8c8;
+}
+
+.auth .auth-form-light .input-group .form-control:focus, .auth .auth-form-light .asColorPicker-wrap .form-control:focus, .auth .auth-form-light .input-group .asColorPicker-input:focus, .auth .auth-form-light .asColorPicker-wrap .asColorPicker-input:focus, .auth .auth-form-light .input-group .dataTables_wrapper select:focus, .dataTables_wrapper .auth .auth-form-light .input-group select:focus, .auth .auth-form-light .asColorPicker-wrap .dataTables_wrapper select:focus, .dataTables_wrapper .auth .auth-form-light .asColorPicker-wrap select:focus, .auth .auth-form-light .input-group .select2-container--default .select2-selection--single:focus, .select2-container--default .auth .auth-form-light .input-group .select2-selection--single:focus, .auth .auth-form-light .asColorPicker-wrap .select2-container--default .select2-selection--single:focus, .select2-container--default .auth .auth-form-light .asColorPicker-wrap .select2-selection--single:focus, .auth .auth-form-light .input-group .select2-container--default .select2-selection--single .select2-search__field:focus, .select2-container--default .select2-selection--single .auth .auth-form-light .input-group .select2-search__field:focus, .auth .auth-form-light .asColorPicker-wrap .select2-container--default .select2-selection--single .select2-search__field:focus, .select2-container--default .select2-selection--single .auth .auth-form-light .asColorPicker-wrap .select2-search__field:focus, .auth .auth-form-light .input-group .typeahead:focus, .auth .auth-form-light .asColorPicker-wrap .typeahead:focus,
+.auth .auth-form-light .input-group .tt-query:focus,
+.auth .auth-form-light .asColorPicker-wrap .tt-query:focus,
+.auth .auth-form-light .input-group .tt-hint:focus,
+.auth .auth-form-light .asColorPicker-wrap .tt-hint:focus, .auth .auth-form-light .input-group .form-control:active, .auth .auth-form-light .asColorPicker-wrap .form-control:active, .auth .auth-form-light .input-group .asColorPicker-input:active, .auth .auth-form-light .asColorPicker-wrap .asColorPicker-input:active, .auth .auth-form-light .input-group .dataTables_wrapper select:active, .dataTables_wrapper .auth .auth-form-light .input-group select:active, .auth .auth-form-light .asColorPicker-wrap .dataTables_wrapper select:active, .dataTables_wrapper .auth .auth-form-light .asColorPicker-wrap select:active, .auth .auth-form-light .input-group .select2-container--default .select2-selection--single:active, .select2-container--default .auth .auth-form-light .input-group .select2-selection--single:active, .auth .auth-form-light .asColorPicker-wrap .select2-container--default .select2-selection--single:active, .select2-container--default .auth .auth-form-light .asColorPicker-wrap .select2-selection--single:active, .auth .auth-form-light .input-group .select2-container--default .select2-selection--single .select2-search__field:active, .select2-container--default .select2-selection--single .auth .auth-form-light .input-group .select2-search__field:active, .auth .auth-form-light .asColorPicker-wrap .select2-container--default .select2-selection--single .select2-search__field:active, .select2-container--default .select2-selection--single .auth .auth-form-light .asColorPicker-wrap .select2-search__field:active, .auth .auth-form-light .input-group .typeahead:active, .auth .auth-form-light .asColorPicker-wrap .typeahead:active,
+.auth .auth-form-light .input-group .tt-query:active,
+.auth .auth-form-light .asColorPicker-wrap .tt-query:active,
+.auth .auth-form-light .input-group .tt-hint:active,
+.auth .auth-form-light .asColorPicker-wrap .tt-hint:active {
+  border-color: #dee2e6;
+}
+
+.auth .auth-form-transparent {
+  background: transparent;
+}
+
+.auth .auth-form-transparent .form-control, .auth .auth-form-transparent .asColorPicker-input, .auth .auth-form-transparent .dataTables_wrapper select, .dataTables_wrapper .auth .auth-form-transparent select, .auth .auth-form-transparent .select2-container--default .select2-selection--single, .select2-container--default .auth .auth-form-transparent .select2-selection--single, .auth .auth-form-transparent .select2-container--default .select2-selection--single .select2-search__field, .select2-container--default .select2-selection--single .auth .auth-form-transparent .select2-search__field, .auth .auth-form-transparent .typeahead,
+.auth .auth-form-transparent .tt-query,
+.auth .auth-form-transparent .tt-hint,
+.auth .auth-form-transparent .input-group-text {
+  border-color: #F1F1F1;
+}
+
+.auth .auth-form-transparent .form-control:focus, .auth .auth-form-transparent .asColorPicker-input:focus, .auth .auth-form-transparent .dataTables_wrapper select:focus, .dataTables_wrapper .auth .auth-form-transparent select:focus, .auth .auth-form-transparent .select2-container--default .select2-selection--single:focus, .select2-container--default .auth .auth-form-transparent .select2-selection--single:focus, .auth .auth-form-transparent .select2-container--default .select2-selection--single .select2-search__field:focus, .select2-container--default .select2-selection--single .auth .auth-form-transparent .select2-search__field:focus, .auth .auth-form-transparent .typeahead:focus,
+.auth .auth-form-transparent .tt-query:focus,
+.auth .auth-form-transparent .tt-hint:focus, .auth .auth-form-transparent .form-control:active, .auth .auth-form-transparent .asColorPicker-input:active, .auth .auth-form-transparent .dataTables_wrapper select:active, .dataTables_wrapper .auth .auth-form-transparent select:active, .auth .auth-form-transparent .select2-container--default .select2-selection--single:active, .select2-container--default .auth .auth-form-transparent .select2-selection--single:active, .auth .auth-form-transparent .select2-container--default .select2-selection--single .select2-search__field:active, .select2-container--default .select2-selection--single .auth .auth-form-transparent .select2-search__field:active, .auth .auth-form-transparent .typeahead:active,
+.auth .auth-form-transparent .tt-query:active,
+.auth .auth-form-transparent .tt-hint:active,
+.auth .auth-form-transparent .input-group-text:focus,
+.auth .auth-form-transparent .input-group-text:active {
+  border-color: #F1F1F1;
+}
+
+.auth .auth-form-transparent select {
+  outline-color: #F1F1F1;
+}
+
+.auth.auth-img-bg {
+  padding: 0;
+}
+
+@media (min-width: 768px) {
+  .auth.auth-img-bg .auth-form-transparent {
+    width: 55%;
+    margin: auto;
+  }
+}
+
+.auth .brand-logo {
+  margin-bottom: 2rem;
+}
+
+.auth .brand-logo img {
+  width: 180px;
+}
+
+.auth form .form-group {
+  margin-bottom: 1.5rem;
+}
+
+.auth form .form-group label {
+  font-size: .8125rem;
+}
+
+.auth form .form-group .form-control, .auth form .form-group .asColorPicker-input, .auth form .form-group .dataTables_wrapper select, .dataTables_wrapper .auth form .form-group select, .auth form .form-group .select2-container--default .select2-selection--single, .select2-container--default .auth form .form-group .select2-selection--single, .auth form .form-group .select2-container--default .select2-selection--single .select2-search__field, .select2-container--default .select2-selection--single .auth form .form-group .select2-search__field, .auth form .form-group .typeahead,
+.auth form .form-group .tt-query,
+.auth form .form-group .tt-hint {
+  background: transparent;
+  border-radius: 0;
+  font-size: .9375rem;
+}
+
+.auth form .auth-form-btn {
+  padding: 1rem 3rem;
+  line-height: 1.5;
+}
+
+.auth form .auth-link {
+  font-size: 0.812rem;
+}
+
+.auth form .auth-link:hover {
+  color: initial;
 }
 
 .content-wrapper {

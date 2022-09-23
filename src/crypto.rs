@@ -1,11 +1,23 @@
-use rand::distributions;
-use rand::prelude::*;
-
+use derive_more::{Display, Error};
 use hmac::{Hmac, Mac};
 use jwt::{Header, SignWithKey, Token, VerifyWithKey};
+use rand::distributions;
+use rand::prelude::*;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sha2::Sha256;
+
+#[derive(Debug, Display, Error)]
+pub enum Error {
+    #[display(fmt = "JWT verification failed")]
+    JwtVerificationFailed(jwt::Error),
+}
+
+impl From<jwt::Error> for Error {
+    fn from(e: jwt::Error) -> Self {
+        Error::JwtVerificationFailed(e)
+    }
+}
 
 pub type HmacType = Hmac<Sha256>;
 
@@ -21,7 +33,8 @@ pub fn random_token(n: usize) -> String {
 
 /// Generates a random HMAC key.
 pub fn random_hmac() -> HmacType {
-    Hmac::new_from_slice(random_token(32).as_bytes()).unwrap()
+    let tok: String = random_token(32);
+    Hmac::new_from_slice(tok.as_bytes()).expect("Unable to generate random hmac")
 }
 
 /// Encodes a claim using JWT
@@ -33,13 +46,12 @@ where
 }
 
 /// Encodes a claim using JWT
-pub fn jwt_decode<C>(token_str: String, key: &Hmac<Sha256>) -> C
+pub fn jwt_decode<C>(token_str: &String, key: &Hmac<Sha256>) -> Result<C, Error>
 where
     C: DeserializeOwned,
-    C: Copy,
+    C: Clone,
 {
-    let token: Token<Header, C, _> =
-        VerifyWithKey::verify_with_key(token_str.as_str(), key).unwrap();
+    let token: Token<Header, C, _> = VerifyWithKey::verify_with_key(token_str.as_str(), key)?;
 
-    *token.claims()
+    Ok(token.claims().clone())
 }

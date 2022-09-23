@@ -18,7 +18,7 @@ impl Login {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Session {
     pub id: String,
     pub username: String,
