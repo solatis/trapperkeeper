@@ -1,11 +1,19 @@
 use derive_more::{Display, Error};
 use hmac::{Hmac, Mac};
 use jwt::{Header, SignWithKey, Token, VerifyWithKey};
+use lazy_static::lazy_static;
 use rand::distributions;
 use rand::prelude::*;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sha2::Sha256;
+
+use crate::config;
+
+pub type HmacType = Hmac<Sha256>;
+lazy_static! {
+    static ref HMAC_SECRET: String = random_token(32);
+}
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
@@ -19,8 +27,6 @@ impl From<jwt::Error> for Error {
     }
 }
 
-pub type HmacType = Hmac<Sha256>;
-
 /// Returns a secure random token of length `n`
 pub fn random_token(n: usize) -> String {
     let rng = rand::thread_rng();
@@ -33,7 +39,14 @@ pub fn random_token(n: usize) -> String {
 
 /// Generates a random HMAC key.
 pub fn random_hmac() -> HmacType {
-    let tok: String = random_token(32);
+    let tok: String = match config::CONFIG.debug {
+        true => {
+            log::warn!("debug mode enabled, using hard-coded HMAC secret");
+            String::from("trapperkeeper")
+        }
+        false => HMAC_SECRET.clone(),
+    };
+
     Hmac::new_from_slice(tok.as_bytes()).expect("Unable to generate random hmac")
 }
 

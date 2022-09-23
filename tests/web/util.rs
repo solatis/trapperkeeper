@@ -6,7 +6,7 @@ use serde::Serialize;
 
 use trapperkeeper::web;
 
-pub async fn test_get(route: &String) -> ServiceResponse {
+pub async fn test_get(route: &str) -> ServiceResponse {
     let mut app = test::init_service(App::new().configure(web::configure)).await;
 
     test::call_service(&mut app, test::TestRequest::get().uri(route).to_request()).await
@@ -42,6 +42,22 @@ where
         &mut app,
         test::TestRequest::post()
             .set_json(&params)
+            .uri(route)
+            .to_request(),
+    )
+    .await
+}
+
+pub async fn test_post_form<T>(route: &str, params: &T) -> ServiceResponse
+where
+    T: Serialize,
+{
+    let mut app = test::init_service(App::new().configure(web::configure)).await;
+
+    test::call_service(
+        &mut app,
+        test::TestRequest::post()
+            .set_form(&params)
             .uri(route)
             .to_request(),
     )
