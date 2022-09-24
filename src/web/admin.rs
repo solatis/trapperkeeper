@@ -24,7 +24,9 @@ async fn post_login(
         return HttpResponse::Forbidden().finish();
     }
 
-    let mut result = HttpResponse::Ok().finish();
+    let mut result = HttpResponse::Found()
+        .append_header(("Locationas", "/admin/index"))
+        .finish();
 
     session::inject_session(&hm, models::Session::new(&login.username), &mut result);
     result
