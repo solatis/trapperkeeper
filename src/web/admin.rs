@@ -25,7 +25,7 @@ async fn post_login(
     }
 
     let mut result = HttpResponse::Found()
-        .append_header(("Locationas", "/admin/index"))
+        .append_header(("Location", "/admin/index"))
         .finish();
 
     session::inject_session(&hm, models::Session::new(&login.username), &mut result);
