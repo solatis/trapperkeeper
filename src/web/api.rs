@@ -4,6 +4,8 @@ use crate::crud;
 use crate::database;
 use crate::models;
 
+use super::util::get_conn;
+
 fn unwrap_get_result<T>(
     result: Result<Option<T>, diesel::result::Error>,
 ) -> Result<HttpResponse, Error>
@@ -29,85 +31,83 @@ fn unwrap_delete_result(
     }
 }
 
-fn get_conn() -> Result<database::PooledConnection, Error> {
-    database::POOL
-        .get()
-        .map_err(actix_web::error::ErrorInternalServerError)
-}
-
-async fn create_app(app: web::Json<models::NewApp>) -> Result<HttpResponse, Error> {
-    log::info!("create_app");
+async fn create_trapp(trapp: web::Json<models::NewTrapp>) -> Result<HttpResponse, Error> {
+    log::info!("create_trapp");
 
     let mut conn = get_conn()?;
-    let app = web::block(move || crud::create_app(&mut conn, &app.name))
+    let trapp = web::block(move || crud::create_trapp(&mut conn, &trapp.name))
         .await?
         .map_err(actix_web::error::ErrorInternalServerError)?;
 
-    Ok(HttpResponse::Ok().json(app))
+    Ok(HttpResponse::Ok().json(trapp))
 }
 
-async fn get_app(app_id: web::Path<i32>) -> Result<HttpResponse, Error> {
-    log::info!("get_app");
+async fn get_trapp(trapp_id: web::Path<i32>) -> Result<HttpResponse, Error> {
+    log::info!("get_trapp");
 
-    let app_id = app_id.into_inner();
+    let trapp_id = trapp_id.into_inner();
 
     let mut conn = get_conn()?;
-    let result = web::block(move || crud::get_app_by_id(&mut conn, app_id)).await?;
+    let result = web::block(move || crud::get_trapp_by_id(&mut conn, trapp_id)).await?;
 
     unwrap_get_result(result)
 }
 
-async fn delete_app(app_id: web::Path<i32>) -> Result<HttpResponse, Error> {
-    log::info!("delete_app");
+async fn delete_trapp(trapp_id: web::Path<i32>) -> Result<HttpResponse, Error> {
+    log::info!("delete_trapp");
 
-    let app_id = app_id.into_inner();
+    let trapp_id = trapp_id.into_inner();
 
     let mut conn = get_conn()?;
-    let result = web::block(move || crud::delete_app_by_id(&mut conn, app_id)).await?;
+    let result = web::block(move || crud::delete_trapp_by_id(&mut conn, trapp_id)).await?;
 
     unwrap_delete_result(result)
 }
 
 async fn create_auth_token(
-    app_id: web::Path<i32>,
+    trapp_id: web::Path<i32>,
     auth_token: web::Json<models::NewAuthToken>,
 ) -> Result<HttpResponse, Error> {
     log::info!("create_auth_token");
 
-    if app_id.into_inner() != auth_token.app_id {
-        return Ok(HttpResponse::BadRequest().body("app_id in auth_token must match app_id in uri"));
+    if trapp_id.into_inner() != auth_token.trapp_id {
+        return Ok(
+            HttpResponse::BadRequest().body("trapp_id in auth_token must match trapp_id in uri")
+        );
     }
 
     let mut conn = get_conn()?;
-    let auth_token =
-        web::block(move || crud::create_auth_token(&mut conn, auth_token.app_id, &auth_token.name))
-            .await?
-            .map_err(actix_web::error::ErrorInternalServerError)?;
+    let auth_token = web::block(move || {
+        crud::create_auth_token(&mut conn, auth_token.trapp_id, &auth_token.name)
+    })
+    .await?
+    .map_err(actix_web::error::ErrorInternalServerError)?;
 
     Ok(HttpResponse::Ok().json(auth_token))
 }
 
-async fn get_app_auth_token(path: web::Path<(i32, String)>) -> Result<HttpResponse, Error> {
-    log::info!("get_app_auth_token");
+async fn get_trapp_auth_token(path: web::Path<(i32, String)>) -> Result<HttpResponse, Error> {
+    log::info!("get_trapp_auth_token");
 
-    let (app_id, auth_token_id) = path.into_inner();
+    let (trapp_id, auth_token_id) = path.into_inner();
 
     let mut conn = get_conn()?;
-    let result =
-        web::block(move || crud::get_auth_token_by_app_and_id(&mut conn, app_id, &auth_token_id))
-            .await?;
+    let result = web::block(move || {
+        crud::get_auth_token_by_trapp_and_id(&mut conn, trapp_id, &auth_token_id)
+    })
+    .await?;
 
     unwrap_get_result(result)
 }
 
-async fn delete_app_auth_token(path: web::Path<(i32, String)>) -> Result<HttpResponse, Error> {
-    log::info!("delete_app_auth_token");
+async fn delete_trapp_auth_token(path: web::Path<(i32, String)>) -> Result<HttpResponse, Error> {
+    log::info!("delete_trapp_auth_token");
 
-    let (app_id, auth_token_id) = path.into_inner();
+    let (trapp_id, auth_token_id) = path.into_inner();
 
     let mut conn = get_conn()?;
     let result = web::block(move || {
-        crud::delete_auth_token_by_app_and_id(&mut conn, app_id, &auth_token_id)
+        crud::delete_auth_token_by_trapp_and_id(&mut conn, trapp_id, &auth_token_id)
     })
     .await?;
 
@@ -115,7 +115,7 @@ async fn delete_app_auth_token(path: web::Path<(i32, String)>) -> Result<HttpRes
 }
 
 async fn delete_auth_token(path: web::Path<String>) -> Result<HttpResponse, Error> {
-    log::info!("delete_app_auth_token");
+    log::info!("delete_trapp_auth_token");
 
     let auth_token_id = path.into_inner();
 
@@ -140,20 +140,20 @@ async fn get_auth_token(path: web::Path<String>) -> Result<HttpResponse, Error> 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/api/v1")
-            .route("/app", web::post().to(create_app))
-            .route("/app/{app_id}", web::get().to(get_app))
-            .route("/app/{app_id}", web::delete().to(delete_app))
+            .route("/trapp", web::post().to(create_trapp))
+            .route("/trapp/{trapp_id}", web::get().to(get_trapp))
+            .route("/trapp/{trapp_id}", web::delete().to(delete_trapp))
             .route(
-                "/app/{app_id}/auth_token",
+                "/trapp/{trapp_id}/auth_token",
                 web::post().to(create_auth_token),
             )
             .route(
-                "/app/{app_id}/auth_token/{auth_token_id}",
-                web::get().to(get_app_auth_token),
+                "/trapp/{trapp_id}/auth_token/{auth_token_id}",
+                web::get().to(get_trapp_auth_token),
             )
             .route(
-                "/app/{app_id}/auth_token/{auth_token_id}",
-                web::delete().to(delete_app_auth_token),
+                "/trapp/{trapp_id}/auth_token/{auth_token_id}",
+                web::delete().to(delete_trapp_auth_token),
             )
             .route("/auth_token/{auth_token_id}", web::get().to(get_auth_token))
             .route(

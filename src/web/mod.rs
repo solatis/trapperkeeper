@@ -6,6 +6,7 @@ use crate::config;
 pub mod admin;
 pub mod api;
 pub mod session;
+pub mod util;
 
 pub fn configure(cfg: &mut ServiceConfig) {
     cfg.configure(api::configure).configure(admin::configure);

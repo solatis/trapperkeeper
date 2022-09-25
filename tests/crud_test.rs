@@ -3,7 +3,7 @@ use rstest::*;
 
 use trapperkeeper::crud;
 use trapperkeeper::database;
-use trapperkeeper::models::{App, AuthToken};
+use trapperkeeper::models::{AuthToken, Trapp};
 
 #[fixture]
 pub fn conn() -> database::PooledConnection {
@@ -11,26 +11,26 @@ pub fn conn() -> database::PooledConnection {
 }
 
 #[fixture]
-pub fn app(mut conn: database::PooledConnection) -> App {
-    return crud::create_app(&mut conn, &String::from("foo")).unwrap();
+pub fn trapp(mut conn: database::PooledConnection) -> Trapp {
+    return crud::create_trapp(&mut conn, &String::from("foo")).unwrap();
 }
 
 #[fixture]
-pub fn apps(mut conn: database::PooledConnection) -> Vec<App> {
+pub fn trapps(mut conn: database::PooledConnection) -> Vec<Trapp> {
     vec![
-        crud::create_app(&mut conn, &String::from("app1")).unwrap(),
-        crud::create_app(&mut conn, &String::from("app2")).unwrap(),
+        crud::create_trapp(&mut conn, &String::from("trapp1")).unwrap(),
+        crud::create_trapp(&mut conn, &String::from("trapp2")).unwrap(),
     ]
 }
 
 #[fixture]
-pub fn app_id(app: App) -> i32 {
-    app.id.unwrap()
+pub fn trapp_id(trapp: Trapp) -> i32 {
+    trapp.id.unwrap()
 }
 
 #[fixture]
-pub fn auth_token(mut conn: database::PooledConnection, app_id: i32) -> AuthToken {
-    return crud::create_auth_token(&mut conn, app_id, &String::from("foo")).unwrap();
+pub fn auth_token(mut conn: database::PooledConnection, trapp_id: i32) -> AuthToken {
+    return crud::create_auth_token(&mut conn, trapp_id, &String::from("foo")).unwrap();
 }
 
 ////
@@ -38,19 +38,19 @@ pub fn auth_token(mut conn: database::PooledConnection, app_id: i32) -> AuthToke
 //
 
 #[rstest]
-fn can_create_app(mut conn: database::PooledConnection) {
-    let app: App = crud::create_app(&mut conn, &String::from("foo")).unwrap();
-    ma::assert_gt!(app.id, Some(0))
+fn can_create_trapp(mut conn: database::PooledConnection) {
+    let trapp: Trapp = crud::create_trapp(&mut conn, &String::from("foo")).unwrap();
+    ma::assert_gt!(trapp.id, Some(0))
 }
 
 #[rstest]
-fn can_create_auth_token(mut conn: database::PooledConnection, app_id: i32) {
-    let auth_token_id = crud::create_auth_token(&mut conn, app_id, &String::from("foo"));
+fn can_create_auth_token(mut conn: database::PooledConnection, trapp_id: i32) {
+    let auth_token_id = crud::create_auth_token(&mut conn, trapp_id, &String::from("foo"));
     assert_eq!(auth_token_id.is_ok(), true)
 }
 
 #[rstest]
-fn cannot_create_auth_token_when_app_doesnt_exist(mut conn: database::PooledConnection) {
+fn cannot_create_auth_token_when_trapp_doesnt_exist(mut conn: database::PooledConnection) {
     let auth_token_id = crud::create_auth_token(&mut conn, -2, &String::from("foo"));
     assert_eq!(auth_token_id.is_ok(), false)
 }
@@ -60,12 +60,12 @@ fn cannot_create_auth_token_when_app_doesnt_exist(mut conn: database::PooledConn
 //
 
 #[rstest]
-fn can_get_apps(mut conn: database::PooledConnection, apps: Vec<App>) {
-    let apps_ = crud::get_apps(&mut conn).expect("unable to list apps");
+fn can_get_trapps(mut conn: database::PooledConnection, trapps: Vec<Trapp>) {
+    let trapps_ = crud::get_trapps(&mut conn).expect("unable to list trapps");
 
-    // Verify all recently created apps are inside our returned apps_. Likely there
+    // Verify all recently created trapps are inside our returned trapps_. Likely there
     // are more.
-    assert!(apps.iter().all(|app| apps_.contains(app)));
+    assert!(trapps.iter().all(|trapp| trapps_.contains(trapp)));
 }
 
 ////
@@ -73,15 +73,15 @@ fn can_get_apps(mut conn: database::PooledConnection, apps: Vec<App>) {
 //
 
 #[rstest]
-fn can_get_app(mut conn: database::PooledConnection, app: App) {
-    let get = crud::get_app_by_id(&mut conn, app.id.unwrap());
+fn can_get_trapp(mut conn: database::PooledConnection, trapp: Trapp) {
+    let get = crud::get_trapp_by_id(&mut conn, trapp.id.unwrap());
 
-    assert_eq!(get, Ok(Some(app)));
+    assert_eq!(get, Ok(Some(trapp)));
 }
 
 #[rstest]
-fn get_nonexisting_app(mut conn: database::PooledConnection) {
-    let get = crud::get_app_by_id(&mut conn, -1);
+fn get_nonexisting_trapp(mut conn: database::PooledConnection) {
+    let get = crud::get_trapp_by_id(&mut conn, -1);
 
     assert_eq!(get, Ok(None));
 }
@@ -98,15 +98,15 @@ fn can_get_auth_token(mut conn: database::PooledConnection, auth_token: AuthToke
 //
 
 #[rstest]
-fn can_delete_app(mut conn: database::PooledConnection, app_id: i32) {
-    assert!(crud::get_app_by_id(&mut conn, app_id)
-        .expect("unable to get app by id")
+fn can_delete_trapp(mut conn: database::PooledConnection, trapp_id: i32) {
+    assert!(crud::get_trapp_by_id(&mut conn, trapp_id)
+        .expect("unable to get trapp by id")
         .is_some());
-    assert_eq!(crud::delete_app_by_id(&mut conn, app_id), Ok(true));
-    assert!(crud::get_app_by_id(&mut conn, app_id)
-        .expect("unable to get app by id")
+    assert_eq!(crud::delete_trapp_by_id(&mut conn, trapp_id), Ok(true));
+    assert!(crud::get_trapp_by_id(&mut conn, trapp_id)
+        .expect("unable to get trapp by id")
         .is_none());
-    assert_eq!(crud::delete_app_by_id(&mut conn, app_id), Ok(false));
+    assert_eq!(crud::delete_trapp_by_id(&mut conn, trapp_id), Ok(false));
 }
 
 #[rstest]

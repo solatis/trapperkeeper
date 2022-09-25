@@ -1,18 +1,22 @@
 use actix_files::Files;
-use actix_web::{http::Uri, web, HttpResponse};
+use actix_web::{http::Uri, web, Error, HttpResponse};
 use handlebars::Handlebars;
 use rust_embed::RustEmbed;
 use serde::Deserialize;
 use serde_json::json;
 
 use crate::config;
+use crate::crud;
 use crate::crypto;
 use crate::models;
-use crate::web::session;
+
+use super::session;
+use super::util::get_conn;
 
 /// Authentication for admin
 ///
-/// Verifies login credentials, sets JWT token cookie if successful.
+/// Verifies login credentials, sets JWT token cookie if successful, and redirects
+/// to main overview upon successful login.
 async fn post_login(
     hm: web::Data<crypto::HmacType>,
     login: web::Form<models::Login>,
@@ -28,7 +32,7 @@ async fn post_login(
     }
 
     let mut result = HttpResponse::Found()
-        .append_header(("Location", "/admin/index"))
+        .append_header(("Location", "/admin/overview"))
         .finish();
 
     session::inject_session(&hm, models::Session::new(&login.username), &mut result);
@@ -40,6 +44,9 @@ struct GetLoginQueryParams {
     auth_failed: Option<bool>,
 }
 
+/// Get overview
+///
+/// Renders login page, and optionally presents an authentication failure message.
 async fn get_login(
     hb: web::Data<Handlebars<'_>>,
     params: web::Query<GetLoginQueryParams>,
@@ -55,13 +62,39 @@ async fn get_login(
     HttpResponse::Ok().body(body)
 }
 
-async fn get_index(session: models::Session, hb: web::Data<Handlebars<'_>>) -> HttpResponse {
-    log::info!("get_admin_index");
+/// Get overview
+///
+/// Dashboard / welcome screen / overview
+async fn get_overview(session: models::Session, hb: web::Data<Handlebars<'_>>) -> HttpResponse {
+    log::info!("get_admin_overview");
 
-    let data = json!({"name": "Leon Mergen"});
-    let body = hb.render("index", &data).unwrap();
+    let data = json!({"page_title": "Overview"});
+    let body = hb.render("overview", &data).unwrap();
 
     HttpResponse::Ok().body(body)
+}
+
+/// Get trapps
+///
+/// Presents overview of existing / installed trapps.
+async fn get_trapps(
+    session: models::Session,
+    hb: web::Data<Handlebars<'_>>,
+) -> Result<HttpResponse, Error> {
+    log::info!("get_admin_trapps");
+
+    let mut conn = get_conn()?;
+    let trapps = crud::get_trapps(&mut conn).map_err(actix_web::error::ErrorInternalServerError)?;
+
+    log::debug!("got {} trapps", trapps.len());
+
+    let data = json!({"page_title": "Trapps",
+                      "trapps": trapps});
+    let body = hb
+        .render("trapps", &data)
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+
+    Ok(HttpResponse::Ok().body(body))
 }
 
 /// Templates
@@ -108,7 +141,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .app_data(web::Data::new(hm.clone()))
         .service(
             web::scope("/admin")
-                .route("/index", web::get().to(get_index))
+                .route("/overview", web::get().to(get_overview))
+                .route("/trapps", web::get().to(get_trapps))
                 .route("/login", web::get().to(get_login))
                 .route("/login", web::post().to(post_login)),
         )

@@ -1,4 +1,4 @@
-use actix_web::{http::StatusCode, test, App};
+use actix_web::{http::StatusCode, test};
 use more_asserts as ma;
 use rstest::*;
 
@@ -17,7 +17,7 @@ fn gen_identifier() -> String {
     random_token(16)
 }
 
-fn gen_app_name() -> String {
+fn gen_trapp_name() -> String {
     gen_identifier()
 }
 
@@ -26,68 +26,68 @@ fn gen_auth_token_name() -> String {
 }
 
 #[fixture]
-pub fn new_app() -> models::NewApp {
-    models::NewApp::new(&gen_app_name())
+pub fn new_trapp() -> models::NewTrapp {
+    models::NewTrapp::new(&gen_trapp_name())
 }
 
 #[fixture]
-pub async fn app(new_app: models::NewApp) -> models::App {
-    let resp = util::test_post("/api/v1/app", &new_app).await;
+pub async fn trapp(new_trapp: models::NewTrapp) -> models::Trapp {
+    let resp = util::test_post("/api/v1/trapp", &new_trapp).await;
     assert_eq!(resp.status(), StatusCode::OK);
 
     test::read_body_json(resp).await
 }
 
 #[fixture]
-pub async fn new_auth_token(#[future] app: models::App) -> models::NewAuthToken {
-    let app_: models::App = app.await;
-    models::NewAuthToken::new(app_.id.unwrap(), &gen_auth_token_name())
+pub async fn new_auth_token(#[future] trapp: models::Trapp) -> models::NewAuthToken {
+    let trapp_: models::Trapp = trapp.await;
+    models::NewAuthToken::new(trapp_.id.unwrap(), &gen_auth_token_name())
 }
 
 #[fixture]
 pub async fn auth_token(#[future] new_auth_token: models::NewAuthToken) -> models::AuthToken {
     let new_auth_token = new_auth_token.await;
-    let uri = format!("/api/v1/app/{}/auth_token", new_auth_token.app_id);
+    let uri = format!("/api/v1/trapp/{}/auth_token", new_auth_token.trapp_id);
 
     util::test_post_json(&uri, &new_auth_token).await
 }
 
 #[rstest]
 #[actix_web::test]
-async fn test_app_create(new_app: models::NewApp) {
-    let resp = util::test_post("/api/v1/app", &new_app).await;
+async fn test_trapp_create(new_trapp: models::NewTrapp) {
+    let resp = util::test_post("/api/v1/trapp", &new_trapp).await;
 
     assert_eq!(resp.status(), StatusCode::OK);
 
-    let app: models::App = test::read_body_json(resp).await;
+    let trapp: models::Trapp = test::read_body_json(resp).await;
 
-    assert_eq!(app.name, new_app.name);
-    ma::assert_gt!(app.id, Some(0))
+    assert_eq!(trapp.name, new_trapp.name);
+    ma::assert_gt!(trapp.id, Some(0))
 }
 
 #[rstest]
 #[actix_web::test]
-async fn test_app_get(#[future] app: models::App) {
-    let app = app.await;
-    let uri = format!("/api/v1/app/{}", app.id.unwrap());
+async fn test_trapp_get(#[future] trapp: models::Trapp) {
+    let trapp = trapp.await;
+    let uri = format!("/api/v1/trapp/{}", trapp.id.unwrap());
 
-    let app_: models::App = util::test_get_json(&uri).await;
+    let trapp_: models::Trapp = util::test_get_json(&uri).await;
 
-    assert_eq!(app, app_);
+    assert_eq!(trapp, trapp_);
 }
 
 #[rstest]
 #[actix_web::test]
-async fn test_app_get_nonexisting_app() {
-    let resp = util::test_get(&String::from("/api/v1/app/0")).await;
+async fn test_trapp_get_nonexisting_trapp() {
+    let resp = util::test_get(&String::from("/api/v1/trapp/0")).await;
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);
 }
 
 #[rstest]
 #[actix_web::test]
-async fn test_app_delete(#[future] app: models::App) {
-    let app = app.await;
-    let uri = format!("/api/v1/app/{}", app.id.unwrap());
+async fn test_trapp_delete(#[future] trapp: models::Trapp) {
+    let trapp = trapp.await;
+    let uri = format!("/api/v1/trapp/{}", trapp.id.unwrap());
 
     // Get before delete
     let resp = util::test_get(&uri).await;
@@ -110,19 +110,19 @@ async fn test_app_delete(#[future] app: models::App) {
 #[actix_web::test]
 async fn test_auth_token_create(#[future] new_auth_token: models::NewAuthToken) {
     let new_auth_token = new_auth_token.await;
-    let uri = format!("/api/v1/app/{}/auth_token", new_auth_token.app_id);
+    let uri = format!("/api/v1/trapp/{}/auth_token", new_auth_token.trapp_id);
 
     let auth_token: models::AuthToken = util::test_post_json(&uri, &new_auth_token).await;
 
     assert_eq!(auth_token.name, new_auth_token.name);
-    assert_eq!(auth_token.app_id, new_auth_token.app_id);
+    assert_eq!(auth_token.trapp_id, new_auth_token.trapp_id);
 }
 
 #[rstest]
 #[actix_web::test]
-async fn test_auth_token_create_incorrect_app_id(#[future] new_auth_token: models::NewAuthToken) {
+async fn test_auth_token_create_incorrect_trapp_id(#[future] new_auth_token: models::NewAuthToken) {
     let new_auth_token = new_auth_token.await;
-    let uri = String::from("/api/v1/app/1/auth_token");
+    let uri = String::from("/api/v1/trapp/1/auth_token");
 
     let resp = util::test_post(&uri, &new_auth_token).await;
 
@@ -135,8 +135,8 @@ async fn test_auth_token_get(#[future] auth_token: models::AuthToken) {
     let auth_token = auth_token.await;
 
     let uri1 = format!(
-        "/api/v1/app/{}/auth_token/{}",
-        auth_token.app_id, auth_token.id
+        "/api/v1/trapp/{}/auth_token/{}",
+        auth_token.trapp_id, auth_token.id
     );
 
     let uri2 = format!("/api/v1/auth_token/{}", auth_token.id);
@@ -150,12 +150,12 @@ async fn test_auth_token_get(#[future] auth_token: models::AuthToken) {
 
 #[rstest]
 #[actix_web::test]
-async fn test_auth_token_delete_by_app(#[future] auth_token: models::AuthToken) {
+async fn test_auth_token_delete_by_trapp(#[future] auth_token: models::AuthToken) {
     let auth_token = auth_token.await;
 
     let uri = format!(
-        "/api/v1/app/{}/auth_token/{}",
-        auth_token.app_id, auth_token.id
+        "/api/v1/trapp/{}/auth_token/{}",
+        auth_token.trapp_id, auth_token.id
     );
 
     let resp = util::test_get(&uri).await;

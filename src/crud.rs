@@ -1,42 +1,44 @@
 use diesel::prelude::*;
 use diesel::result::Error;
 
-use crate::models::{App, AuthToken, NewApp};
+use crate::models::{AuthToken, NewTrapp, Trapp};
 
-pub fn create_app(conn: &mut SqliteConnection, title: &String) -> Result<App, Error> {
-    use crate::schema::apps;
-    let new_app = &NewApp::new(title);
+pub fn create_trapp(conn: &mut SqliteConnection, title: &String) -> Result<Trapp, Error> {
+    use crate::schema::trapps;
+    let new_trapp = &NewTrapp::new(title);
 
-    let inserted_app = diesel::insert_into(apps::table)
-        .values(new_app)
-        .get_result::<App>(conn)?;
+    let inserted_trapp = diesel::insert_into(trapps::table)
+        .values(new_trapp)
+        .get_result::<Trapp>(conn)?;
 
-    Ok(inserted_app)
+    Ok(inserted_trapp)
 }
 
-pub fn get_apps(conn: &mut SqliteConnection) -> Result<Vec<App>, Error> {
-    use crate::schema::apps;
+pub fn get_trapps(conn: &mut SqliteConnection) -> Result<Vec<Trapp>, Error> {
+    use crate::schema::trapps;
 
-    let result = apps::dsl::apps.load::<App>(conn)?;
+    let result = trapps::dsl::trapps.load::<Trapp>(conn)?;
     Ok(result)
 }
 
-pub fn get_app_by_id(conn: &mut SqliteConnection, id: i32) -> Result<Option<App>, Error> {
-    use crate::schema::apps;
+pub fn get_trapp_by_id(conn: &mut SqliteConnection, id: i32) -> Result<Option<Trapp>, Error> {
+    use crate::schema::trapps;
 
-    let result = apps::table.filter(apps::id.eq(id)).get_result::<App>(conn);
+    let result = trapps::table
+        .filter(trapps::id.eq(id))
+        .get_result::<Trapp>(conn);
 
     match result {
-        Ok(app) => Ok(Some(app)),
+        Ok(trapp) => Ok(Some(trapp)),
         Err(Error::NotFound) => Ok(None),
         Err(e) => Err(e),
     }
 }
 
-pub fn delete_app_by_id(conn: &mut SqliteConnection, id: i32) -> Result<bool, Error> {
-    use crate::schema::apps;
+pub fn delete_trapp_by_id(conn: &mut SqliteConnection, id: i32) -> Result<bool, Error> {
+    use crate::schema::trapps;
 
-    let r = diesel::delete(apps::table.filter(apps::id.eq(id))).execute(conn);
+    let r = diesel::delete(trapps::table.filter(trapps::id.eq(id))).execute(conn);
 
     match r {
         Ok(0) => Ok(false),
@@ -47,12 +49,12 @@ pub fn delete_app_by_id(conn: &mut SqliteConnection, id: i32) -> Result<bool, Er
 
 pub fn create_auth_token(
     conn: &mut SqliteConnection,
-    app_id: i32,
+    trapp_id: i32,
     title: &String,
 ) -> Result<AuthToken, Error> {
     use crate::schema::auth_tokens;
 
-    let auth_token = AuthToken::new(app_id, title);
+    let auth_token = AuthToken::new(trapp_id, title);
 
     diesel::insert_into(auth_tokens::table)
         .values(&auth_token)
@@ -78,15 +80,15 @@ pub fn get_auth_token_by_id(
     }
 }
 
-pub fn get_auth_token_by_app_and_id(
+pub fn get_auth_token_by_trapp_and_id(
     conn: &mut SqliteConnection,
-    app_id: i32,
+    trapp_id: i32,
     id: &String,
 ) -> Result<Option<AuthToken>, Error> {
     use crate::schema::auth_tokens;
 
     let result = auth_tokens::table
-        .filter(auth_tokens::app_id.eq(app_id))
+        .filter(auth_tokens::trapp_id.eq(trapp_id))
         .filter(auth_tokens::id.eq(id))
         .get_result::<AuthToken>(conn);
 
@@ -109,9 +111,9 @@ pub fn delete_auth_token_by_id(conn: &mut SqliteConnection, id: &String) -> Resu
     }
 }
 
-pub fn delete_auth_token_by_app_and_id(
+pub fn delete_auth_token_by_trapp_and_id(
     conn: &mut SqliteConnection,
-    app_id: i32,
+    trapp_id: i32,
     id: &String,
 ) -> Result<bool, Error> {
     use crate::schema::auth_tokens;
@@ -119,7 +121,7 @@ pub fn delete_auth_token_by_app_and_id(
     let r = diesel::delete(
         auth_tokens::table
             .filter(auth_tokens::id.eq(id))
-            .filter(auth_tokens::app_id.eq(app_id)),
+            .filter(auth_tokens::trapp_id.eq(trapp_id)),
     )
     .execute(conn);
 

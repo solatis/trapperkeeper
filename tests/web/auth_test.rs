@@ -29,7 +29,7 @@ async fn test_valid_login() {
     let resp = util::test_post_form("/admin/login", &login).await;
     let headers = resp.headers();
 
-    // A valid login means we get redirected to the index page
+    // A valid login means we get redirected to the overview page
     assert_eq!(resp.status(), StatusCode::FOUND);
 
     let location = headers
@@ -37,7 +37,7 @@ async fn test_valid_login() {
         .expect("Location header not set")
         .to_str()
         .expect("Unable to convert location header to string -- not valid ascii?");
-    assert_eq!(location, "/admin/index");
+    assert_eq!(location, "/admin/overview");
 
     // The part below verifies the set-cookie behavior
     let set_cookie = headers
