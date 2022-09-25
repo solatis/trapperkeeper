@@ -72,7 +72,13 @@ async fn test_invalid_login() {
     let resp = util::test_post_form("/admin/login", &login).await;
     let headers = resp.headers();
 
-    assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+    assert_eq!(resp.status(), StatusCode::FOUND);
     assert_eq!(headers.contains_key("Set-Cookie"), false);
-    assert_eq!(headers.contains_key("Location"), false);
+
+    let location = headers
+        .get("Location")
+        .expect("Location header not set")
+        .to_str()
+        .expect("Unable to convert location header to string -- not valid ascii?");
+    assert_eq!(location, "/admin/login?auth_failed=true");
 }

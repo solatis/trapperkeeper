@@ -25,6 +25,13 @@
                                         <img src="../static/img/logo.svg" alt="logo">
                                     </div>
                                     <h4>Sign in to continue.</h4>
+
+                                    {{#if auth_failed }}
+                                    <div class="text-danger text-center">
+                                        Authentication failed
+                                    </div>
+                                    {{/if}}
+
                                     <form class="pt-3"
                                           method="post"
                                           action="/admin/login">
@@ -40,6 +47,7 @@
                                                    name="password"
                                                    placeholder="Password" />
                                         </div>
+
                                         <div class="mt-3">
                                             <input type="submit"
                                                    class="btn btn-block btn-primary btn-lg font-weight-medium auth-form-btn"

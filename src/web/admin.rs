@@ -1,7 +1,8 @@
 use actix_files::Files;
-use actix_web::{web, HttpResponse};
+use actix_web::{http::Uri, web, HttpResponse};
 use handlebars::Handlebars;
 use rust_embed::RustEmbed;
+use serde::Deserialize;
 use serde_json::json;
 
 use crate::config;
@@ -21,7 +22,9 @@ async fn post_login(
     let credentials = &config::CONFIG.admin;
 
     if login.username != credentials.username || login.password != credentials.password {
-        return HttpResponse::Forbidden().finish();
+        return HttpResponse::Found()
+            .append_header(("Location", "/admin/login?auth_failed=true"))
+            .finish();
     }
 
     let mut result = HttpResponse::Found()
@@ -32,10 +35,21 @@ async fn post_login(
     result
 }
 
-async fn get_login(hb: web::Data<Handlebars<'_>>) -> HttpResponse {
-    log::info!("get_admin_login");
+#[derive(Deserialize)]
+struct GetLoginQueryParams {
+    auth_failed: Option<bool>,
+}
 
-    let data = json!({});
+async fn get_login(
+    hb: web::Data<Handlebars<'_>>,
+    params: web::Query<GetLoginQueryParams>,
+) -> HttpResponse {
+    log::info!("get_admin_login");
+    let auth_failed = params.auth_failed.unwrap_or(false);
+
+    log::info!("auth_failed: {}", auth_failed);
+
+    let data = json!({ "auth_failed": auth_failed });
     let body = hb.render("login", &data).unwrap();
 
     HttpResponse::Ok().body(body)
