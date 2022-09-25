@@ -78,7 +78,7 @@ async fn get_overview(session: models::Session, hb: web::Data<Handlebars<'_>>) -
 ///
 /// Presents overview of existing / installed trapps.
 async fn get_trapps(
-    session: models::Session,
+    _session: models::Session,
     hb: web::Data<Handlebars<'_>>,
 ) -> Result<HttpResponse, Error> {
     log::info!("get_admin_trapps");
@@ -90,6 +90,38 @@ async fn get_trapps(
                       "trapps": trapps});
     let body = hb
         .render("trapps", &data)
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+
+    Ok(HttpResponse::Ok().body(body))
+}
+
+/// Get trapp create
+///
+/// Presents form to create new trapp.
+async fn get_trapp_create(
+    _session: models::Session,
+    hb: web::Data<Handlebars<'_>>,
+) -> Result<HttpResponse, Error> {
+    let data = json!({"page_title": "Create trapp"});
+
+    let body = hb
+        .render("trapp_create", &data)
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+
+    Ok(HttpResponse::Ok().body(body))
+}
+
+/// Post trapp create
+///
+/// Creates new trapp, redirects trapps overview when successful.
+async fn post_trapp_create(
+    _session: models::Session,
+    hb: web::Data<Handlebars<'_>>,
+) -> Result<HttpResponse, Error> {
+    let data = json!({"page_title": "Create trapp"});
+
+    let body = hb
+        .render("trapp_create", &data)
         .map_err(actix_web::error::ErrorInternalServerError)?;
 
     Ok(HttpResponse::Ok().body(body))
@@ -141,6 +173,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             web::scope("/admin")
                 .route("/overview", web::get().to(get_overview))
                 .route("/trapps", web::get().to(get_trapps))
+                .route("/trapp_create", web::get().to(get_trapp_create))
+                .route("/trapp_create", web::post().to(post_trapp_create))
                 .route("/login", web::get().to(get_login))
                 .route("/login", web::post().to(post_login)),
         )
