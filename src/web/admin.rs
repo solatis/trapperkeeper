@@ -86,8 +86,6 @@ async fn get_trapps(
     let mut conn = get_conn()?;
     let trapps = crud::get_trapps(&mut conn).map_err(actix_web::error::ErrorInternalServerError)?;
 
-    log::debug!("got {} trapps", trapps.len());
-
     let data = json!({"page_title": "Trapps",
                       "trapps": trapps});
     let body = hb

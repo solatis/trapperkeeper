@@ -33,7 +33,7 @@ impl Session {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Queryable, Insertable)]
+#[derive(Clone, Debug, Serialize, Deserialize, Queryable, Insertable)]
 #[diesel(table_name = trapps)]
 pub struct NewTrapp {
     pub name: String,
@@ -45,7 +45,7 @@ impl NewTrapp {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Queryable)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Queryable)]
 #[diesel(table_name = trapps)]
 pub struct Trapp {
     pub id: Option<i32>,
@@ -68,7 +68,7 @@ impl NewAuthToken {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Queryable, Insertable)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Queryable, Insertable)]
 #[diesel(table_name = auth_tokens)]
 pub struct AuthToken {
     pub id: String,

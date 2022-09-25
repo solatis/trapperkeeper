@@ -1,17 +1,83 @@
 {{#*inline "page"}}
-<ul class="nav nav-tabs" role="tablist">
-    <li class="nav-item">
-        <a class="nav-link active ps-0" id="home-tab" data-bs-toggle="tab" href="#overview" role="tab" aria-controls="overview" aria-selected="true">Overview</a>
-    </li>
-    <li class="nav-item">
-        <a class="nav-link" id="profile-tab" data-bs-toggle="tab" href="#audiences" role="tab" aria-selected="false">Audiences</a>
-    </li>
-    <li class="nav-item">
-        <a class="nav-link" id="contact-tab" data-bs-toggle="tab" href="#demographics" role="tab" aria-selected="false">Demographics</a>
-    </li>
-    <li class="nav-item">
-        <a class="nav-link border-0" id="more-tab" data-bs-toggle="tab" href="#more" role="tab" aria-selected="false">More</a>
-    </li>
-</ul>
+<div class="d-sm-flex align-items-center justify-content-between border-bottom">
+    <ul class="nav nav-tabs" role="tablist">
+        <li class="nav-item">
+            <a class="nav-link active ps-0"
+               id="home-tab"
+               data-bs-toggle="tab"
+               href="/admin/trapps"
+               role="tab"
+               aria-controls="overview"
+               aria-selected="true">
+                Overview
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link"
+               id="profile-tab"
+               data-bs-toggle="tab"
+               href="/admin/trapp_create"
+               role="tab"
+               aria-selected="false">
+                Create new
+            </a>
+        </li>
+    </ul>
+</div>
+
+<div class="tab-content tab-content-basic">
+    <div class="tab-pane fade show active" id="overview" role="tabpanel" aria-labelledby="overview">
+        <div class="col-lg-12 grid-margin stretch-card">
+            <div class="card">
+                <div class="card-body">
+                    <h4 class="card-title">Active trapps</h4>
+                    <p class="card-description">
+                        Active applications that installed a trap.
+                    </p>
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>
+                                        Name
+                                    </th>
+                                    <th>
+                                        Activity
+                                    </th>
+                                    <th>
+                                        Last seen
+                                    </th>
+                                    <th>
+                                        Auth token(s)
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {{#each trapps as |trapp| }}
+                                <tr>
+                                    <td>
+                                        {{ trapp.name }}
+                                    </td>
+                                    <td>
+                                        <div class="progress">
+                                            <div class="progress-bar bg-success" role="progressbar" style="width: 25%" aria-valuenow="25" aria-valuemin="0" aria-valuemax="100"></div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        July 1, 2015
+                                    </td>
+                                    <td>
+                                        1 active
+                                    </td>
+                                </tr>
+                                {{/each}}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 {{/inline}}
 {{> _base }}
