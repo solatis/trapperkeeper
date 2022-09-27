@@ -1,7 +1,6 @@
 use actix_web::{web, Error, HttpResponse};
 
 use crate::crud;
-use crate::database;
 use crate::models;
 
 use super::util::get_conn;
