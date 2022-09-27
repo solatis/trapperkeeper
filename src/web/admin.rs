@@ -1,6 +1,10 @@
 use actix_files::Files;
-use actix_web::{http::Uri, web, Error, HttpResponse};
-use handlebars::Handlebars;
+use actix_web::{
+    http::{header::ContentType, StatusCode},
+    web, HttpResponse,
+};
+use derive_more;
+use handlebars::{Handlebars, RenderError};
 use rust_embed::RustEmbed;
 use serde::Deserialize;
 use serde_json::json;
@@ -8,10 +12,48 @@ use serde_json::json;
 use crate::config;
 use crate::crud;
 use crate::crypto;
+use crate::database;
 use crate::models;
 
 use super::session;
-use super::util::get_conn;
+
+#[derive(Debug, derive_more::Display, derive_more::Error)]
+pub enum Error {
+    TemplateError(RenderError),
+    CrudError(crud::Error),
+    DatabaseError(database::Error),
+}
+
+impl From<crud::Error> for Error {
+    fn from(e: crud::Error) -> Self {
+        Error::CrudError(e)
+    }
+}
+
+impl From<RenderError> for Error {
+    fn from(e: RenderError) -> Self {
+        Error::TemplateError(e)
+    }
+}
+
+impl From<database::Error> for Error {
+    fn from(e: database::Error) -> Self {
+        Error::DatabaseError(e)
+    }
+}
+
+impl actix_web::error::ResponseError for Error {
+    fn error_response(&self) -> HttpResponse {
+        match *self {
+            // Database error
+            Error::CrudError(_) | Error::TemplateError(_) | Error::DatabaseError(_) => {
+                HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
+                    .insert_header(ContentType::html())
+                    .body(self.to_string())
+            }
+        }
+    }
+}
 
 /// Authentication for admin
 ///
@@ -83,14 +125,12 @@ async fn get_trapps(
 ) -> Result<HttpResponse, Error> {
     log::info!("get_admin_trapps");
 
-    let mut conn = get_conn()?;
-    let trapps = crud::get_trapps(&mut conn).map_err(actix_web::error::ErrorInternalServerError)?;
+    let mut conn = database::POOL.get()?;
+    let trapps = crud::get_trapps(&mut conn)?;
 
     let data = json!({"page_title": "Trapps",
                       "trapps": trapps});
-    let body = hb
-        .render("trapps", &data)
-        .map_err(actix_web::error::ErrorInternalServerError)?;
+    let body = hb.render("trapps", &data)?;
 
     Ok(HttpResponse::Ok().body(body))
 }
@@ -102,11 +142,11 @@ async fn get_trapp_create(
     _session: models::Session,
     hb: web::Data<Handlebars<'_>>,
 ) -> Result<HttpResponse, Error> {
+    log::info!("get_trapp_create");
+
     let data = json!({"page_title": "Create trapp"});
 
-    let body = hb
-        .render("trapp_create", &data)
-        .map_err(actix_web::error::ErrorInternalServerError)?;
+    let body = hb.render("trapp_create", &data)?;
 
     Ok(HttpResponse::Ok().body(body))
 }
@@ -117,14 +157,30 @@ async fn get_trapp_create(
 async fn post_trapp_create(
     _session: models::Session,
     hb: web::Data<Handlebars<'_>>,
+    new_trapp: web::Form<models::NewTrapp>,
 ) -> Result<HttpResponse, Error> {
-    let data = json!({"page_title": "Create trapp"});
+    log::info!("post_trapp_create");
 
-    let body = hb
-        .render("trapp_create", &data)
-        .map_err(actix_web::error::ErrorInternalServerError)?;
+    let mut conn = database::POOL.get()?;
 
-    Ok(HttpResponse::Ok().body(body))
+    // Create the app
+    let trapp: models::Trapp = crud::create_trapp(&mut conn, &new_trapp.name)?;
+
+    // Create a default auth token
+    let trapp_id: i32 = trapp.id.unwrap();
+    let auth_token_title = String::from("Default token");
+
+    let auth_token: models::AuthToken =
+        crud::create_auth_token(&mut conn, trapp_id, &auth_token_title)?;
+
+    let data = json!({"trapp": trapp,
+                      "auth_token": auth_token});
+
+    let body = hb.render("trapp_created", &data)?;
+
+    Ok(HttpResponse::Found()
+        .append_header(("Location", "/admin/trapps"))
+        .finish())
 }
 
 /// Templates

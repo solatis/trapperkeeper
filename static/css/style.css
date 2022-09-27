@@ -1115,6 +1115,11 @@ code {
   align-items: center;
 }
 
+.home-tab .btn {
+    color: #ffffff !important;
+
+}
+
 @media (max-width: 991px) {
   .home-tab .btn, .home-tab .ajax-upload-dragdrop .ajax-file-upload, .ajax-upload-dragdrop .home-tab .ajax-file-upload, .home-tab .swal2-modal .swal2-buttonswrapper .swal2-styled, .swal2-modal .swal2-buttonswrapper .home-tab .swal2-styled {
     padding: 8px 12px;

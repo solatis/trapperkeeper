@@ -1,11 +1,16 @@
-use actix_web::{cookie, dev::Payload, http, web, HttpRequest, HttpResponse};
-use derive_more::{Display, Error};
+use actix_web::{
+    cookie,
+    dev::Payload,
+    http::{header::ContentType, StatusCode},
+    web, HttpRequest, HttpResponse,
+};
+use derive_more;
 use futures_util::future::LocalBoxFuture;
 
 use crate::crypto;
 use crate::models;
 
-#[derive(Debug, Display, Error)]
+#[derive(Debug, derive_more::Display, derive_more::Error)]
 pub enum Error {
     #[display(fmt = "HMAC not accessible")]
     HmacNotAccessible,
@@ -19,18 +24,16 @@ pub enum Error {
 
 impl actix_web::error::ResponseError for Error {
     fn error_response(&self) -> HttpResponse {
+        // Not a real error, just no (valid) session set
         match *self {
-            // Not a real error, just no (valid) session set
             Error::VerificationFailed | Error::NoCookie => HttpResponse::Found()
                 .append_header(("Location", "/admin/login"))
                 .finish(),
 
             // Internal error: HMAC not accessible through Actix web::Data
-            Error::HmacNotAccessible => {
-                HttpResponse::build(http::StatusCode::INTERNAL_SERVER_ERROR)
-                    .insert_header(http::header::ContentType::html())
-                    .body(self.to_string())
-            }
+            Error::HmacNotAccessible => HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
+                .insert_header(ContentType::html())
+                .body(self.to_string()),
         }
     }
 }

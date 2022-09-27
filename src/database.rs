@@ -1,17 +1,41 @@
-use std::fmt;
-
+use derive_more;
+use diesel;
 use diesel::connection::SimpleConnection;
-use diesel::r2d2;
 use diesel::r2d2::CustomizeConnection;
 use diesel::sqlite::SqliteConnection;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use lazy_static::lazy_static;
+use r2d2;
 
 use crate::config;
 
-type ManageConnectionType = r2d2::ConnectionManager<SqliteConnection>;
-pub type Pool = r2d2::Pool<ManageConnectionType>;
-pub type PooledConnection = diesel::r2d2::PooledConnection<ManageConnectionType>;
+#[derive(Debug, derive_more::Display, derive_more::Error)]
+pub enum Error {
+    DbError(r2d2::Error),
+    MigrationError,
+}
+
+impl From<r2d2::Error> for Error {
+    fn from(e: r2d2::Error) -> Self {
+        Error::DbError(e)
+    }
+}
+
+type InnerConnectionType = diesel::r2d2::ConnectionManager<SqliteConnection>;
+type InnerPool = diesel::r2d2::Pool<InnerConnectionType>;
+
+pub type PooledConnection = diesel::r2d2::PooledConnection<InnerConnectionType>;
+pub struct Pool(InnerPool);
+
+impl Pool {
+    pub fn get(&self) -> Result<PooledConnection, Error> {
+        let p: &InnerPool = &self.0;
+        match p.get() {
+            Ok(conn) => Ok(conn),
+            Err(e) => Err(e.into()),
+        }
+    }
+}
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
 
@@ -55,39 +79,17 @@ impl PoolBuilder {
 
         let customizer = Box::new(ConnectionCustomizer {});
 
-        let pool = Pool::builder()
+        let pool = InnerPool::builder()
             .max_size(self.cfg.pool_size)
             .connection_customizer(customizer)
-            .build(r2d2::ConnectionManager::new(&self.cfg.url))
+            .build(diesel::r2d2::ConnectionManager::new(&self.cfg.url))
             .expect("Failed to create database connection pool");
 
         let mut conn = pool.get().expect("unable to get connection");
         run_migrations(&mut conn).expect("unable to run migrations");
-        pool
+        Pool(pool)
     }
 }
-
-pub enum Error {
-    MigrationError,
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Error::MigrationError => write!(f, "Migration error"),
-        }
-    }
-}
-
-impl fmt::Debug for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Error::MigrationError => write!(f, "Migration error"),
-        }
-    }
-}
-
-impl std::error::Error for Error {}
 
 pub fn run_migrations(conn: &mut PooledConnection) -> std::result::Result<(), Error> {
     log::info!("running migrations");

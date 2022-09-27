@@ -1,7 +1,19 @@
+use derive_more;
+use diesel;
 use diesel::prelude::*;
-use diesel::result::Error;
 
 use crate::models::{AuthToken, NewTrapp, Trapp};
+
+#[derive(Debug, derive_more::Display, derive_more::Error, PartialEq)]
+pub enum Error {
+    DbError(diesel::result::Error),
+}
+
+impl From<diesel::result::Error> for Error {
+    fn from(e: diesel::result::Error) -> Self {
+        Error::DbError(e)
+    }
+}
 
 pub fn create_trapp(conn: &mut SqliteConnection, title: &String) -> Result<Trapp, Error> {
     use crate::schema::trapps;
@@ -30,8 +42,8 @@ pub fn get_trapp_by_id(conn: &mut SqliteConnection, id: i32) -> Result<Option<Tr
 
     match result {
         Ok(trapp) => Ok(Some(trapp)),
-        Err(Error::NotFound) => Ok(None),
-        Err(e) => Err(e),
+        Err(diesel::result::Error::NotFound) => Ok(None),
+        Err(e) => Err(e.into()),
     }
 }
 
@@ -43,7 +55,7 @@ pub fn delete_trapp_by_id(conn: &mut SqliteConnection, id: i32) -> Result<bool, 
     match r {
         Ok(0) => Ok(false),
         Ok(_) => Ok(true),
-        Err(e) => Err(e),
+        Err(e) => Err(e.into()),
     }
 }
 
@@ -75,8 +87,8 @@ pub fn get_auth_token_by_id(
 
     match result {
         Ok(auth_token) => Ok(Some(auth_token)),
-        Err(Error::NotFound) => Ok(None),
-        Err(e) => Err(e),
+        Err(diesel::result::Error::NotFound) => Ok(None),
+        Err(e) => Err(e.into()),
     }
 }
 
@@ -94,8 +106,8 @@ pub fn get_auth_token_by_trapp_and_id(
 
     match result {
         Ok(auth_token) => Ok(Some(auth_token)),
-        Err(Error::NotFound) => Ok(None),
-        Err(e) => Err(e),
+        Err(diesel::result::Error::NotFound) => Ok(None),
+        Err(e) => Err(e.into()),
     }
 }
 
@@ -107,7 +119,7 @@ pub fn delete_auth_token_by_id(conn: &mut SqliteConnection, id: &String) -> Resu
     match r {
         Ok(0) => Ok(false),
         Ok(_) => Ok(true),
-        Err(e) => Err(e),
+        Err(e) => Err(e.into()),
     }
 }
 
@@ -128,6 +140,6 @@ pub fn delete_auth_token_by_trapp_and_id(
     match r {
         Ok(0) => Ok(false),
         Ok(_) => Ok(true),
-        Err(e) => Err(e),
+        Err(e) => Err(e.into()),
     }
 }

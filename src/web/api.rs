@@ -6,9 +6,7 @@ use crate::models;
 
 use super::util::get_conn;
 
-fn unwrap_get_result<T>(
-    result: Result<Option<T>, diesel::result::Error>,
-) -> Result<HttpResponse, Error>
+fn unwrap_get_result<T>(result: Result<Option<T>, crud::Error>) -> Result<HttpResponse, Error>
 where
     T: serde::Serialize,
 {
@@ -20,9 +18,7 @@ where
     }
 }
 
-fn unwrap_delete_result(
-    result: Result<bool, diesel::result::Error>,
-) -> Result<HttpResponse, Error> {
+fn unwrap_delete_result(result: Result<bool, crud::Error>) -> Result<HttpResponse, Error> {
     let result_ = result.map_err(actix_web::error::ErrorInternalServerError)?;
 
     match result_ {

@@ -27,7 +27,28 @@
 
 <div class="tab-content tab-content-basic">
     <div class="tab-pane fade show active" id="overview" role="tabpanel" aria-labelledby="overview">
-        w00t
+        <div class="card">
+            <div class="card-body">
+                <h4 class="card-title">Create new application</h4>
+                <p class="card-description">
+                    Please fill in the form below to create a new application to monitor.
+                </p>
+
+                <form class="forms-sample"
+                      action="/admin/trapp_create"
+                      method="post">
+                    <div class="form-group">
+                        <label for="trapp_name">Application name</label>
+                        <input type="text"
+                               class="form-control"
+                               name="name"
+                               placeholder="Application name" />
+                    </div>
+
+                    <input type="submit" class="btn btn-primary me-2" value="Create" />
+                </form>
+            </div>
+        </div>
     </div>
 </div>
 {{/inline}}
