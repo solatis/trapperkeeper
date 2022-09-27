@@ -94,7 +94,7 @@ async fn get_login(
 /// Get overview
 ///
 /// Dashboard / welcome screen / overview
-async fn get_overview(session: models::Session, hb: web::Data<Handlebars<'_>>) -> HttpResponse {
+async fn get_overview(_session: models::Session, hb: web::Data<Handlebars<'_>>) -> HttpResponse {
     log::info!("get_admin_overview");
 
     let data = json!({"page_title": "Overview"});
@@ -165,9 +165,7 @@ async fn post_trapp_create(
 
     let body = hb.render("trapp_created", &data)?;
 
-    Ok(HttpResponse::Found()
-        .append_header(("Location", "/admin/trapps"))
-        .finish())
+    Ok(HttpResponse::Ok().body(body))
 }
 
 /// Templates
