@@ -17,29 +17,16 @@ use crate::models;
 
 use super::session;
 
-#[derive(Debug, derive_more::Display, derive_more::Error)]
+#[derive(Debug, derive_more::Display, derive_more::Error, derive_more::From)]
 pub enum Error {
+    #[from]
     TemplateError(RenderError),
+
+    #[from]
     CrudError(crud::Error),
+
+    #[from]
     DatabaseError(database::Error),
-}
-
-impl From<crud::Error> for Error {
-    fn from(e: crud::Error) -> Self {
-        Error::CrudError(e)
-    }
-}
-
-impl From<RenderError> for Error {
-    fn from(e: RenderError) -> Self {
-        Error::TemplateError(e)
-    }
-}
-
-impl From<database::Error> for Error {
-    fn from(e: database::Error) -> Self {
-        Error::DatabaseError(e)
-    }
 }
 
 impl actix_web::error::ResponseError for Error {

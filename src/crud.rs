@@ -4,18 +4,15 @@ use diesel::prelude::*;
 
 use crate::models::{AuthToken, NewTrapp, Trapp};
 
-#[derive(Debug, derive_more::Display, derive_more::Error, PartialEq)]
+#[derive(Debug, derive_more::From, derive_more::Display, derive_more::Error, PartialEq)]
 pub enum Error {
+    #[from]
     DbError(diesel::result::Error),
 }
 
-impl From<diesel::result::Error> for Error {
-    fn from(e: diesel::result::Error) -> Self {
-        Error::DbError(e)
-    }
-}
+pub type Result<T, E = Error> = std::result::Result<T, E>;
 
-pub fn create_trapp(conn: &mut SqliteConnection, title: &String) -> Result<Trapp, Error> {
+pub fn create_trapp(conn: &mut SqliteConnection, title: &String) -> Result<Trapp> {
     use crate::schema::trapps;
     let new_trapp = &NewTrapp::new(title);
 
@@ -26,14 +23,14 @@ pub fn create_trapp(conn: &mut SqliteConnection, title: &String) -> Result<Trapp
     Ok(inserted_trapp)
 }
 
-pub fn get_trapps(conn: &mut SqliteConnection) -> Result<Vec<Trapp>, Error> {
+pub fn get_trapps(conn: &mut SqliteConnection) -> Result<Vec<Trapp>> {
     use crate::schema::trapps;
 
     let result = trapps::dsl::trapps.load::<Trapp>(conn)?;
     Ok(result)
 }
 
-pub fn get_trapp_by_id(conn: &mut SqliteConnection, id: i32) -> Result<Option<Trapp>, Error> {
+pub fn get_trapp_by_id(conn: &mut SqliteConnection, id: i32) -> Result<Option<Trapp>> {
     use crate::schema::trapps;
 
     let result = trapps::table
@@ -47,7 +44,7 @@ pub fn get_trapp_by_id(conn: &mut SqliteConnection, id: i32) -> Result<Option<Tr
     }
 }
 
-pub fn delete_trapp_by_id(conn: &mut SqliteConnection, id: i32) -> Result<bool, Error> {
+pub fn delete_trapp_by_id(conn: &mut SqliteConnection, id: i32) -> Result<bool> {
     use crate::schema::trapps;
 
     let r = diesel::delete(trapps::table.filter(trapps::id.eq(id))).execute(conn);
@@ -63,7 +60,7 @@ pub fn create_auth_token(
     conn: &mut SqliteConnection,
     trapp_id: i32,
     title: &String,
-) -> Result<AuthToken, Error> {
+) -> Result<AuthToken> {
     use crate::schema::auth_tokens;
 
     let auth_token = AuthToken::new(trapp_id, title);
@@ -75,10 +72,7 @@ pub fn create_auth_token(
     Ok(auth_token)
 }
 
-pub fn get_auth_token_by_id(
-    conn: &mut SqliteConnection,
-    id: &String,
-) -> Result<Option<AuthToken>, Error> {
+pub fn get_auth_token_by_id(conn: &mut SqliteConnection, id: &String) -> Result<Option<AuthToken>> {
     use crate::schema::auth_tokens;
 
     let result = auth_tokens::table
@@ -96,7 +90,7 @@ pub fn get_auth_token_by_trapp_and_id(
     conn: &mut SqliteConnection,
     trapp_id: i32,
     id: &String,
-) -> Result<Option<AuthToken>, Error> {
+) -> Result<Option<AuthToken>> {
     use crate::schema::auth_tokens;
 
     let result = auth_tokens::table
@@ -111,7 +105,7 @@ pub fn get_auth_token_by_trapp_and_id(
     }
 }
 
-pub fn delete_auth_token_by_id(conn: &mut SqliteConnection, id: &String) -> Result<bool, Error> {
+pub fn delete_auth_token_by_id(conn: &mut SqliteConnection, id: &String) -> Result<bool> {
     use crate::schema::auth_tokens;
 
     let r = diesel::delete(auth_tokens::table.filter(auth_tokens::id.eq(id))).execute(conn);
@@ -127,7 +121,7 @@ pub fn delete_auth_token_by_trapp_and_id(
     conn: &mut SqliteConnection,
     trapp_id: i32,
     id: &String,
-) -> Result<bool, Error> {
+) -> Result<bool> {
     use crate::schema::auth_tokens;
 
     let r = diesel::delete(

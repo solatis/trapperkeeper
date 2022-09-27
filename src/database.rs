@@ -9,16 +9,12 @@ use r2d2;
 
 use crate::config;
 
-#[derive(Debug, derive_more::Display, derive_more::Error)]
+#[derive(Debug, derive_more::Display, derive_more::Error, derive_more::From)]
 pub enum Error {
+    #[from]
     DbError(r2d2::Error),
-    MigrationError,
-}
 
-impl From<r2d2::Error> for Error {
-    fn from(e: r2d2::Error) -> Self {
-        Error::DbError(e)
-    }
+    MigrationError,
 }
 
 type InnerConnectionType = diesel::r2d2::ConnectionManager<SqliteConnection>;
