@@ -6,6 +6,7 @@ use diesel::sqlite::SqliteConnection;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use lazy_static::lazy_static;
 use r2d2;
+use std::ops::{Deref, DerefMut};
 
 use crate::config;
 
@@ -17,17 +18,36 @@ pub enum Error {
     MigrationError,
 }
 
-type InnerConnectionType = diesel::r2d2::ConnectionManager<SqliteConnection>;
-type InnerPool = diesel::r2d2::Pool<InnerConnectionType>;
+type InnerConnection = SqliteConnection;
+type InnerConnectionManager = diesel::r2d2::ConnectionManager<InnerConnection>;
+type InnerPooledConnection = diesel::r2d2::PooledConnection<InnerConnectionManager>;
+type InnerPool = diesel::r2d2::Pool<InnerConnectionManager>;
 
-pub type PooledConnection = diesel::r2d2::PooledConnection<InnerConnectionType>;
+// pub type PooledConnection = diesel::r2d2::PooledConnection<InnerConnectionType>;
+
+pub type Connection = InnerConnection;
+pub struct PooledConnection(InnerPooledConnection);
 pub struct Pool(InnerPool);
+
+impl Deref for PooledConnection {
+    type Target = InnerConnection;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.deref()
+    }
+}
+
+impl DerefMut for PooledConnection {
+    fn deref_mut(&mut self) -> &mut InnerConnection {
+        self.0.deref_mut()
+    }
+}
 
 impl Pool {
     pub fn get(&self) -> Result<PooledConnection, Error> {
         let p: &InnerPool = &self.0;
         match p.get() {
-            Ok(conn) => Ok(conn),
+            Ok(conn) => Ok(PooledConnection(conn)),
             Err(e) => Err(e.into()),
         }
     }
@@ -87,7 +107,7 @@ impl PoolBuilder {
     }
 }
 
-pub fn run_migrations(conn: &mut PooledConnection) -> std::result::Result<(), Error> {
+pub fn run_migrations(conn: &mut InnerConnection) -> std::result::Result<(), Error> {
     log::info!("running migrations");
     match conn.run_pending_migrations(MIGRATIONS) {
         Ok(_) => Ok(()),
