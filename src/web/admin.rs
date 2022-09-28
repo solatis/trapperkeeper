@@ -108,11 +108,11 @@ async fn get_overview(_session: models::Session, hb: web::Data<Handlebars<'_>>) 
 /// Presents overview of existing / installed trapps.
 async fn get_trapps(
     _session: models::Session,
+    mut conn: database::PooledConnection,
     hb: web::Data<Handlebars<'_>>,
 ) -> Result<HttpResponse, Error> {
     log::info!("get_admin_trapps");
 
-    let mut conn = database::POOL.get()?;
     let trapps = crud::get_trapps(&mut conn)?;
 
     let data = json!({"page_title": "Trapps",
@@ -143,12 +143,11 @@ async fn get_trapp_create(
 /// Creates new trapp, redirects trapps overview when successful.
 async fn post_trapp_create(
     _session: models::Session,
+    mut conn: database::PooledConnection,
     hb: web::Data<Handlebars<'_>>,
     new_trapp: web::Form<models::NewTrapp>,
 ) -> Result<HttpResponse, Error> {
     log::info!("post_trapp_create");
-
-    let mut conn = database::POOL.get()?;
 
     // Create the app
     let trapp: models::Trapp = crud::create_trapp(&mut conn, &new_trapp.name)?;
