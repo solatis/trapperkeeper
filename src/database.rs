@@ -6,6 +6,7 @@ use diesel::sqlite::SqliteConnection;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use lazy_static::lazy_static;
 use r2d2;
+use std::time::Duration;
 
 use crate::config;
 
@@ -35,8 +36,14 @@ impl Pool {
     pub fn get(&self) -> Result<PooledConnection, Error> {
         let p: &InnerPool = &self.0;
         match p.get() {
-            Ok(conn) => Ok(PooledConnection(conn)),
-            Err(e) => Err(e.into()),
+            Ok(conn) => {
+                log::info!("acquired connection");
+                Ok(PooledConnection(conn))
+            }
+            Err(e) => {
+                log::error!("Unable to acquire connection from pool: {}", e);
+                Err(e.into())
+            }
         }
     }
 }
@@ -48,18 +55,35 @@ lazy_static! {
 }
 
 #[derive(Copy, Clone, Debug)]
-struct ConnectionCustomizer {}
+struct ConnectionOptions {
+    pub enable_wal: bool,
+    pub enable_fkey: bool,
+    pub busy_timeout: Option<Duration>,
+}
 
-impl<C, E> CustomizeConnection<C, E> for ConnectionCustomizer
-where
-    C: SimpleConnection,
-{
-    fn on_acquire(&self, conn: &mut C) -> std::result::Result<(), E> {
-        log::debug!("enabling foreign keys on connection");
-        conn.batch_execute("PRAGMA foreign_keys = ON")
-            .expect("unable to enable foreign keys");
+impl CustomizeConnection<InnerConnection, diesel::r2d2::Error> for ConnectionOptions {
+    fn on_acquire(
+        &self,
+        conn: &mut InnerConnection,
+    ) -> std::result::Result<(), diesel::r2d2::Error> {
+        (|| {
+            if self.enable_wal {
+                log::debug!("enabling WAL on connection");
+                conn.batch_execute("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;")?;
+            }
 
-        Ok(())
+            if self.enable_fkey {
+                log::debug!("enabling foreign keys on connection");
+                conn.batch_execute("PRAGMA foreign_keys = ON")?;
+            }
+
+            if let Some(d) = self.busy_timeout {
+                log::debug!("setting busy timeout to {}ms", d.as_millis());
+                conn.batch_execute(&format!("PRAGMA busy_timeout = {};", d.as_millis()))?;
+            }
+            Ok(())
+        })()
+        .map_err(diesel::r2d2::Error::QueryError)
     }
 }
 
@@ -81,7 +105,11 @@ impl PoolBuilder {
             self.cfg.pool_size
         );
 
-        let customizer = Box::new(ConnectionCustomizer {});
+        let customizer = Box::new(ConnectionOptions {
+            enable_wal: true,
+            enable_fkey: true,
+            busy_timeout: Some(Duration::from_secs(30)),
+        });
 
         let pool = InnerPool::builder()
             .max_size(self.cfg.pool_size)
