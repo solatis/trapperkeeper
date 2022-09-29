@@ -17,7 +17,4 @@ diesel::table! {
 
 diesel::joinable!(auth_tokens -> trapps (trapp_id));
 
-diesel::allow_tables_to_appear_in_same_query!(
-    auth_tokens,
-    trapps,
-);
+diesel::allow_tables_to_appear_in_same_query!(auth_tokens, trapps,);

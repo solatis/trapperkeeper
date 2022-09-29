@@ -12,14 +12,14 @@ pub fn conn() -> database::PooledConnection {
 
 #[fixture]
 pub fn trapp(mut conn: database::PooledConnection) -> Trapp {
-    return crud::create_trapp(&mut conn, &String::from("foo")).unwrap();
+    return crud::create_trapp(conn.as_mut(), &String::from("foo")).unwrap();
 }
 
 #[fixture]
 pub fn trapps(mut conn: database::PooledConnection) -> Vec<Trapp> {
     vec![
-        crud::create_trapp(&mut conn, &String::from("trapp1")).unwrap(),
-        crud::create_trapp(&mut conn, &String::from("trapp2")).unwrap(),
+        crud::create_trapp(conn.as_mut(), &String::from("trapp1")).unwrap(),
+        crud::create_trapp(conn.as_mut(), &String::from("trapp2")).unwrap(),
     ]
 }
 
@@ -30,7 +30,7 @@ pub fn trapp_id(trapp: Trapp) -> i32 {
 
 #[fixture]
 pub fn auth_token(mut conn: database::PooledConnection, trapp_id: i32) -> AuthToken {
-    return crud::create_auth_token(&mut conn, trapp_id, &String::from("foo")).unwrap();
+    return crud::create_auth_token(conn.as_mut(), trapp_id, &String::from("foo")).unwrap();
 }
 
 ////
@@ -39,19 +39,19 @@ pub fn auth_token(mut conn: database::PooledConnection, trapp_id: i32) -> AuthTo
 
 #[rstest]
 fn can_create_trapp(mut conn: database::PooledConnection) {
-    let trapp: Trapp = crud::create_trapp(&mut conn, &String::from("foo")).unwrap();
+    let trapp: Trapp = crud::create_trapp(conn.as_mut(), &String::from("foo")).unwrap();
     ma::assert_gt!(trapp.id, Some(0))
 }
 
 #[rstest]
 fn can_create_auth_token(mut conn: database::PooledConnection, trapp_id: i32) {
-    let auth_token_id = crud::create_auth_token(&mut conn, trapp_id, &String::from("foo"));
+    let auth_token_id = crud::create_auth_token(conn.as_mut(), trapp_id, &String::from("foo"));
     assert_eq!(auth_token_id.is_ok(), true)
 }
 
 #[rstest]
 fn cannot_create_auth_token_when_trapp_doesnt_exist(mut conn: database::PooledConnection) {
-    let auth_token_id = crud::create_auth_token(&mut conn, -2, &String::from("foo"));
+    let auth_token_id = crud::create_auth_token(conn.as_mut(), -2, &String::from("foo"));
     assert_eq!(auth_token_id.is_ok(), false)
 }
 
@@ -61,7 +61,7 @@ fn cannot_create_auth_token_when_trapp_doesnt_exist(mut conn: database::PooledCo
 
 #[rstest]
 fn can_get_trapps(mut conn: database::PooledConnection, trapps: Vec<Trapp>) {
-    let trapps_ = crud::get_trapps(&mut conn).expect("unable to list trapps");
+    let trapps_ = crud::get_trapps(conn.as_mut()).expect("unable to list trapps");
 
     // Verify all recently created trapps are inside our returned trapps_. Likely there
     // are more.
@@ -74,21 +74,21 @@ fn can_get_trapps(mut conn: database::PooledConnection, trapps: Vec<Trapp>) {
 
 #[rstest]
 fn can_get_trapp(mut conn: database::PooledConnection, trapp: Trapp) {
-    let get = crud::get_trapp_by_id(&mut conn, trapp.id.unwrap());
+    let get = crud::get_trapp_by_id(conn.as_mut(), trapp.id.unwrap());
 
     assert_eq!(get, Ok(Some(trapp)));
 }
 
 #[rstest]
 fn get_nonexisting_trapp(mut conn: database::PooledConnection) {
-    let get = crud::get_trapp_by_id(&mut conn, -1);
+    let get = crud::get_trapp_by_id(conn.as_mut(), -1);
 
     assert_eq!(get, Ok(None));
 }
 
 #[rstest]
 fn can_get_auth_token(mut conn: database::PooledConnection, auth_token: AuthToken) {
-    let get = crud::get_auth_token_by_id(&mut conn, &auth_token.id).unwrap();
+    let get = crud::get_auth_token_by_id(conn.as_mut(), &auth_token.id).unwrap();
 
     assert_eq!(get.unwrap(), auth_token);
 }
@@ -99,30 +99,30 @@ fn can_get_auth_token(mut conn: database::PooledConnection, auth_token: AuthToke
 
 #[rstest]
 fn can_delete_trapp(mut conn: database::PooledConnection, trapp_id: i32) {
-    assert!(crud::get_trapp_by_id(&mut conn, trapp_id)
+    assert!(crud::get_trapp_by_id(conn.as_mut(), trapp_id)
         .expect("unable to get trapp by id")
         .is_some());
-    assert_eq!(crud::delete_trapp_by_id(&mut conn, trapp_id), Ok(true));
-    assert!(crud::get_trapp_by_id(&mut conn, trapp_id)
+    assert_eq!(crud::delete_trapp_by_id(conn.as_mut(), trapp_id), Ok(true));
+    assert!(crud::get_trapp_by_id(conn.as_mut(), trapp_id)
         .expect("unable to get trapp by id")
         .is_none());
-    assert_eq!(crud::delete_trapp_by_id(&mut conn, trapp_id), Ok(false));
+    assert_eq!(crud::delete_trapp_by_id(conn.as_mut(), trapp_id), Ok(false));
 }
 
 #[rstest]
 fn can_delete_auth_token(mut conn: database::PooledConnection, auth_token: AuthToken) {
-    assert!(crud::get_auth_token_by_id(&mut conn, &auth_token.id)
+    assert!(crud::get_auth_token_by_id(conn.as_mut(), &auth_token.id)
         .expect("unable to get auth token by id")
         .is_some());
     assert_eq!(
-        crud::delete_auth_token_by_id(&mut conn, &auth_token.id),
+        crud::delete_auth_token_by_id(conn.as_mut(), &auth_token.id),
         Ok(true)
     );
-    assert!(crud::get_auth_token_by_id(&mut conn, &auth_token.id)
+    assert!(crud::get_auth_token_by_id(conn.as_mut(), &auth_token.id)
         .expect("unable to get auth token by id")
         .is_none());
     assert_eq!(
-        crud::delete_auth_token_by_id(&mut conn, &auth_token.id),
+        crud::delete_auth_token_by_id(conn.as_mut(), &auth_token.id),
         Ok(false)
     );
 }

@@ -113,7 +113,7 @@ async fn get_trapps(
 ) -> Result<HttpResponse, Error> {
     log::info!("get_admin_trapps");
 
-    let trapps = crud::get_trapps(&mut conn)?;
+    let trapps = crud::get_trapps(conn.as_mut())?;
 
     let data = json!({"page_title": "Trapps",
                       "trapps": trapps});
@@ -150,14 +150,14 @@ async fn post_trapp_create(
     log::info!("post_trapp_create");
 
     // Create the app
-    let trapp: models::Trapp = crud::create_trapp(&mut conn, &new_trapp.name)?;
+    let trapp: models::Trapp = crud::create_trapp(conn.as_mut(), &new_trapp.name)?;
 
     // Create a default auth token
     let trapp_id: i32 = trapp.id.unwrap();
     let auth_token_title = String::from("Default token");
 
     let auth_token: models::AuthToken =
-        crud::create_auth_token(&mut conn, trapp_id, &auth_token_title)?;
+        crud::create_auth_token(conn.as_mut(), trapp_id, &auth_token_title)?;
 
     let data = json!({"trapp": trapp,
                       "auth_token": auth_token});

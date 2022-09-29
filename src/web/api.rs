@@ -31,7 +31,7 @@ async fn create_trapp(
 ) -> Result<HttpResponse, Error> {
     log::info!("create_trapp");
 
-    let trapp = web::block(move || crud::create_trapp(&mut conn, &trapp.name))
+    let trapp = web::block(move || crud::create_trapp(conn.as_mut(), &trapp.name))
         .await?
         .map_err(actix_web::error::ErrorInternalServerError)?;
 
@@ -46,7 +46,7 @@ async fn get_trapp(
 
     let trapp_id = trapp_id.into_inner();
 
-    let result = web::block(move || crud::get_trapp_by_id(&mut conn, trapp_id)).await?;
+    let result = web::block(move || crud::get_trapp_by_id(conn.as_mut(), trapp_id)).await?;
 
     unwrap_get_result(result)
 }
@@ -59,7 +59,7 @@ async fn delete_trapp(
 
     let trapp_id = trapp_id.into_inner();
 
-    let result = web::block(move || crud::delete_trapp_by_id(&mut conn, trapp_id)).await?;
+    let result = web::block(move || crud::delete_trapp_by_id(conn.as_mut(), trapp_id)).await?;
 
     unwrap_delete_result(result)
 }
@@ -78,7 +78,7 @@ async fn create_auth_token(
     }
 
     let auth_token = web::block(move || {
-        crud::create_auth_token(&mut conn, auth_token.trapp_id, &auth_token.name)
+        crud::create_auth_token(conn.as_mut(), auth_token.trapp_id, &auth_token.name)
     })
     .await?
     .map_err(actix_web::error::ErrorInternalServerError)?;
@@ -95,7 +95,7 @@ async fn get_trapp_auth_token(
     let (trapp_id, auth_token_id) = path.into_inner();
 
     let result = web::block(move || {
-        crud::get_auth_token_by_trapp_and_id(&mut conn, trapp_id, &auth_token_id)
+        crud::get_auth_token_by_trapp_and_id(conn.as_mut(), trapp_id, &auth_token_id)
     })
     .await?;
 
@@ -111,7 +111,7 @@ async fn delete_trapp_auth_token(
     let (trapp_id, auth_token_id) = path.into_inner();
 
     let result = web::block(move || {
-        crud::delete_auth_token_by_trapp_and_id(&mut conn, trapp_id, &auth_token_id)
+        crud::delete_auth_token_by_trapp_and_id(conn.as_mut(), trapp_id, &auth_token_id)
     })
     .await?;
 
@@ -127,7 +127,7 @@ async fn delete_auth_token(
     let auth_token_id = path.into_inner();
 
     let result =
-        web::block(move || crud::delete_auth_token_by_id(&mut conn, &auth_token_id)).await?;
+        web::block(move || crud::delete_auth_token_by_id(conn.as_mut(), &auth_token_id)).await?;
 
     unwrap_delete_result(result)
 }
@@ -140,7 +140,8 @@ async fn get_auth_token(
 
     let auth_token_id = path.into_inner();
 
-    let result = web::block(move || crud::get_auth_token_by_id(&mut conn, &auth_token_id)).await?;
+    let result =
+        web::block(move || crud::get_auth_token_by_id(conn.as_mut(), &auth_token_id)).await?;
 
     unwrap_get_result(result)
 }
