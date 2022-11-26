@@ -3,6 +3,9 @@ on: [push]
 
 name: CI
 
+env:
+  DATABASE_URL: "sqlite:default.sqlite"
+
 jobs:
   build_and_test:
     name: build_and_test
@@ -30,14 +33,14 @@ jobs:
           cargo --version
           rustc --version
 
-      # - name: Install diesel cli
-      #   run: cargo install diesel_cli --no-default-features --features sqlite
-
-      # - name: Create tables & schema
-      #   run: diesel migration run
+      - name: Install sqlx cli
+        run: cargo install sqlx-cli --features sqlite
 
       - name: Run trapperkeeper_tests
-        run: cargo test
+        run: |
+          sqlx db create
+          sqlx migrate run
+          cargo test
 
       - name: Build trapperkeeper
         run: cargo build --release --all-features

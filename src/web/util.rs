@@ -1,5 +1,6 @@
-use actix_utils::future;
-use actix_web;
+use actix_web::web;
+use core::future::Future;
+use std::pin::Pin;
 
 use crate::database;
 
@@ -7,19 +8,27 @@ use crate::database;
 ///
 /// This allows routes to use a pooled connection directly as an argument to
 /// their routes.
-impl actix_web::FromRequest for database::PooledConnection {
+impl actix_web::FromRequest for database::PoolConnection {
     type Error = actix_web::Error;
-    type Future = future::Ready<Result<database::PooledConnection, Self::Error>>;
+    type Future = Pin<Box<dyn Future<Output = Result<database::PoolConnection, Self::Error>>>>;
 
     fn from_request(
-        _req: &actix_web::HttpRequest,
+        req: &actix_web::HttpRequest,
         _payload: &mut actix_web::dev::Payload,
     ) -> Self::Future {
-        match database::POOL.get() {
-            Ok(conn) => future::ok(conn),
-            Err(_) => future::err(actix_web::error::ErrorInternalServerError(String::from(
-                "Unable to acquire database connection",
-            ))),
-        }
+        let req = req.clone();
+
+        Box::pin(async move {
+            let pool: &web::Data<database::Pool> = req
+                .app_data::<web::Data<database::Pool>>()
+                .expect("Unable to retrieve database pool from app data");
+
+            match pool.acquire().await {
+                Ok(conn) => Ok(conn),
+                Err(_) => Err(actix_web::error::ErrorInternalServerError(String::from(
+                    "Unable to acquire database connection",
+                ))),
+            }
+        })
     }
 }

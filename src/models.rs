@@ -1,6 +1,3 @@
-use crate::schema::{auth_tokens, trapps};
-use crate::utils;
-use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -10,10 +7,10 @@ pub struct Login {
 }
 
 impl Login {
-    pub fn new(username: &String, password: &String) -> Self {
+    pub fn new(username: &str, password: &str) -> Self {
         Login {
-            username: username.clone(),
-            password: password.clone(),
+            username: String::from(username),
+            password: String::from(password),
         }
     }
 }
@@ -25,63 +22,68 @@ pub struct Session {
 }
 
 impl Session {
-    pub fn new(username: &String) -> Self {
+    pub fn new(id: &str, username: &str) -> Self {
         Session {
-            id: utils::random_token(32),
-            username: username.clone(),
+            id: String::from(id),
+            username: String::from(username),
         }
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, Queryable, Insertable)]
-#[diesel(table_name = trapps)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NewTrapp {
     pub name: String,
 }
 
 impl NewTrapp {
-    pub fn new(name: &String) -> Self {
-        NewTrapp { name: name.clone() }
-    }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Queryable)]
-#[diesel(table_name = trapps)]
-pub struct Trapp {
-    pub id: Option<i32>,
-    pub name: String,
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq, Queryable, Insertable)]
-#[diesel(table_name = auth_tokens)]
-pub struct NewAuthToken {
-    pub trapp_id: i32,
-    pub name: String,
-}
-
-impl NewAuthToken {
-    pub fn new(trapp_id: i32, name: &String) -> Self {
-        NewAuthToken {
-            trapp_id: trapp_id,
-            name: name.clone(),
+    pub fn new(name: &str) -> Self {
+        NewTrapp {
+            name: String::from(name),
         }
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Queryable, Insertable)]
-#[diesel(table_name = auth_tokens)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Trapp {
+    pub id: i64,
+    pub name: String,
+}
+
+impl Trapp {
+    pub fn new(id: i64, name: &str) -> Self {
+        Trapp {
+            id: id,
+            name: String::from(name),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub struct NewAuthToken {
+    pub name: String,
+}
+
+impl NewAuthToken {
+    pub fn new(name: &str) -> Self {
+        NewAuthToken {
+            name: String::from(name),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct AuthToken {
     pub id: String,
-    pub trapp_id: i32,
+    pub trapp_id: i64,
     pub name: String,
 }
 
 impl AuthToken {
-    pub fn new(trapp_id: i32, name: &String) -> Self {
+    pub fn new(id: &str, trapp_id: i64, name: &str) -> Self {
         AuthToken {
-            id: utils::random_token(32),
+            id: String::from(id),
             trapp_id: trapp_id,
-            name: name.clone(),
+            name: String::from(name),
         }
     }
 }

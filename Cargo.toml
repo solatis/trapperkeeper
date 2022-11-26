@@ -11,9 +11,7 @@ generic_const_exprs = []
 [dependencies]
 
 # ORM
-diesel = { version = "2.0.0", features = ["sqlite", "returning_clauses_for_sqlite_3_35", "r2d2"] }
-diesel_migrations = { version = "2.0.0", features = ["sqlite"] }
-r2d2 = ">=0.8.2, <0.9.0"
+sqlx = { version = "0.6", features = ["runtime-actix-rustls", "sqlite", "macros", "migrate", "time"] }
 
 # Webserver stuff
 actix-web = { version = "4", features = ["cookies"] }
@@ -40,6 +38,7 @@ dotenvy = "0.15"
 log = "0.4"
 
 # Utilities
+async-std = { version = "^1.12", features = ["attributes", "tokio1"] }
 derive_more = "0.99"
 futures-util = "0.3"
 lazy_static = "1.1"

@@ -56,7 +56,9 @@
                                 {{#each trapps as |trapp| }}
                                 <tr>
                                     <td>
-                                        {{ trapp.name }}
+                                        <a href="/admin/trapp/{{ trapp.id }}/overview" >
+                                            {{ trapp.name }}
+                                        </a>
                                     </td>
                                     <td>
                                         <div class="progress">

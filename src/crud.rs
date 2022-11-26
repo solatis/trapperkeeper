@@ -1,143 +1,181 @@
 use derive_more;
-use diesel;
-use diesel::prelude::*;
+use sqlx;
 
+use crate::crypto;
 use crate::database;
-use crate::models::{AuthToken, NewTrapp, Trapp};
+use crate::models::{AuthToken, Trapp};
 
-#[derive(Debug, derive_more::From, derive_more::Display, derive_more::Error, PartialEq)]
+#[derive(Debug, derive_more::From, derive_more::Display, derive_more::Error)]
 pub enum Error {
     #[from]
-    DbError(diesel::result::Error),
+    SqlxError(sqlx::Error),
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
-pub fn create_trapp(conn: &mut database::Connection, title: &String) -> Result<Trapp> {
-    use crate::schema::trapps;
-    let new_trapp = &NewTrapp::new(title);
+pub async fn create_trapp(conn: &mut impl database::IntoConnection, title: &str) -> Result<i64> {
+    let conn = conn.into_connection();
 
-    let inserted_trapp = diesel::insert_into(trapps::table)
-        .values(new_trapp)
-        .get_result::<Trapp>(conn)?;
+    let id = sqlx::query!(r#"INSERT INTO trapps (name) VALUES ( ?1 )"#, title)
+        .execute(conn)
+        .await?
+        .last_insert_rowid();
 
-    Ok(inserted_trapp)
+    Ok(id)
 }
 
-pub fn get_trapps(conn: &mut database::Connection) -> Result<Vec<Trapp>> {
-    use crate::schema::trapps;
+pub async fn get_trapps(conn: &mut impl database::IntoConnection) -> Result<Vec<Trapp>> {
+    let conn = conn.into_connection();
 
-    let result = trapps::dsl::trapps.load::<Trapp>(conn)?;
+    let recs = sqlx::query!("SELECT id, name FROM trapps")
+        .fetch_all(conn)
+        .await?;
+    let result = recs
+        .iter()
+        .map(|rec| Trapp::new(rec.id, &rec.name))
+        .collect();
     Ok(result)
 }
 
-pub fn get_trapp_by_id(conn: &mut database::Connection, id: i32) -> Result<Option<Trapp>> {
-    use crate::schema::trapps;
+pub async fn get_trapp_by_id(
+    conn: &mut impl database::IntoConnection,
+    id: &i64,
+) -> Result<Option<Trapp>> {
+    let conn = conn.into_connection();
 
-    let result = trapps::table
-        .filter(trapps::id.eq(id))
-        .get_result::<Trapp>(conn);
+    let rec = sqlx::query!(r#"SELECT id, name FROM trapps WHERE id = ?1 "#, id)
+        .fetch_optional(conn)
+        .await?;
 
-    match result {
-        Ok(trapp) => Ok(Some(trapp)),
-        Err(diesel::result::Error::NotFound) => Ok(None),
-        Err(e) => Err(e.into()),
+    match rec {
+        Some(rec_) => Ok(Some(Trapp::new(rec_.id, &rec_.name))),
+        None => Ok(None),
     }
 }
 
-pub fn delete_trapp_by_id(conn: &mut database::Connection, id: i32) -> Result<bool> {
-    use crate::schema::trapps;
-
-    let r = diesel::delete(trapps::table.filter(trapps::id.eq(id))).execute(conn);
-
-    match r {
-        Ok(0) => Ok(false),
-        Ok(_) => Ok(true),
-        Err(e) => Err(e.into()),
-    }
-}
-
-pub fn create_auth_token(
-    conn: &mut database::Connection,
-    trapp_id: i32,
-    title: &String,
-) -> Result<AuthToken> {
-    use crate::schema::auth_tokens;
-
-    let auth_token = AuthToken::new(trapp_id, title);
-
-    diesel::insert_into(auth_tokens::table)
-        .values(&auth_token)
-        .execute(conn)?;
-
-    Ok(auth_token)
-}
-
-pub fn get_auth_token_by_id(
-    conn: &mut database::Connection,
-    id: &String,
-) -> Result<Option<AuthToken>> {
-    use crate::schema::auth_tokens;
-
-    let result = auth_tokens::table
-        .filter(auth_tokens::id.eq(id))
-        .get_result::<AuthToken>(conn);
-
-    match result {
-        Ok(auth_token) => Ok(Some(auth_token)),
-        Err(diesel::result::Error::NotFound) => Ok(None),
-        Err(e) => Err(e.into()),
-    }
-}
-
-pub fn get_auth_token_by_trapp_and_id(
-    conn: &mut database::Connection,
-    trapp_id: i32,
-    id: &String,
-) -> Result<Option<AuthToken>> {
-    use crate::schema::auth_tokens;
-
-    let result = auth_tokens::table
-        .filter(auth_tokens::trapp_id.eq(trapp_id))
-        .filter(auth_tokens::id.eq(id))
-        .get_result::<AuthToken>(conn);
-
-    match result {
-        Ok(auth_token) => Ok(Some(auth_token)),
-        Err(diesel::result::Error::NotFound) => Ok(None),
-        Err(e) => Err(e.into()),
-    }
-}
-
-pub fn delete_auth_token_by_id(conn: &mut database::Connection, id: &String) -> Result<bool> {
-    use crate::schema::auth_tokens;
-
-    let r = diesel::delete(auth_tokens::table.filter(auth_tokens::id.eq(id))).execute(conn);
-
-    match r {
-        Ok(0) => Ok(false),
-        Ok(_) => Ok(true),
-        Err(e) => Err(e.into()),
-    }
-}
-
-pub fn delete_auth_token_by_trapp_and_id(
-    conn: &mut database::Connection,
-    trapp_id: i32,
-    id: &String,
+pub async fn delete_trapp_by_id(
+    conn: &mut impl database::IntoConnection,
+    id: &i64,
 ) -> Result<bool> {
-    use crate::schema::auth_tokens;
+    let conn = conn.into_connection();
 
-    let r = diesel::delete(
-        auth_tokens::table
-            .filter(auth_tokens::id.eq(id))
-            .filter(auth_tokens::trapp_id.eq(trapp_id)),
+    let n = sqlx::query!(r#"DELETE FROM trapps WHERE id = ?1"#, id)
+        .execute(conn)
+        .await?
+        .rows_affected();
+
+    Ok(n > 0)
+}
+
+pub async fn create_auth_token(
+    conn: &mut impl database::IntoConnection,
+    trapp_id: &i64,
+    name: &str,
+) -> Result<String> {
+    let conn = conn.into_connection();
+
+    let id = crypto::random_token(32);
+
+    sqlx::query!(
+        r#"INSERT INTO auth_tokens (id, trapp_id, name) VALUES ( ?1, ?2, ?3 )"#,
+        id,
+        trapp_id,
+        name
     )
-    .execute(conn);
+    .execute(conn)
+    .await?;
 
-    match r {
-        Ok(0) => Ok(false),
-        Ok(_) => Ok(true),
-        Err(e) => Err(e.into()),
+    Ok(id)
+}
+
+pub async fn get_auth_token_by_id(
+    conn: &mut impl database::IntoConnection,
+    id: &str,
+) -> Result<Option<AuthToken>> {
+    let conn = conn.into_connection();
+
+    let rec = sqlx::query!(
+        r#"SELECT id, trapp_id, name FROM auth_tokens WHERE id = ?1 "#,
+        id
+    )
+    .fetch_optional(conn)
+    .await?;
+
+    match rec {
+        Some(rec_) => Ok(Some(AuthToken::new(&rec_.id, rec_.trapp_id, &rec_.name))),
+        None => Ok(None),
     }
+}
+
+pub async fn get_auth_token_by_trapp_and_id(
+    conn: &mut impl database::IntoConnection,
+    trapp_id: &i64,
+    id: &str,
+) -> Result<Option<AuthToken>> {
+    let conn = conn.into_connection();
+
+    let rec = sqlx::query!(
+        r#"SELECT id, trapp_id, name FROM auth_tokens WHERE id = ?1 AND trapp_id = ?2 "#,
+        id,
+        trapp_id
+    )
+    .fetch_optional(conn)
+    .await?;
+
+    match rec {
+        Some(rec_) => Ok(Some(AuthToken::new(&rec_.id, rec_.trapp_id, &rec_.name))),
+        None => Ok(None),
+    }
+}
+
+pub async fn get_auth_tokens_by_trapp(
+    conn: &mut impl database::IntoConnection,
+    trapp_id: &i64,
+) -> Result<Vec<AuthToken>> {
+    let conn = conn.into_connection();
+
+    let recs = sqlx::query!(
+        r#"SELECT id, name FROM auth_tokens WHERE trapp_id = ?1"#,
+        trapp_id
+    )
+    .fetch_all(conn)
+    .await?;
+    let result = recs
+        .iter()
+        .map(|rec| AuthToken::new(&rec.id, *trapp_id, &rec.name))
+        .collect();
+    Ok(result)
+}
+
+pub async fn delete_auth_token_by_id(
+    conn: &mut impl database::IntoConnection,
+    id: &str,
+) -> Result<bool> {
+    let conn = conn.into_connection();
+
+    let n = sqlx::query!(r#"DELETE FROM auth_tokens WHERE id = ?1"#, id)
+        .execute(conn)
+        .await?
+        .rows_affected();
+
+    Ok(n > 0)
+}
+
+pub async fn delete_auth_token_by_trapp_and_id(
+    conn: &mut impl database::IntoConnection,
+    trapp_id: i64,
+    id: &str,
+) -> Result<bool> {
+    let conn = conn.into_connection();
+
+    let n = sqlx::query!(
+        r#"DELETE FROM auth_tokens WHERE id = ?1 AND trapp_id = ?2"#,
+        id,
+        trapp_id
+    )
+    .execute(conn)
+    .await?
+    .rows_affected();
+
+    Ok(n > 0)
 }

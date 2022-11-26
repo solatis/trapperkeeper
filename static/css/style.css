@@ -3247,6 +3247,14 @@ code {
   font-weight: 600;
 }
 
+.card .card-alttitle {
+  color: #010101;
+  margin-bottom: 1.2rem;
+  text-transform: capitalize;
+  font-size: 1rem;
+  font-weight: 500;
+}
+
 .card .card-title.card-title-dash {
   font-style: normal;
   font-weight: 800;
@@ -6000,6 +6008,14 @@ dl li {
 
 .table td {
   font-size: 0.812rem;
+}
+
+.table td a {
+    text-decoration: underline;
+    color: #1F3BB3;
+    font-family: sans-serif;
+    font-style: normal;
+    font-weight: 500;
 }
 
 .table td img {

@@ -1,5 +1,3 @@
--- Your SQL goes here
-
 CREATE TABLE trapps (
        id INTEGER PRIMARY KEY AUTOINCREMENT,
        name TEXT NOT NULL

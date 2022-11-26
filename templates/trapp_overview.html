@@ -1,0 +1,108 @@
+{{#*inline "page"}}
+<div class="d-sm-flex align-items-center justify-content-between border-bottom">
+    <ul class="nav nav-tabs" role="tablist">
+        <li class="nav-item">
+            <a class="nav-link ps-0"
+               id="home-tab"
+               data-bs-toggle="tab"
+               href="/admin/trapps"
+               role="tab"
+               aria-controls="overview"
+               aria-selected="false">
+                Overview
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link active"
+               id="profile-tab"
+               data-bs-toggle="tab"
+               href="/admin/trapp_create"
+               role="tab"
+               aria-selected="true">
+                Create new
+            </a>
+        </li>
+    </ul>
+</div>
+
+<div class="tab-content tab-content-basic">
+    <div class="tab-pane fade show active" id="overview" role="tabpanel" aria-labelledby="overview">
+        <div class="card">
+            <div class="card-body">
+                <h4 class="card-title">{{ trapp.name }}</h4>
+                <p class="card-description">
+                    foo bar baz
+                </p>
+
+                <div class="w-50 pt-5">
+                    <h4 class="card-alttitle">Authorization tokens</h4>
+
+                    {{#unless has_auth_tokens}}
+                    <p class="card-description">
+                        No authorization tokens found.
+                    </p>
+                    {{else}}
+                    <table class="table table-striped p-0" >
+                        <thead>
+                            <tr>
+                                <th>
+                                    Name
+                                </th>
+                                <th>
+                                    Created
+                                </th>
+                                <th>
+                                    Token
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {{#each auth_tokens as |auth_token| }}
+                            <tr>
+                                <td>
+                                    {{ auth_token.name }}
+                                </td>
+                                <td>
+                                    {{ auth_token.created_at }}
+                                </td>
+                                <td>
+                                    {{ auth_token.id }}
+                                </td>
+                            </tr>
+                            {{/each}}
+                        </tbody>
+                    </table>
+
+                    {{/unless}}
+
+
+                    <h4 class="card-alttitle pt-5">Add token</h4>
+                    <div class="col-12 grid-margin">
+                        <form class="form-inline"
+                              action="/admin/trapp/{{ trapp_id}}/auth_token"
+                              method="post">
+                            <div class="row">
+                                <div class="col-md-10">
+                                    <input type="text"
+                                           name="name"
+                                           class="form-control mb-2 mr-sm-2"
+                                           id="inlineFormInputName2"
+                                           placeholder="Token name" />
+                                </div>
+                                <div class="col-md-2">
+                                    <button type="submit"
+                                            class="btn btn-primary mb-2">Add</button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+
+
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+{{/inline}}
+{{> _base }}

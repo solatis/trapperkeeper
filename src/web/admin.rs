@@ -64,7 +64,12 @@ async fn post_login(
         .append_header(("Location", "/admin/overview"))
         .finish();
 
-    session::inject_session(&hm, models::Session::new(&login.username), &mut result);
+    let session_id = crypto::random_token(32);
+    session::inject_session(
+        &hm,
+        models::Session::new(&session_id, &login.username),
+        &mut result,
+    );
     result
 }
 
@@ -108,12 +113,12 @@ async fn get_overview(_session: models::Session, hb: web::Data<Handlebars<'_>>) 
 /// Presents overview of existing / installed trapps.
 async fn get_trapps(
     _session: models::Session,
-    mut conn: database::PooledConnection,
+    mut conn: database::PoolConnection,
     hb: web::Data<Handlebars<'_>>,
 ) -> Result<HttpResponse, Error> {
     log::info!("get_admin_trapps");
 
-    let trapps = crud::get_trapps(conn.as_mut())?;
+    let trapps = crud::get_trapps(&mut conn).await?;
 
     let data = json!({"page_title": "Trapps",
                       "trapps": trapps});
@@ -143,28 +148,90 @@ async fn get_trapp_create(
 /// Creates new trapp, redirects trapps overview when successful.
 async fn post_trapp_create(
     _session: models::Session,
-    mut conn: database::PooledConnection,
+    mut conn: database::PoolConnection,
     hb: web::Data<Handlebars<'_>>,
     new_trapp: web::Form<models::NewTrapp>,
 ) -> Result<HttpResponse, Error> {
     log::info!("post_trapp_create");
 
     // Create the app
-    let trapp: models::Trapp = crud::create_trapp(conn.as_mut(), &new_trapp.name)?;
+    let trapp_id: i64 = crud::create_trapp(&mut conn, &new_trapp.name).await?;
 
     // Create a default auth token
-    let trapp_id: i32 = trapp.id.unwrap();
-    let auth_token_title = String::from("Default token");
+    let auth_token_name = String::from("Default token");
 
-    let auth_token: models::AuthToken =
-        crud::create_auth_token(conn.as_mut(), trapp_id, &auth_token_title)?;
+    let auth_token_id: String =
+        crud::create_auth_token(&mut conn, &trapp_id, &auth_token_name).await?;
 
-    let data = json!({"trapp": trapp,
-                      "auth_token": auth_token});
+    let data = json!({"trapp_id": trapp_id,
+                      "auth_token_name": auth_token_name,
+                      "auth_token_id": auth_token_id});
 
     let body = hb.render("trapp_created", &data)?;
 
     Ok(HttpResponse::Ok().body(body))
+}
+
+/// Get trapp overview
+///
+/// Single page overview of a trapp, including managing its auth tokens.
+async fn get_trapp_overview(
+    _session: models::Session,
+    mut conn: database::PoolConnection,
+    hb: web::Data<Handlebars<'_>>,
+    path: web::Path<(i64,)>,
+) -> Result<HttpResponse, Error> {
+    log::info!("get_trapp_overview");
+
+    let (trapp_id,) = path.into_inner();
+
+    let trapp = crud::get_trapp_by_id(&mut conn, &trapp_id).await?;
+    let auth_tokens = crud::get_auth_tokens_by_trapp(&mut conn, &trapp_id).await?;
+
+    log::info!("got auth tokens: {:?}", auth_tokens);
+
+    let data = json!({
+        "trapp_id": trapp_id,
+        "trapp": trapp,
+        "auth_tokens": auth_tokens,
+        "has_auth_tokens": !auth_tokens.is_empty()
+    });
+
+    let body = hb.render("trapp_overview", &data)?;
+
+    Ok(HttpResponse::Ok().body(body))
+}
+
+/// Post trapp auth token
+///
+/// Creates new auth token within a trapp. Trapp is provided in path, auth token name in form input.
+/// Redirects back to the trapp overview afterwards.
+async fn post_trapp_auth_token(
+    _session: models::Session,
+    mut conn: database::PoolConnection,
+    hb: web::Data<Handlebars<'_>>,
+    path: web::Path<(i64,)>,
+    new_auth_token: web::Form<models::NewAuthToken>,
+) -> Result<HttpResponse, Error> {
+    log::info!("post_trapp_auth_token");
+
+    let (trapp_id,) = path.into_inner();
+
+    log::info!(
+        "creating auth token for trapp_id {:?} with name '{:?}'",
+        trapp_id,
+        new_auth_token.name
+    );
+
+    let auth_token_id: String =
+        crud::create_auth_token(&mut conn, &trapp_id, &new_auth_token.name).await?;
+
+    Ok(HttpResponse::Found()
+        .append_header((
+            "Location",
+            format!("/admin/trapp/{}/overview?auth_token_created=true", trapp_id),
+        ))
+        .finish())
 }
 
 /// Templates
@@ -213,6 +280,11 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             web::scope("/admin")
                 .route("/overview", web::get().to(get_overview))
                 .route("/trapps", web::get().to(get_trapps))
+                .route("/trapp/{id}/overview", web::get().to(get_trapp_overview))
+                .route(
+                    "/trapp/{id}/auth_token",
+                    web::post().to(post_trapp_auth_token),
+                )
                 .route("/trapp_create", web::get().to(get_trapp_create))
                 .route("/trapp_create", web::post().to(post_trapp_create))
                 .route("/login", web::get().to(get_login))

@@ -1,63 +1,87 @@
+use async_std;
 use more_asserts as ma;
 use rstest::*;
 
+use trapperkeeper::config;
 use trapperkeeper::crud;
 use trapperkeeper::database;
 use trapperkeeper::models::{AuthToken, Trapp};
 
-fn get_conn() -> database::PooledConnection {
-    database::POOL
-        .get()
+async fn get_pool() -> database::Pool {
+    let cfg = config::Config::new().expect("Unable to read configuration");
+    let pool = database::Pool::builder()
+        .from_config(&cfg.database)
+        .build()
+        .await
+        .expect("Unable to construct database connection pool");
+
+    pool
+}
+
+#[fixture]
+async fn pool() -> database::Pool {
+    get_pool().await
+}
+
+async fn get_conn(pool: &mut database::Pool) -> database::PoolConnection {
+    pool.acquire()
+        .await
         .expect("Unable to get reference to database pool")
 }
 
-#[fixture]
-pub fn trapp() -> Trapp {
-    let mut conn = get_conn();
-    return crud::create_trapp(conn.as_mut(), &String::from("foo")).unwrap();
+pub async fn get_trapp_id(conn: &mut impl database::IntoConnection) -> i64 {
+    crud::create_trapp(conn, &"foo").await.unwrap()
 }
 
-#[fixture]
-pub fn trapps() -> Vec<Trapp> {
-    let mut conn = get_conn();
-    vec![
-        crud::create_trapp(conn.as_mut(), &String::from("trapp1")).unwrap(),
-        crud::create_trapp(conn.as_mut(), &String::from("trapp2")).unwrap(),
-    ]
+pub async fn get_trapp(conn: &mut impl database::IntoConnection) -> Trapp {
+    let trapp_id = get_trapp_id(conn).await;
+    crud::get_trapp_by_id(conn, &trapp_id)
+        .await
+        .expect("Unable to get trapp by id")
+        .expect("Trapp not found")
 }
 
-#[fixture]
-pub fn trapp_id(trapp: Trapp) -> i32 {
-    trapp.id.unwrap()
+pub async fn get_trapps(conn: &mut impl database::IntoConnection) -> Vec<Trapp> {
+    vec![get_trapp(conn).await, get_trapp(conn).await]
 }
 
-#[fixture]
-pub fn auth_token(trapp_id: i32) -> AuthToken {
-    let mut conn = get_conn();
-    return crud::create_auth_token(conn.as_mut(), trapp_id, &String::from("foo")).unwrap();
+pub async fn get_auth_token_id(conn: &mut impl database::IntoConnection) -> String {
+    let trapp_id: i64 = get_trapp_id(conn).await;
+    return crud::create_auth_token(conn, &trapp_id, &"foo")
+        .await
+        .expect("Unable to create auth token");
 }
 
 // Creation
 //
 
 #[rstest]
-fn can_create_trapp() {
-    let mut conn = get_conn();
-    let trapp: Trapp = crud::create_trapp(conn.as_mut(), &String::from("foo")).unwrap();
-    ma::assert_gt!(trapp.id, Some(0))
+async fn can_create_trapp(#[future] pool: database::Pool) {
+    let mut pool = pool.await;
+    let mut conn = get_conn(&mut pool).await;
+
+    let trapp_id = crud::create_trapp(&mut conn, &"foo").await.unwrap();
+
+    ma::assert_gt!(trapp_id, 0)
 }
 
 #[rstest]
-fn can_create_auth_token(trapp_id: i32) {
-    let mut conn = get_conn();
-    let auth_token_id = crud::create_auth_token(conn.as_mut(), trapp_id, &String::from("foo"));
+async fn can_create_auth_token(#[future] pool: database::Pool) {
+    let mut pool = pool.await;
+    let mut conn = get_conn(&mut pool).await;
+
+    let trapp_id: i64 = get_trapp_id(&mut conn).await;
+
+    let auth_token_id = crud::create_auth_token(&mut conn, &trapp_id, &"foo").await;
     assert_eq!(auth_token_id.is_ok(), true)
 }
 
 #[rstest]
-fn cannot_create_auth_token_when_trapp_doesnt_exist() {
-    let mut conn = get_conn();
-    let auth_token_id = crud::create_auth_token(conn.as_mut(), -2, &String::from("foo"));
+async fn cannot_create_auth_token_when_trapp_doesnt_exist(#[future] pool: database::Pool) {
+    let mut pool = pool.await;
+    let mut conn = get_conn(&mut pool).await;
+
+    let auth_token_id = crud::create_auth_token(&mut conn, &-2, &"foo").await;
     assert_eq!(auth_token_id.is_ok(), false)
 }
 
@@ -65,73 +89,152 @@ fn cannot_create_auth_token_when_trapp_doesnt_exist() {
 //
 
 #[rstest]
-fn can_get_trapps(trapps: Vec<Trapp>) {
-    let mut conn = get_conn();
-    let trapps_ = crud::get_trapps(conn.as_mut()).expect("unable to list trapps");
+async fn can_get_trapps(#[future] pool: database::Pool) {
+    let mut pool = pool.await;
+    let mut conn = get_conn(&mut pool).await;
+
+    // Realize (insertion) future before querying
+    let trapps = get_trapps(&mut conn).await;
+    let trapps_ = crud::get_trapps(&mut conn)
+        .await
+        .expect("unable to list trapps");
 
     // Verify all recently created trapps are inside our returned trapps_. Likely there
     // are more.
     assert!(trapps.iter().all(|trapp| trapps_.contains(trapp)));
 }
 
+#[rstest]
+async fn can_get_auth_tokens(#[future] pool: database::Pool) {
+    let mut pool = pool.await;
+    let mut conn = get_conn(&mut pool).await;
+
+    // Realize (insertion) future before querying
+    let trapps = get_trapps(&mut conn).await;
+
+    // Create two auth tokens for each of these trapps
+    for trapp in trapps.iter() {
+        let trapp_id: i64 = trapp.id;
+        crud::create_auth_token(&mut conn, &trapp_id, &"first")
+            .await
+            .expect("Unable to create auth token");
+        crud::create_auth_token(&mut conn, &trapp_id, &"second")
+            .await
+            .expect("Unable to create auth token");
+    }
+
+    // Now ensure that each each trapp indeed gets back two auth tokens
+    for trapp in trapps.iter() {
+        let trapp_id: i64 = trapp.id;
+        let xs = crud::get_auth_tokens_by_trapp(&mut conn, &trapp_id)
+            .await
+            .expect("Unable to list auth tokens");
+        assert_eq!(xs.len(), 2);
+    }
+}
+
 // Get
 //
 
 #[rstest]
-fn can_get_trapp(trapp: Trapp) {
-    let mut conn = get_conn();
-    let get = crud::get_trapp_by_id(conn.as_mut(), trapp.id.unwrap());
+async fn can_get_trapp(#[future] pool: database::Pool) {
+    let mut pool = pool.await;
+    let mut conn = get_conn(&mut pool).await;
 
-    assert_eq!(get, Ok(Some(trapp)));
+    // Realize (insertion) future before querying
+    let trapp = get_trapp(&mut conn).await;
+
+    let get = crud::get_trapp_by_id(&mut conn, &trapp.id)
+        .await
+        .expect("Unable to get trapp by id");
+
+    assert_eq!(get, Some(trapp));
 }
 
 #[rstest]
-fn get_nonexisting_trapp() {
-    let mut conn = get_conn();
-    let get = crud::get_trapp_by_id(conn.as_mut(), -1);
+async fn get_nonexisting_trapp(#[future] pool: database::Pool) {
+    let mut pool = pool.await;
+    let mut conn = get_conn(&mut pool).await;
 
-    assert_eq!(get, Ok(None));
+    let get = crud::get_trapp_by_id(&mut conn, &-1)
+        .await
+        .expect("Unable to get trapp by id");
+
+    assert_eq!(get, None);
 }
 
 #[rstest]
-fn can_get_auth_token(auth_token: AuthToken) {
-    let mut conn = get_conn();
-    let get = crud::get_auth_token_by_id(conn.as_mut(), &auth_token.id).unwrap();
+async fn can_get_auth_token(#[future] pool: database::Pool) {
+    let mut pool = pool.await;
+    let mut conn = get_conn(&mut pool).await;
 
-    assert_eq!(get.unwrap(), auth_token);
+    // Realize (insertion) future before querying
+    let auth_token_id = get_auth_token_id(&mut conn).await;
+    let get = crud::get_auth_token_by_id(&mut conn, &auth_token_id)
+        .await
+        .expect("Unable to get auth token by id")
+        .expect("Auth token not found");
+
+    assert_eq!(get.id, auth_token_id);
 }
 
 // Deletion
 //
 
 #[rstest]
-fn can_delete_trapp(trapp_id: i32) {
-    let mut conn = get_conn();
-    assert!(crud::get_trapp_by_id(conn.as_mut(), trapp_id)
+async fn can_delete_trapp(#[future] pool: database::Pool) {
+    let mut pool = pool.await;
+    let mut conn = get_conn(&mut pool).await;
+
+    let trapp_id = get_trapp_id(&mut conn).await;
+
+    assert!(crud::get_trapp_by_id(&mut conn, &trapp_id)
+        .await
         .expect("unable to get trapp by id")
         .is_some());
-    assert_eq!(crud::delete_trapp_by_id(conn.as_mut(), trapp_id), Ok(true));
-    assert!(crud::get_trapp_by_id(conn.as_mut(), trapp_id)
+    assert_eq!(
+        crud::delete_trapp_by_id(&mut conn, &trapp_id)
+            .await
+            .expect("unable to delete trapp"),
+        true
+    );
+    assert!(crud::get_trapp_by_id(&mut conn, &trapp_id)
+        .await
         .expect("unable to get trapp by id")
         .is_none());
-    assert_eq!(crud::delete_trapp_by_id(conn.as_mut(), trapp_id), Ok(false));
+    assert_eq!(
+        crud::delete_trapp_by_id(&mut conn, &trapp_id)
+            .await
+            .expect("unable to delete trapp"),
+        false
+    );
 }
 
 #[rstest]
-fn can_delete_auth_token(auth_token: AuthToken) {
-    let mut conn = get_conn();
-    assert!(crud::get_auth_token_by_id(conn.as_mut(), &auth_token.id)
+async fn can_delete_auth_token(#[future] pool: database::Pool) {
+    let mut pool = pool.await;
+    let mut conn = get_conn(&mut pool).await;
+
+    let auth_token_id = get_auth_token_id(&mut conn).await;
+
+    assert!(crud::get_auth_token_by_id(&mut conn, &auth_token_id)
+        .await
         .expect("unable to get auth token by id")
         .is_some());
     assert_eq!(
-        crud::delete_auth_token_by_id(conn.as_mut(), &auth_token.id),
-        Ok(true)
+        crud::delete_auth_token_by_id(&mut conn, &auth_token_id)
+            .await
+            .expect("unable to delete auth token"),
+        true
     );
-    assert!(crud::get_auth_token_by_id(conn.as_mut(), &auth_token.id)
+    assert!(crud::get_auth_token_by_id(&mut conn, &auth_token_id)
+        .await
         .expect("unable to get auth token by id")
         .is_none());
     assert_eq!(
-        crud::delete_auth_token_by_id(conn.as_mut(), &auth_token.id),
-        Ok(false)
+        crud::delete_auth_token_by_id(&mut conn, &auth_token_id)
+            .await
+            .expect("unable to delete auth token"),
+        false
     );
 }
