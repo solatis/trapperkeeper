@@ -121,7 +121,10 @@ async fn get_trapps(
     let trapps = crud::get_trapps(&mut conn).await?;
 
     let data = json!({"page_title": "Trapps",
-                      "trapps": trapps});
+                      "trapps": trapps,
+                      "has_trapps": !trapps.is_empty()
+
+    });
     let body = hb.render("trapps", &data)?;
 
     Ok(HttpResponse::Ok().body(body))

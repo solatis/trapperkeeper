@@ -31,6 +31,11 @@
             <div class="card">
                 <div class="card-body">
                     <h4 class="card-title">Active trapps</h4>
+                    {{#unless has_trapps}}
+                    <p class="card-description">
+                        No trapps found. Please <a href="/admin/trapp_create">create a new trapp</a>.
+                    </p>
+                    {{else}}
                     <p class="card-description">
                         Active applications that installed a trap.
                     </p>
@@ -76,6 +81,7 @@
                             </tbody>
                         </table>
                     </div>
+                    {{/unless}}
                 </div>
             </div>
         </div>
