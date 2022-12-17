@@ -3,7 +3,7 @@ use sqlx;
 
 use crate::crypto;
 use crate::database;
-use crate::models::{AuthToken, Trapp};
+use crate::models::{AnyRule, AuthToken, Trapp};
 
 #[derive(Debug, derive_more::From, derive_more::Display, derive_more::Error)]
 pub enum Error {
@@ -178,4 +178,28 @@ pub async fn delete_auth_token_by_trapp_and_id(
     .rows_affected();
 
     Ok(n > 0)
+}
+
+pub async fn get_rules(conn: &mut impl database::IntoConnection) -> Result<Vec<impl AnyRule>> {
+    let conn = conn.into_connection();
+
+    let recs = sqlx::query!("SELECT id, type, name FROM rules")
+        .fetch_all(conn)
+        .await?;
+    let result = recs
+        .iter()
+        .map(|rec| Rule::new(rec.id, &rec.name))
+        .collect();
+    Ok(result)
+}
+
+pub async fn create_rule(conn: &mut impl database::IntoConnection, title: &str) -> Result<i64> {
+    let conn = conn.into_connection();
+
+    let id = sqlx::query!(r#"INSERT INTO trapps (name) VALUES ( ?1 )"#, title)
+        .execute(conn)
+        .await?
+        .last_insert_rowid();
+
+    Ok(id)
 }
