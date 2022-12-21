@@ -27,6 +27,10 @@ type InnerPoolConnection = sqlx::pool::PoolConnection<Db>;
 // Public exposed connection type alias
 pub type Connection = PoolConnection;
 
+// Public exposed query type alias
+pub type Query<'q> =
+    sqlx::query::Query<'q, Db, <Db as sqlx::database::HasArguments<'q>>::Arguments>;
+
 // Trait to allow coercion to a "regular" connection, mainly so that APIs don't
 // need to be aware whether we're using pure sqlx Connection or our own
 // wrapper.

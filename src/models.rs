@@ -90,7 +90,7 @@ impl AuthToken {
 }
 
 #[derive(Copy, Clone, Debug)]
-enum RuleType {
+pub enum RuleType {
     FilterTrapp = 1,
     FilterField = 2,
 }
@@ -107,10 +107,13 @@ impl TryFrom<i64> for RuleType {
     }
 }
 
-pub trait AnyRule {
-    fn id(&self) -> i64;
+pub trait NewRule {
     fn name(&self) -> &str;
     fn type_(&self) -> RuleType;
+}
+
+pub trait Rule: NewRule {
+    fn id(&self) -> i64;
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -121,17 +124,29 @@ pub struct RuleFilterTrapp {
     pub trapp_id: i64,
 }
 
-impl AnyRule for RuleFilterTrapp {
-    fn id(&self) -> i64 {
-        self.id
-    }
-
+impl NewRule for RuleFilterTrapp {
     fn name(&self) -> &str {
         &self.name
     }
 
     fn type_(&self) -> RuleType {
         RuleType::FilterTrapp
+    }
+}
+
+impl Rule for RuleFilterTrapp {
+    fn id(&self) -> i64 {
+        self.id
+    }
+}
+
+impl RuleFilterTrapp {
+    pub fn new(id: i64, name: &str, trapp_id: i64) -> Self {
+        RuleFilterTrapp {
+            id: id,
+            name: String::from(name),
+            trapp_id: trapp_id,
+        }
     }
 }
 
@@ -144,16 +159,29 @@ pub struct RuleFilterField {
     pub field_value: String,
 }
 
-impl AnyRule for RuleFilterField {
-    fn id(&self) -> i64 {
-        self.id
-    }
-
+impl NewRule for RuleFilterField {
     fn name(&self) -> &str {
         &self.name
     }
 
     fn type_(&self) -> RuleType {
         RuleType::FilterField
+    }
+}
+
+impl Rule for RuleFilterField {
+    fn id(&self) -> i64 {
+        self.id
+    }
+}
+
+impl RuleFilterField {
+    pub fn new(id: i64, name: &str, field_key: &str, field_value: &str) -> Self {
+        RuleFilterField {
+            id: id,
+            name: String::from(name),
+            field_key: String::from(field_key),
+            field_value: String::from(field_value),
+        }
     }
 }

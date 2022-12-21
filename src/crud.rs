@@ -1,9 +1,12 @@
+use async_trait::async_trait;
 use derive_more;
 use sqlx;
+use sqlx::Database;
+use std::convert::TryFrom;
 
 use crate::crypto;
 use crate::database;
-use crate::models::{AnyRule, AuthToken, Trapp};
+use crate::models::{AuthToken, NewRule, Rule, RuleFilterField, RuleFilterTrapp, RuleType, Trapp};
 
 #[derive(Debug, derive_more::From, derive_more::Display, derive_more::Error)]
 pub enum Error {
@@ -180,26 +183,97 @@ pub async fn delete_auth_token_by_trapp_and_id(
     Ok(n > 0)
 }
 
-pub async fn get_rules(conn: &mut impl database::IntoConnection) -> Result<Vec<impl AnyRule>> {
-    let conn = conn.into_connection();
+fn resolve_rule_filter_trapp(
+    conn: &mut impl database::IntoConnection,
+    id: i64,
+    name: &str,
+) -> Box<dyn Rule> {
+    Box::new(RuleFilterTrapp::new(id, name, 1234))
+}
 
-    let recs = sqlx::query!("SELECT id, type, name FROM rules")
-        .fetch_all(conn)
+fn resolve_rule_filter_field(
+    conn: &mut impl database::IntoConnection,
+    id: i64,
+    name: &str,
+) -> Box<dyn Rule> {
+    Box::new(RuleFilterField::new(id, name, "key", "value"))
+}
+
+fn resolve_rule(
+    conn: &mut impl database::IntoConnection,
+    id: i64,
+    name: &str,
+    type_: i64,
+) -> Box<dyn Rule> {
+    match type_.try_into().expect("Unrecognized rule type") {
+        RuleType::FilterTrapp => resolve_rule_filter_trapp(conn, id, name),
+        RuleType::FilterField => resolve_rule_filter_field(conn, id, name),
+    }
+}
+
+pub async fn get_rules(conn: &mut impl database::IntoConnection) -> Result<Vec<Box<dyn Rule>>> {
+    let recs = sqlx::query!("SELECT id, type_, name FROM rules")
+        .fetch_all(conn.into_connection())
         .await?;
+
     let result = recs
         .iter()
-        .map(|rec| Rule::new(rec.id, &rec.name))
+        .map(|rec| resolve_rule(conn, rec.id, &rec.name, rec.type_))
         .collect();
     Ok(result)
 }
 
-pub async fn create_rule(conn: &mut impl database::IntoConnection, title: &str) -> Result<i64> {
-    let conn = conn.into_connection();
+#[async_trait]
+pub trait CreateRule: NewRule {
+    async fn create(&self, conn: &mut sqlx::SqliteConnection, id: i64) -> Result<()>;
+}
 
-    let id = sqlx::query!(r#"INSERT INTO trapps (name) VALUES ( ?1 )"#, title)
+#[async_trait]
+impl CreateRule for RuleFilterTrapp {
+    async fn create(&self, conn: &mut sqlx::SqliteConnection, id: i64) -> Result<()> {
+        sqlx::query!(
+            r#"INSERT INTO rules_filter_trapp(rule_id, trapp_id) VALUES ( ?1, ?2 )"#,
+            id,
+            self.trapp_id
+        )
         .execute(conn)
-        .await?
-        .last_insert_rowid();
+        .await?;
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl CreateRule for RuleFilterField {
+    async fn create(&self, conn: &mut sqlx::SqliteConnection, id: i64) -> Result<()> {
+        sqlx::query!(
+            r#"INSERT INTO rules_filter_field(rule_id, field_key, field_value) VALUES ( ?1, ?2, ?3 )"#,
+            id,
+            self.field_key,
+            self.field_value,
+        )
+        .execute(conn)
+        .await?;
+        Ok(())
+    }
+}
+
+pub async fn create_rule(
+    conn: &mut impl database::IntoConnection,
+    rule: Box<dyn CreateRule>,
+) -> Result<i64> {
+    let name: &str = &rule.name();
+    let type_: i64 = rule.type_() as i64;
+
+    let id = sqlx::query!(
+        r#"INSERT INTO rules (name, type_) VALUES ( ?1, ?2 )"#,
+        name,
+        type_
+    )
+    .execute(conn.into_connection())
+    .await?
+    .last_insert_rowid();
+
+    rule.create(conn.into_connection(), id).await?;
 
     Ok(id)
 }
