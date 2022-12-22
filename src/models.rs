@@ -89,6 +89,9 @@ impl AuthToken {
     }
 }
 
+/// Rules
+///
+/// Data types for different rules.
 #[derive(Copy, Clone, Debug)]
 pub enum RuleType {
     FilterTrapp = 1,
@@ -116,12 +119,31 @@ pub trait Rule: NewRule {
     fn id(&self) -> i64;
 }
 
+/// RuleFilterTrapp
+///
+/// Filter type that allows you to filter for specific trapps.
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub struct NewRuleFilterTrapp {
+    pub name: String,
+    pub trapp_id: i64,
+}
+
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct RuleFilterTrapp {
     pub id: i64,
     pub name: String,
-
     pub trapp_id: i64,
+}
+
+impl NewRule for NewRuleFilterTrapp {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn type_(&self) -> RuleType {
+        RuleType::FilterTrapp
+    }
 }
 
 impl NewRule for RuleFilterTrapp {
@@ -150,6 +172,17 @@ impl RuleFilterTrapp {
     }
 }
 
+/// RuleFilterField
+///
+/// Filter type that allows you to filter for object properties (key/values).
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub struct NewRuleFilterField {
+    pub name: String,
+
+    pub field_key: String,
+    pub field_value: String,
+}
+
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct RuleFilterField {
     pub id: i64,
@@ -157,6 +190,16 @@ pub struct RuleFilterField {
 
     pub field_key: String,
     pub field_value: String,
+}
+
+impl NewRule for NewRuleFilterField {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn type_(&self) -> RuleType {
+        RuleType::FilterField
+    }
 }
 
 impl NewRule for RuleFilterField {

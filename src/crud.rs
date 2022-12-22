@@ -1,8 +1,7 @@
 use async_trait::async_trait;
 use derive_more;
+use futures::future::join_all;
 use sqlx;
-use sqlx::Database;
-use std::convert::TryFrom;
 
 use crate::crypto;
 use crate::database;
@@ -183,7 +182,7 @@ pub async fn delete_auth_token_by_trapp_and_id(
     Ok(n > 0)
 }
 
-fn resolve_rule_filter_trapp(
+async fn resolve_rule_filter_trapp(
     conn: &mut impl database::IntoConnection,
     id: i64,
     name: &str,
@@ -191,7 +190,7 @@ fn resolve_rule_filter_trapp(
     Box::new(RuleFilterTrapp::new(id, name, 1234))
 }
 
-fn resolve_rule_filter_field(
+async fn resolve_rule_filter_field(
     conn: &mut impl database::IntoConnection,
     id: i64,
     name: &str,
@@ -199,15 +198,15 @@ fn resolve_rule_filter_field(
     Box::new(RuleFilterField::new(id, name, "key", "value"))
 }
 
-fn resolve_rule(
+async fn resolve_rule(
     conn: &mut impl database::IntoConnection,
     id: i64,
     name: &str,
     type_: i64,
 ) -> Box<dyn Rule> {
     match type_.try_into().expect("Unrecognized rule type") {
-        RuleType::FilterTrapp => resolve_rule_filter_trapp(conn, id, name),
-        RuleType::FilterField => resolve_rule_filter_field(conn, id, name),
+        RuleType::FilterTrapp => resolve_rule_filter_trapp(conn, id, name).await,
+        RuleType::FilterField => resolve_rule_filter_field(conn, id, name).await,
     }
 }
 
@@ -216,11 +215,15 @@ pub async fn get_rules(conn: &mut impl database::IntoConnection) -> Result<Vec<B
         .fetch_all(conn.into_connection())
         .await?;
 
-    let result = recs
-        .iter()
-        .map(|rec| resolve_rule(conn, rec.id, &rec.name, rec.type_))
-        .collect();
-    Ok(result)
+    let mut ret: Vec<Box<dyn Rule>> = Vec::new();
+
+    // TODO: can we rewrite this using .iter().map(...).collect() ? async closures are a pain, because they would
+    //       cause all requests to be triggered in parallel, which we don't want.
+    for rec in recs.iter() {
+        ret.push(resolve_rule(conn, rec.id, &rec.name, rec.type_).await);
+    }
+
+    Ok(ret)
 }
 
 #[async_trait]
