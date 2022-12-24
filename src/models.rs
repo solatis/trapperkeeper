@@ -172,6 +172,15 @@ impl RuleFilterTrapp {
     }
 }
 
+impl NewRuleFilterTrapp {
+    pub fn new(name: &str, trapp_id: i64) -> Self {
+        NewRuleFilterTrapp {
+            name: String::from(name),
+            trapp_id: trapp_id,
+        }
+    }
+}
+
 /// RuleFilterField
 ///
 /// Filter type that allows you to filter for object properties (key/values).
@@ -222,6 +231,16 @@ impl RuleFilterField {
     pub fn new(id: i64, name: &str, field_key: &str, field_value: &str) -> Self {
         RuleFilterField {
             id: id,
+            name: String::from(name),
+            field_key: String::from(field_key),
+            field_value: String::from(field_value),
+        }
+    }
+}
+
+impl NewRuleFilterField {
+    pub fn new(name: &str, field_key: &str, field_value: &str) -> Self {
+        NewRuleFilterField {
             name: String::from(name),
             field_key: String::from(field_key),
             field_value: String::from(field_value),

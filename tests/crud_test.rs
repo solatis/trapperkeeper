@@ -5,7 +5,9 @@ use rstest::*;
 use trapperkeeper::config;
 use trapperkeeper::crud;
 use trapperkeeper::database;
-use trapperkeeper::models::{AuthToken, Trapp};
+use trapperkeeper::models::{
+    AuthToken, NewRuleFilterField, RuleFilterField, RuleFilterTrapp, Trapp,
+};
 
 async fn get_pool() -> database::Pool {
     let cfg = config::Config::new().expect("Unable to read configuration");
@@ -83,6 +85,16 @@ async fn cannot_create_auth_token_when_trapp_doesnt_exist(#[future] pool: databa
 
     let auth_token_id = crud::create_auth_token(&mut conn, &-2, &"foo").await;
     assert_eq!(auth_token_id.is_ok(), false)
+}
+
+#[rstest]
+async fn can_create_rule(#[future] pool: database::Pool) {
+    let mut pool = pool.await;
+    let mut conn = get_conn(&mut pool).await;
+
+    let rule = NewRuleFilterField::new(&"foo", &"key", &"value");
+    let rule_id = crud::create_rule(&mut conn, rule).await;
+    assert_eq!(rule_id.is_ok(), true)
 }
 
 // List
