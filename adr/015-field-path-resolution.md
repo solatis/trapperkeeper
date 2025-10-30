@@ -1,6 +1,10 @@
 # ADR-015: Field Path Resolution and Wildcard Semantics
 
-Date: 2025-10-28
+## Revision log
+
+| Date | Description |
+|------|-------------|
+| 2025-10-28 | Document created |
 
 ## Context
 
@@ -265,7 +269,7 @@ No enforced limit on field path depth:
 **Depends on:**
 - **ADR-014: Rule Expression Language** - Extends the rule language with detailed field path resolution semantics
 
-**Works with:**
+**Related to:**
 - **ADR-016: Type System and Coercion** - Field resolution results are processed through type coercion
 - **ADR-017: Schema Evolution** - Handles missing fields during path resolution
 

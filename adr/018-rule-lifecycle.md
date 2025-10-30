@@ -1,5 +1,10 @@
 # ADR-018: Rule Lifecycle and Operational Controls
-Date: 2025-10-28
+
+## Revision log
+
+| Date | Description |
+|------|-------------|
+| 2025-10-28 | Document created |
 
 ## Context
 
@@ -14,7 +19,7 @@ Key operational challenges:
 - **Rollback requirements**: Must recover from accidental deletions or incorrect modifications
 - **Zero downtime**: Rule updates propagate to sensors without service restarts
 
-Constraints from distributed architecture (ADR-001, ADR-004):
+Constraints from distributed architecture (ADR-001, ADR-005):
 
 - Sensors cache rules in memory with periodic sync (default: 30 seconds)
 - Rules propagate via ETAG-based polling (pull model, not push)
@@ -281,13 +286,15 @@ Rule changes propagate via eventual consistency model:
 
 ## Related Decisions
 
+This ADR adds operational lifecycle controls (dry-run, pause, enable/disable) to the rule engine, leveraging the SDK's ephemeral caching model for rule distribution and the API's ETAG-based sync mechanism for propagation.
+
 **Depends on:**
 - **ADR-014: Rule Expression Language** - Adds operational controls to the rule engine
 - **ADR-002: SDK Model** - Leverages ephemeral sensor caching for rule distribution
+- **ADR-005: API Service Architecture** - Documents ETAG-based conditional sync mechanism for rule propagation
 
-**Related:**
-- **ADR-004: API Service Architecture** - Documents ETAG-based conditional sync mechanism
-- **ADR-013: Event Schema** - Documents event storage that captures dry-run actions
+**Required by:**
+- **ADR-019: Event Schema and Storage** - Events capture the rule that triggered them, including dry-run state
 
 ## Future Considerations
 

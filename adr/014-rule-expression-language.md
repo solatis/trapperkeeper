@@ -1,8 +1,10 @@
 # ADR-014: Rule Expression Language and Schema
 
-Date: 2025-10-28
+## Revision log
 
-Supersedes: ADR-013 (Firewall Rules Design)
+| Date | Description |
+|------|-------------|
+| 2025-10-28 | Document created |
 
 ## Context
 
@@ -15,7 +17,7 @@ TrapperKeeper's rule engine evaluates data quality rules against streaming recor
 - **Safety**: Explicit handling of missing fields, type mismatches, and schema evolution
 - **Pre-compilation**: Optimize rules once at sync time, not per-record
 
-ADR-013 established firewall-style rule execution but left expression syntax and schema undefined. This ADR formalizes the complete rule schema, operator set, and evaluation semantics.
+This ADR formalizes the complete rule schema, operator set, and evaluation semantics.
 
 ## Decision
 
@@ -221,11 +223,11 @@ calculated_priority = base_priority + condition_count + or_penalty + operator_co
 
 **Future optimizations** (deferred from MVP):
 - Range merging for same-field comparisons (e.g., `temp > 10 AND temp < 20` → single range check)
-- Zero-allocation field lookups using unsafe pointers (Go) or buffer views (Java)
+- Zero-allocation field lookups using direct memory access or buffer views
 - Branchless comparison operations using SIMD instructions
 - Bloom filters for high-cardinality set membership (`value IN [...]`)
 
-**Rationale**: MVP optimizations sufficient for <1ms target. Measurements inform future work. See ADR-020 for detailed performance strategy.
+**Rationale**: MVP optimizations sufficient for <1ms target. Measurements inform future work.
 
 ### 8. UI Design Implications
 
@@ -307,7 +309,7 @@ Visual rule builder structure maps directly to DNF schema:
 
 2. **Implement rule parser** in each SDK:
    - Parse protobuf rule message
-   - Compile to native predicates (Go: `func(Record) bool`, Python: closures, Java: `Predicate<Record>`)
+   - Compile to native predicate functions that accept a Record and return a boolean result
    - Apply cost-based ordering within each `all` group
    - Pre-bind field accessors during compilation
 
@@ -349,9 +351,6 @@ Visual rule builder structure maps directly to DNF schema:
 **Depends on:**
 - **ADR-001: Architectural Principles** - Implements Schema-Agnostic Architecture through runtime field resolution
 
-**Supersedes:**
-- **ADR-013: Firewall Rules Design** - Replaces the simple firewall design with comprehensive DNF-based rule expressions
-
 **Extended by:**
 - **ADR-015: Field Path Resolution** - Defines the field path notation and wildcard semantics
 - **ADR-016: Type System and Coercion** - Specifies type handling for rule evaluation
@@ -370,7 +369,7 @@ Visual rule builder structure maps directly to DNF schema:
 - **Rule composition**: Reference other rules by ID to enable rule reuse (`RULE(id) AND condition`)
 - **Temporal operators**: `CHANGED(field)`, `RATE(field, window)` for stateful evaluation (requires major architecture change)
 
-## Appendix: Example Rules
+## Appendix A: Example Rules
 
 ### Example 1: Simple Numeric Range
 ```json

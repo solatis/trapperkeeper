@@ -1,5 +1,10 @@
 # ADR-023: Batch Processing and Vectorization
-Date: 2025-10-28
+
+## Revision log
+
+| Date | Description |
+|------|-------------|
+| 2025-10-28 | Document created |
 
 ## Context
 
@@ -163,8 +168,8 @@ We will implement **vectorized batch processing** for high-performance data fram
 - **ADR-002: SDK Model** - Extends the SDK architecture with vectorized operations for data processing frameworks
 - **ADR-014: Rule Expression Language** - Applies rule evaluation using vectorized operations on batches
 
-**Also references:**
-- **ADR-004: API Service Architecture** - Documents gRPC protocol for event submission
+**Extends:**
+- **ADR-005: API Service Architecture** - Documents gRPC protocol for event submission
 - **ADR-015: Field Path Resolution** - Defines field path semantics for vectorized operations
 - **ADR-016: Type System and Coercion** - Defines type coercion rules applied vectorially
 
@@ -177,7 +182,7 @@ We will implement **vectorized batch processing** for high-performance data fram
 - **Columnar Storage**: Native integration with Arrow/Parquet for zero-copy evaluation
 - **GPU Acceleration**: CUDA-based vectorized evaluation for massive datasets
 
-## Appendix: Performance Characteristics
+## Appendix A: Performance Characteristics
 
 ### Pandas Vectorized vs Sequential (1M rows)
 

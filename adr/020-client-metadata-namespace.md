@@ -1,5 +1,10 @@
 # ADR-020: Client Metadata Namespace and Limits
-Date: 2025-10-28
+
+## Revision log
+
+| Date | Description |
+|------|-------------|
+| 2025-10-28 | Document created |
 
 ## Context
 
@@ -140,11 +145,13 @@ User-provided metadata has strict limits to prevent resource exhaustion:
 
 ## Related Decisions
 
-**Depends on:**
-- **ADR-019: Event Schema and Storage** - Extends event schema with metadata namespace rules and limits
+This ADR establishes the namespace separation and limits for client metadata within TrapperKeeper events, building on the event schema defined in ADR-019 and supporting the metadata collection patterns described in the SDK Model.
 
-**Related:**
-- **ADR-001: SDK Model** - Documents metadata collection strategy and environment variable scanning
+**Depends on**:
+- **ADR-019** - Event Schema and Storage: Extends event schema with metadata namespace rules and limits
+
+**Related to**:
+- **ADR-002** - SDK Model: Documents metadata collection strategy and environment variable scanning
 
 ## Future Considerations
 

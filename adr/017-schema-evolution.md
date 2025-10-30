@@ -1,5 +1,10 @@
 # ADR-017: Schema Evolution and Missing Field Handling
-Date: 2025-10-28
+
+## Revision log
+
+| Date | Description |
+|------|-------------|
+| 2025-10-28 | Document created |
 
 ## Context
 
@@ -9,7 +14,7 @@ TrapperKeeper operates on arbitrary data schemas that evolve over time without p
 - **Fields removed**: Deprecated fields disappear from new records
 - **Field type changes**: Numeric IDs converted to strings, booleans to integers
 - **Null values**: Fields present but null in some records
-- **Schema-agnostic architecture**: Server has zero understanding of schemas (see ADR-023)
+- **Schema-agnostic architecture**: Server has zero understanding of schemas (see ADR-001)
 
 Traditional schema registries solve this with centralized coordination, but require pre-registration and centralized schema management. TrapperKeeper's schema-agnostic design (no pre-registration, no schema registry) requires explicit strategies for handling schema evolution.
 
@@ -32,31 +37,9 @@ Every rule has an `on_missing_field` configuration option (per-rule, not per-con
 | `match` | Field missing → treat as matching condition | Detect incomplete records |
 | `error` | Field missing → raise exception, fail pipeline | Strict validation |
 
-**Default**: `skip` (least intrusive by default, aligns with ADR-023 principles)
+**Default**: `skip` (least intrusive by default, aligns with ADR-001 principles)
 
-**Example**:
-```json
-{
-  "rule_id": "01936a3e-1234-7b3c-9d5e-abcdef123456",
-  "name": "Detect missing age field",
-  "action": "observe",
-  "on_missing_field": "match",
-  "any": [
-    {
-      "all": [
-        {
-          "field": ["customer", "age"],
-          "field_type": "numeric",
-          "op": "exists",
-          "value": null
-        }
-      ]
-    }
-  ]
-}
-```
-
-**Rationale**: Explicit configuration prevents implicit assumptions. Different use cases require different behaviors - data quality monitoring needs "match" mode, production pipelines need "skip" mode.
+**Rationale**: Explicit configuration prevents implicit assumptions. Different use cases require different behaviors - data quality monitoring needs "match" mode, production pipelines need "skip" mode. See Appendix A for configuration examples.
 
 ### 2. Null Value Semantics
 
@@ -94,7 +77,7 @@ Every rule has an `on_missing_field` configuration option (per-rule, not per-con
 **Rationale**: Breaking changes require explicit choice. Default "skip" prevents pipeline failures.
 
 #### Field Type Changes
-**Behavior**: Handled by type coercion system (see ADR-016)
+**Behavior**: Handled by type coercion system (see ADR-001)
 
 **Example**:
 - Original schema: `{"user_id": 12345}` (numeric)
@@ -114,15 +97,6 @@ Every rule has an `on_missing_field` configuration option (per-rule, not per-con
 
 **Nested paths**: Missing field handling applies at any depth
 
-**Example**:
-```json
-{
-  "field": ["customer", "address", "zipcode"],
-  "op": "eq",
-  "value": "94102"
-}
-```
-
 **Scenarios**:
 - `customer` field missing → `on_missing_field` policy applies
 - `address` field missing from `customer` → `on_missing_field` policy applies
@@ -130,21 +104,12 @@ Every rule has an `on_missing_field` configuration option (per-rule, not per-con
 
 **Wildcard paths**: Missing field handling per array element (see ADR-015)
 
-**Example**:
-```json
-{
-  "field": ["readings", "*", "temp"],
-  "op": "gt",
-  "value": 100
-}
-```
-
 **Behavior**:
 - `readings[0].temp` missing → Skip element, try `readings[1]`
 - `readings[1].temp = 105` → Match, return this value
 - If all elements missing `temp` → `on_missing_field` policy applies to entire condition
 
-**Rationale**: Per-element handling enables resilient evaluation over heterogeneous arrays. First-match short-circuit stops at first valid match.
+**Rationale**: Per-element handling enables resilient evaluation over heterogeneous arrays. First-match short-circuit stops at first valid match. See Appendix B for nested path examples.
 
 ### 5. Interaction with Type System
 
@@ -157,25 +122,7 @@ Missing field handling integrates with type coercion (ADR-016):
 4. If coercion fails → Treat as condition failed, wrap in `on_missing_field` logic
 5. If coercion succeeds → Evaluate operator
 
-**Example with `field_type="numeric"`**:
-```json
-{
-  "field": ["temperature"],
-  "field_type": "numeric",
-  "op": "gt",
-  "value": 100
-}
-```
-
-| Data | Step 1 | Step 2 | Step 3 | Result |
-|------|--------|--------|--------|--------|
-| `{}` | missing | `on_missing_field` applies | — | Depends on policy |
-| `{"temperature": null}` | missing (null → missing) | `on_missing_field` applies | — | Depends on policy |
-| `{"temperature": 105}` | present | — | Coerce: 105 (success) | Evaluate: `105 > 100` → match |
-| `{"temperature": "105"}` | present | — | Coerce: `"105"` → 105 | Evaluate: `105 > 100` → match |
-| `{"temperature": "abc"}` | present | — | Coerce: fail | Treat as failed, `on_missing_field` applies |
-
-**Rationale**: Unified error handling. Type coercion failures behave consistently with missing fields.
+**Rationale**: Unified error handling. Type coercion failures behave consistently with missing fields. See Appendix C for detailed processing examples.
 
 ## Consequences
 
@@ -248,9 +195,11 @@ Missing field handling integrates with type coercion (ADR-016):
 
 ## Related Decisions
 
-**Depends on:**
-- **ADR-015: Field Path Resolution** - Extends field resolution with explicit missing field handling modes
-- **ADR-016: Type System and Coercion** - Defines interaction between null values and missing fields
+This ADR defines how TrapperKeeper handles schema evolution and missing fields through configurable policies that integrate with field path resolution and type coercion.
+
+**Depends on**:
+- **ADR-015: Field Path Resolution** - Provides runtime field path resolution mechanism extended with missing field handling
+- **ADR-016: Type System and Coercion** - Defines type coercion rules that interact with missing field semantics
 
 ## Future Considerations
 
@@ -260,3 +209,166 @@ Missing field handling integrates with type coercion (ADR-016):
 - **Automatic Schema Inference**: Suggest rule updates when schemas evolve
 - **Dry-Run Mode**: Test rules against new schemas before deployment
 - **Field Deprecation Warnings**: Detect when rules reference rarely-present fields
+
+## Appendix A: Missing Field Configuration Examples
+
+**Example 1: Detect missing age field (match mode)**
+```json
+{
+  "rule_id": "01936a3e-1234-7b3c-9d5e-abcdef123456",
+  "name": "Detect missing age field",
+  "action": "observe",
+  "on_missing_field": "match",
+  "any": [
+    {
+      "all": [
+        {
+          "field": ["customer", "age"],
+          "field_type": "numeric",
+          "op": "exists",
+          "value": null
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Example 2: Skip records without email (skip mode - default)**
+```json
+{
+  "rule_id": "01936a3e-5678-7b3c-9d5e-abcdef789012",
+  "name": "Validate email format",
+  "action": "observe",
+  "on_missing_field": "skip",
+  "any": [
+    {
+      "all": [
+        {
+          "field": ["contact", "email"],
+          "field_type": "text",
+          "op": "regex",
+          "value": "^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Example 3: Enforce required fields (error mode)**
+```json
+{
+  "rule_id": "01936a3e-9abc-7b3c-9d5e-abcdef345678",
+  "name": "Require user_id field",
+  "action": "observe",
+  "on_missing_field": "error",
+  "any": [
+    {
+      "all": [
+        {
+          "field": ["user_id"],
+          "field_type": "text",
+          "op": "exists",
+          "value": null
+        }
+      ]
+    }
+  ]
+}
+```
+
+## Appendix B: Nested Path Resolution Examples
+
+**Example 1: Nested object path**
+```json
+{
+  "field": ["customer", "address", "zipcode"],
+  "op": "eq",
+  "value": "94102"
+}
+```
+
+**Data scenarios**:
+```json
+// Scenario 1: Complete path
+{"customer": {"address": {"zipcode": "94102"}}}
+// Result: Match
+
+// Scenario 2: Missing zipcode
+{"customer": {"address": {}}}
+// Result: on_missing_field policy applies
+
+// Scenario 3: Missing address
+{"customer": {}}
+// Result: on_missing_field policy applies
+
+// Scenario 4: Missing customer
+{}
+// Result: on_missing_field policy applies
+```
+
+**Example 2: Wildcard array path**
+```json
+{
+  "field": ["readings", "*", "temp"],
+  "op": "gt",
+  "value": 100
+}
+```
+
+**Data scenarios**:
+```json
+// Scenario 1: First element has temp
+{"readings": [{"temp": 105}, {"temp": 95}]}
+// Result: Match (returns 105 from first element)
+
+// Scenario 2: First element missing temp, second has it
+{"readings": [{"pressure": 30}, {"temp": 105}]}
+// Result: Match (skips first, returns 105 from second)
+
+// Scenario 3: All elements missing temp
+{"readings": [{"pressure": 30}, {"pressure": 28}]}
+// Result: on_missing_field policy applies to entire condition
+
+// Scenario 4: Empty array
+{"readings": []}
+// Result: on_missing_field policy applies
+```
+
+## Appendix C: Type Coercion Processing Examples
+
+**Processing flow for `field_type="numeric"` condition**:
+```json
+{
+  "field": ["temperature"],
+  "field_type": "numeric",
+  "op": "gt",
+  "value": 100
+}
+```
+
+| Data | Step 1: Resolve | Step 2: Missing Check | Step 3: Coercion | Step 4: Evaluate | Final Result |
+|------|-----------------|----------------------|------------------|------------------|--------------|
+| `{}` | Field missing | `on_missing_field` applies | — | — | Depends on policy (`skip`/`match`/`error`) |
+| `{"temperature": null}` | null → treated as missing | `on_missing_field` applies | — | — | Depends on policy |
+| `{"temperature": 105}` | Field present: 105 | Pass | 105 (already numeric) | `105 > 100` → true | **Match** |
+| `{"temperature": "105"}` | Field present: "105" | Pass | "105" → 105 (coerce success) | `105 > 100` → true | **Match** |
+| `{"temperature": "105.5"}` | Field present: "105.5" | Pass | "105.5" → 105.5 (coerce success) | `105.5 > 100` → true | **Match** |
+| `{"temperature": "abc"}` | Field present: "abc" | Pass | "abc" → fail | Coercion failure | Depends on policy (treated as missing) |
+| `{"temperature": true}` | Field present: true | Pass | true → 1 (coerce success) | `1 > 100` → false | **No match** |
+| `{"temperature": false}` | Field present: false | Pass | false → 0 (coerce success) | `0 > 100` → false | **No match** |
+
+**Configuration mode implications**:
+
+**Mode: `skip` (default)**
+- Missing field or coercion failure: Rule doesn't match, continue to next rule
+- Use case: Production pipelines that should tolerate schema drift
+
+**Mode: `match`**
+- Missing field or coercion failure: Rule matches
+- Use case: Data quality monitoring to detect incomplete records
+
+**Mode: `error`**
+- Missing field or coercion failure: Raise exception, fail pipeline
+- Use case: Strict validation where schema contract must be enforced

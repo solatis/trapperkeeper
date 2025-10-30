@@ -1,6 +1,10 @@
 # ADR-016: Type System and Coercion Rules
 
-Date: 2025-10-28
+## Revision log
+
+| Date | Description |
+|------|-------------|
+| 2025-10-28 | Document created |
 
 ## Context
 
@@ -25,30 +29,7 @@ We will implement a **per-condition type system** with four field types (`numeri
 
 ### 1. Field Type System
 
-Each condition specifies `field_type` independently (not rule-level). This enables mixed-type operations:
-
-```json
-{
-  "any": [
-    {
-      "all": [
-        {
-          "field": ["temperature"],
-          "field_type": "numeric",
-          "op": "gt",
-          "value": 100
-        },
-        {
-          "field": ["sensor_id"],
-          "field_type": "text",
-          "op": "prefix",
-          "value": "TEMP-"
-        }
-      ]
-    }
-  ]
-}
-```
+Each condition specifies `field_type` independently (not rule-level). This enables mixed-type operations where different conditions within the same rule can apply different type semantics.
 
 ### 2. Type Coercion Matrix
 
@@ -72,27 +53,7 @@ Each condition specifies `field_type` independently (not rule-level). This enabl
 
 **Usage**: Required for comparison operators (`gt`, `gte`, `lt`, `lte`).
 
-**Example**:
-```json
-{
-  "field": ["age"],
-  "field_type": "numeric",
-  "op": "gt",
-  "value": 18
-}
-```
-
-Matches:
-- `age: 25` → `25 > 18` ✓
-- `age: "25"` → `25 > 18` ✓ (coerced)
-
-Errors:
-- `age: "abc"` → Coercion fails → Error (wrapped in `on_missing_field` logic)
-- `age: true` → Coercion fails → Error
-
-Skips (when `on_missing_field="skip"`):
-- `age: null` → Missing field → Skip rule
-- Missing `age` key → Missing field → Skip rule
+**Example**: See Appendix A for detailed JSON examples of numeric type coercion behavior.
 
 ### 4. Field Type: `text`
 
@@ -106,23 +67,7 @@ Skips (when `on_missing_field="skip"`):
 
 **Usage**: Required for string operators (`prefix`, `suffix`). Optional for equality (`eq`, `neq`).
 
-**Example**:
-```json
-{
-  "field": ["sensor_id"],
-  "field_type": "text",
-  "op": "prefix",
-  "value": "100"
-}
-```
-
-Matches:
-- `sensor_id: "1003873479"` → `"1003873479".startswith("100")` ✓
-- `sensor_id: 1003873479` → `"1003873479".startswith("100")` ✓ (coerced)
-- `sensor_id: true` → `"true".startswith("100")` ✗
-
-Skips (when `on_missing_field="skip"`):
-- `sensor_id: null` → Missing field → Skip rule
+**Example**: See Appendix A for detailed JSON examples of text type coercion behavior.
 
 ### 5. Field Type: `boolean`
 
@@ -136,25 +81,7 @@ Skips (when `on_missing_field="skip"`):
 
 **Usage**: For equality operators when user wants boolean semantics.
 
-**Example**:
-```json
-{
-  "field": ["is_active"],
-  "field_type": "boolean",
-  "op": "eq",
-  "value": true
-}
-```
-
-Matches:
-- `is_active: true` → `true == true` ✓
-
-Errors:
-- `is_active: "true"` → Coercion fails → Error
-- `is_active: 1` → Coercion fails → Error
-
-Skips (when `on_missing_field="skip"`):
-- `is_active: null` → Missing field → Skip rule
+**Example**: See Appendix A for detailed JSON examples of boolean type coercion behavior.
 
 ### 6. Field Type: `any`
 
@@ -169,25 +96,7 @@ Skips (when `on_missing_field="skip"`):
 
 **Usage**: For equality operators (`eq`, `neq`) when user wants flexible matching.
 
-**Example**:
-```json
-{
-  "field": ["quantity"],
-  "field_type": "any",
-  "op": "eq",
-  "value": 25
-}
-```
-
-Matches:
-- `quantity: 25` → `25 == 25` ✓
-- `quantity: "25"` → `25 == 25` ✓ (coerced)
-
-Errors:
-- `quantity: true` → No bool↔number coercion → Error
-
-Skips (when `on_missing_field="skip"`):
-- `quantity: null` → Missing field → Skip rule
+**Example**: See Appendix A for detailed JSON examples of any type coercion behavior.
 
 ### 7. Null Value Semantics
 
@@ -218,31 +127,16 @@ When type coercion fails, the system treats it as an **error wrapped in `on_miss
 
 ### 9. Wildcard Array Semantics
 
-Type coercion applies **per-element** when evaluating wildcards:
+Type coercion applies **per-element** when evaluating wildcards. Short-circuit evaluation prevents a single bad value from failing the entire array check.
 
-```json
-{
-  "field": ["readings", "*", "temp"],
-  "field_type": "numeric",
-  "op": "gt",
-  "value": 15
-}
-```
+**Evaluation behavior**:
+- Iterate through array elements sequentially
+- Apply type coercion to each element independently
+- Treat impossible coercion as condition failed (not missing field), continue to next element
+- Treat `null` elements as missing field (defer to `on_missing_field`)
+- Stop on first matching element (short-circuit)
 
-Evaluated against: `readings = [{"temp": 10}, {"temp": "invalid"}, {"temp": 30}]`
-
-**Evaluation sequence**:
-1. `readings[0].temp` (10) → numeric → `10 > 15` → false, continue
-2. `readings[1].temp` ("invalid") → coercion fails → treat as condition failed, continue
-3. `readings[2].temp` (30) → numeric → `30 > 15` → **true, stop**
-
-**Result**: Rule matches with `matched_value = 30`, `matched_field = ["readings", 2, "temp"]`
-
-**Handling null-like values in arrays**:
-- `null` elements: Treat as missing field (defer to `on_missing_field`)
-- Impossible coercion: Treat as condition failed (not missing field), continue to next element
-
-**Rationale**: Short-circuit evaluation with per-element coercion prevents single bad value from failing entire array check.
+**Example**: See Appendix A for a complete wildcard array coercion example with mixed-type array data.
 
 ### 10. Operator-Specific Type Requirements
 
@@ -263,7 +157,7 @@ Certain operators impose type constraints:
 ### 11. Performance Optimizations
 
 **Fast-path type checks**:
-- Use native type checks before coercion (e.g., Go `switch v.(type)`, Python `isinstance()`)
+- Use native type checks before coercion (e.g., type inspection in the target language)
 - Avoid string parsing for numeric checks when possible
 - Cache parsed numeric values for repeated comparisons
 
@@ -306,61 +200,226 @@ Certain operators impose type constraints:
 
 ## Implementation
 
-1. **Define type coercion interface**:
-   ```go
-   type FieldType int
-   const (
-       FieldTypeNumeric FieldType = iota
-       FieldTypeText
-       FieldTypeBoolean
-       FieldTypeAny
-   )
+1. **Define type coercion interface** with FieldType enum (Numeric, Text, Boolean, Any) and CoerceValue function
+2. **Implement coercion functions** for each type (see Appendix B for pseudocode)
+3. **Integrate with condition evaluation** by checking `field_type` before value comparison
+4. **Implement wildcard array handling** with per-element coercion and short-circuit logic
+5. **Add comprehensive logging** for coercion failures with full field context
+6. **UI Implementation** with auto-selected types for operators and help text for dropdowns
+7. **Test Coverage** including unit tests, integration tests, edge cases, and wildcard arrays
 
-   func CoerceValue(value interface{}, targetType FieldType) (interface{}, error)
-   ```
+For detailed implementation pseudocode, see Appendix B.
 
-2. **Implement coercion functions** for each type:
-   - `CoerceNumeric(value)` - strict numeric coercion
-   - `CoerceText(value)` - lenient string coercion
-   - `CoerceBoolean(value)` - strict boolean coercion
-   - `CoerceAny(value, compareValue)` - context-dependent coercion
+## Appendix A: Type Coercion Examples
 
-3. **Integrate with condition evaluation**:
-   - Check `field_type` before value comparison
-   - Apply appropriate coercion function
-   - Wrap coercion errors in `on_missing_field` logic
+### Numeric Field Type Example
 
-4. **Implement wildcard array handling**:
-   - Iterate array elements
-   - Apply per-element coercion
-   - Short-circuit on first match
-   - Handle null and coercion failures per semantics
+```json
+{
+  "field": ["age"],
+  "field_type": "numeric",
+  "op": "gt",
+  "value": 18
+}
+```
 
-5. **Add comprehensive logging**:
-   - Log coercion failures with field path, actual value, expected type
-   - Include context in error messages for debugging
-   - Structured logging for operational monitoring
+Matches:
+- `age: 25` → `25 > 18` ✓
+- `age: "25"` → `25 > 18` ✓ (coerced)
 
-6. **UI Implementation**:
-   - Auto-select `field_type` for comparison/string operators
-   - User dropdown for equality operators with help text:
-     - `numeric`: "Coerces strings to numbers (e.g., '25' matches 25)"
-     - `text`: "Converts all values to strings (e.g., 100 matches '100')"
-     - `boolean`: "Strict boolean matching (true/false only)"
-     - `any`: "Flexible matching with auto-coercion (e.g., '25' matches 25)"
+Errors:
+- `age: "abc"` → Coercion fails → Error (wrapped in `on_missing_field` logic)
+- `age: true` → Coercion fails → Error
 
-7. **Test Coverage**:
-   - Unit tests for each coercion path
-   - Integration tests for mixed-type rules
-   - Edge cases: null, empty strings, special numeric values (NaN, Infinity)
-   - Wildcard arrays with mixed types
+Skips (when `on_missing_field="skip"`):
+- `age: null` → Missing field → Skip rule
+- Missing `age` key → Missing field → Skip rule
+
+### Text Field Type Example
+
+```json
+{
+  "field": ["sensor_id"],
+  "field_type": "text",
+  "op": "prefix",
+  "value": "100"
+}
+```
+
+Matches:
+- `sensor_id: "1003873479"` → `"1003873479".startswith("100")` ✓
+- `sensor_id: 1003873479` → `"1003873479".startswith("100")` ✓ (coerced)
+- `sensor_id: true` → `"true".startswith("100")` ✗
+
+Skips (when `on_missing_field="skip"`):
+- `sensor_id: null` → Missing field → Skip rule
+
+### Boolean Field Type Example
+
+```json
+{
+  "field": ["is_active"],
+  "field_type": "boolean",
+  "op": "eq",
+  "value": true
+}
+```
+
+Matches:
+- `is_active: true` → `true == true` ✓
+
+Errors:
+- `is_active: "true"` → Coercion fails → Error
+- `is_active: 1` → Coercion fails → Error
+
+Skips (when `on_missing_field="skip"`):
+- `is_active: null` → Missing field → Skip rule
+
+### Any Field Type Example
+
+```json
+{
+  "field": ["quantity"],
+  "field_type": "any",
+  "op": "eq",
+  "value": 25
+}
+```
+
+Matches:
+- `quantity: 25` → `25 == 25` ✓
+- `quantity: "25"` → `25 == 25` ✓ (coerced)
+
+Errors:
+- `quantity: true` → No bool↔number coercion → Error
+
+Skips (when `on_missing_field="skip"`):
+- `quantity: null` → Missing field → Skip rule
+
+### Wildcard Array Example
+
+```json
+{
+  "field": ["readings", "*", "temp"],
+  "field_type": "numeric",
+  "op": "gt",
+  "value": 15
+}
+```
+
+Evaluated against: `readings = [{"temp": 10}, {"temp": "invalid"}, {"temp": 30}]`
+
+**Evaluation sequence**:
+1. `readings[0].temp` (10) → numeric → `10 > 15` → false, continue
+2. `readings[1].temp` ("invalid") → coercion fails → treat as condition failed, continue
+3. `readings[2].temp` (30) → numeric → `30 > 15` → **true, stop**
+
+**Result**: Rule matches with `matched_value = 30`, `matched_field = ["readings", 2, "temp"]`
+
+**Handling null-like values in arrays**:
+- `null` elements: Treat as missing field (defer to `on_missing_field`)
+- Impossible coercion: Treat as condition failed (not missing field), continue to next element
+
+### Mixed-Type Rule Example
+
+Demonstrates per-condition type system with different field types in same rule:
+
+```json
+{
+  "any": [
+    {
+      "all": [
+        {
+          "field": ["temperature"],
+          "field_type": "numeric",
+          "op": "gt",
+          "value": 100
+        },
+        {
+          "field": ["sensor_id"],
+          "field_type": "text",
+          "op": "prefix",
+          "value": "TEMP-"
+        }
+      ]
+    }
+  ]
+}
+```
+
+## Appendix B: Type Coercion Implementation Guide
+
+### Interface Definition
+
+```
+Define type coercion system:
+  - FieldType enum: Numeric, Text, Boolean, Any
+  - CoerceValue(value, targetType) function returning (coercedValue, error)
+  - Type-specific coercion handlers for each target type
+```
+
+### Coercion Function Pseudocode
+
+```
+function CoerceNumeric(value):
+  if value is numeric:
+    return (value, nil)
+  if value is string:
+    parsed = parse_number(value)
+    if parsed is valid:
+      return (parsed, nil)
+    else:
+      return (nil, CoercionError("Cannot convert string to number"))
+  return (nil, CoercionError("Type not coercible to numeric"))
+
+function CoerceText(value):
+  if value is string:
+    return (value, nil)
+  if value is numeric or boolean:
+    return (to_string(value), nil)
+  return (nil, CoercionError("Type not coercible to text"))
+
+function CoerceBoolean(value):
+  if value is boolean:
+    return (value, nil)
+  return (nil, CoercionError("Type not coercible to boolean"))
+
+function CoerceAny(value, compareValue):
+  if same_type(value, compareValue):
+    return (value, nil)
+  if (value is numeric and compareValue is string) or vice versa:
+    try coerce_to_common_type(value, compareValue)
+    return (coerced, nil or error)
+  return (nil, CoercionError("Types not compatible for any coercion"))
+```
+
+### Integration with Condition Evaluation
+
+```
+function EvaluateCondition(condition, record):
+  field_value = resolve_field_path(condition.field, record)
+
+  if field_value is null or field_value is missing:
+    handle_missing_field(condition.on_missing_field)
+    return
+
+  coerced_value, error = CoerceValue(field_value, condition.field_type)
+
+  if error:
+    log_coercion_failure(condition.field, field_value, condition.field_type, error)
+    handle_missing_field(condition.on_missing_field)
+    return
+
+  result = apply_operator(condition.op, coerced_value, condition.value)
+  return result
+```
 
 ## Related Decisions
 
 **Depends on:**
 - **ADR-014: Rule Expression Language** - Defines type system for rule condition evaluation
 
-**Works with:**
+**Related to:**
 - **ADR-015: Field Path Resolution** - Type coercion applies to values resolved through field paths
 - **ADR-017: Schema Evolution** - Interacts with missing field handling and null value semantics
 

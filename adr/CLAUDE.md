@@ -16,8 +16,8 @@ This file provides a machine-parseable index of all Architecture Decision Record
 - File: 001-architectural-principles.md
 - Date: 2025-10-28
 - Depends on: None (root document)
-- Extended by: ADR-002, ADR-003, ADR-004, ADR-005, ADR-021
-- Summary: Establishes five core principles - Schema-Agnostic Architecture, Least Intrusive by Default, Ephemeral Sensors, MVP Simplicity, and Consistent Encoding/Identifiers
+- Extended by: ADR-002, ADR-003, ADR-004, ADR-005, ADR-021, ADR-024
+- Summary: Establishes six core principles - Schema-Agnostic Architecture, Least Intrusive by Default, Ephemeral Sensors, MVP Simplicity, Consistent Encoding/Identifiers, and Integration-First Testing
 
 ### ADR-002: SDK Model
 - File: 002-sdk-model.md
@@ -52,7 +52,7 @@ This file provides a machine-parseable index of all Architecture Decision Record
 - File: 006-service-architecture.md
 - Date: 2025-10-28
 - Depends on: ADR-005
-- Extended by: ADR-007, ADR-008, ADR-009
+- Extended by: ADR-007, ADR-008, ADR-009, ADR-025
 - Summary: Two-service architecture - tk-sensor-api (gRPC) and tk-web-ui (HTTP)
 
 ### ADR-007: CLI Configuration
@@ -66,7 +66,7 @@ This file provides a machine-parseable index of all Architecture Decision Record
 - Date: 2025-10-28
 - Depends on: ADR-006
 - Extended by: ADR-011
-- Summary: Chi router for HTTP service layer in tk-web-ui
+- Summary: Axum web framework for HTTP service layer in tk-web-ui
 
 ### ADR-009: Operational Endpoints
 - File: 009-operational-endpoints.md
@@ -85,7 +85,7 @@ This file provides a machine-parseable index of all Architecture Decision Record
 - Date: 2025-10-28
 - Depends on: ADR-008
 - Related to: ADR-012
-- Summary: Cookie-based authentication for Web UI using Chi router
+- Summary: Cookie-based authentication for Web UI using Axum web framework
 
 ### ADR-012: API Authentication
 - File: 012-api-authentication.md
@@ -164,6 +164,20 @@ This file provides a machine-parseable index of all Architecture Decision Record
 - Related to: ADR-005, ADR-015, ADR-016
 - Summary: Vectorized operations for Pandas/Spark data processing frameworks
 
+### ADR-024: Testing Strategy
+- File: 024-testing-strategy.md
+- Date: 2025-10-29
+- Depends on: ADR-001
+- Related to: ADR-002, ADR-003, ADR-004, ADR-005, ADR-021
+- Summary: Implements Integration-First Testing principle with Testing Trophy model, ephemeral Docker environments, property-based testing, and clear SDK testing boundaries
+
+### ADR-025: Binary Distribution Strategy
+- File: 025-binary-distribution.md
+- Date: 2025-10-28
+- Depends on: ADR-001, ADR-006
+- Extended by: ADR-007, ADR-010
+- Summary: Single binary with subcommands for unified build and deployment of both services
+
 ## Dependency Graph Summary
 
 ### Root Documents
@@ -183,6 +197,7 @@ This file provides a machine-parseable index of all Architecture Decision Record
 - ADR-010: Database Migrations (depends on ADR-004)
 - ADR-011: Authentication and Users (depends on ADR-008)
 - ADR-012: API Authentication (depends on ADR-005)
+- ADR-025: Binary Distribution Strategy (depends on ADR-001, ADR-006)
 
 ### Rule Engine Layer
 - ADR-014: Rule Expression Language (supersedes ADR-001)
@@ -198,13 +213,15 @@ This file provides a machine-parseable index of all Architecture Decision Record
 - ADR-022: Sampling (depends on ADR-014, ADR-015)
 - ADR-023: Batch Processing (depends on ADR-002, ADR-014)
 
+### Testing Strategy Layer
+- ADR-024: Testing Strategy (depends on ADR-001)
+
 ## Maintenance Instructions
 
 ### When Adding a New ADR
 
 1. Add entry to "Structured ADR List" section with:
    - File: Path to the ADR file
-   - Status: Accepted/Draft/Superseded
    - Date: Decision date
    - Depends on: ADRs that must be read first
    - Extended by: ADRs that add detail (if known)
@@ -219,27 +236,13 @@ This file provides a machine-parseable index of all Architecture Decision Record
 
 ### When Modifying an Existing ADR
 
-1. Update the Status field if changed
-2. Add "Extended by" references if new ADRs build on it
+1. Update the Revisions
+2. Add ADR references if new ADRs build on it
 3. If superseding, mark old ADR as "Superseded" and add "Superseded by"
+4. This task MUST be delegated to @agent-adr-writer
 
 ### When Removing an ADR
 
-1. Do not delete entries
+1. Do not delete files unless specifically requested by user
 2. Mark Status as "Superseded" or "Deprecated"
 3. Update any ADRs that depended on it
-
-### Validation
-
-Run periodic checks to ensure:
-- All files in *.md have entries
-- All "Depends on" references are valid
-- No circular dependencies exist
-- Duplicate numbers are properly documented
-
-### Important Notes on File Numbering
-
-As of 2025-10-28, all file names match their header ADR numbers. When maintaining this file:
-- Verify that new ADR files follow the pattern: NNN-topic-name.md where NNN matches the header "# ADR-NNN:"
-- If a discrepancy is discovered, document it in the "File Numbering Discrepancies" section
-- Always reference ADRs by their header number in relationships (Depends on, Extended by, etc.)

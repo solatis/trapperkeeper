@@ -1,14 +1,10 @@
 # ADR-012: API Authentication Strategy
 
-Date: 2025-10-28
+## Revision Log
 
-## Related Decisions
-
-**Depends on:**
-- **ADR-005: API Service Architecture** - Implements authentication for the gRPC sensor API
-
-**Relates to:**
-- **ADR-011: Authentication and Users** - Covers Web UI authentication (this ADR covers API only)
+| Date | Description |
+|------|-------------|
+| 2025-10-28 | Document created |
 
 ## Context
 
@@ -29,15 +25,7 @@ We will implement **HMAC-based API key authentication** with a dual-mode bootstr
 
 ### 1. API Key Format
 
-API keys use a structured format that embeds the HMAC secret identifier:
-
-```
-tk-v1-550e8400e29b41d4a716446655440000-d7ed499a8f7efd6e6252cf3416788ed8d038b01d4c39d6e62eb6f775c59ca112
-│   │  │                               └─────────────────────────── Random data (256 bits / 64 hex chars)
-│   │  └─────────────────────────────────────────────────────────── HMAC Secret ID (UUID / 32 hex chars)
-│   └────────────────────────────────────────────────────────────── Version (v1)
-└────────────────────────────────────────────────────────────────── Prefix (tk-)
-```
+API keys use a structured format that embeds the HMAC secret identifier (see **Appendix A** for detailed format specification).
 
 **Components**:
 - **Prefix**: `tk-` for identification and secret scanning tools
@@ -77,16 +65,6 @@ Two deployment patterns supported:
 
 ### 3. HMAC Secret Storage
 
-**Database Schema**:
-```sql
-CREATE TABLE hmac_secrets (
-  secret_id UUID PRIMARY KEY,
-  secret_hash BLOB NOT NULL,       -- SHA256 hash of the raw secret
-  source TEXT NOT NULL,             -- "environment" or "auto-generated"
-  created_at TIMESTAMP NOT NULL
-);
-```
-
 **Loading Strategy**:
 1. On startup, parse all `TK_HMAC_SECRET*` environment variables
 2. For each environment secret:
@@ -101,6 +79,8 @@ CREATE TABLE hmac_secrets (
 - Hashing secrets before database storage protects against database compromise
 - SHA256 (not bcrypt) chosen for performance (verification happens on every API call)
 - Storing secret ID enables efficient O(1) lookup during authentication
+
+**Database schema details**: See **Appendix B** for complete table definitions.
 
 ### 4. API Key Management
 
@@ -121,22 +101,9 @@ CREATE TABLE hmac_secrets (
 - **Revocation**: Mark key as revoked in database (soft delete)
 - **Performance Optimization**: `last_used_at` updated periodically (max once per minute) to reduce write overhead
 
-**Database Schema**:
-```sql
-CREATE TABLE api_keys (
-  api_key_id UUID PRIMARY KEY,      -- UUIDv7 identifier
-  tenant_id UUID NOT NULL,
-  name TEXT NOT NULL,               -- User-assigned name
-  key_hash BLOB NOT NULL,           -- HMAC-SHA256 hash of full key
-  secret_id UUID NOT NULL,          -- FK to hmac_secrets
-  created_at TIMESTAMP NOT NULL,
-  last_used_at TIMESTAMP,
-  revoked_at TIMESTAMP,
-  FOREIGN KEY (secret_id) REFERENCES hmac_secrets(secret_id)
-);
-```
-
 **Scope**: Single-tenant in MVP, full sensor permissions (read rules + write events). No granular permissions.
+
+**Database schema details**: See **Appendix B** for complete table definitions.
 
 ### 5. Authentication Flow
 
@@ -159,6 +126,8 @@ CREATE TABLE api_keys (
 **Security Monitoring**:
 - Log all authentication failures with client IP address
 - Enable detection of brute-force attempts or compromised keys
+
+**Implementation pseudocode**: See **Appendix C** for complete flow.
 
 ### 6. HMAC vs Bcrypt for API Keys
 
@@ -207,8 +176,8 @@ CREATE TABLE api_keys (
 ## Implementation
 
 1. **Database Schema**:
-   - Create `hmac_secrets` table for secret storage
-   - Create `api_keys` table with HMAC hash storage
+   - Create `hmac_secrets` table for secret storage (see **Appendix B**)
+   - Create `api_keys` table with HMAC hash storage (see **Appendix B**)
    - Add indexes on `api_key_id`, `tenant_id`, `secret_id`
 
 2. **HMAC Secret Loading**:
@@ -218,14 +187,14 @@ CREATE TABLE api_keys (
    - Build in-memory lookup map for O(1) access
 
 3. **API Key Generation** (Web UI):
-   - Generate 256-bit random data using `crypto/rand`
+   - Generate 256-bit cryptographically secure random data
    - Select HMAC secret (most recent by default)
    - Compute HMAC-SHA256 hash
    - Store in database with UUIDv7 identifier
    - Return formatted key to user once
 
 4. **Authentication Middleware** (gRPC interceptor):
-   - Extract `x-api-key` from metadata
+   - Extract `x-api-key` from metadata (see **Appendix C** for complete flow)
    - Parse format and lookup secret
    - Verify HMAC-SHA256 hash
    - Check revocation status
@@ -236,6 +205,174 @@ CREATE TABLE api_keys (
    - Log authentication failures with client IP
    - Exclude sensitive data (no key values in logs)
    - Enable monitoring for attack detection
+
+## Related Decisions
+
+This ADR implements authentication for the gRPC sensor API defined in ADR-005, while ADR-011 handles Web UI authentication separately. Both authentication systems protect different service boundaries and use appropriate mechanisms for their respective use cases.
+
+**Depends on:**
+- **ADR-005: API Service Architecture** - Implements authentication for the gRPC sensor API
+
+**Related to:**
+- **ADR-011: Authentication and Users** - Covers Web UI authentication (this ADR covers API only)
+
+## Appendix A: API Key Format Specification
+
+API keys follow this structured format:
+
+```
+tk-v1-550e8400e29b41d4a716446655440000-d7ed499a8f7efd6e6252cf3416788ed8d038b01d4c39d6e62eb6f775c59ca112
+│   │  │                               └─────────────────────────── Random data (256 bits / 64 hex chars)
+│   │  └─────────────────────────────────────────────────────────── HMAC Secret ID (UUID / 32 hex chars)
+│   └────────────────────────────────────────────────────────────── Version (v1)
+└────────────────────────────────────────────────────────────────── Prefix (tk-)
+```
+
+**Format Components**:
+- **Total Length**: 102 characters
+- **Separators**: Dashes separate prefix, version, secret ID, and random data
+- **Character Set**: Lowercase hexadecimal (0-9, a-f)
+- **Case Sensitivity**: Keys are case-insensitive (normalize to lowercase)
+
+**Parsing Rules**:
+1. Split on dashes: `["tk", "v1", "<secret-id>", "<random-data>"]`
+2. Validate prefix = "tk" and version = "v1"
+3. Validate secret-id length = 32 hex chars
+4. Validate random-data length = 64 hex chars
+5. Reject malformed keys immediately (don't attempt database lookup)
+
+## Appendix B: Authentication Database Schema
+
+### HMAC Secrets Table
+
+```sql
+CREATE TABLE hmac_secrets (
+  secret_id UUID PRIMARY KEY,           -- UUIDv7 identifier for the secret
+  secret_hash BLOB NOT NULL,            -- SHA256 hash of the raw secret
+  source TEXT NOT NULL,                 -- "environment" or "auto-generated"
+  created_at TIMESTAMP NOT NULL,
+  CONSTRAINT valid_source CHECK (source IN ('environment', 'auto-generated'))
+);
+
+CREATE INDEX idx_hmac_secrets_source ON hmac_secrets(source);
+```
+
+**Field Details**:
+- `secret_id`: UUIDv7 enables time-ordered lookups
+- `secret_hash`: SHA256(raw_secret), 32 bytes
+- `source`: Tracks provenance for audit trail
+- `created_at`: Auto-set to current timestamp
+
+### API Keys Table
+
+```sql
+CREATE TABLE api_keys (
+  api_key_id UUID PRIMARY KEY,          -- UUIDv7 identifier
+  tenant_id UUID NOT NULL,
+  name TEXT NOT NULL,                   -- User-assigned name
+  key_hash BLOB NOT NULL,               -- HMAC-SHA256 hash of full key
+  secret_id UUID NOT NULL,              -- FK to hmac_secrets
+  created_at TIMESTAMP NOT NULL,
+  last_used_at TIMESTAMP,
+  revoked_at TIMESTAMP,
+  FOREIGN KEY (secret_id) REFERENCES hmac_secrets(secret_id),
+  FOREIGN KEY (tenant_id) REFERENCES tenants(tenant_id)
+);
+
+CREATE INDEX idx_api_keys_tenant ON api_keys(tenant_id);
+CREATE INDEX idx_api_keys_secret ON api_keys(secret_id);
+CREATE INDEX idx_api_keys_revoked ON api_keys(revoked_at) WHERE revoked_at IS NULL;
+```
+
+**Field Details**:
+- `api_key_id`: UUIDv7 enables time-ordered key listing
+- `key_hash`: HMAC-SHA256(full_api_key, hmac_secret), 32 bytes
+- `name`: Max 255 chars, used for UI display
+- `last_used_at`: Throttled updates (max once per minute)
+- `revoked_at`: NULL = active, non-NULL = revoked (soft delete)
+
+**Query Patterns**:
+1. **Authentication**: `SELECT key_hash, revoked_at FROM api_keys WHERE secret_id = ? LIMIT 1`
+2. **List Active Keys**: `SELECT * FROM api_keys WHERE tenant_id = ? AND revoked_at IS NULL ORDER BY created_at DESC`
+3. **Revoke Key**: `UPDATE api_keys SET revoked_at = NOW() WHERE api_key_id = ?`
+
+## Appendix C: Authentication Implementation Flow
+
+**Pseudocode for gRPC Interceptor**:
+
+```rust
+fn authenticate_request(metadata: &Metadata) -> Result<TenantId, AuthError> {
+    // Step 1: Extract API key from metadata
+    let api_key = metadata.get("x-api-key")
+        .ok_or(AuthError::MissingKey)?;
+
+    // Step 2: Parse format
+    let parts: Vec<&str> = api_key.split('-').collect();
+    if parts.len() != 4 || parts[0] != "tk" || parts[1] != "v1" {
+        return Err(AuthError::InvalidFormat);
+    }
+    let secret_id = parts[2];  // 32 hex chars
+    let random_data = parts[3]; // 64 hex chars
+
+    // Step 3: Lookup HMAC secret (O(1) from in-memory map)
+    let hmac_secret = SECRET_MAP.get(secret_id)
+        .ok_or(AuthError::UnknownKey)?;
+
+    // Step 4: Compute HMAC-SHA256 hash
+    let computed_hash = hmac_sha256(hmac_secret, api_key);
+
+    // Step 5: Compare against stored hash
+    let stored = db.query_one(
+        "SELECT key_hash, tenant_id, revoked_at FROM api_keys WHERE secret_id = ?",
+        &[secret_id]
+    )?;
+
+    if !constant_time_eq(&computed_hash, &stored.key_hash) {
+        return Err(AuthError::InvalidKey);
+    }
+
+    // Step 6: Check revocation
+    if stored.revoked_at.is_some() {
+        return Err(AuthError::KeyRevoked);
+    }
+
+    // Step 7: Update last_used_at (throttled)
+    if should_update_last_used(stored.last_used_at) {
+        db.execute(
+            "UPDATE api_keys SET last_used_at = NOW() WHERE api_key_id = ?",
+            &[stored.api_key_id]
+        ).ok(); // Non-critical, ignore errors
+    }
+
+    // Step 8: Return tenant ID for request context
+    Ok(stored.tenant_id)
+}
+
+fn should_update_last_used(last_used: Option<Timestamp>) -> bool {
+    match last_used {
+        None => true,  // Never used, always update
+        Some(ts) => (now() - ts) > Duration::minutes(1)
+    }
+}
+```
+
+**Error Mapping to gRPC Status Codes**:
+```rust
+impl From<AuthError> for grpc::Status {
+    fn from(err: AuthError) -> Self {
+        match err {
+            AuthError::MissingKey =>
+                grpc::Status::unauthenticated("API key required in x-api-key metadata"),
+            AuthError::InvalidFormat =>
+                grpc::Status::unauthenticated("Invalid API key format"),
+            AuthError::UnknownKey | AuthError::InvalidKey =>
+                grpc::Status::unauthenticated("Invalid API key"),
+            AuthError::KeyRevoked =>
+                grpc::Status::permission_denied("API key has been revoked"),
+        }
+    }
+}
+```
 
 ## Future Considerations
 

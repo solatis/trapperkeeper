@@ -1,19 +1,14 @@
 # ADR-002: SDK Model
 
-Date: 2025-10-28
+## Revision log
+
+| Date | Description |
+|------|-------------|
+| 2025-10-28 | Document created |
 
 ## Context
 
-TrapperKeeper requires a mechanism for integrating rule evaluation into data processing pipelines. Key design constraints:
-
-- **Ephemeral workloads**: Data processing jobs run for minutes to hours, then terminate
-- **Developer control**: Engineers need visibility and explicit control over observability integration
-- **Performance requirements**: Rule evaluation must complete in <1ms to avoid pipeline bottlenecks
-- **Framework diversity**: Must support Python (Pandas, Airflow), Java (Spark), Go, and future frameworks
-- **Minimal operational overhead**: Cannot require separate infrastructure deployment per environment
-- **Fail-safe defaults**: System degradation must not break production pipelines
-
-Traditional approaches (sidecar proxies, agents, infrastructure plugins) add deployment complexity and hide integration points from developers.
+TrapperKeeper requires a mechanism for integrating rule evaluation into data processing pipelines. Traditional approaches (sidecar proxies, agents, infrastructure plugins) add deployment complexity and hide integration points from developers.
 
 ## Decision
 
@@ -50,17 +45,21 @@ We will implement a **developer-first SDK model** where TrapperKeeper is integra
 
 ### 3. Language-Native Base SDKs
 
-**Three core SDKs**:
-- `pkg/trapperkeeper/` - Go SDK
-- `sdks/python/` - Python SDK
-- `sdks/java/` - Java SDK
+**Core Rust library**:
+- `trapperkeeper-core` - Core Rust SDK library provides rule parsing, gRPC communication, and evaluation logic
+- All heavy lifting (rule parsing, sensor-api communication) centralized in Rust
+- Language-specific SDKs become lightweight wrappers over the core library
+
+**Language bindings**:
+- `sdks/python/` - Python SDK built with pyo3 for native performance
+- `sdks/java/` - Java SDK using JNI bindings
 
 **Framework wrappers built on base**:
 - Python → Pandas API, Airflow operators
 - Java → Spark transformations
 - Framework wrappers override `api_type` metadata (Airflow wrapper reports `"airflow"`, not `"python"`)
 
-**Rationale**: Language-native implementation enables idiomatic APIs and optimal performance. Framework wrappers leverage existing base SDKs rather than reimplementing protocol logic.
+**Rationale**: Core Rust library reduces duplication across language SDKs. All heavy lifting centralized in Rust achieves optimal performance with nanosecond-level evaluation. pyo3 enables native Rust extensions for Python, achieving significantly better performance than ctypes or cffi approaches. Native Python extensions via pyo3 eliminate Python/C boundary overhead. Framework wrappers leverage existing base SDKs rather than reimplementing protocol logic.
 
 ### 4. Pre-Compilation for Performance
 
@@ -70,9 +69,9 @@ We will implement a **developer-first SDK model** where TrapperKeeper is integra
 - Field paths resolved against in-memory objects/DataFrames
 
 **Rules compiled to native predicates**:
-- Go: `func(Record) bool` with short-circuit evaluation
-- Python: List of closures with pre-bound field accessors
-- Java: `List<List<Predicate<Record>>>`
+- Rust: Compiled to concrete enum with pattern matching
+- Zero virtual dispatch, nanosecond-level pattern matching
+- Compiler can inline aggressively for optimal performance
 - Compilation happens once when rules fetched from API
 
 **Rationale**: Pre-compilation amortizes parsing cost across thousands/millions of records. Enables <1ms evaluation target. Avoids JSON parsing on hot path.
@@ -204,21 +203,23 @@ We will implement a **developer-first SDK model** where TrapperKeeper is integra
 
 ## Related Decisions
 
-**Depends on:**
-- **ADR-001: Architectural Principles** - Implements the Ephemeral Sensors principle through library-based integration model and stateless sensor architecture
+This ADR implements the Ephemeral Sensors principle from ADR-001 through library-based integration and stateless sensor architecture. ADR-023 extends this model with vectorized operations for data frameworks.
 
-**Extended by:**
-- **ADR-021: Batch Processing and Vectorization** - Extends SDK model with vectorized operations for data frameworks
+**Depends on**:
+- **ADR-001** - Architectural Principles
+
+**Extended by**:
+- **ADR-023** - Batch Processing and Vectorization
 
 ## Future Considerations
 
-- **Async event reporting**: Background goroutine/thread for non-blocking POST
+- **Async event reporting**: Background async task for non-blocking POST
 - **Dead letter queue**: Persistent buffer for events that fail to send
 - **Automatic SDK updates**: In-process hot reload of rule engine without restart
 - **Telemetry streaming**: Real-time sensor health metrics independent of events
 - **Bytecode instrumentation**: Optional transparent mode for frameworks that support it
 
-## Appendix: Standard Metadata Collection
+## Appendix A: Standard Metadata Collection
 
 ### Always Collected
 SDKs automatically collect these fields at startup:

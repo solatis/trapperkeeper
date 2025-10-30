@@ -1,31 +1,57 @@
 # ADR-007: Command Line Interface and Configuration
 
-Date: 2025-10-28
+## Revision log
+
+| Date | Description |
+|------|-------------|
+| 2025-10-28 | Document created |
+
+## Context
+
+TrapperKeeper needs to handle configuration for command-line flags in a way that's DevOps-friendly. For the MVP, we focus on command-line arguments only; file and environment-based configuration can be added later if needed.
+
+## Decision
+
+We will use `clap` v4 with derive macros for command-line argument parsing by creating separate binaries for different services (`tk-sensor-api` and `tk-web-ui`).
+
+File and environment-based configuration is not supported in the MVP. If needed later, we can integrate `figment` for unified configuration from multiple sources.
+
+## Consequences
+
+**Benefits:**
+- Derive macros reduce boilerplate and improve maintainability
+- Compile-time validation of CLI arguments prevents runtime errors
+- Excellent help text generation and error messages out of the box
+- Clean separation between sensor API (gRPC) and web UI (HTTP) services
+- Minimal library approach (CLI parser only, not a framework)
+- Can easily add file/env configuration later via `figment` if needed
+
+**Tradeoffs:**
+- Need separate binaries instead of subcommands
+- Must coordinate shared configuration between services
+- MVP lacks environment variable and config file support (acceptable tradeoff for simplicity)
+
+**Operational Implications:**
+- DevOps teams configure services using command-line flags only
+- Each service (`tk-sensor-api` and `tk-web-ui`) requires separate binary invocation
+- Shared configuration (database, data directory) must be specified for each service
+- The `TK_` environment variable prefix is reserved for SDK client metadata (ADR-020), not service configuration
+
+## Implementation
+
+1. Add `clap` v4 with derive feature to dependencies
+2. Define shared configuration struct with common fields (`--data-dir`, `--db-url`)
+3. Create service-specific configuration structs for `tk-sensor-api` and `tk-web-ui`
+4. Implement service-specific defaults for `--port` flag (different per service)
+5. Generate separate binaries in `src/bin/tk-sensor-api.rs` and `src/bin/tk-web-ui.rs`
+6. Document required command-line flags in help text and deployment guides
 
 ## Related Decisions
 
 **Depends on:**
 - **ADR-006: Service Architecture** - Configures the two services (tk-sensor-api and tk-web-ui) defined in the service architecture
 
-## Context
-
-TrapperKeeper needs to handle configuration from multiple sources (command-line flags, environment variables, and optionally config files) in a way that's DevOps-friendly. The standard library's `flag` package only handles command-line arguments, requiring manual coordination with environment variables. We prefer minimal libraries over frameworks where possible.
-
-The system consists of two distinct services:
-- **`tk-sensor-api`**: gRPC service for sensor communication
-- **`tk-web-ui`**: HTTP service for web interface with server-side rendering
-
-Options considered:
-- Standard library `flag` + manual env var handling - requires too much boilerplate for env var mapping and config file parsing
-- `spf13/cobra` + `spf13/viper` - Cobra is overkill for our needs (subcommands, help generation), adds unnecessary complexity
-- `spf13/viper` alone - configuration-focused library that handles our exact needs
-- `koanf` - newer alternative but less mature ecosystem and documentation
-
-## Decision
-
-Use `spf13/viper` for all configuration management without Cobra. Create separate binaries for different services (`tk-sensor-api` and `tk-web-ui`).
-
-## Configuration Structure
+## Appendix A: Configuration Structure
 
 ### Command-Line Flags
 
@@ -36,12 +62,11 @@ Core flags supported by both services:
 - `--db-url`: Database connection string
 - `--port`: Service port (different defaults per service)
 
-### Environment Variables
+### Environment Variables (Out of Scope for MVP)
 
-The system uses environment variables with the `TK_` prefix. Viper automatically maps these to configuration keys:
-- `TK_DATA_DIR` maps to `--data-dir` flag
-- `TK_PORT` maps to `--port` flag
-- `TK_DB_URL` maps to `--db-url` flag
+Environment variable support is not included in the MVP. If needed later, `figment` can provide unified configuration from env vars, files, and command-line flags.
+
+Note: The `TK_` prefix is reserved for SDK client metadata (see ADR-020: Client Metadata Namespace), not for service configuration.
 
 ### Shared Configuration
 
@@ -50,20 +75,11 @@ Both services share certain configuration elements:
 - Data directory for file storage
 - Base system configuration
 
-Service-specific configuration is handled through separate flag defaults and environment variable namespaces where needed.
+Service-specific configuration is handled through separate flag defaults in each binary.
 
-## Consequences
+### Library Options Evaluated
 
-**Pros:**
-- Unified configuration from flags, env vars, and config files
-- DevOps-friendly with 12-factor app principles
-- Automatic environment variable binding (e.g., `TK_PORT` maps to `port`)
-- Clean separation between sensor API (gRPC) and web UI (HTTP) services
-- No heavyweight CLI framework needed
-- Still relatively minimal (configuration-focused, not a framework)
-
-**Cons:**
-- Need separate binaries instead of subcommands
-- Must coordinate shared configuration between services
-
-This gives us professional configuration management while keeping the architecture simple and Go-like.
+Options considered:
+- `clap` v4 - mature, widely-used CLI parser with derive macros, excellent ergonomics, and compile-time validation (selected)
+- `structopt` (now merged into clap v4) - predecessor to clap's derive API
+- `argh` - smaller but less feature-rich, limited documentation

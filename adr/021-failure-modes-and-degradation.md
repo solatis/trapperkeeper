@@ -1,5 +1,10 @@
 # ADR-021: Failure Modes and Degradation Strategy
-Date: 2025-10-28
+
+## Revision log
+
+| Date | Description |
+|------|-------------|
+| 2025-10-28 | Document created |
 
 ## Context
 
@@ -71,7 +76,7 @@ sensor = Sensor(
 ### 4. Network Partition Handling
 
 **Stateless protocol characteristics**:
-- No persistent connections (see ADR-020)
+- No persistent connections (see ADR-005)
 - Periodic rule sync (default: 30 seconds)
 - No heartbeat mechanism
 - No split-brain detection
@@ -229,12 +234,12 @@ sensor = Sensor(
 - **ADR-001: Architectural Principles** - Implements the Least Intrusive by Default principle through fail-safe degradation
 - **ADR-002: SDK Model** - Defines failure behavior for ephemeral sensors
 
-**Referenced by:**
-- **ADR-020: API Service Architecture** - Documents stateless protocol and ETAG-based sync that enables this degradation strategy
+**Required by:**
+- **ADR-005: API Service Architecture** - Documents stateless protocol and ETAG-based sync that enables this degradation strategy
 
 ## Future Considerations
 
-- **Async event retry**: Background goroutine/thread for exponential backoff retry
+- **Async event retry**: Asynchronous background retry mechanism with exponential backoff
 - **Dead letter queue**: Persistent buffer for events that fail to send (disk or memory-mapped)
 - **Failure metrics**: Expose failure rate and degraded operation time via metrics endpoint
 - **Automatic failover**: Multiple API endpoints with automatic failover on failure

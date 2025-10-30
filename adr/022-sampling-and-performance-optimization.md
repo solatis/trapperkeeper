@@ -1,5 +1,10 @@
 # ADR-022: Sampling and Performance Optimization
-Date: 2025-10-28
+
+## Revision log
+
+| Date | Description |
+|------|-------------|
+| 2025-10-28 | Document created |
 
 ## Context
 
@@ -164,6 +169,48 @@ If Group 2's `condition_C` succeeds and `condition_D` succeeds, stop (rule match
 
 ### 1. Sampling Implementation
 
+See Appendix A for implementation pseudo-code.
+
+### 2. Cost-Based Ordering
+
+See Appendix B for cost estimation algorithm.
+
+### 3. Short-Circuit Evaluation
+
+See Appendix C for complete evaluation flow with short-circuit logic.
+
+### 4. Monitoring and Profiling
+
+Add instrumentation to track:
+- Average evaluation time per rule (p50, p95, p99)
+- Conditions evaluated per record (indicates short-circuit effectiveness)
+- Sample rate effectiveness (% of records skipped)
+- Field extraction cache hit rate (post-MVP optimization)
+
+Export metrics via operational endpoints (see ADR-005).
+
+## Related Decisions
+
+**Depends on:**
+- **ADR-014: Rule Expression Language** - Extends rules with sample_rate field for probabilistic evaluation
+- **ADR-015: Field Path Resolution** - Optimizes field extraction and wildcard evaluation
+
+**Related to:**
+- **ADR-002: SDK Model** - Pre-compilation architecture enables fast rule evaluation optimized by sampling
+- **ADR-023: Batch Processing and Vectorization** - Vectorized evaluation for Pandas/Spark complements row-by-row optimizations
+
+## Future Considerations
+
+- **Adaptive sampling**: Automatically adjust sample rates based on observed match frequency
+- **Field extraction caching**: Memoize intermediate field lookups within single record evaluation
+- **Condition selectivity learning**: Track which conditions most frequently fail, optimize ordering dynamically
+- **SIMD vectorization**: Use CPU vector instructions for primitive comparisons in tight loops
+- **JIT compilation**: Generate native code for hot rules using LLVM or similar
+- **Rule deduplication**: Detect when multiple rules evaluate identical conditions, share results
+- **Cost model tuning**: Collect profiling data to refine cost estimates per SDK/platform
+
+## Appendix A: Sampling Implementation Pseudo-code
+
 ```python
 # Pseudo-code for SDK implementation
 def evaluate_rule(record, rule):
@@ -182,7 +229,7 @@ def evaluate_rule(record, rule):
     return evaluate_conditions(record, rule)
 ```
 
-### 2. Cost-Based Ordering
+## Appendix B: Cost Estimation Algorithm
 
 ```python
 # Pseudo-code for condition cost estimation
@@ -212,7 +259,7 @@ def estimate_cost(condition):
 sorted_conditions = sorted(conditions, key=estimate_cost)
 ```
 
-### 3. Short-Circuit Evaluation
+## Appendix C: Short-Circuit Evaluation Flow
 
 ```python
 # Pseudo-code for rule evaluation with short-circuit
@@ -235,33 +282,3 @@ def evaluate_rule(record, rule):
 
     return None  # No groups matched
 ```
-
-### 4. Monitoring and Profiling
-
-Add instrumentation to track:
-- Average evaluation time per rule (p50, p95, p99)
-- Conditions evaluated per record (indicates short-circuit effectiveness)
-- Sample rate effectiveness (% of records skipped)
-- Field extraction cache hit rate (post-MVP optimization)
-
-Export metrics via operational endpoints (see ADR-005).
-
-## Related Decisions
-
-**Depends on:**
-- **ADR-014: Rule Expression Language** - Extends rules with sample_rate field for probabilistic evaluation
-- **ADR-015: Field Path Resolution** - Optimizes field extraction and wildcard evaluation
-
-**Related:**
-- **ADR-001: SDK Model** - Documents pre-compilation architecture that enables fast rule evaluation
-- **ADR-021: Batch Processing and Vectorization** - Documents vectorized evaluation for Pandas/Spark (complements this ADR)
-
-## Future Considerations
-
-- **Adaptive sampling**: Automatically adjust sample rates based on observed match frequency
-- **Field extraction caching**: Memoize intermediate field lookups within single record evaluation
-- **Condition selectivity learning**: Track which conditions most frequently fail, optimize ordering dynamically
-- **SIMD vectorization**: Use CPU vector instructions for primitive comparisons in tight loops
-- **JIT compilation**: Generate native code for hot rules using LLVM or similar
-- **Rule deduplication**: Detect when multiple rules evaluate identical conditions, share results
-- **Cost model tuning**: Collect profiling data to refine cost estimates per SDK/platform

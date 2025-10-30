@@ -1,16 +1,15 @@
 # ADR-005: API Service Architecture
 
-Date: 2025-10-28
+## Revision log
+
+| Date | Description |
+|------|-------------|
+| 2025-10-28 | Document created |
+| 2025-10-30 | Added backlink to ADR-018 (Rule Lifecycle) |
 
 ## Context
 
-TrapperKeeper requires an API layer to enable communication between ephemeral sensors (embedded in data processing jobs) and the central coordination server. Key requirements:
-
-- **High-performance sensor communication**: Sensors check rules on every record (<1ms target), requiring efficient binary protocol
-- **Type-safe contracts**: Strong schema enforcement prevents runtime errors in distributed system
-- **Clear separation of concerns**: Sensors (machines) have different needs than operators (humans)
-- **Stateless operation**: Sensors are short-lived (minutes to hours), no persistent connections
-- **Network partition resilience**: System must gracefully handle connectivity issues
+TrapperKeeper requires an API layer to enable communication between ephemeral sensors and the central coordination server, using efficient binary protocol for high-performance rule checking and stateless operation for network resilience.
 
 ## Decision
 
@@ -156,12 +155,15 @@ All sensor API calls use **gRPC** (not HTTP/JSON REST):
 
 ## Related Decisions
 
-**Depends on:**
+This ADR implements the Schema-Agnostic Architecture and Ephemeral Sensors principles by providing a stateless gRPC protocol with no schema validation at the API layer.
+
+**Depends on**:
 - **ADR-001: Architectural Principles** - Implements Schema-Agnostic Architecture (no schema validation) and Ephemeral Sensors (stateless protocol) principles
 
-**Extended by:**
+**Extended by**:
 - **ADR-006: Service Architecture** - Separates into tk-sensor-api and tk-web-ui services
 - **ADR-012: API Authentication** - Defines HMAC-based authentication for sensor API
+- **ADR-018: Rule Lifecycle and Operational Controls** - Uses ETAG-based sync mechanism for rule distribution
 
 ## Future Considerations
 

@@ -1,14 +1,10 @@
 # ADR-004: Database Backend Strategy
 
-Date: 2025-10-28
+## Revision Log
 
-## Related Decisions
-
-**Depends on:**
-- **ADR-001: Architectural Principles** - Implements MVP Simplicity principle with SQLite as zero-configuration default
-
-**Extended by:**
-- **ADR-010: Database Migrations** - Defines explicit migration strategy for database schema changes
+| Date | Description |
+|------|-------------|
+| 2025-10-28 | Document created |
 
 ## Context
 
@@ -26,13 +22,11 @@ Requirements:
 
 ## Decision
 
-Use standard `database/sql` with multiple driver support. Default to SQLite for zero-configuration startup. Write lowest common denominator SQL that works across all three databases.
+Use sqlx for database access with compile-time query verification. Default to SQLite for zero-configuration startup. Write lowest common denominator SQL that works across all three databases.
 
 ### Database Drivers
 
-- SQLite: `modernc.org/sqlite` (pure Go, no CGO)
-- PostgreSQL: `github.com/lib/pq`
-- MySQL: `github.com/go-sql-driver/mysql`
+sqlx supports SQLite, PostgreSQL, and MySQL through a unified async API. Runtime feature flags control which database driver is compiled into the binary, reducing dependency footprint for specific deployments.
 
 ### Shared Access Pattern
 
@@ -44,34 +38,18 @@ Configuration per service:
 - Max connections: 16
 - Idle timeout: 5 minutes
 - Connection lifetime: 30 minutes
-- Use database/sql defaults in Go
+- sqlx provides built-in async connection pooling
 - Configuration will be refined when adding PostgreSQL support
 
 ### Database Migrations
 
-**Directory Structure:**
-```
-internal/store/
-├── store.go           # Contains //go:embed directives
-├── migrations/
-│   ├── sqlite/
-│   │   ├── 001_initial_schema.sql
-│   │   └── 002_add_indices.sql
-│   ├── postgres/
-│   │   ├── 001_initial_schema.sql
-│   │   └── 002_add_indices.sql
-│   └── mysql/
-│       ├── 001_initial_schema.sql
-│       └── 002_add_indices.sql
-```
+Migrations are organized in database-specific directories (`sqlite/`, `postgres/`, `mysql/`) under `src/store/migrations/`. Each database has numbered migration files (e.g., `001_initial_schema.sql`, `002_add_indices.sql`). See [Appendix: Migration Structure](#appendix-migration-structure) for complete directory layout.
+
+Migrations are embedded at compile time using the `sqlx::migrate!()` macro, which reads the appropriate database-specific migration directory and embeds all SQL files into the binary.
 
 **Migration Tracking:**
 
-Migrations recorded in `migrations` table:
-- `migration_id` VARCHAR(128) PRIMARY KEY (filename without .sql)
-- `checksum` VARCHAR(64) NOT NULL (SHA256 of file content)
-- `applied_at` TIMESTAMP NOT NULL
-- `execution_ms` INTEGER (execution duration)
+Migrations recorded in `migrations` table with fields for migration_id, checksum, applied_at, and execution_ms. See [Appendix: Migrations Tracking Table](#appendix-migrations-tracking-table) for complete schema.
 
 **Startup Behavior:**
 - Service compares expected last migration with database
@@ -89,27 +67,11 @@ Migrations recorded in `migrations` table:
 
 ### SQL Query Layer
 
-Architecture using go:embed + sqlc:
-- **sqlc**: Generate type-safe Go code from SQL queries
-- **go:embed**: Embed SQL files directly in binary
+Architecture: Write SQL queries directly in Rust code using sqlx macros for compile-time verification. The `query!()` and `query_as!()` macros connect to a development database at compile time to verify queries are valid and extract result types.
 
-**Directory Structure:**
-```
-internal/store/
-├── store.go           # Contains //go:embed directives
-├── sql/
-│   ├── sqlite/
-│   │   ├── tenants.sql
-│   │   └── rules.sql
-│   ├── postgres/
-│   │   ├── tenants.sql
-│   │   └── rules.sql
-│   └── mysql/
-│       ├── tenants.sql
-│       └── rules.sql
-```
+See [Appendix: Query Example](#appendix-query-example) for a concrete Rust code example.
 
-Benefits: Type safety, no runtime SQL parsing, compile-time verification.
+Benefits: Type safety enforced at compile time, compile-time verification ensures queries are valid and types match database schema, no separate code generation step required, direct mapping to Rust types.
 
 ### Multi-Tenancy Preparation
 
@@ -142,52 +104,19 @@ Rules stored in normalized relational structure across multiple tables:
 - `condition_fields`: Field paths as separate records (field_name/field_index, path_index)
 - `rule_scope`: Rule scope tags (tag_key, tag_value pairs)
 
-**API Keys Storage:**
-```sql
-api_keys (
-  tenant_id UUID NOT NULL,
-  api_key_id UUID NOT NULL,
-  created_at, modified_at, deleted_at,
-  key_name VARCHAR(128),
-  key_hash_type VARCHAR(16) NOT NULL DEFAULT 'hmac-sha256',
-  key_hash BINARY(32) NOT NULL,
-  hmac_secret_id UUID,  -- FK to hmac_secrets
-  last_used_at TIMESTAMP,
-  PRIMARY KEY (tenant_id, api_key_id),
-  INDEX idx_key_hash (key_hash)
-);
-```
+**API Keys and HMAC Secrets:**
 
-**HMAC Secrets Storage:**
-```sql
-hmac_secrets (
-  tenant_id UUID NOT NULL,
-  hmac_secret_id UUID NOT NULL,
-  created_at, modified_at, deleted_at,
-  secret BINARY(32) NOT NULL,
-  is_primary BOOLEAN NOT NULL DEFAULT FALSE,
-  PRIMARY KEY (tenant_id, hmac_secret_id)
-);
-```
+API keys are stored with key hashes and references to HMAC secrets for authentication. HMAC secrets support primary/secondary key rotation. See [Appendix: API Keys and HMAC Secrets Tables](#appendix-api-keys-and-hmac-secrets-tables) for complete schemas.
 
 Note: HMAC secret management (environment variables, rotation, initialization) is covered separately in the API authentication specification. This ADR only covers the database schema.
 
 **Sessions Storage:**
-```sql
-sessions (
-  tenant_id UUID NOT NULL,
-  session_id UUID NOT NULL,
-  user_id UUID NOT NULL,
-  created_at,
-  expires_at TIMESTAMP NOT NULL,
-  last_activity_at TIMESTAMP NOT NULL,
-  PRIMARY KEY (tenant_id, session_id)
-);
-```
+
+Sessions table stores user session data with tenant_id, session_id, user_id, creation/expiration timestamps, and last activity tracking. See [Appendix: Sessions Table](#appendix-sessions-table) for complete schema.
 
 **Identifier Strategy:**
 
-All identifiers use UUIDv7 format. See [ADR 007: UUID Strategy](007-uuid-strategy.md) for complete rationale and implementation details.
+All identifiers use UUIDv7 format. See [ADR-003: UUID Strategy](003-uuid-strategy.md) for complete rationale and implementation details.
 
 **First Boot Initialization:**
 
@@ -213,32 +142,153 @@ Default entities created on first boot:
 
 ## Consequences
 
-**Pros:**
-- Zero dependencies beyond drivers
+**Benefits:**
+- Minimal dependencies (sqlx and database drivers only)
 - SQLite default means instant startup for demos/development
 - Enterprises can use their preferred database
 - Direct SQL control and visibility
-- Standard library approach
+- Compile-time query verification prevents SQL errors at runtime
+- Async-first design integrates naturally with Tokio runtime
 - Shared SQLite access simplifies deployment
-- Type-safe SQL with sqlc
+- Type-safe SQL with compile-time verification
 - Migration tracking prevents version mismatches
 - Normalized schema prevents query performance issues with complex rules
 - Multi-tenancy preparation enables future growth without major refactoring
 - Soft deletes preserve audit history
 - UUIDv7 identifiers provide natural time-ordering (see ADR 007)
+- Direct mapping to Rust types eliminates serialization overhead
 
-**Cons:**
+**Tradeoffs:**
 - Cannot use database-specific features (Postgres JSONB operators, etc.)
 - Must handle minor dialect differences (placeholders, RETURNING clause)
 - SQLite has concurrent write limitations (mitigated by multiple writer support)
-- Manual SQL writing (no query builder)
+- Manual SQL writing (no query builder abstraction)
+- Compile-time verification requires development database connection during build
 - Normalized schema requires joins for rule retrieval (acceptable for read patterns)
 - Soft delete cascades must be implemented manually in application layer
 - Multiple migration directories require maintenance
 - Migration failure recovery requires backup restoration
 
-**Future Options:**
+**Operational Implications:**
+- Shared SQLite database file requires file system access coordination between tk-sensor-api and tk-web-ui services
+- Connection pool configuration affects concurrent request handling capacity
+- Migration version mismatches will halt service startup, requiring manual intervention
+- Soft delete queries must explicitly filter `deleted_at IS NULL` in all application code
+- Database file backups required before migration attempts for rollback capability
+
+## Implementation
+
+1. Configure sqlx with compile-time query verification using `query!()` and `query_as!()` macros
+2. Organize migration files in database-specific directories (`sqlite/`, `postgres/`, `mysql/`) under `src/store/migrations/`
+3. Embed migrations at compile time using `sqlx::migrate!()` macro
+4. Implement migration tracking table with migration_id, checksum, applied_at, and execution_ms fields
+5. Add startup validation to compare expected vs. actual migration state and halt on mismatch
+6. Create initial database schemas with multi-tenancy support (tenant_id, created_at, modified_at, deleted_at columns)
+7. Configure connection pooling with 16 max connections, 5-minute idle timeout, 30-minute connection lifetime
+8. Enable SQLite multiple writer support for shared access between services
+9. Implement first-boot initialization logic to create default tenant, team, and admin user
+
+## Related Decisions
+
+**Depends on:**
+- **ADR-001: Architectural Principles** - Implements MVP Simplicity principle with SQLite as zero-configuration default
+
+**Extended by:**
+- **ADR-010: Database Migrations** - Defines explicit migration strategy for database schema changes
+
+## Future Considerations
+
 - If dialect differences become painful, implement separate Store implementations per database while keeping the same interface
 - Add migration state tracking when operational complexity justifies it
 - Optimize normalized schema query performance if needed
 - Add automatic retention policies for soft-deleted records
+
+## Appendix A: Migration Structure
+
+Migration files are organized by database type:
+
+```
+src/store/
+├── mod.rs            # Migration embedding using sqlx::migrate!()
+├── migrations/
+│   ├── sqlite/
+│   │   ├── 001_initial_schema.sql
+│   │   └── 002_add_indices.sql
+│   ├── postgres/
+│   │   ├── 001_initial_schema.sql
+│   │   └── 002_add_indices.sql
+│   └── mysql/
+│       ├── 001_initial_schema.sql
+│       └── 002_add_indices.sql
+```
+
+## Appendix B: Migrations Tracking Table
+
+The `migrations` table tracks applied migrations:
+
+```sql
+migrations (
+  migration_id VARCHAR(128) PRIMARY KEY,  -- filename without .sql
+  checksum VARCHAR(64) NOT NULL,          -- SHA256 of file content
+  applied_at TIMESTAMP NOT NULL,
+  execution_ms INTEGER                    -- execution duration
+)
+```
+
+## Appendix C: Query Example
+
+Type-safe query example using sqlx macros:
+
+```rust
+let tenant = sqlx::query_as!(
+    Tenant,
+    "SELECT tenant_id, name, created_at FROM tenants WHERE tenant_id = ?",
+    tenant_id
+)
+.fetch_one(&pool)
+.await?;
+```
+
+## Appendix D: API Keys and HMAC Secrets Tables
+
+**API Keys:**
+```sql
+api_keys (
+  tenant_id UUID NOT NULL,
+  api_key_id UUID NOT NULL,
+  created_at, modified_at, deleted_at,
+  key_name VARCHAR(128),
+  key_hash_type VARCHAR(16) NOT NULL DEFAULT 'hmac-sha256',
+  key_hash BINARY(32) NOT NULL,
+  hmac_secret_id UUID,  -- FK to hmac_secrets
+  last_used_at TIMESTAMP,
+  PRIMARY KEY (tenant_id, api_key_id),
+  INDEX idx_key_hash (key_hash)
+);
+```
+
+**HMAC Secrets:**
+```sql
+hmac_secrets (
+  tenant_id UUID NOT NULL,
+  hmac_secret_id UUID NOT NULL,
+  created_at, modified_at, deleted_at,
+  secret BINARY(32) NOT NULL,
+  is_primary BOOLEAN NOT NULL DEFAULT FALSE,
+  PRIMARY KEY (tenant_id, hmac_secret_id)
+);
+```
+
+## Appendix E: Sessions Table
+
+```sql
+sessions (
+  tenant_id UUID NOT NULL,
+  session_id UUID NOT NULL,
+  user_id UUID NOT NULL,
+  created_at,
+  expires_at TIMESTAMP NOT NULL,
+  last_activity_at TIMESTAMP NOT NULL,
+  PRIMARY KEY (tenant_id, session_id)
+);
+```
