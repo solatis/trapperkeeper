@@ -1,0 +1,294 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://trapperkeeper.io/schemas/validation-schema.json",
+  "title": "Template Validation Schema",
+  "description": "JSON Schema for validation blocks in template frontmatter. Defines structure for template-driven validation rules.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Schema version for validation block structure. Must be 1."
+    },
+    "extends": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9_-]+\\.md$"
+      },
+      "description": "Optional list of template files to inherit validation rules from.",
+      "uniqueItems": true
+    },
+    "conditions": {
+      "type": "object",
+      "patternProperties": {
+        "^[a-z_][a-z0-9_]*$": {
+          "type": "string",
+          "pattern": "^[a-z_][a-z0-9_]*\\([^)]*\\)$"
+        }
+      },
+      "additionalProperties": false,
+      "description": "Named predicate expressions for conditional validation rules. Keys must be valid identifiers, values must be function calls."
+    },
+    "title_pattern": {
+      "type": "string",
+      "description": "Regular expression that document title (first H1) must match."
+    },
+    "max_lines": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Maximum number of lines allowed in the document."
+    },
+    "forbidden": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "pattern": {
+            "type": "string",
+            "description": "Regular expression pattern to forbid in document content."
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Human-readable explanation for why this pattern is forbidden."
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["error", "warn"],
+            "default": "error",
+            "description": "Severity level: error blocks validation, warn is informational."
+          }
+        },
+        "required": ["pattern", "reason"],
+        "additionalProperties": false
+      },
+      "description": "List of forbidden patterns with explanations."
+    },
+    "required_sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Section name (H2+ heading text)."
+          },
+          "must_exist": {
+            "type": "boolean",
+            "description": "If true, section must be present in document."
+          },
+          "require_if": {
+            "type": "string",
+            "pattern": "^[a-z_][a-z0-9_]*$",
+            "description": "Condition name from conditions block. Section required if condition evaluates to true."
+          },
+          "forbid_if": {
+            "type": "string",
+            "pattern": "^[a-z_][a-z0-9_]*$",
+            "description": "Condition name from conditions block. Section forbidden if condition evaluates to true."
+          },
+          "max_paragraphs": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Maximum number of paragraphs allowed in this section."
+          },
+          "min_paragraphs": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Minimum number of paragraphs required in this section."
+          },
+          "max_sentences": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Maximum number of sentences allowed in this section."
+          },
+          "content_pattern": {
+            "type": "string",
+            "description": "Regular expression that section content must match."
+          },
+          "subsections_required": {
+            "type": "object",
+            "properties": {
+              "min": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Minimum number of subsections required."
+              },
+              "max": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Maximum number of subsections allowed."
+              },
+              "pattern": {
+                "type": "string",
+                "description": "Regular expression that subsection heading markers must match (e.g., '^### ')."
+              }
+            },
+            "additionalProperties": false,
+            "description": "Rules for subsections within this section."
+          },
+          "files_rules": {
+            "type": "object",
+            "properties": {
+              "must_list_all_md": {
+                "type": "boolean",
+                "description": "If true, section must list all .md files in directory."
+              },
+              "must_list_all_subdirs": {
+                "type": "boolean",
+                "description": "If true, section must list all subdirectories."
+              },
+              "exclude_globs": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Glob patterns for files to exclude from listing requirement."
+              },
+              "entry_pattern": {
+                "type": "string",
+                "description": "Regular expression that each file listing entry must match."
+              }
+            },
+            "additionalProperties": false,
+            "description": "Rules for file/directory listings within section."
+          }
+        },
+        "required": ["name"],
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "required": ["must_exist"]
+          },
+          {
+            "required": ["require_if"]
+          },
+          {
+            "required": ["forbid_if"]
+          }
+        ]
+      },
+      "description": "List of section requirements with structural and content constraints."
+    },
+    "filename_pattern": {
+      "type": "string",
+      "description": "Regular expression that the document filename must match."
+    },
+    "frontmatter": {
+      "type": "object",
+      "properties": {
+        "required_fields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true,
+          "description": "List of frontmatter fields that must be present."
+        },
+        "field_constraints": {
+          "type": "object",
+          "patternProperties": {
+            "^[a-z_][a-z0-9_]*$": {
+              "type": "object",
+              "properties": {
+                "enum": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "description": "Allowed values for this field."
+                },
+                "pattern": {
+                  "type": "string",
+                  "description": "Regular expression that field value must match."
+                },
+                "type": {
+                  "type": "string",
+                  "enum": ["string", "integer", "boolean", "array", "object"],
+                  "description": "Expected type for this field."
+                },
+                "min_items": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "Minimum number of items for array fields."
+                },
+                "max_items": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "Maximum number of items for array fields."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false,
+          "description": "Constraints for specific frontmatter fields."
+        },
+        "conditional_constraints": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "if_field": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Field name to check for conditional constraint."
+              },
+              "equals": {
+                "oneOf": [
+                  {"type": "string"},
+                  {"type": "integer"},
+                  {"type": "boolean"}
+                ],
+                "description": "Value that if_field must equal for constraint to apply."
+              },
+              "then_required": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "uniqueItems": true,
+                "description": "Fields that become required when condition is met."
+              },
+              "then_forbidden": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "uniqueItems": true,
+                "description": "Fields that become forbidden when condition is met."
+              }
+            },
+            "required": ["if_field", "equals"],
+            "oneOf": [
+              {"required": ["then_required"]},
+              {"required": ["then_forbidden"]}
+            ],
+            "additionalProperties": false
+          },
+          "description": "Conditional field requirements based on other field values."
+        },
+        "forbidden_fields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true,
+          "description": "List of field names that must not be present in frontmatter."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Validation rules for document frontmatter."
+    }
+  },
+  "required": ["schema_version"],
+  "additionalProperties": false
+}

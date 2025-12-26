@@ -1,0 +1,16 @@
+# Prettier configuration for Trapperkeeper documentation
+# See: https://prettier.io/docs/en/options.html
+
+# Prose wrap
+proseWrap: "preserve" # Don't wrap prose - maintain manual line breaks
+
+# Print width
+printWidth: 80 # Wrap code blocks at 80 characters
+
+# Markdown-specific options
+overrides:
+  - files: "*.md"
+    options:
+      proseWrap: "preserve"
+      # Preserve emphasis markers (*, _) as written
+      singleQuote: false

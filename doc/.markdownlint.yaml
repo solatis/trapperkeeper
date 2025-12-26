@@ -1,0 +1,40 @@
+# Markdownlint configuration for Trapperkeeper documentation
+# See: https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md
+
+# Extend default configuration
+default: true
+
+# Disable specific rules that conflict with our documentation style
+MD013: false # Line length - documentation may have long lines
+MD033: false # Inline HTML - needed for complex tables and formatting
+MD041: false # First line in file should be top-level heading - not always needed for templates
+MD040: false # Fenced code language - not all code blocks need language specified
+MD031: false # Blanks around fences - allow tight formatting
+MD022: false # Blanks around headings - allow tight formatting
+MD032: false # Blanks around lists - allow tight formatting
+MD026: false # Trailing punctuation in heading - allow for "..." and similar
+
+# Customize rules
+MD007:
+  # Unordered list indentation
+  indent: 2
+
+MD024:
+  # Multiple headings with same content
+  siblings_only: true # Allow same heading at different levels
+
+MD025:
+  # Single H1 per document
+  front_matter_title: "" # Allow H1 even with frontmatter title
+
+MD029:
+  # Ordered list item prefix
+  style: "ordered" # Use 1. 2. 3. not 1. 1. 1.
+
+MD046:
+  # Code block style
+  style: "fenced" # Use ``` not indented blocks
+
+MD048:
+  # Code fence style
+  style: "backtick" # Use ``` not ~~~

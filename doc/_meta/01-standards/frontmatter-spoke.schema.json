@@ -1,0 +1,149 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://trapperkeeper.dev/schemas/frontmatter-spoke.schema.json",
+  "title": "Spoke Document Frontmatter",
+  "description": "Metadata schema for spoke documents in Trapperkeeper documentation",
+  "type": "object",
+  "required": [
+    "doc_type",
+    "status",
+    "date_created",
+    "primary_category"
+  ],
+  "properties": {
+    "doc_type": {
+      "type": "string",
+      "enum": ["spoke", "hub", "index", "guide", "reference", "redirect-stub"],
+      "description": "Type of documentation. Must be 'spoke' for spoke documents."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "active", "deprecated", "superseded"],
+      "description": "Current status of the document in its lifecycle"
+    },
+    "date_created": {
+      "type": "string",
+      "format": "date",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "description": "Date document was created (YYYY-MM-DD)"
+    },
+    "date_updated": {
+      "type": "string",
+      "format": "date",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "description": "Date of last significant update (YYYY-MM-DD)"
+    },
+    "primary_category": {
+      "type": "string",
+      "enum": [
+        "architecture",
+        "api",
+        "database",
+        "security",
+        "performance",
+        "validation",
+        "configuration",
+        "testing",
+        "deployment",
+        "error-handling"
+      ],
+      "description": "Primary domain category for this document"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true,
+      "description": "Additional classification tags for discovery and indexing"
+    },
+    "hub_document": {
+      "type": "string",
+      "description": "Reference to the hub document this spoke belongs to (if applicable). Use relative path or document identifier."
+    },
+    "depends_on": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true,
+      "description": "Documents that must be understood before this one. Use document identifiers or relative paths."
+    },
+    "extended_by": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true,
+      "description": "Documents that extend or build upon this one. Use document identifiers or relative paths."
+    },
+    "cross_cutting": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["security", "performance", "validation", "observability", "error-handling"]
+      },
+      "uniqueItems": true,
+      "description": "Cross-cutting concerns this document addresses. Used for index generation."
+    },
+    "authors": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Primary authors or maintainers of this document"
+    },
+    "superseded_by": {
+      "type": "string",
+      "description": "Document identifier that supersedes this one (only use if status is 'superseded')"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "superseded"
+          }
+        }
+      },
+      "then": {
+        "required": ["superseded_by"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "doc_type": {
+            "const": "spoke"
+          }
+        }
+      },
+      "then": {
+        "required": ["hub_document"]
+      }
+    }
+  ],
+  "not": {
+    "anyOf": [
+      {
+        "required": ["version"]
+      },
+      {
+        "required": ["revision"]
+      },
+      {
+        "required": ["changelog"]
+      },
+      {
+        "required": ["history"]
+      },
+      {
+        "required": ["versions"]
+      },
+      {
+        "required": ["revisions"]
+      }
+    ]
+  }
+}
