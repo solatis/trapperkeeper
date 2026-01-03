@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package trapperkeeper.sensor.v1;
+
+option go_package = "github.com/solatis/trapperkeeper/internal/protobuf/trapperkeeper/sensor/v1";
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+message Event {
+  string event_id = 1;
+  // google.protobuf.Struct enables schema-agnostic JSON without predefined structure.
+  // Rule engine queries Struct fields directly via field paths.
+  google.protobuf.Struct payload = 2;
+  // String-only metadata enforces consistent type handling.
+  // Complex metadata belongs in payload; metadata is for filtering/routing.
+  map<string, string> metadata = 3;
+  google.protobuf.Timestamp client_timestamp = 4;
+}

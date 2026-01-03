@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package trapperkeeper.sensor.v1;
+
+option go_package = "github.com/solatis/trapperkeeper/internal/protobuf/trapperkeeper/sensor/v1";
+
+message FieldPath {
+  repeated PathSegment segments = 1;
+}
+
+message PathSegment {
+  // oneof enforces exactly-one-of constraint for segment types.
+  // field_name: object property access ($.user)
+  // array_index: array element access ($.items[0])
+  // wildcard: match-all expansion ($.items[*])
+  oneof segment_type {
+    string field_name = 1;
+    int32 array_index = 2;
+    WildcardSegment wildcard = 3;
+  }
+}
+
+// WildcardSegment represents a wildcard (*) in a field path.
+// Empty message: proto3 oneof requires concrete types, not primitives.
+// Presence indicates wildcard; no additional data needed.
+message WildcardSegment {}

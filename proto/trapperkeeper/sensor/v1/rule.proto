@@ -1,0 +1,124 @@
+syntax = "proto3";
+
+package trapperkeeper.sensor.v1;
+
+option go_package = "github.com/solatis/trapperkeeper/internal/protobuf/trapperkeeper/sensor/v1";
+
+import "google/protobuf/timestamp.proto";
+import "trapperkeeper/sensor/v1/field_path.proto";
+
+message Rule {
+  string rule_id = 1;
+  string name = 2;
+  RuleState state = 3;
+  Action action = 4;
+  // or_groups encodes DNF (Disjunctive Normal Form): OR of ANDs.
+  // Each OrGroup is an AND of Conditions; groups are ORed together.
+  // Empty list matches nothing (invalid rule).
+  repeated OrGroup or_groups = 5;
+  // sample_rate enables probabilistic evaluation (0.0 = never, 1.0 = always).
+  // Values outside [0.0, 1.0] are invalid; callers must validate before use.
+  double sample_rate = 6;
+  repeated ScopeTag scope_tags = 7;
+  google.protobuf.Timestamp created_at = 8;
+}
+
+message OrGroup {
+  int32 group_index = 1;
+  repeated Condition conditions = 2;
+}
+
+message Condition {
+  FieldPath field_path = 1;
+  Operator op = 2;
+  ConditionValue value = 3;
+  FieldType field_type = 4;
+  OnMissingField on_missing_field = 5;
+  OnCoercionFail on_coercion_fail = 6;
+  // field_ref enables cross-field comparison ($.price < $.budget).
+  // When set, compare field_path against field_ref instead of value.
+  // Mutually exclusive with value; setting both is invalid.
+  FieldPath field_ref = 7;
+}
+
+message ConditionValue {
+  // oneof enables type-safe value representation without runtime type inspection.
+  // Arrays support IN operator; null_value supports IS_NULL/EXISTS operators.
+  oneof value_type {
+    string string_value = 1;
+    double numeric_value = 2;
+    bool boolean_value = 3;
+    NullValue null_value = 4;
+    StringArray string_array = 5;
+    NumericArray numeric_array = 6;
+  }
+}
+
+message StringArray {
+  repeated string values = 1;
+}
+
+message NumericArray {
+  repeated double values = 1;
+}
+
+message ScopeTag {
+  string key = 1;
+  string value = 2;
+}
+
+enum NullValue {
+  NULL_VALUE_UNSPECIFIED = 0;
+}
+
+enum Operator {
+  OPERATOR_UNSPECIFIED = 0;
+  OPERATOR_EQ = 1;
+  OPERATOR_NEQ = 2;
+  OPERATOR_LT = 3;
+  OPERATOR_LTE = 4;
+  OPERATOR_GT = 5;
+  OPERATOR_GTE = 6;
+  OPERATOR_PREFIX = 7;
+  OPERATOR_SUFFIX = 8;
+  OPERATOR_CONTAINS = 9;
+  OPERATOR_IN = 10;
+  OPERATOR_EXISTS = 11;
+  OPERATOR_IS_NULL = 12;
+}
+
+enum FieldType {
+  FIELD_TYPE_UNSPECIFIED = 0;
+  FIELD_TYPE_NUMERIC = 1;
+  FIELD_TYPE_TEXT = 2;
+  FIELD_TYPE_BOOLEAN = 3;
+  FIELD_TYPE_ANY = 4;
+}
+
+enum RuleState {
+  RULE_STATE_UNSPECIFIED = 0;
+  RULE_STATE_DRAFT = 1;
+  RULE_STATE_ACTIVE = 2;
+  RULE_STATE_DISABLED = 3;
+}
+
+enum Action {
+  ACTION_UNSPECIFIED = 0;
+  ACTION_OBSERVE = 1;
+  ACTION_DROP = 2;
+  ACTION_FAIL = 3;
+}
+
+enum OnMissingField {
+  ON_MISSING_FIELD_UNSPECIFIED = 0;
+  ON_MISSING_FIELD_SKIP = 1;
+  ON_MISSING_FIELD_MATCH = 2;
+  ON_MISSING_FIELD_FAIL = 3;
+}
+
+enum OnCoercionFail {
+  ON_COERCION_FAIL_UNSPECIFIED = 0;
+  ON_COERCION_FAIL_SKIP = 1;
+  ON_COERCION_FAIL_MATCH = 2;
+  ON_COERCION_FAIL_FAIL = 3;
+}

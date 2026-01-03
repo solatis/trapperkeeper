@@ -1,0 +1,69 @@
+syntax = "proto3";
+
+package trapperkeeper.sensor.v1;
+
+option go_package = "github.com/solatis/trapperkeeper/internal/protobuf/trapperkeeper/sensor/v1";
+
+import "google/protobuf/timestamp.proto";
+import "trapperkeeper/sensor/v1/rule.proto";
+import "trapperkeeper/sensor/v1/event.proto";
+
+// SensorAPI provides gRPC communication between sensors and TrapperKeeper server.
+service SensorAPI {
+  // SyncRules fetches active rules matching sensor tags.
+  // ETAG-based: server returns 304 Not Modified if rules unchanged since last sync.
+  rpc SyncRules(SyncRulesRequest) returns (SyncRulesResponse) {}
+
+  // ReportEvents submits a batch of events from sensor to server.
+  // Batching reduces RPC overhead; max batch size enforced server-side.
+  rpc ReportEvents(ReportEventsRequest) returns (ReportEventsResponse) {}
+
+  // GetDiagnostics retrieves SDK state for troubleshooting.
+  // Non-production use; disabled in high-performance deployments.
+  rpc GetDiagnostics(GetDiagnosticsRequest) returns (GetDiagnosticsResponse) {}
+}
+
+message SyncRulesRequest {
+  repeated string tags = 1;
+}
+
+message SyncRulesResponse {
+  repeated Rule rules = 1;
+  string etag = 2;
+}
+
+message ReportEventsRequest {
+  repeated Event events = 1;
+  string sensor_id = 2;
+  google.protobuf.Timestamp client_timestamp = 3;
+}
+
+message ReportEventsResponse {
+  repeated EventResult results = 1;
+  int32 accepted_count = 2;
+  int32 rejected_count = 3;
+}
+
+message EventResult {
+  string event_id = 1;
+  EventStatus status = 2;
+  string error_message = 3;
+}
+
+enum EventStatus {
+  EVENT_STATUS_UNSPECIFIED = 0;
+  EVENT_STATUS_ACCEPTED = 1;
+  EVENT_STATUS_REJECTED = 2;
+  EVENT_STATUS_ERROR = 3;
+}
+
+message GetDiagnosticsRequest {
+  string sensor_id = 1;
+}
+
+message GetDiagnosticsResponse {
+  int32 buffered_events_count = 1;
+  int32 rules_synced_count = 2;
+  google.protobuf.Timestamp last_sync_time = 3;
+  repeated string active_rule_ids = 4;
+}

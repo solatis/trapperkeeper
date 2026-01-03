@@ -1,0 +1,12 @@
+version: v2
+modules:
+  - path: proto
+    name: buf.build/solatis/trapperkeeper
+lint:
+  use:
+    - STANDARD
+  except:
+    - SERVICE_SUFFIX
+breaking:
+  use:
+    - FILE
