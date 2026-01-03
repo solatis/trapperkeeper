@@ -1,12 +1,12 @@
 ---
-doc_type: spoke
+doc_type: hub
 status: active
 date_created: 2025-11-07
 primary_category: architecture
-hub_document: /Users/lmergen/git/trapperkeeper/doc/02-architecture/README.md
-related_documents:
-  - monorepo-structure.md
+consolidated_spokes:
   - package-separation.md
+  - monorepo-structure.md
+  - dependency-management.md
 tags:
   - integration
   - monorepo
@@ -49,25 +49,28 @@ This document serves as the integration hub providing strategic overview with cr
    - Centralizes validation logic (shared by SDK, server, web UI)
    - Depends only on internal/types (no protocol dependencies)
 
-4. **internal/client**: Lean client-side SDK
-   - gRPC client communication (uses internal/protobuf types)
+4. **sdks/go/**: Go SDK (package within main module)
+   - gRPC client communication (uses proto/ generated types)
    - Event buffering and batching
-   - SDK API surface for language bindings
-   - ~5-10MB binary size (80-90% reduction vs bundling server code)
-   - Depends on: internal/types, internal/protobuf, internal/rules
+   - Rule evaluation (imports internal/rules)
+   - Externally importable: `go get .../trapperkeeper/sdks/go`
+   - Depends on: internal/types, internal/rules, proto/
 
 5. **internal/core**: Server-side shared code
    - Database access (dotsql + jmoiron/sqlx with query organization)
    - Authentication primitives (HMAC validation, API key management, bcrypt)
    - Configuration management (viper or environment variables)
-   - Depends on: internal/types, internal/protobuf, internal/rules (NOT internal/client)
+   - Depends on: internal/types, internal/protobuf, internal/rules
 
-**Key Property**: SDKs depend on internal/client ONLY, avoiding server dependencies (database drivers, stdlib net/http server, authentication).
+**Key Property**: Go SDK (sdks/go/) imports internal/types and internal/rules but avoids
+internal/core (no server dependencies). Python/Java SDKs use gRPC with generated protobuf
+types only.
 
 **Cross-References**:
 
 - Monorepo Structure: Complete package descriptions and dependency graph
 - Package Separation: Rationale for modular split and SDK implications
+- Dependency Management: Go/Python/Java versioning policies and vendoring strategy
 
 ### Monorepo Structure
 
@@ -125,7 +128,21 @@ sdks/java/
 └── tk-java/                 # JNI binding package
 ```
 
-**Key Constraint**: SDK binding packages depend ONLY on internal/client, avoiding server dependencies.
+**Go SDK** (sdks/go/):
+
+```
+sdks/go/
+├── client.go                # gRPC client wrapper
+├── buffer.go                # Event buffering
+└── evaluator.go             # Rule evaluation
+```
+
+**Go SDK Design**: Unlike Python and Java, the Go SDK is a **package within the main
+module** (no separate go.mod). This allows it to import internal/types and
+internal/rules while remaining externally importable via
+`go get github.com/trapperkeeper/trapperkeeper/sdks/go`.
+
+**Key Constraint**: SDK packages avoid server dependencies (internal/core).
 
 **Build Independence**: Each SDK can be built and tested independently while maintaining version sync via go.mod configuration.
 
@@ -151,18 +168,21 @@ tk-sensor-api -> internal/core -> internal/protobuf
 **SDK Chain**:
 
 ```
-SDKs (Python, Java) -> internal/client -> internal/protobuf
-                                        -> internal/rules -> internal/types
+Go SDK (sdks/go/) -> internal/rules -> internal/types
+                  -> proto/ (generated protobuf)
+
+Python/Java SDKs -> gRPC (generated protobuf only)
+                 -> own rule evaluation implementation
 ```
 
 **Key Properties**:
 
-- SDKs depend on internal/client only (no server code)
-- internal/core does NOT depend on internal/client (prevents server->client dependency)
-- internal/rules centralizes validation shared by client, server, web UI
-- internal/protobuf provides protocol types shared by client and server
+- Go SDK imports internal/rules and internal/types (same module, allowed)
+- Go SDK avoids internal/core (no server dependencies)
+- Python/Java SDKs use generated protobuf types (cannot import Go packages)
+- internal/rules centralizes validation shared by Go SDK, server, web UI
 - internal/types remains zero-dependency (preserves simplicity)
-- Protocol changes (internal/protobuf) don't trigger rule logic recompilation (internal/rules)
+- Protocol changes (proto/) don't trigger rule logic recompilation (internal/rules)
 
 **Cross-Reference**: Package Separation for complete dependency graph and rationale.
 
@@ -190,7 +210,7 @@ SDKs (Python, Java) -> internal/client -> internal/protobuf
 **Operational Implications:**
 
 - Release process: Single workflow builds all artifacts from unified version
-- Development setup: Developers need Go 1.25+, Python, and Java toolchains
+- Development setup: Developers need latest stable Go, Python, and Java toolchains
 - CI/CD coordination: Build matrix tests Go core, Python SDK, Java SDK independently
 - Binary distribution: Single trapperkeeper binary with embedded migrations
 - SDK distribution: Python wheels to PyPI, Java JARs to Maven Central
@@ -212,9 +232,9 @@ SDKs (Python, Java) -> internal/client -> internal/protobuf
 
 - [Architecture: SDK Model](../02-architecture/sdk-model.md): SDK architecture with lean client-side dependencies
 - [Architecture: Service Architecture](../02-architecture/README.md): Two-service model (web-ui, sensor-api) implemented by tk-core
-- [Data: Batch Processing and Vectorization](../03-data/README.md): Pandas and Spark wrapper locations in SDK directories
+- [Performance: Batch Processing and Vectorization](../05-performance/batch-processing.md): Pandas and Spark wrapper locations in SDK directories
 
 **Extended by**:
 
-- Dependency vendoring strategy (future ADR): go mod vendor for offline builds
-- Multi-language build automation (future ADR): Unified build scripts across Go/Python/Java
+- [Dependency Management](dependency-management.md): Go vendoring, Python/Java version pinning, upgrade policies
+- Multi-language build automation (future document): Unified build scripts across Go/Python/Java

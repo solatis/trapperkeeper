@@ -3,7 +3,7 @@ doc_type: spoke
 status: active
 date_created: 2025-11-07
 primary_category: database
-hub_document: /Users/lmergen/git/trapperkeeper/doc/03-data/README.md
+hub_document: doc/03-data/README.md
 tags:
   - uuidv7
   - identifiers
@@ -18,7 +18,7 @@ TrapperKeeper requires globally unique identifiers that are time-ordered for eff
 
 UUIDv7 provides time-ordered identifiers with strong randomness, enabling efficient B-tree indexing without coordination overhead. All system identifiers (events, rules, users, sensors, tenants) use UUIDv7 format.
 
-**Hub Document**: This document is part of the Data Hub. See Data Architecture for strategic overview of UUIDv7 within TrapperKeeper's identifier strategy.
+**Hub Document**: This document is part of the Data Hub. See [Data Architecture](README.md) for strategic overview of UUIDv7 within TrapperKeeper's identifier strategy.
 
 ## UUIDv7 Format
 

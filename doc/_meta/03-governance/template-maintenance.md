@@ -3,7 +3,7 @@ doc_type: spoke
 status: active
 date_created: 2025-11-08
 primary_category: governance
-hub_document: README.md
+hub_document: doc/_meta/03-governance/README.md
 tags:
   - templates
   - validation
@@ -29,6 +29,7 @@ This guide provides procedures for creating new documentation templates with val
 **1. Identify Template Need**
 
 Determine when a new template is needed:
+
 - New document type emerges (e.g., API reference, tutorial)
 - Existing document type requires stricter validation
 - Specialized variation of existing template needed
@@ -62,6 +63,7 @@ validation:
 ```
 
 **Required frontmatter fields**:
+
 - `doc_type: template` - Identifies file as template
 - `template_for: <type>` - Document type this template creates
 - `status: active` - Template lifecycle state
@@ -131,6 +133,7 @@ python3 validate.py validate-all
 **6. Iterate Until Validation Passes**
 
 Fix validation errors:
+
 - Adjust patterns that are too strict
 - Loosen constraints that fail legitimate documents
 - Add conditional logic for optional sections
@@ -178,11 +181,13 @@ Add new template to `doc/_meta/02-templates/README.md`:
 Template for creating [description] documents.
 
 **Key Points:**
+
 - [Primary usage scenario]
 - [Validation requirements]
 - [Special considerations]
 
 **Cross-References:**
+
 - **my-new-template.md**: Complete template with validation rules
 ```
 
@@ -229,7 +234,7 @@ validation:
   # Optional: Frontmatter validation
   frontmatter:
     required_fields: [...]
-    field_constraints: {...}
+    field_constraints: { ... }
     conditional_constraints: [...]
 
   # Optional: Content restrictions
@@ -330,6 +335,7 @@ python3 validate.py validate-all
 ### When to Update Validation Rules
 
 Update template validation when:
+
 - Documentation standards evolve
 - New anti-patterns discovered
 - Validation too strict (causes false positives)
@@ -337,6 +343,7 @@ Update template validation when:
 - Conditional logic needed for new use cases
 
 **Don't update when**:
+
 - Single document violates template (fix document instead)
 - Personal preference (standards trump preference)
 - Edge case affects <5% of documents (handle manually)
@@ -401,7 +408,7 @@ Update inline comments explaining the change:
 ```yaml
 validation:
   schema_version: 1
-  max_lines: 300  # Increased from 200 to accommodate security hub complexity
+  max_lines: 300 # Increased from 200 to accommodate security hub complexity
 ```
 
 **6. Commit Changes**
@@ -475,12 +482,14 @@ python3 validate.py validate-hub doc/scripts/fixtures/edge_case_hub/README.md
 ### Backwards Compatibility Considerations
 
 **Breaking Changes**:
+
 - Adding new required frontmatter fields
 - Making optional sections mandatory
 - Tightening pattern constraints
 - Reducing max_lines limit
 
 **Non-Breaking Changes**:
+
 - Adding optional validation rules
 - Loosening constraints
 - Increasing max_lines limit
@@ -489,6 +498,7 @@ python3 validate.py validate-hub doc/scripts/fixtures/edge_case_hub/README.md
 **Handle Breaking Changes**:
 
 1. **Audit Impact**: Find all affected documents
+
    ```bash
    grep -r "doc_type: hub" doc/ --include="*.md"
    ```
@@ -638,6 +648,7 @@ Effective Validation Rules:
 ```
 
 **Use Cases**:
+
 - Verify conditional logic resolves correctly
 - Debug complex pattern matching
 - Understand inheritance (if implemented)
@@ -655,6 +666,7 @@ Effective Validation Rules:
 ```
 
 **Error Components**:
+
 - File path and line number
 - Rule violation identifier
 - Detailed explanation
@@ -663,15 +675,19 @@ Effective Validation Rules:
 **Common Debugging Steps**:
 
 1. **Check exact section name**: Section headings are case-sensitive
+
    ```markdown
    # Wrong
+
    ## decision
 
    # Correct
+
    ## Decision
    ```
 
 2. **Verify frontmatter syntax**: YAML indentation matters
+
    ```yaml
    # Wrong
    tags:
@@ -685,6 +701,7 @@ Effective Validation Rules:
 3. **Test regex patterns**: Use online regex testers for complex patterns
 
 4. **Check file encoding**: Ensure UTF-8 encoding
+
    ```bash
    file -I document.md
    ```
@@ -699,6 +716,7 @@ Effective Validation Rules:
 ### When Validation Blocks Become Too Complex
 
 **Warning Signs**:
+
 - Validation block exceeds 50 lines
 - More than 5 conditional predicates
 - More than 10 required sections
@@ -733,6 +751,7 @@ doc/_meta/02-templates/claude-md.md:
 ### Extracting Complex Rules to Python Validators (Future)
 
 **When DSL becomes insufficient**:
+
 - Need custom validation logic
 - Complex cross-document validation
 - Performance-critical validation
@@ -798,6 +817,7 @@ validation:
 ```
 
 **Benefits**:
+
 - Reduce duplication
 - Centralize common rules
 - Easier bulk updates
@@ -807,12 +827,14 @@ validation:
 ### Complexity Limits and Warnings
 
 **Hard Limits** (validation fails):
+
 - `schema_version` must be 1
 - Regex patterns must compile
 - Predicate functions must exist
 - Field references must be valid
 
 **Soft Limits** (warnings only):
+
 - `max_frontmatter_lines: 40` - Validation block size
 - `max_conditions: 5` - Conditional predicates
 - `max_required_sections: 10` - Section requirements
@@ -834,8 +856,8 @@ COMPLEXITY_LIMITS = {
 ```yaml
 validation:
   schema_version: 1
-  complexity_override: true  # Suppress warnings
-  max_frontmatter_lines: 60  # Justify in comment why needed
+  complexity_override: true # Suppress warnings
+  max_frontmatter_lines: 60 # Justify in comment why needed
 ```
 
 ## Common Patterns and Anti-Patterns
@@ -853,6 +875,7 @@ required_sections:
 ```
 
 **Why Good**:
+
 - Fast validation (no complex parsing)
 - Clear error messages
 - Easy to maintain
@@ -871,6 +894,7 @@ forbidden:
 ```
 
 **Why Bad**:
+
 - Brittle (breaks with minor wording changes)
 - Difficult to debug
 - Creates false positives
@@ -904,6 +928,7 @@ required_sections:
 ```
 
 **Why Good**:
+
 - Adapts to directory structure
 - No false positives for empty directories
 - Encourages complete documentation when files exist
@@ -923,6 +948,7 @@ required_sections:
 ```
 
 **Why Bad**:
+
 - Hard to understand
 - Difficult to debug
 - Error-prone
@@ -961,6 +987,7 @@ forbidden:
 ```
 
 **Why Good**:
+
 - Educates users
 - Justifies restriction
 - Helps users fix violations
@@ -979,6 +1006,7 @@ forbidden:
 ```
 
 **Why Bad**:
+
 - Users don't understand why violation matters
 - Difficult to maintain (what was intent?)
 - Hard to decide if pattern should change
@@ -996,6 +1024,7 @@ forbidden:
 ### Pattern Summary
 
 **Do**:
+
 - Check document structure (sections, paragraphs)
 - Use conditional logic for optional content
 - Write clear, explanatory error messages
@@ -1003,6 +1032,7 @@ forbidden:
 - Test validation rules with fixtures
 
 **Don't**:
+
 - Validate specific wording or phrasing
 - Create complex nested conditions
 - Use cryptic regex patterns
@@ -1014,10 +1044,12 @@ forbidden:
 **Hub Document**: This spoke is part of the Governance hub. See [README.md](README.md) for governance strategy overview and related procedures.
 
 **Dependencies**:
-- **doc/_meta/04-tooling/validation-dsl-reference.md**: Complete DSL syntax and predicate reference
-- **doc/_meta/02-templates/README.md**: Template hub listing all available templates
-- **doc/_meta/01-standards/documentation-standards.md**: Documentation quality standards
+
+- **doc/\_meta/04-tooling/validation-dsl-reference.md**: Complete DSL syntax and predicate reference
+- **doc/\_meta/02-templates/README.md**: Template hub listing all available templates
+- **doc/\_meta/01-standards/documentation-standards.md**: Documentation quality standards
 
 **References**:
-- **doc/_meta/04-tooling/architecture.md**: Validation system architecture
-- **doc/_meta/03-governance/documentation-evolution-principle.md**: When to create new templates
+
+- **doc/\_meta/04-tooling/architecture.md**: Validation system architecture
+- **doc/\_meta/03-governance/documentation-evolution-principle.md**: When to create new templates

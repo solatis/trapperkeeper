@@ -21,6 +21,7 @@ This index provides navigation to all performance-related documentation across T
 Performance optimization techniques across system layers.
 
 **Relevant Documentation:**
+
 - **doc/05-performance/sampling.md** - Sampling strategies and sample rate configuration
 - **doc/05-performance/batch-processing.md** - Batch processing and vectorization techniques
 - **doc/05-performance/cost-model.md** - Cost models, canonical constants, and performance calculations
@@ -31,5 +32,6 @@ Performance optimization techniques across system layers.
 High-throughput data processing patterns.
 
 **Relevant Documentation:**
+
 - **doc/05-performance/batch-processing.md** - Batch processing architecture and throughput optimization
 - **doc/05-performance/README.md** - Performance Architecture hub with sub-millisecond evaluation targets

@@ -19,7 +19,7 @@ tags:
 
 ## Context
 
-Performance strategy was previously fragmented across multiple rule engine and SDK ADRs with significant duplication and inconsistency. The cost calculation algorithm appeared in two locations with 100% duplication. Field type multipliers were documented in three separate places. Nested wildcard validation guidance was duplicated at 95% overlap. This fragmentation created maintenance burden, terminology inconsistencies ("cost multiplier" vs "execution multiplier"), and prevented developers from getting a unified view of performance considerations.
+Performance strategy addresses fragmentation across documents that creates duplication and inconsistency. The cost calculation algorithm appears in two locations with 100% duplication. Field type multipliers are documented in three separate places. Nested wildcard validation guidance is duplicated at 95% overlap. This fragmentation creates maintenance burden, terminology inconsistencies ("cost multiplier" vs "execution multiplier"), and prevents developers from getting a unified view of performance considerations.
 
 TrapperKeeper's performance requirements are demanding: sub-millisecond per-event evaluation for high-performance data processing, support for billions of events per day in industrial IoT and financial data pipelines, and minimal intrusion in systems capable of processing massive data volumes. The schema-agnostic architecture and ephemeral sensor model constrain optimization strategies—no pre-compilation based on known schemas, no long-running query plan learning.
 
@@ -155,7 +155,7 @@ Probabilistic sampling enables flexible performance control through per-rule `sa
 **Sampling Recommendations**:
 
 - Cost > 10,000: Consider sampling at 10-50%
-- Cost > 30,000: Mandatory sampling at 1-10%
+- Cost > 30,000: Strongly recommended sampling at 1-10% (exception: critical rules requiring 100% coverage)
 - Cost > 100,000: Extreme sampling at 0.1-1% or redesign rule
 
 **Cross-References**:

@@ -5,7 +5,7 @@ status: active
 date_created: 2025-11-06
 date_updated: 2025-11-07
 primary_category: documentation
-hub_document: README.md
+hub_document: doc/_meta/02-templates/README.md
 tags:
   - templates
   - claude-md
@@ -95,6 +95,7 @@ validation:
 
 **REQUIRED**: Clear, specific triggers/thresholds for when to read each file
 **FORBIDDEN**:
+
 - Detailed explanations of concepts
 - How-to instructions or step-by-step procedures
 - Duplicate information from target files
@@ -104,6 +105,7 @@ validation:
 ### Trigger Examples
 
 **Good triggers** (specific, actionable thresholds):
+
 - `README.md` - Read when understanding validation strategy across 4 layers
 - `input-sanitization.md` - Read when implementing OWASP injection prevention
 - `frontmatter-reference.md` - Read when adding frontmatter fields to documents
@@ -111,6 +113,7 @@ validation:
 - `architecture.md` - Read when implementing or debugging validation tooling
 
 **Bad triggers** (vague, explanatory, duplicate content):
+
 - ❌ "Contains information about validation" (vague)
 - ❌ "Describes the 4-layer validation matrix which includes..." (duplicates content)
 - ❌ "Important file for understanding security" (not actionable)
@@ -120,6 +123,7 @@ validation:
 ### Structure Enforcement
 
 CLAUDE.md must contain EXACTLY these sections in order:
+
 1. Title: `# [Directory Name] Guide for LLM Agents`
 2. Purpose: 1-2 sentences
 3. Hub: `README.md` entry (if hub exists in this directory)

@@ -3,7 +3,7 @@ doc_type: spoke
 status: active
 date_created: 2025-11-07
 primary_category: performance
-hub_document: /Users/lmergen/git/trapperkeeper/doc/05-performance/README.md
+hub_document: doc/05-performance/README.md
 tags:
   - sampling
   - optimization
@@ -16,7 +16,7 @@ tags:
 
 TrapperKeeper processes high-volume data streams where customers generate millions to billions of records per day. Probabilistic sampling enables flexible performance control through per-rule configuration, allowing expensive rules to coexist with high-throughput pipelines without creating bottlenecks.
 
-**Hub Document**: This document is part of the Performance Architecture. See Performance Hub for strategic overview and cost model details.
+**Hub Document**: This document is part of the Performance Architecture. See [Performance Hub](README.md) for strategic overview and cost model details.
 
 ## Random Sampling Before Rule Evaluation
 

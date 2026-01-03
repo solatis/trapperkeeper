@@ -23,6 +23,7 @@ Security is addressed through multiple layers including API authentication, data
 Authentication mechanisms protect API access and user management.
 
 **Relevant Documentation:**
+
 - **[Security Hub](../../06-security/README.md)** - Strategic authentication overview and rationale
 - **[Authentication (Web UI)](../../06-security/authentication-web-ui.md)** - Cookie-based session authentication
 - **[Authentication (Sensor API)](../../06-security/authentication-sensor-api.md)** - HMAC-based API key authentication
@@ -32,6 +33,7 @@ Authentication mechanisms protect API access and user management.
 Encryption protects data at rest and in transit.
 
 **Relevant Documentation:**
+
 - **[Encryption Strategy](../../06-security/encryption.md)** - Data encryption approach and key management
 - **[TLS/HTTPS Strategy](../../06-security/tls-https-strategy.md)** - Transport security configuration
 
@@ -40,5 +42,6 @@ Encryption protects data at rest and in transit.
 Threat mitigation handles security vulnerabilities and attack vectors.
 
 **Relevant Documentation:**
+
 - **[Security Hub](../../06-security/README.md)** - Comprehensive threat model and security boundaries
 - **[Validation Hub](../../07-validation/README.md)** - Input sanitization and OWASP compliance

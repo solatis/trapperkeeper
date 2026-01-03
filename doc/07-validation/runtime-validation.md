@@ -3,7 +3,7 @@ doc_type: spoke
 status: active
 date_created: 2025-11-07
 primary_category: validation
-hub_document: /Users/lmergen/git/trapperkeeper/doc/07-validation/README.md
+hub_document: doc/07-validation/README.md
 tags:
   - runtime-validation
   - rule-evaluation
@@ -16,7 +16,7 @@ tags:
 
 Runtime layer enforces validation during rule evaluation in both SDK execution (sdks/go) and server processing (cmd/sensor-api, cmd/web-ui). Different validation types apply to different scopes (SDK-only, server-only, or both). Validation logic centralized in internal/rules package ensures consistency across all execution contexts.
 
-**Hub Document**: This document is part of the Validation Architecture. See Validation Hub for complete validation strategy and layer distribution.
+**Hub Document**: This document is part of the Validation Architecture. See [Validation Hub](README.md) for complete validation strategy and layer distribution.
 
 ## Validation Scope (SDK vs Server)
 
@@ -37,7 +37,7 @@ Runtime validation applies to three scopes based on validation type.
 **Cross-References**:
 
 - Client/Server Separation: Package boundaries and validation ownership
-- Validation Hub: Complete scope matrix in Appendix C
+- Validation Hub: Scope matrix (see table above)
 
 ## Type Coercion Validation
 

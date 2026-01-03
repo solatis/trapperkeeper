@@ -25,6 +25,7 @@ Templates define validation rules that documents must follow.
 ## Example Rules
 
 The validation block above defines:
+
 - Title must end with "Guide"
 - Maximum 50 lines
 - No forbidden patterns (how-to, step-by-step)

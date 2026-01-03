@@ -3,7 +3,7 @@ doc_type: spoke
 status: active
 date_created: 2025-11-10
 primary_category: validation
-hub_document: /Users/lmergen/git/trapperkeeper/doc/07-validation/README.md
+hub_document: doc/07-validation/README.md
 tags:
   - input-sanitization
   - security
@@ -24,7 +24,7 @@ The need for explicit input sanitization arises from two distinct validation dom
 
 This clarification is critical for greenfield projects to be explicit about where OWASP sanitization applies (primarily Domain 2 external data at ingestion boundaries, while Domain 1 applies strict structural validation).
 
-**Hub Document**: This document is part of the Validation Architecture. See Validation Hub for strategic overview and relationships to other validation layers.
+**Hub Document**: This document is part of the Validation Architecture. See [Validation Hub](README.md) for strategic overview and relationships to other validation layers.
 
 ## Five Core Security Controls
 

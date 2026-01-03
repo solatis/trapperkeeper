@@ -32,11 +32,13 @@ This hub consolidates all meta-documentation standards, templates, governance pr
 
 ## Decision
 
-We will apply **hub-and-spoke architecture and frontmatter standards uniformly to all documentation** including meta-documentation in `_meta/`.
+Meta-documentation in `_meta/` is **exempt from strict frontmatter requirements** per the policy in `01-standards/frontmatter-reference.md`. Meta-docs may optionally use frontmatter when beneficial but are not required to. This exemption allows tooling docs, templates, and governance documents to focus on content without metadata overhead.
 
 This document serves as the meta-documentation hub providing navigation to standards (how to write docs), templates (copy-paste starting points), governance (procedures and workflows), and tooling (validation automation). Meta-documentation follows the same structural patterns as product documentation while documenting the rules themselves.
 
 **Exception**: Every subdirectory in `_meta/` (01-standards/, 02-templates/, 03-governance/, 04-tooling/) MUST have a hub document (README.md) regardless of spoke count, because meta-documentation benefits from strategic overview even with few spokes.
+
+**Date Tracking**: Document creation and modification dates are tracked via git history rather than frontmatter fields. Use `git log --follow <file>` to retrieve date information. This avoids redundant metadata that drifts out of sync with actual changes.
 
 ### Standards (How to Write Documentation)
 
@@ -81,7 +83,7 @@ Governance documents define procedures, workflows, and responsibilities for main
 - Hub consolidation governance defines when to create hubs vs spokes
 - Cross-cutting index governance defines ownership and update triggers
 - Lightweight governance suited for 5-person team
-- Every _meta/ subdirectory must have a hub regardless of spoke count
+- Every \_meta/ subdirectory must have a hub regardless of spoke count
 
 **Cross-References:**
 
@@ -107,7 +109,7 @@ Tooling documents define validation automation architecture, algorithms, and CI/
 
 **Benefits:**
 
-- Uniform validation applies to all documentation (no special cases for _meta/)
+- Uniform validation applies to all documentation (no special cases for \_meta/)
 - Meta-documentation is discoverable through same navigation patterns
 - Automated tooling works consistently across all docs
 - CLAUDE.md navigation files provide fast access to meta-docs

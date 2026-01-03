@@ -3,7 +3,7 @@ doc_type: spoke
 status: active
 date_created: 2025-11-07
 primary_category: architecture
-hub_document: /Users/lmergen/git/trapperkeeper/doc/04-rule-engine/README.md
+hub_document: doc/04-rule-engine/README.md
 tags:
   - schema-evolution
   - missing-fields

@@ -3,7 +3,7 @@ doc_type: spoke
 status: active
 date_created: 2025-11-07
 primary_category: validation
-hub_document: /Users/lmergen/git/trapperkeeper/doc/07-validation/README.md
+hub_document: doc/07-validation/README.md
 tags:
   - database-validation
   - constraints
@@ -16,7 +16,7 @@ tags:
 
 Database layer provides final enforcement through schema constraints, ensuring data integrity at storage level. Constraints complement application-layer validation with type safety, referential integrity, and uniqueness guarantees. No CHECK constraints due to backend variations (SQLite vs PostgreSQL).
 
-**Hub Document**: This document is part of the Validation Architecture. See Validation Hub for complete validation strategy and layer distribution.
+**Hub Document**: This document is part of the Validation Architecture. See [Validation Hub](README.md) for complete validation strategy and layer distribution.
 
 ## Type Constraints
 
@@ -28,7 +28,6 @@ Column type constraints ensure data type safety.
 CREATE TABLE rules (
     rule_id TEXT NOT NULL,           -- UUIDv7 as TEXT
     name TEXT NOT NULL,              -- Rule name
-    priority INTEGER NOT NULL,       -- Calculated priority
     sample_rate REAL NOT NULL DEFAULT 1.0,  -- 0.0-1.0 range
     created_at INTEGER NOT NULL,     -- Unix timestamp
     conditions TEXT NOT NULL         -- JSON/JSONB
@@ -55,7 +54,7 @@ Referential integrity between tables.
 ### Foreign Key Examples
 
 ```sql
-CREATE TABLE events (
+CREATE TABLE rule_event_assignments (
     event_id TEXT PRIMARY KEY,
     rule_id TEXT NOT NULL,
     sensor_id TEXT NOT NULL,
@@ -88,7 +87,7 @@ CREATE TABLE users (
     email TEXT UNIQUE                -- Optional email uniqueness
 );
 
-CREATE UNIQUE INDEX idx_api_keys_id ON api_keys(key_id);
+CREATE UNIQUE INDEX idx_api_keys_id ON api_keys(api_key_id);
 ```
 
 **Rationale**: Unique constraints at database level guarantee uniqueness even under concurrent writes. Application layer can pre-check but database provides final enforcement.

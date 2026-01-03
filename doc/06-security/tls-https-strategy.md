@@ -3,7 +3,7 @@ doc_type: spoke
 status: active
 date_created: 2025-11-07
 primary_category: security
-hub_document: /Users/lmergen/git/trapperkeeper/doc/06-security/README.md
+hub_document: doc/06-security/README.md
 tags:
   - tls
   - https

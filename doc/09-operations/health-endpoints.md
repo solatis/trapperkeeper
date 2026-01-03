@@ -3,7 +3,7 @@ doc_type: spoke
 status: active
 date_created: 2025-11-07
 primary_category: deployment
-hub_document: /Users/lmergen/git/trapperkeeper/doc/09-operations/README.md
+hub_document: doc/09-operations/README.md
 tags:
   - health-checks
   - kubernetes
@@ -438,4 +438,4 @@ return true
 
 **Observability References**:
 
-- [Error Handling: Error Handling Strategy](../07-error-handling/README.md): Monitoring strategy and metrics collection (consolidated reference)
+- [Error Handling: Error Handling Strategy](../08-resilience/README.md): Monitoring strategy and metrics collection (consolidated reference)

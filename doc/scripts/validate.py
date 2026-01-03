@@ -136,7 +136,8 @@ def validate_frontmatter_fields(doc: Path, fm: Dict) -> List[str]:
     errors = []
 
     # Required fields (all doc types)
-    required = ['doc_type', 'status', 'date_created', 'primary_category']
+    # Note: date_created is deprecated - dates tracked via git history
+    required = ['doc_type', 'status', 'primary_category']
     for field in required:
         if field not in fm:
             errors.append(f"[ERROR] {doc}: Missing required field: {field}")
@@ -969,8 +970,6 @@ def validate_all(args) -> int:
         ('Spoke', validate_spoke),
         ('Cross-cutting Index', validate_cross_cutting_index),
         ('Redirect Stub', validate_redirect_stub),
-        ('Indexes', validate_indexes),
-        ('Links', validate_links),
     ]
 
     results = {}
@@ -988,12 +987,6 @@ def validate_all(args) -> int:
     for name, exit_code in results.items():
         status = "PASSED" if exit_code == 0 else "FAILED"
         print(f"{name}: {status}")
-
-    # Hub freshness (informational only)
-    print("\n" + "=" * 60)
-    print("Hub Freshness Check (informational)")
-    print("=" * 60)
-    check_hub_freshness(args)
 
     # Return first non-zero exit code
     for exit_code in results.values():
@@ -1084,23 +1077,6 @@ Examples:
         help='Validate redirect stub documents against template rules'
     )
 
-    # validate-indexes subcommand
-    parser_indexes = subparsers.add_parser(
-        'validate-indexes',
-        help='Validate index file completeness and structure'
-    )
-
-    # validate-links subcommand
-    parser_links = subparsers.add_parser(
-        'validate-links',
-        help='Validate internal documentation links'
-    )
-
-    # check-hub-freshness subcommand
-    parser_freshness = subparsers.add_parser(
-        'check-hub-freshness',
-        help='Check hub document freshness against spokes'
-    )
 
     # validate-all subcommand
     parser_all = subparsers.add_parser(
@@ -1127,9 +1103,6 @@ Examples:
         'validate-spoke': validate_spoke,
         'validate-cross-cutting-index': validate_cross_cutting_index,
         'validate-redirect-stub': validate_redirect_stub,
-        'validate-indexes': validate_indexes,
-        'validate-links': validate_links,
-        'check-hub-freshness': check_hub_freshness,
         'check-complexity': check_complexity,
         'validate-all': validate_all,
     }

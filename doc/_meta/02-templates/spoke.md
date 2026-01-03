@@ -16,7 +16,6 @@ validation:
     required_fields:
       - doc_type
       - status
-      - date_created
       - primary_category
       - hub_document
     field_constraints:
@@ -24,8 +23,6 @@ validation:
         enum: ["spoke"]
       status:
         enum: ["draft", "active", "deprecated", "superseded"]
-      date_created:
-        pattern: "^\\d{4}-\\d{2}-\\d{2}$"
       hub_document:
         pattern: ".*\\.md$"
     conditional_constraints:
@@ -53,24 +50,27 @@ SPOKE NAMING: Use descriptive filenames that reflect the focused topic
 -->
 
 ---
+
 doc_type: spoke
 status: draft
 date_created: YYYY-MM-DD
 primary_category: [architecture|api|database|security|performance|validation|configuration|testing|deployment|error-handling]
 hub_document: doc/[domain]/README.md
 tags:
-  - [tag1]
-  - [tag2]
+
+- [tag1]
+- [tag2]
+
 ---
 
 <!--
 FRONTMATTER GUIDANCE:
 - doc_type: Must be "spoke"
 - status: Start with "draft", change to "active" when complete
-- date_created: Today's date in YYYY-MM-DD format
 - primary_category: Choose one that best fits this spoke's domain
 - hub_document: REQUIRED - Path to parent hub (all hubs are README.md)
 - tags: Optional additional classification tags for discovery
+NOTE: Document dates are tracked via git history, not frontmatter.
 
 COMPLEMENTARY PATTERNS:
 The hub_document frontmatter field provides MACHINE-READABLE metadata for

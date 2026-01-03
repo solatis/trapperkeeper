@@ -7,6 +7,7 @@ Test fixtures for validating hub document template compliance.
 ### valid-minimal.md
 
 Minimal valid hub document meeting all requirements:
+
 - ✓ Correct filename pattern (would need to be README.md in practice)
 - ✓ All required frontmatter fields present
 - ✓ Minimum 3 consolidated_spokes
@@ -18,6 +19,7 @@ Minimal valid hub document meeting all requirements:
 ### valid-complete.md
 
 Complete hub document with all optional features:
+
 - ✓ All required frontmatter fields plus optional fields (tags, maintainer, cross_cutting)
 - ✓ Context section with 4 paragraphs
 - ✓ Decision section with 7 concept subsections (maximum allowed)
@@ -32,6 +34,7 @@ Complete hub document with all optional features:
 ### invalid-not-readme.md
 
 Hub document with **wrong filename**.
+
 - ✗ Filename is `invalid-not-readme.md` instead of `README.md`
 - ✓ All other requirements met
 
@@ -42,6 +45,7 @@ Hub document with **wrong filename**.
 ### invalid-frontmatter.md
 
 Hub document with **missing required frontmatter fields**.
+
 - ✗ Missing `primary_category` (required)
 - ✗ Missing `consolidated_spokes` (required)
 - ✓ Correct filename pattern
@@ -54,6 +58,7 @@ Hub document with **missing required frontmatter fields**.
 ### invalid-few-spokes.md
 
 Hub document with **too few consolidated spokes**.
+
 - ✗ Only 2 spokes in `consolidated_spokes` list (minimum is 3)
 - ✓ Correct filename pattern
 - ✓ All required frontmatter fields present
@@ -67,9 +72,11 @@ Hub document with **too few consolidated spokes**.
 Hub documents must satisfy (from `hub.md` template validation block):
 
 **Filename**:
+
 - Pattern: `^README\.md$`
 
 **Frontmatter Required Fields**:
+
 - `doc_type` (must equal "hub")
 - `status` (enum: draft, active, deprecated, superseded)
 - `date_created` (pattern: YYYY-MM-DD)
@@ -77,9 +84,11 @@ Hub documents must satisfy (from `hub.md` template validation block):
 - `consolidated_spokes` (array, min 3 items)
 
 **Conditional Constraints**:
+
 - If `status` = "superseded", then `superseded_by` field required
 
 **Required Sections**:
+
 - "Context" (2-4 paragraphs)
 - "Decision" (3-7 subsections starting with `### `)
 - "Consequences"

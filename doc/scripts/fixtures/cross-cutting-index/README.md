@@ -5,7 +5,9 @@ Test cases for validating cross-cutting index documents against template require
 ## Valid Test Cases
 
 ### valid-security.md
+
 Complete security index meeting all requirements:
+
 - All required frontmatter fields present
 - cross_cutting_concern is "security" (valid enum value)
 - Has Overview section with 2 paragraphs (within 1-3 range)
@@ -13,7 +15,9 @@ Complete security index meeting all requirements:
 - Proper date format (YYYY-MM-DD)
 
 ### valid-performance.md
+
 Complete performance index meeting all requirements:
+
 - All required frontmatter fields present
 - cross_cutting_concern is "performance" (valid enum value)
 - Has Overview section with 1 paragraph (within 1-3 range)
@@ -22,13 +26,17 @@ Complete performance index meeting all requirements:
 ## Invalid Test Cases
 
 ### invalid-frontmatter.md
+
 Missing required frontmatter fields:
+
 - MISSING: date_created
 - MISSING: cross_cutting_concern
 - Should fail frontmatter validation
 
 ### invalid-concern.md
+
 Invalid cross_cutting_concern value:
+
 - cross_cutting_concern: "testing-quality" (not in allowed enum)
 - Should fail field constraint validation
 - Valid values: security, performance, validation, observability, error-handling

@@ -3,7 +3,7 @@ doc_type: spoke
 status: active
 date_created: 2025-11-07
 primary_category: database
-hub_document: /Users/lmergen/git/trapperkeeper/doc/03-data/README.md
+hub_document: doc/03-data/README.md
 tags:
   - jsonl
   - audit-trail
@@ -18,7 +18,7 @@ TrapperKeeper events must store arbitrary JSON payloads from sensors without req
 
 The event storage architecture uses JSONL (JSON Lines) files for append-only writes with database indexes for fast queries. Each event preserves the full context: original payload, matched rules with snapshots, and execution metadata.
 
-**Hub Document**: This document is part of the Data Hub. See Data Architecture for strategic overview of event storage, identifiers, timestamps, and metadata within TrapperKeeper's data model.
+**Hub Document**: This document is part of the Data Hub. See [Data Architecture](README.md) for strategic overview of event storage, identifiers, timestamps, and metadata within TrapperKeeper's data model.
 
 ## JSONL File Format
 
@@ -62,11 +62,23 @@ Each line is complete, independent JSON object:
   "matched_rules": [
     {
       "rule_id": "018c9f8e-aaaa-7abc-9def-0123456789ab",
-      "action": "observe",
-      "severity": "critical"
+      "action": "observe"
     }
   ],
-  "rule_snapshot": { "expression": "$.temperature > 80", "state": "active" },
+  "rule_snapshot": {
+    "rule_id": "018c9f8e-aaaa-7abc-9def-0123456789ab",
+    "name": "High Temperature",
+    "action": "observe",
+    "conditions": [
+      {
+        "or_group": 0,
+        "field_path": "$.temperature",
+        "operator": "gt",
+        "value": 80
+      }
+    ],
+    "created_at": "2025-10-01T00:00:00Z"
+  },
   "record_snapshot": { "temperature": 95.5 }
 }
 ```
@@ -133,15 +145,23 @@ Complete event schema with required and optional fields.
   "matched_rules": [
     {
       "rule_id": "018c9f8e-aaaa-7abc-9def-0123456789ab",
-      "action": "observe",
-      "severity": "critical"
+      "action": "observe"
     }
   ],
   "rule_snapshot": {
     "rule_id": "018c9f8e-aaaa-7abc-9def-0123456789ab",
     "name": "High Temperature",
-    "expression": "$.temperature > 80",
-    "state": "active",
+    "action": "observe",
+    "conditions": [
+      {
+        "or_group": 0,
+        "field_path": "$.temperature",
+        "operator": "gt",
+        "value": 80
+      }
+    ],
+    "on_missing_field": "skip",
+    "sample_rate": 1.0,
     "created_at": "2025-10-01T00:00:00Z"
   },
   "record_snapshot": {
@@ -152,8 +172,8 @@ Complete event schema with required and optional fields.
 ```
 
 - `metadata`: User and system metadata (see Client Metadata Namespace)
-- `matched_rules`: Array of rules that matched this event
-- `rule_snapshot`: Full rule definition at evaluation time
+- `matched_rules`: Array of rules that matched this event (summary for quick filtering)
+- `rule_snapshot`: **Required** - Complete rule definition at evaluation time (see Audit Trail Preservation)
 - `record_snapshot`: Subset of payload that caused match
 
 **Cross-References**:
@@ -200,33 +220,73 @@ Schema-agnostic JSON accepting arbitrary structure:
 
 Events preserve complete context for compliance and debugging.
 
-### Rule Snapshot
+### Rule Snapshot Requirement
 
-Full rule definition at time of evaluation:
+**Critical design requirement**: Events MUST embed complete rule snapshots at evaluation time.
+
+This is not optional. Event storage MUST be self-contained and independent of database rule data. The rule_snapshot field contains the full rule definition exactly as it existed when the sensor evaluated the event.
 
 ```json
 {
   "rule_snapshot": {
     "rule_id": "018c9f8e-aaaa-7abc-9def-0123456789ab",
     "name": "High Temperature",
-    "expression": "$.temperature > 80",
     "action": "observe",
-    "state": "active",
+    "conditions": [
+      {
+        "or_group": 0,
+        "field_path": "$.temperature",
+        "operator": "gt",
+        "value": 80
+      }
+    ],
     "on_missing_field": "skip",
     "sample_rate": 1.0,
-    "created_at": "2025-10-01T00:00:00Z",
-    "modified_at": "2025-10-15T12:00:00Z"
+    "created_at": "2025-10-01T00:00:00Z"
   }
 }
 ```
 
-**Rationale**: Rules may be modified or deleted after event creation. Snapshot preserves original rule definition for audit trail.
+### Independence Principle
+
+**Why complete snapshots?**
+
+- **Separation of concerns**: Event storage is independent of database -- events can be queried, archived, or analyzed without database access
+- **Independent retention**: Events may be retained longer than rule versions in database (different compliance requirements)
+- **Self-contained audit**: Each event is a complete audit record -- no joins, no foreign key lookups
+- **No cross-version correlation needed**: Events are self-contained, query by rule name if correlation needed (see Rule Lifecycle: Explicit Non-Goals)
+
+**What must be captured**:
+
+- `rule_id`: Exact version identifier (immutable, never reused)
+- `name`: Human-readable rule name
+- `action`: Action that was (or would be) taken
+- `conditions`: Complete DNF condition structure
+- `on_missing_field`: Missing field handling policy
+- `sample_rate`: Sampling rate at evaluation time
+- `created_at`: Rule version creation timestamp
+
+**What is NOT captured**:
+
+- No `modified_at` (rules are immutable, never modified)
+- No `dry_run` flag (eliminated -- action=observe serves this purpose)
+- No `lineage_id` (no version grouping, see Rule Lifecycle: Explicit Non-Goals)
+
+### Rationale
+
+Rules are immutable (see Rule Lifecycle), but even with immutable rule_ids, events must embed snapshots because:
+
+1. Database retention may be shorter than event retention
+2. Event queries should not require database joins
+3. Audit trail must be self-contained for compliance
+4. Event storage can be backed up independently
 
 **Use Cases**:
 
-- Compliance audits: Prove which rule triggered action
-- Debugging: Understand why event was flagged
-- Historical analysis: Compare rule evolution over time
+- Compliance audits: Prove which exact rule version triggered action
+- Debugging: Understand why event was flagged without database access
+- Historical analysis: Compare rule evolution across events
+- Disaster recovery: Reconstruct rule history from events
 
 ### Record Snapshot
 

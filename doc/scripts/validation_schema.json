@@ -241,9 +241,9 @@
               },
               "equals": {
                 "oneOf": [
-                  {"type": "string"},
-                  {"type": "integer"},
-                  {"type": "boolean"}
+                  { "type": "string" },
+                  { "type": "integer" },
+                  { "type": "boolean" }
                 ],
                 "description": "Value that if_field must equal for constraint to apply."
               },
@@ -268,8 +268,8 @@
             },
             "required": ["if_field", "equals"],
             "oneOf": [
-              {"required": ["then_required"]},
-              {"required": ["then_forbidden"]}
+              { "required": ["then_required"] },
+              { "required": ["then_forbidden"] }
             ],
             "additionalProperties": false
           },

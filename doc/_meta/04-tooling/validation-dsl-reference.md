@@ -3,7 +3,7 @@ doc_type: reference
 status: active
 date_created: 2025-11-08
 primary_category: tooling
-hub_document: README.md
+hub_document: doc/_meta/04-tooling/README.md
 tags:
   - validation
   - dsl
@@ -24,6 +24,7 @@ The validation DSL enables template authors to define validation rules directly 
 **Execution**: `validate.py` reads validation rules from templates, matches documents to templates, and executes all applicable rules.
 
 **Benefits**:
+
 - Template-driven validation keeps rules adjacent to structure
 - No code changes needed to add new validation constraints
 - Declarative syntax easier to maintain than imperative validation code
@@ -38,6 +39,7 @@ All validation blocks must declare `schema_version: 1` as the first field.
 **Version evolution**: Breaking changes increment version number. Non-breaking additions maintain compatibility with version 1.
 
 **Example**:
+
 ```yaml
 validation:
   schema_version: 1
@@ -57,6 +59,7 @@ Validates document title (first H1 heading) matches required pattern.
 **Type**: String (regular expression)
 
 **Example**:
+
 ```yaml
 validation:
   schema_version: 1
@@ -66,6 +69,7 @@ validation:
 **Error behavior**: Reports mismatch with expected pattern and actual title found.
 
 **Use cases**:
+
 - CLAUDE.md must end with "Guide for LLM Agents"
 - Hub documents must end with "Architecture"
 - Reference documents must end with "Reference"
@@ -79,6 +83,7 @@ Enforces maximum document length in lines.
 **Type**: Integer (minimum 1)
 
 **Example**:
+
 ```yaml
 validation:
   schema_version: 1
@@ -88,6 +93,7 @@ validation:
 **Error behavior**: Reports actual line count and maximum allowed.
 
 **Use cases**:
+
 - CLAUDE.md limited to 50 lines for fast navigation
 - Hub documents capped at 500 lines to prevent monolithic files
 - Template files bounded to maintain usability
@@ -101,6 +107,7 @@ Validates filename matches required pattern.
 **Type**: String (regular expression)
 
 **Example**:
+
 ```yaml
 validation:
   schema_version: 1
@@ -110,6 +117,7 @@ validation:
 **Error behavior**: Reports incorrect filename and required pattern.
 
 **Use cases**:
+
 - Hub documents must be named `README.md`
 - Index documents must match `*-index.md` pattern
 - Templates must end with `.md` extension
@@ -123,18 +131,21 @@ Prohibits specified content patterns with severity levels.
 **Type**: Array of objects with `pattern`, `reason`, and optional `severity` fields.
 
 **Structure**:
+
 ```yaml
 forbidden:
   - pattern: "regex_pattern"
     reason: "explanation of why forbidden"
-    severity: error  # or "warn"
+    severity: error # or "warn"
 ```
 
 **Severity levels**:
+
 - `error`: Validation fails, blocks commit
 - `warn`: Informational, doesn't block commit
 
 **Example**:
+
 ```yaml
 validation:
   schema_version: 1
@@ -153,6 +164,7 @@ validation:
 **Error behavior**: Reports line number, matched pattern, and reason for prohibition.
 
 **Best practices**:
+
 - Use `(?i)` flag for case-insensitive matching
 - Keep patterns specific to avoid false positives
 - Write clear reasons explaining why pattern violates standards
@@ -167,6 +179,7 @@ Validates document structure including section presence, content, and subsection
 **Type**: Array of section requirement objects.
 
 **Section requirement fields**:
+
 - `name`: Section heading text (H2 level)
 - `must_exist`: Boolean, section absolutely required
 - `require_if`: Condition name, section required if condition true
@@ -179,6 +192,7 @@ Validates document structure including section presence, content, and subsection
 - `files_rules`: File listing validation
 
 **Basic example**:
+
 ```yaml
 validation:
   schema_version: 1
@@ -189,6 +203,7 @@ validation:
 ```
 
 **Conditional example**:
+
 ```yaml
 validation:
   schema_version: 1
@@ -201,6 +216,7 @@ validation:
 ```
 
 **Subsections example**:
+
 ```yaml
 validation:
   schema_version: 1
@@ -224,12 +240,14 @@ Validates file and directory listings within sections.
 **Type**: Object with validation flags and patterns.
 
 **Fields**:
+
 - `must_list_all_md`: Boolean, require all .md files listed
 - `must_list_all_subdirs`: Boolean, require all subdirectories listed
 - `exclude_globs`: Array of glob patterns to exclude
 - `entry_pattern`: Regex for entry format validation
 
 **Example**:
+
 ```yaml
 validation:
   schema_version: 1
@@ -245,6 +263,7 @@ validation:
 **Error behavior**: Reports unlisted files, unlisted directories, or format violations.
 
 **Use cases**:
+
 - CLAUDE.md must list all documentation files
 - Hub documents must reference all consolidated spokes
 - Index documents must link all relevant sections
@@ -264,6 +283,7 @@ Validates frontmatter fields including required fields, constraints, and conditi
 Array of field names that must be present.
 
 **Example**:
+
 ```yaml
 validation:
   schema_version: 1
@@ -280,6 +300,7 @@ validation:
 Per-field validation rules including enums, patterns, types, and array sizes.
 
 **Constraint types**:
+
 - `enum`: Allowed values (array of strings)
 - `pattern`: Regex pattern for field value
 - `type`: Expected type (string, integer, boolean, array, object)
@@ -287,6 +308,7 @@ Per-field validation rules including enums, patterns, types, and array sizes.
 - `max_items`: Maximum array length
 
 **Example**:
+
 ```yaml
 validation:
   schema_version: 1
@@ -308,12 +330,14 @@ validation:
 If-then field requirements based on other field values.
 
 **Fields**:
+
 - `if_field`: Field name to check
 - `equals`: Value that triggers constraint
 - `then_required`: Fields required when condition true
 - `then_forbidden`: Fields forbidden when condition true
 
 **Example**:
+
 ```yaml
 validation:
   schema_version: 1
@@ -342,6 +366,7 @@ Checks if file exists relative to document directory.
 **Returns**: Boolean (true if file exists)
 
 **Example**:
+
 ```yaml
 validation:
   schema_version: 1
@@ -353,6 +378,7 @@ validation:
 ```
 
 **Use cases**:
+
 - Require "Hub" section only if README.md exists
 - Conditional validation based on configuration files
 - Different rules for directories with/without hub documents
@@ -366,6 +392,7 @@ Checks if markdown files exist in document directory after exclusions.
 **Returns**: Boolean (true if any non-excluded .md files found)
 
 **Example**:
+
 ```yaml
 validation:
   schema_version: 1
@@ -377,6 +404,7 @@ validation:
 ```
 
 **Use cases**:
+
 - Require "Files" section only if spoke documents exist
 - Different validation for empty directories
 - Conditional listing requirements
@@ -390,6 +418,7 @@ Checks if subdirectories exist in document directory.
 **Returns**: Boolean (true if any subdirectories found)
 
 **Example**:
+
 ```yaml
 validation:
   schema_version: 1
@@ -401,6 +430,7 @@ validation:
 ```
 
 **Use cases**:
+
 - Require "Subdirectories" section only if navigation needed
 - Different structure for leaf vs branch directories
 - Conditional documentation inventory
@@ -416,6 +446,7 @@ Checks if section exists in target document.
 **Requirements**: Requires document AST context from markdown parser.
 
 **Example**:
+
 ```yaml
 validation:
   schema_version: 1
@@ -429,6 +460,7 @@ validation:
 **Note**: This predicate requires parsed AST, available only during full document validation (not during template validation).
 
 **Use cases**:
+
 - Cross-reference validation between sections
 - Conditional requirements based on content structure
 - Ensuring section dependencies
@@ -442,6 +474,7 @@ Defines named predicate expressions for reuse in validation rules.
 **Purpose**: Create reusable boolean expressions for `require_if` and `forbid_if` constraints.
 
 **Structure**:
+
 ```yaml
 conditions:
   condition_name: predicate_function(args)
@@ -452,6 +485,7 @@ conditions:
 **Predicate values**: Must be function calls matching predicate signatures.
 
 **Example**:
+
 ```yaml
 validation:
   schema_version: 1
@@ -471,6 +505,7 @@ Conditional section requirement - section required only when condition true.
 **Purpose**: Make sections optional based on directory state.
 
 **Example**:
+
 ```yaml
 validation:
   schema_version: 1
@@ -483,6 +518,7 @@ validation:
 ```
 
 **Behavior**:
+
 - Condition evaluates to `true`: section becomes required
 - Condition evaluates to `false`: section optional (no validation)
 - Condition evaluation error: validation fails
@@ -494,6 +530,7 @@ Conditional section prohibition - section forbidden when condition true.
 **Purpose**: Prevent sections that don't apply in certain contexts.
 
 **Example**:
+
 ```yaml
 validation:
   schema_version: 1
@@ -505,6 +542,7 @@ validation:
 ```
 
 **Behavior**:
+
 - Condition evaluates to `true`: section must not exist
 - Condition evaluates to `false`: section allowed (no restriction)
 - Section present when forbidden: validation error
@@ -518,9 +556,10 @@ validation:
 **Future enhancement**: Compound conditions with AND/OR logic (e.g., `require_if: "readme_exists AND has_md_files"`).
 
 **Workaround**: Define compound conditions in `conditions` block:
+
 ```yaml
 conditions:
-  readme_and_files: file_exists("README.md") AND md_files_exist()  # Not yet supported
+  readme_and_files: file_exists("README.md") AND md_files_exist() # Not yet supported
 ```
 
 Current workaround uses predicate chaining through multiple condition definitions.
@@ -544,7 +583,6 @@ validation:
   title_pattern: "^# .+ Guide$"
   max_lines: 100
 ---
-
 # Example Guide
 
 Content goes here...
@@ -600,7 +638,6 @@ validation:
         must_list_all_subdirs: true
         entry_pattern: '^\*\*`.+/`\*\* - Read when'
 ---
-
 # Example Directory Guide for LLM Agents
 
 ## Purpose
@@ -662,7 +699,6 @@ validation:
         max: 7
         pattern: "^### "
 ---
-
 # Example Architecture
 
 ## Context
@@ -784,7 +820,6 @@ validation:
         exclude_globs: ["README.md"]
         entry_pattern: '^\*\*\[.+\]\(.+\.md\)\*\*'
 ---
-
 # Security Architecture
 
 ## Context
@@ -799,6 +834,7 @@ Fragmentation explanation...
 Target 20-40 lines for validation blocks. Longer blocks indicate over-specification.
 
 **Good**:
+
 ```yaml
 validation:
   schema_version: 1
@@ -807,6 +843,7 @@ validation:
 ```
 
 **Avoid**:
+
 ```yaml
 validation:
   schema_version: 1
@@ -818,6 +855,7 @@ validation:
 Prefer conditional requirements over complex forbidden patterns.
 
 **Good**:
+
 ```yaml
 conditions:
   has_md_files: md_files_exist(exclude=["README.md"])
@@ -827,10 +865,11 @@ required_sections:
 ```
 
 **Avoid**:
+
 ```yaml
 required_sections:
   - name: "Files"
-    must_exist: true  # Fails for empty directories
+    must_exist: true # Fails for empty directories
 ```
 
 ### Prefer Structural Checks Over Regex
@@ -838,6 +877,7 @@ required_sections:
 Use section requirements instead of content pattern matching when possible.
 
 **Good**:
+
 ```yaml
 required_sections:
   - name: "Purpose"
@@ -846,6 +886,7 @@ required_sections:
 ```
 
 **Avoid**:
+
 ```yaml
 forbidden:
   - pattern: "^## Purpose\\n(.*\\n){10,}"
@@ -857,6 +898,7 @@ forbidden:
 Explain why pattern is forbidden, not just that it is.
 
 **Good**:
+
 ```yaml
 forbidden:
   - pattern: "(?i)how to"
@@ -864,6 +906,7 @@ forbidden:
 ```
 
 **Avoid**:
+
 ```yaml
 forbidden:
   - pattern: "(?i)how to"
@@ -875,11 +918,13 @@ forbidden:
 Reserve `error` for standards violations, use `warn` for guidelines.
 
 **Error** (blocks commit):
+
 - Document structure violations
 - Missing required sections
 - Incorrect frontmatter
 
 **Warn** (informational):
+
 - Style preferences
 - Recommended but not required patterns
 - Soft guidelines
@@ -901,24 +946,28 @@ forbidden:
 ### Common Validation Errors
 
 **Schema version missing**:
+
 ```
 Error: validation block missing schema_version field
 Fix: Add schema_version: 1 as first field in validation block
 ```
 
 **Invalid regex pattern**:
+
 ```
 Error: Invalid regex pattern: unbalanced parenthesis
 Fix: Escape special characters: \\( \\) \\. \\[ \\]
 ```
 
 **Condition name mismatch**:
+
 ```
 Error: require_if references undefined condition 'readme_exists'
 Fix: Add condition to conditions block with matching name
 ```
 
 **Section name doesn't match**:
+
 ```
 Error: Required section "Files" not found
 Fix: Ensure section heading exactly matches name field (case-sensitive)
@@ -927,6 +976,7 @@ Fix: Ensure section heading exactly matches name field (case-sensitive)
 ### Debugging Validation Rules
 
 **Use --show-effective-rules flag**:
+
 ```bash
 ./validate.py template --show-effective-rules doc/_meta/02-templates/hub.md
 ```
@@ -936,6 +986,7 @@ Displays resolved validation rules after template inheritance.
 **Check validation_schema.json**:
 
 Validate template frontmatter against JSON schema:
+
 ```bash
 # Extract validation block and validate
 python3 -c "import json, yaml; print(json.dumps(yaml.safe_load(open('template.md').read().split('---')[1])['validation']))" | jsonschema -i /dev/stdin validation_schema.json
@@ -944,6 +995,7 @@ python3 -c "import json, yaml; print(json.dumps(yaml.safe_load(open('template.md
 **Test with minimal fixtures**:
 
 Create minimal test documents to isolate failures:
+
 ```yaml
 ---
 doc_type: test
@@ -951,7 +1003,6 @@ status: active
 date_created: 2025-11-08
 primary_category: testing
 ---
-
 # Test Guide
 
 ## Purpose
@@ -962,6 +1013,7 @@ Minimal test document.
 **Validate template frontmatter independently**:
 
 Extract and validate just the validation block:
+
 ```python
 import yaml
 with open('template.md') as f:
@@ -988,6 +1040,7 @@ print(json.dumps(fm['validation'], indent=2))
 **Check for typos in field names**:
 
 Common typos:
+
 - `required_section` → `required_sections`
 - `condition` → `conditions`
 - `frontmater` → `frontmatter`
@@ -1010,9 +1063,10 @@ field_constraints:
 **Ensure required fields present**:
 
 All validation blocks require `schema_version`:
+
 ```yaml
 validation:
-  schema_version: 1  # Required
+  schema_version: 1 # Required
   title_pattern: "^# .+ Guide$"
 ```
 
@@ -1021,12 +1075,14 @@ validation:
 **Hub Document**: This document is part of the Tooling architecture. See [README.md](README.md) for validation system overview and relationships to linters and architecture documentation.
 
 **Dependencies**:
+
 - **validation_schema.json**: JSON Schema defining validation block structure
 - **rule_evaluator.py**: Python module executing validation rules
 - **predicates.py**: Predicate evaluation engine for conditional logic
 - **markdown_parser.py**: AST parsing for section validation
 
 **References**:
-- **doc/_meta/02-templates/README.md**: How templates use validation blocks
-- **doc/_meta/01-standards/frontmatter-reference.md**: Frontmatter field definitions
-- **doc/_meta/04-tooling/architecture.md**: Validation system architecture
+
+- **doc/\_meta/02-templates/README.md**: How templates use validation blocks
+- **doc/\_meta/01-standards/frontmatter-reference.md**: Frontmatter field definitions
+- **doc/\_meta/04-tooling/architecture.md**: Validation system architecture

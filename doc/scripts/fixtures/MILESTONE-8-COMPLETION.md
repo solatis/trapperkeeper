@@ -12,6 +12,7 @@
 **File**: `/Users/lmergen/git/trapperkeeper/doc/_meta/02-templates/cross-cutting-index.md`
 
 **Validation Added**:
+
 ```yaml
 validation:
   schema_version: 1
@@ -32,6 +33,7 @@ validation:
 ```
 
 **Test Fixtures Created** (4 files):
+
 - `valid-security.md` - Complete security index with all required fields
 - `valid-performance.md` - Complete performance index
 - `invalid-frontmatter.md` - Missing required fields (date_created, cross_cutting_concern)
@@ -43,6 +45,7 @@ validation:
 **File**: `/Users/lmergen/git/trapperkeeper/doc/_meta/02-templates/redirect-stub.md`
 
 **Validation Added**:
+
 ```yaml
 validation:
   schema_version: 1
@@ -61,6 +64,7 @@ validation:
 ```
 
 **Test Fixtures Created** (3 files):
+
 - `valid-stub.md` - Complete redirect stub (13 lines, all requirements met)
 - `invalid-too-long.md` - Exceeds 15-line limit (26 lines)
 - `invalid-missing-notice.md` - Missing "Redirect Notice" section
@@ -70,28 +74,29 @@ validation:
 
 All 5 templates now have validation frontmatter:
 
-| Template | Required Fields | Required Sections | Special Constraints |
-|----------|----------------|-------------------|---------------------|
-| claude-md | 0 | 4 | max_lines: 50 |
-| hub | 5 | 4 | conditional (filename, status) |
-| spoke | 5 | 0 | conditional (status) |
-| cross-cutting-index | 5 | 2 | conditional (status), enum constraints |
-| redirect-stub | 3 | 1 | max_lines: 15, content_pattern |
+| Template            | Required Fields | Required Sections | Special Constraints                    |
+| ------------------- | --------------- | ----------------- | -------------------------------------- |
+| claude-md           | 0               | 4                 | max_lines: 50                          |
+| hub                 | 5               | 4                 | conditional (filename, status)         |
+| spoke               | 5               | 0                 | conditional (status)                   |
+| cross-cutting-index | 5               | 2                 | conditional (status), enum constraints |
+| redirect-stub       | 3               | 1                 | max_lines: 15, content_pattern         |
 
 ## Test Fixture Coverage
 
-| Template Type | Valid Cases | Invalid Cases | Total | README |
-|---------------|-------------|---------------|-------|--------|
-| claude-md | 8 | 4 | 12 | ✓ |
-| hub | 2 | 3 | 5 | ✓ |
-| spoke | 2 | 1 | 3 | ✓ |
-| cross-cutting-index | 2 | 2 | 4 | ✓ |
-| redirect-stub | 1 | 2 | 3 | ✓ |
-| **TOTAL** | **15** | **12** | **27** | **5/5** |
+| Template Type       | Valid Cases | Invalid Cases | Total  | README  |
+| ------------------- | ----------- | ------------- | ------ | ------- |
+| claude-md           | 8           | 4             | 12     | ✓       |
+| hub                 | 2           | 3             | 5      | ✓       |
+| spoke               | 2           | 1             | 3      | ✓       |
+| cross-cutting-index | 2           | 2             | 4      | ✓       |
+| redirect-stub       | 1           | 2             | 3      | ✓       |
+| **TOTAL**           | **15**      | **12**        | **27** | **5/5** |
 
 ## Validation Capabilities
 
 ### Cross-Cutting Index
+
 - Validates 5 required frontmatter fields
 - Enforces cross_cutting_concern enum (security, performance, validation, observability, error-handling)
 - Validates date format (YYYY-MM-DD)
@@ -100,6 +105,7 @@ All 5 templates now have validation frontmatter:
 - Conditional validation: superseded status requires superseded_by field
 
 ### Redirect Stub
+
 - Validates 3 required frontmatter fields
 - Enforces status must be "superseded"
 - Validates superseded_by must end with .md
@@ -112,6 +118,7 @@ All 5 templates now have validation frontmatter:
 With all templates migrated, the next phase is:
 
 **Milestone 9**: Remove hardcoded validation rules from validate.py
+
 - All template-specific rules now live in template frontmatter
 - validate.py should have zero hardcoded doc_type rules
 - All validation driven by template metadata
@@ -124,6 +131,7 @@ With all templates migrated, the next phase is:
 ## Files Created
 
 ### Cross-Cutting Index Fixtures
+
 3. `/Users/lmergen/git/trapperkeeper/doc/scripts/fixtures/cross-cutting-index/valid-security.md`
 4. `/Users/lmergen/git/trapperkeeper/doc/scripts/fixtures/cross-cutting-index/valid-performance.md`
 5. `/Users/lmergen/git/trapperkeeper/doc/scripts/fixtures/cross-cutting-index/invalid-frontmatter.md`
@@ -131,6 +139,7 @@ With all templates migrated, the next phase is:
 7. `/Users/lmergen/git/trapperkeeper/doc/scripts/fixtures/cross-cutting-index/README.md`
 
 ### Redirect Stub Fixtures
+
 8. `/Users/lmergen/git/trapperkeeper/doc/scripts/fixtures/redirect-stub/valid-stub.md`
 9. `/Users/lmergen/git/trapperkeeper/doc/scripts/fixtures/redirect-stub/invalid-too-long.md`
 10. `/Users/lmergen/git/trapperkeeper/doc/scripts/fixtures/redirect-stub/invalid-missing-notice.md`
@@ -151,11 +160,13 @@ With all templates migrated, the next phase is:
 **After Milestone 8**: 5/5 templates validated (100%)
 
 **Test Coverage**:
+
 - 27 test fixtures across all templates
 - 15 valid cases, 12 invalid cases
 - 100% README documentation coverage
 
 **Validation Quality**:
+
 - All templates have schema_version: 1
 - All templates enforce required fields
 - Special constraints properly implemented (max_lines, content_pattern, conditionals)
@@ -165,6 +176,7 @@ With all templates migrated, the next phase is:
 ## Template Migration Complete
 
 All template migrations are now complete. The validation framework is ready for:
+
 1. Removing hardcoded rules from validate.py
 2. Testing against real documentation corpus
 3. Integration into CI/CD pipeline

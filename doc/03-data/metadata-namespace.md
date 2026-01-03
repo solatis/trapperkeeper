@@ -3,7 +3,7 @@ doc_type: spoke
 status: active
 date_created: 2025-11-07
 primary_category: validation
-hub_document: /Users/lmergen/git/trapperkeeper/doc/03-data/README.md
+hub_document: doc/03-data/README.md
 tags:
   - metadata
   - namespace
@@ -18,7 +18,7 @@ TrapperKeeper events include metadata from client sensors for correlation with e
 
 The reserved `$tk.*` prefix for system metadata prevents collision with user keys and prevents spoofing of system-generated fields. Strict limits on user metadata prevent resource exhaustion from malicious or buggy clients.
 
-**Hub Document**: This document is part of the Data Hub. See Data Architecture for strategic overview of metadata namespace within TrapperKeeper's data model.
+**Hub Document**: This document is part of the Data Hub. See [Data Architecture](README.md) for strategic overview of metadata namespace within TrapperKeeper's data model.
 
 ## Reserved Prefix ($tk.\*)
 

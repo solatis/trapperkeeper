@@ -4,7 +4,7 @@ status: active
 date_created: 2025-11-06
 date_updated: 2025-11-07
 primary_category: documentation
-hub_document: README.md
+hub_document: doc/_meta/01-standards/README.md
 tags:
   - standards
   - claude-md
@@ -27,6 +27,7 @@ CRITICAL: CLAUDE.md files are navigation aids ONLY. NEVER duplicate content from
 They provide clear triggers for when to read specific files, then rely on those files to contain the actual information. This minimizes indirection and keeps agents focused on finding the right document quickly.
 
 **FORBIDDEN in CLAUDE.md files:**
+
 - Content summaries or abstracts
 - Implementation details from target files
 - Step-by-step procedures (point to files instead)
@@ -35,11 +36,13 @@ They provide clear triggers for when to read specific files, then rely on those 
 ## When to Create CLAUDE.md
 
 **ALWAYS create for:**
+
 - Directories with 3+ documentation files
 - Documentation hubs requiring navigation
 - Directories with specialized file types (standards, templates, tools)
 
 **NEVER create for:**
+
 - Directories with only README.md
 - Code directories (create README.md instead)
 - Directories with single file
@@ -67,14 +70,17 @@ All subdirectory CLAUDE.md files MUST use EXACTLY this structure. Any deviation 
 ```
 
 **Structure Requirements:**
+
 - **Purpose section**: Exactly one sentence
 - **Files section**: Every file with "Read when:" or "Use when:" triggers
 
 **Content Requirements:**
+
 - **Minimal**: NEVER duplicate content from target files
 - **Trigger clarity**: Every trigger is actionable and situation-based
 
 **Scope Requirements:**
+
 - **No formatting commands**: Only in `tooling/linters.md`
 - **No philosophy**: Only in `doc/_meta/CLAUDE.md`
 
@@ -109,16 +115,19 @@ All subdirectory CLAUDE.md files MUST use EXACTLY this structure. Any deviation 
 ## Verification Checklist
 
 **CRITICAL (Must Fix):**
+
 - [ ] **Purpose**: Single sentence only
 - [ ] **Files**: All files listed with triggers
 - [ ] **No duplication**: Zero content from target files
 
 **IMPORTANT (Should Fix):**
+
 - [ ] **Trigger quality**: Specific and situation-based
 - [ ] **No formatting**: Commands removed (only in linters.md)
-- [ ] **No philosophy**: Philosophy removed (only in doc/_meta/CLAUDE.md)
+- [ ] **No philosophy**: Philosophy removed (only in doc/\_meta/CLAUDE.md)
 
 **NICE TO HAVE:**
+
 - [ ] **Up to date**: File list matches directory contents
 - [ ] Consistent terminology throughout
 - [ ] Alphabetical file ordering
@@ -170,6 +179,7 @@ Convert content-based descriptions to situation-based triggers:
 ### Trigger Quality Requirements
 
 Each trigger MUST be:
+
 - **Actionable**: Agent knows exactly when to use it
 - **Situation-based**: Describes WHEN not WHAT
 - **Specific**: No ambiguous words (details, information, overview)
@@ -214,18 +224,22 @@ Each level provides navigation to the next, with clear triggers for when to desc
 ## Maintenance Decision Tree
 
 **Question 1**: Did file list in directory change?
+
 - File added/removed/renamed → UPDATE: Files section
 - Otherwise → Continue to Question 2
 
 **Question 2**: Did file PURPOSE change?
+
 - Triggers no longer match file use → UPDATE: Triggers
 - Otherwise → Continue to Question 3
 
 **Question 3**: Did directory PURPOSE change?
+
 - Directory role changed → UPDATE: Purpose section
 - Otherwise → NO UPDATE NEEDED
 
 **NEVER update for:**
+
 - File content changes (CLAUDE.md describes WHEN, not WHAT)
 - File length changes
 - Implementation detail changes
@@ -242,6 +256,7 @@ Documentation maintains both navigation systems:
 Both serve different audiences and purposes. CLAUDE.md is NOT a replacement for README.md.
 
 **FORBIDDEN:**
+
 - Converting README.md to CLAUDE.md (audiences differ)
 - Duplicating README content in CLAUDE.md
 - Writing CLAUDE.md content for humans
@@ -348,6 +363,7 @@ Read this when you need any information about hubs.
 **Step 3: Verify no duplication remains**
 
 Run content duplication check:
+
 1. Open CLAUDE.md and hub-and-spoke-architecture.md
 2. Verify no sentences from target appear in CLAUDE.md
 3. Verify triggers describe situations, not contents

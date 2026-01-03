@@ -3,7 +3,7 @@ doc_type: spoke
 status: active
 date_created: 2025-11-07
 primary_category: performance
-hub_document: /Users/lmergen/git/trapperkeeper/doc/05-performance/README.md
+hub_document: doc/05-performance/README.md
 tags:
   - cost-model
   - performance
@@ -14,9 +14,9 @@ tags:
 
 ## Context
 
-The cost model provides the canonical source of truth for all performance calculations in TrapperKeeper. It defines operator costs, field type multipliers, execution multipliers, and the complete algorithm for calculating rule priority. This cost model was previously duplicated across multiple documents, creating maintenance burden and version drift.
+The cost model provides the canonical source of truth for all performance calculations in TrapperKeeper. It defines operator costs, field type multipliers, execution multipliers, and the complete algorithm for calculating rule priority.
 
-**Hub Document**: This document is part of the Performance Architecture. See Performance Hub for strategic overview and optimization guidance.
+**Hub Document**: This document is part of the Performance Architecture. See [Performance Hub](README.md) for strategic overview and optimization guidance.
 
 ## Operator Cost Map (Canonical Constants)
 
@@ -49,6 +49,8 @@ operator_cost_map = {
 
 **IMPORTANT**: These are initial values based on CPU benchmarks. They may be tuned based on production profiling. Changes must be documented with rationale.
 
+Profiling criteria and tuning procedures are deferred to a planned profiling guide (see performance-index.md Known Gaps).
+
 ## Field Type Multipliers (Canonical Constants)
 
 Cost adjustment based on field type complexity.
@@ -80,6 +82,35 @@ field_type_multipliers = {
 **Cross-References**:
 
 - Type System: Complete rationale for field type performance characteristics
+
+## Field Structure Multipliers
+
+Cost adjustment based on field structure complexity (distinct from field type multipliers).
+
+### Structure Multipliers
+
+```python
+field_structure_multipliers = {
+    'scalar': 1,        # Simple field access (baseline)
+    'array': 10,        # Array traversal overhead
+    'nested': 10,       # Object nesting traversal
+    'array_of_objects': 100  # Combined array + nesting traversal
+}
+```
+
+**Rationale**:
+
+- **Scalar (1x)**: Baseline - direct field access, no traversal
+- **Array (10x)**: Iteration overhead, multiple value checks
+- **Nested (10x)**: Nested field resolution, multiple hash lookups
+- **Array of Objects (100x)**: Combined cost of array iteration and nested object traversal
+
+**Note**: Field structure multipliers affect lookup costs (traversal complexity), while field type multipliers affect execution costs (operation complexity on the data type).
+
+**Cross-References**:
+
+- Field Path Resolution: How structure affects runtime resolution performance
+- Performance Hub: Field structure multiplier rationale
 
 ## Field Lookup Cost Formula
 
@@ -265,12 +296,12 @@ operator_evaluation_cost = 5 (eq) × 48 (string) × 1 (no wildcards) = 240
 condition_cost = 384 + 240 = 624
 ```
 
-**Example 2**: `tags[*] contains "production"` (string field, 1 wildcard)
+**Example 2**: `tags[*] prefix "production"` (string field, 1 wildcard)
 
 ```python
 field_lookup_cost = 128 × 1 = 128  (wildcard is free)
-operator_evaluation_cost = 16 (contains) × 48 (string) × 8 (1 wildcard) = 6,144
-condition_cost = 128 + 6,144 = 6,272
+operator_evaluation_cost = 10 (prefix) × 48 (string) × 8 (1 wildcard) = 3,840
+condition_cost = 128 + 3,840 = 3,968
 ```
 
 **Example 3**: `facilities[*].sensors[*].temp > 100` (numeric field, 2 wildcards)

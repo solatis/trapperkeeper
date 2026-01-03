@@ -3,7 +3,7 @@ doc_type: spoke
 status: active
 date_created: 2025-11-07
 primary_category: architecture
-hub_document: /Users/lmergen/git/trapperkeeper/doc/02-architecture/README.md
+hub_document: doc/10-integration/README.md
 tags:
   - monorepo
   - go-module
@@ -28,7 +28,7 @@ TrapperKeeper requires directory structure supporting Go module conventions, pol
 ```go
 module github.com/trapperkeeper/trapperkeeper
 
-go 1.25
+go 1.23  // Always use latest stable Go release
 
 require (
     github.com/google/uuid v1.6.0
@@ -38,6 +38,11 @@ require (
     google.golang.org/grpc v1.62.1
     google.golang.org/protobuf v1.33.0
 )
+
+// Versions pinned at latest stable on first use.
+// Minor/patch upgrades: apply freely.
+// Major upgrades: require expert decision.
+// See: dependency-management.md
 ```
 
 **Benefits**:
@@ -56,6 +61,7 @@ require (
 trapperkeeper/
 ├── go.mod                        # Go module definition
 ├── go.sum                        # Dependency checksums
+├── vendor/                       # Vendored Go dependencies (committed)
 ├── cmd/
 │   └── trapperkeeper/            # Main binary
 │       └── main.go
@@ -185,7 +191,7 @@ internal/rules/
 
 **Consumers**: Native SDKs (SDK-side evaluation), internal/core (server-side validation), cmd/web-ui (validation)
 
-**Cross-Reference**: See [Data: Rule Expression Language](../03-data/README.md) for complete rule parsing specification.
+**Cross-Reference**: See [Data: Rule Expression Language](../04-rule-engine/README.md) for complete rule parsing specification.
 
 ### 4. internal/core (Server-Side Shared Code)
 
@@ -377,35 +383,45 @@ cd sdks/java
 
 ```
 sdks/go/
-├── go.mod                 # Separate Go module for SDK
 ├── client.go              # gRPC client wrapper
 ├── buffer.go              # Event buffering
-└── proto/                 # Generated protobuf code (symlink to ../../proto)
+├── evaluator.go           # Rule evaluation (uses internal/rules)
+└── doc.go                 # Package documentation
 ```
 
-**go.mod** (separate module):
+**Key Design Decision**: The Go SDK is a **package within the main module**, not a
+separate module. This allows it to import internal/types and internal/rules while
+remaining externally importable.
+
+**Rationale**:
+
+- Go's internal/ visibility only blocks imports from _outside_ the module
+- Packages in sdks/go/ are inside the main module, so they CAN import internal/
+- External users import via the full path, which works for any non-internal package
+- No separate go.mod means no version synchronization complexity
+
+**Why not a separate module?** A separate go.mod in sdks/go/ would create a distinct
+Go module that CANNOT import internal/ packages from the parent. This would force
+either code duplication or moving types/rules out of internal/ (exposing them to all
+external consumers). Keeping sdks/go/ as a package avoids this entirely.
+
+**External Import Path**:
 
 ```go
-module github.com/trapperkeeper/trapperkeeper-go
-
-go 1.25
-
-require (
-    google.golang.org/grpc v1.62.1
-    google.golang.org/protobuf v1.33.0
-)
+import "github.com/trapperkeeper/trapperkeeper/sdks/go"
 ```
 
 **Build Commands**:
 
 ```bash
-cd sdks/go
+# Build SDK (from repository root)
+go build ./sdks/go/...
 
-# Install SDK
-go get github.com/trapperkeeper/trapperkeeper-go
+# Test SDK
+go test ./sdks/go/...
 
-# Run tests
-go test ./...
+# External users install via:
+go get github.com/trapperkeeper/trapperkeeper/sdks/go
 ```
 
 ## Centralized Migrations and Tests
@@ -488,7 +504,7 @@ docker-compose down
 ```go
 module github.com/trapperkeeper/trapperkeeper
 
-go 1.25
+go 1.23  // Always latest stable; see dependency-management.md
 ```
 
 **Versioning**: Go modules use semantic versioning via git tags (v0.1.0, v1.0.0, etc.)
@@ -658,14 +674,14 @@ echo "All components built successfully"
 
 **Related Spokes** (siblings in this hub):
 
-- [Package Separation](crate-separation.md): Module architecture rationale and SDK implications
+- [Package Separation](package-separation.md): Module architecture rationale and SDK implications
 
 **Implements** (realizes these decisions):
 
 - [Architecture: SDK Model](../02-architecture/sdk-model.md): SDK directory structure for Python, Java, and Go implementations
 - [Architecture: Service Architecture](../02-architecture/README.md): Implementation structure for internal/api and cmd/web-ui services
 - [Operations: Database Migrations](../09-operations/database-migrations.md): Migrations location at root for runtime access
-- [Data: Batch Processing and Vectorization](../03-data/README.md): Pandas and Spark wrapper locations in SDK directories
+- [Performance: Batch Processing and Vectorization](../05-performance/batch-processing.md): Pandas and Spark wrapper locations in SDK directories
 
 **Extended by**:
 

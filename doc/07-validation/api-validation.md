@@ -3,7 +3,7 @@ doc_type: spoke
 status: active
 date_created: 2025-11-07
 primary_category: validation
-hub_document: /Users/lmergen/git/trapperkeeper/doc/07-validation/README.md
+hub_document: doc/07-validation/README.md
 tags:
   - api-validation
   - input-sanitization
@@ -16,7 +16,7 @@ tags:
 
 API layer serves as primary enforcement point for all validation rules. Early validation before expensive operations (database writes, rule compilation) improves performance and provides clear error feedback. Input sanitization at API boundary prevents injection attacks and ensures data integrity.
 
-**Hub Document**: This document is part of the Validation Architecture. See Validation Hub for complete validation strategy and layer distribution.
+**Hub Document**: This document is part of the Validation Architecture. See [Validation Hub](README.md) for complete validation strategy and layer distribution.
 
 ## Input Sanitization (SECURITY-CRITICAL)
 

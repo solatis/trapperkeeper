@@ -7,9 +7,14 @@ title: Architectural Principles
 nav_order: 1
 has_children: true
 consolidated_spokes:
-  - testing-philosophy
-  - testing-integration-patterns
-  - testing-examples
+  - schema-agnostic-architecture.md
+  - least-intrusive-defaults.md
+  - ephemeral-sensors.md
+  - simplicity.md
+  - consistent-encoding-identifiers.md
+  - testing-philosophy.md
+  - testing-integration-patterns.md
+  - testing-examples.md
 tags:
   - principles
   - schema-agnostic
@@ -25,95 +30,53 @@ TrapperKeeper's architecture prioritizes **pragmatic minimalism** over enterpris
 
 ### 1. Schema-Agnostic Architecture
 
-**The central server has zero understanding of data schemas.**
+**The central server has zero understanding of data schemas.** Rules operate on abstract field paths resolved at runtime by SDKs. No schema registry, no pre-registration required.
 
-Rules operate on abstract field paths resolved at runtime by SDKs. No schema registry, no pre-registration required. The system works equally well with schemaless/agile data pipelines and structured data.
+Benefits: Deployment simplicity, server statelessness, schema evolution without coordination.
 
-**Why:** Customers deploy 15+ diverse dataset types (compressed JSON, CSV, Parquet with 500K-point waveforms). Requiring schema registration creates friction and becomes stale. Schema-agnostic design aligns with modern agile data pipelines.
+Tradeoffs: Limited server-side validation, runtime errors for type mismatches, field name brittleness.
 
-**Cross-references:**
-
-- [Rule Expression Language](../04-rule-engine/expression-language.md) - Field paths resolved at runtime
-- [SDK Model](../02-architecture/sdk-model.md) - Operates on parsed structures, not wire formats
+See: [Schema-Agnostic Architecture](schema-agnostic-architecture.md)
 
 ### 2. Least Intrusive by Default
 
-**System degrades to pass-through rather than failing pipelines.**
+**System degrades to pass-through rather than failing pipelines.** Network failures trigger fail-safe mode (disable rules), missing fields skip rules, type coercion failures continue evaluation.
 
-Default behaviors:
+Benefits: Pipeline safety, operational simplicity, schema tolerance, gradual rollout.
 
-- Network failures: Sensors operate in "fail-safe" mode (disable all rules, become no-op)
-- Missing fields: Rules skip rather than error (configurable via `on_missing_field`)
-- Type coercion failures: Treat as condition failed, continue evaluation
-- Event POST failures: Log warning, continue processing
+Tradeoffs: Silent failures may hide misconfigurations, event loss on network issues, stale rules in fail-closed mode.
 
-**Why:** TrapperKeeper is an observability layer, not core business logic. Production pipelines must not fail because rule evaluation has issues.
-
-**Cross-references:**
-
-- [Failure Modes and Degradation](../08-resilience/failure-modes.md) - Fail-safe/fail-closed configurations
-- [Error Handling Strategy](../08-resilience/README.md) - Unified error patterns (Category 1)
+See: [Least Intrusive by Default](least-intrusive-defaults.md)
 
 ### 3. Ephemeral Sensors
 
-**Sensors are short-lived by design, tied to job lifecycles.**
+**Sensors are short-lived by design, tied to job lifecycles.** No persistent identity, no registration, in-memory state only. Sensors live for minutes to hours and disappear when jobs complete.
 
-Core characteristics:
+Benefits: Operational simplicity, alignment with modern infrastructure, scalability, simplified SDK.
 
-- **Lifecycle**: Sensors live for minutes to hours (Airflow/Spark job duration)
-- **No Persistent Identity**: No registration, no preserved identity across restarts
-- **In-Memory State Only**: Rule cache and event buffer—no disk persistence
-- **Natural Cleanup**: Sensors disappear when jobs complete
-- **No Health Monitoring**: No heartbeats, no persistent connections
+Tradeoffs: No cross-job continuity, event loss on crash, no historical sensor view, cache inefficiency.
 
-**Why:** Aligns with modern ephemeral compute (containers, serverless, batch jobs). Simplifies state management by eliminating registration lifecycle and stale sensor cleanup.
-
-**Cross-references:**
-
-- [SDK Model](../02-architecture/sdk-model.md) - Library integration implements ephemeral lifecycle
-- [API Service Architecture](../02-architecture/api-service.md) - Stateless protocol supports ephemeral design
+See: [Ephemeral Sensors](ephemeral-sensors.md)
 
 ### 4. Simplicity
 
-**Avoid over-engineering, defer complexity to future iterations.**
+**Avoid over-engineering, defer complexity to future iterations.** Single-tenant only, no staged rollouts, simple database validation, JSONL storage, no automatic retention, last-write-wins concurrency. YAGNI principle applied aggressively.
 
-Scope constraints:
+Benefits: Development velocity, reduced maintenance, clear migration path, easier debugging.
 
-- Single-tenant only (multi-tenancy in data model but not enforced)
-- No staged rollouts, A/B testing, or rule versioning
-- Simple validation (schema checks only, no logic validation)
-- Basic JSONL storage, migrate to time-series database later
-- No automatic retention policies (manual deletion)
-- Last-write-wins concurrency (no optimistic locking)
+Tradeoffs: Feature gaps, storage inefficiency, migration overhead, operational burden, concurrency risks.
 
-**Why:** Five-engineer startup cannot maintain complex infrastructure. Build working system first, optimize later. YAGNI principle applied aggressively.
-
-**Cross-references:**
-
-- [Database Backend](../09-operations/database-backend.md) - SQLite default for zero-configuration
-- [Event Schema and Storage](../03-data/event-schema-storage.md) - JSONL files for MVP
+See: [Simplicity (Pragmatic Minimalism)](simplicity.md)
 
 ### 5. Consistent Encoding and Identifiers
 
-**Use UTF-8 everywhere and UUIDv7 for all identifiers.**
+**Use UTF-8 everywhere and UUIDv7 for all identifiers.** All text stored as UTF-8, all entities use time-ordered UUIDv7 for globally unique, sortable identifiers.
 
-UTF-8 encoding:
+Benefits: Encoding consistency, global uniqueness, time-series efficiency, index performance.
 
-- All strings stored as UTF-8
-- User-generated content (Web UI): UTF-8
-- Client/sensor data: UTF-8
-- Language conversions handled transparently
+Tradeoffs: Clock dependency (NTP required), storage overhead, reduced human readability, timestamp precision limits.
 
-UUIDv7 identifiers:
-
-- All entities use UUIDv7: tenants, teams, users, rules, API keys, events
-- Benefits: Sortable (time-ordered), globally unique, efficient for time-series
-- Requires NTP synchronization, accept client-generated UUIDs as-is
-
-**Cross-references:**
-
-- [Identifiers (UUIDv7)](../03-data/identifiers-uuidv7.md) - Complete UUID strategy
-- [Event Schema and Storage](../03-data/event-schema-storage.md) - UUIDv7 for event IDs
+See: [Consistent Encoding and Identifiers](consistent-encoding-identifiers.md)
 
 ### 6. Integration-First Testing
 

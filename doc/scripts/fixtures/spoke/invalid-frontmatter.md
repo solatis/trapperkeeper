@@ -28,4 +28,5 @@ def example():
 ## Related Documents
 
 **Dependencies**:
+
 - some-doc.md

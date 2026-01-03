@@ -3,7 +3,7 @@ doc_type: spoke
 status: active
 date_created: 2025-11-07
 primary_category: architecture
-hub_document: /Users/lmergen/git/trapperkeeper/doc/02-architecture/README.md
+hub_document: doc/02-architecture/README.md
 tags:
   - two-service
   - grpc

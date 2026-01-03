@@ -3,7 +3,7 @@ doc_type: spoke
 status: active
 date_created: 2025-11-07
 primary_category: security
-hub_document: /Users/lmergen/git/trapperkeeper/doc/06-security/README.md
+hub_document: doc/06-security/README.md
 tags:
   - authentication
   - sensor-api
@@ -94,9 +94,8 @@ Two deployment patterns supported via **dual-mode bootstrapping**:
 CREATE TABLE hmac_secrets (
   secret_id UUID PRIMARY KEY,           -- UUIDv7 identifier for the secret
   secret_hash BLOB NOT NULL,            -- SHA256 hash of the raw secret
-  source TEXT NOT NULL,                 -- "environment" or "auto-generated"
-  created_at TIMESTAMP NOT NULL,
-  CONSTRAINT valid_source CHECK (source IN ('environment', 'auto-generated'))
+  source TEXT NOT NULL,                 -- validated at app layer: 'environment' or 'auto-generated'
+  created_at TIMESTAMP NOT NULL
 );
 
 CREATE INDEX idx_hmac_secrets_source ON hmac_secrets(source);
@@ -288,8 +287,8 @@ func shouldUpdateLastUsed(lastUsed *time.Time) bool {
 
 **Dependencies** (read these first):
 
-- [API Service Architecture](../../02-architecture/api-service.md): gRPC metadata handling, stateless protocol
-- [Configuration Management](../../09-operations/configuration.md): TK_HMAC_SECRET environment variable enforcement, secrets rejection in config files
+- [API Service Architecture](../02-architecture/api-service.md): gRPC metadata handling, stateless protocol
+- [Configuration Management](../09-operations/configuration.md): TK_HMAC_SECRET environment variable enforcement, secrets rejection in config files
 - [Identifiers (UUIDv7)](../03-data/identifiers-uuidv7.md): UUIDv7 for api_key_id and secret_id identifiers
 
 **Related Spokes** (siblings in this hub):

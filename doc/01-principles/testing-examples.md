@@ -3,7 +3,7 @@ doc_type: spoke
 status: active
 date_created: 2025-11-07
 primary_category: testing
-hub_document: /Users/lmergen/git/trapperkeeper/doc/01-principles/README.md
+hub_document: doc/01-principles/README.md
 tags:
   - examples
   - property-based
@@ -19,7 +19,7 @@ This document provides comprehensive examples implementing TrapperKeeper's Integ
 
 All examples follow patterns defined in Testing Integration Patterns and principles established in Testing Philosophy.
 
-**Hub Document**: This document is part of the Principles Hub. See Principles Architecture and Testing Philosophy for strategic context.
+**Hub Document**: This document is part of the Principles Hub. See [Principles Overview](README.md) and Testing Philosophy for strategic context.
 
 ## Environment Setup
 

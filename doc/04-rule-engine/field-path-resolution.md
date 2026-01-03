@@ -3,7 +3,7 @@ doc_type: spoke
 status: active
 date_created: 2025-11-07
 primary_category: architecture
-hub_document: /Users/lmergen/git/trapperkeeper/doc/04-rule-engine/README.md
+hub_document: doc/04-rule-engine/README.md
 tags:
   - field-paths
   - wildcards
@@ -67,9 +67,9 @@ Rule: `readings[*].temp > 15` → **Matches** (because readings[1].temp = 30 sat
 
 **Note**: Wildcards are only supported in the primary `field` path. The `field_ref` path (for cross-field comparisons) cannot contain wildcards.
 
-## Empty Array Behavior (No Match)
+## Empty Array Behavior
 
-Empty arrays result in **no match** (least intrusive by default):
+Empty arrays are treated as **all elements missing**, deferring to the `on_missing_field` policy:
 
 **Example**:
 
@@ -77,14 +77,18 @@ Empty arrays result in **no match** (least intrusive by default):
 { "readings": [] }
 ```
 
-Rule: `readings[*].temp > 15` → **Does not match**
+Rule: `readings[*].temp > 15`
+
+- With `on_missing_field="skip"` (default): **Does not match** (least intrusive)
+- With `on_missing_field="match"`: **Matches** (detects incomplete data)
+- With `on_missing_field="error"`: **Raises exception** (strict validation)
 
 **Rationale**:
 
-- **Consistent with ANY semantics**: If no elements exist, there's nothing to match
-- **Least intrusive principle**: Pass-through by default
-- **Prevents false positives**: Empty arrays should not trigger drop/error actions
-- **Clear semantics**: "Match if any element satisfies condition" → no elements = no match
+- **Semantic consistency**: Empty array = vacuously "all elements missing field"
+- **Unified policy control**: Same `on_missing_field` setting controls both missing fields and empty arrays
+- **Schema evolution alignment**: Empty arrays follow same evolution semantics as missing fields
+- **Default behavior preserved**: `on_missing_field="skip"` (default) maintains least intrusive principle
 
 ## First-Match Short-Circuit Evaluation (Performance Optimization)
 
@@ -325,17 +329,17 @@ Rules support cross-field comparisons using `field_ref`, which references a seco
 // Evaluation: calibrated_max missing → Applies on_missing_field="skip" → No match
 ```
 
-## Maximum Path Depth (No Limit)
+## Maximum Path Depth
 
-No enforced limit on field path depth:
+Field path depth is limited to **16 segments maximum**.
 
-**Example**: `["level1", "level2", "level3", "level4", "level5", "level6"]` is valid
+**Example**: `["level1", "level2", ..., "level16"]` is valid; 17+ segments rejected at rule creation.
 
 **Rationale**:
 
-- **YAGNI principle**: No evidence of pathological cases in customer data
-- **Simple implementation**: Easier to add limits later than remove them
-- **Framework-dependent limits**: Pandas/Spark may have their own nesting limits that provide natural boundaries
+- **Defensive limits**: Explicit bounds prevent unexpected performance degradation from pathological inputs
+- **SRE philosophy**: TrapperKeeper follows defense-in-depth -- explicit limits everywhere prevent edge cases from causing production incidents
+- **Practical sufficiency**: Real-world data structures rarely exceed 10 levels of nesting
 
 ## Edge Cases and Limitations
 

@@ -4,10 +4,10 @@ status: active
 date_created: 2025-11-07
 primary_category: error-handling
 consolidated_spokes:
-  - doc/08-resilience/error-taxonomy.md
-  - doc/08-resilience/logging-standards.md
-  - doc/08-resilience/monitoring-strategy.md
-  - doc/08-resilience/failure-modes.md
+  - error-taxonomy.md
+  - logging-standards.md
+  - monitoring-strategy.md
+  - failure-modes.md
 tags:
   - error-handling
   - resilience
@@ -18,7 +18,7 @@ tags:
 
 ## Context
 
-Error handling guidance was previously fragmented across four ADRs with inconsistent patterns and coverage gaps. Type coercion error handling appeared in three locations with 70% content overlap. The "Least Intrusive Principle" was documented in two locations with 60% overlap. Critical error categories lacked unified guidance: database errors (40% scenario coverage), protocol errors, circuit breaker patterns, logging standards, and monitoring thresholds.
+Error handling guidance is fragmented across multiple documents with inconsistent patterns and coverage gaps. Type coercion error handling appears in three locations with 70% content overlap. The "Least Intrusive Principle" is documented in two locations with 60% overlap. Critical error categories lack unified guidance: database errors (40% scenario coverage), protocol errors, circuit breaker patterns, logging standards, and monitoring thresholds.
 
 This hub consolidates error handling strategy into a single comprehensive entry point establishing error taxonomy (6 categories), response patterns (fail vs degrade vs retry decision tree), logging standards (slog), and monitoring strategy with specific alert thresholds. It provides unified patterns and cross-references to domain-specific implementations.
 
@@ -237,8 +237,8 @@ slog.Debug("Type coercion failed, treating as condition failed",
 
 **Benefits**:
 
-- Single comprehensive entry point for all error handling decisions eliminates need to consult 4 ADRs
-- Error taxonomy covering 6 categories with 100% scenario coverage (previously 40-70% coverage)
+- Single comprehensive entry point for all error handling decisions eliminates need to consult multiple documents
+- Error taxonomy covering 6 categories with 100% scenario coverage
 - Unified decision tree for fail vs degrade vs retry eliminates inconsistent choices
 - Structured logging standards with slog enable comprehensive debugging
 - Monitoring strategy with specific alert thresholds enables proactive incident response

@@ -7,6 +7,7 @@ Test fixtures for validating spoke document template compliance.
 ### valid-minimal.md
 
 Minimal valid spoke document meeting all requirements:
+
 - ✓ All required frontmatter fields present
 - ✓ Valid doc_type ("spoke")
 - ✓ Valid status, date format
@@ -19,6 +20,7 @@ Minimal valid spoke document meeting all requirements:
 ### valid-complete.md
 
 Complete spoke document with all optional features:
+
 - ✓ All required frontmatter fields plus optional fields (tags, maintainer)
 - ✓ Multiple detailed implementation sections
 - ✓ Rich examples and code snippets
@@ -33,6 +35,7 @@ Complete spoke document with all optional features:
 ### invalid-frontmatter.md
 
 Spoke document with **missing required frontmatter fields**.
+
 - ✗ Missing `primary_category` (required)
 - ✗ Missing `hub_document` (required)
 - ✓ Other frontmatter fields valid
@@ -46,6 +49,7 @@ Spoke document with **missing required frontmatter fields**.
 Spoke documents must satisfy (from `spoke.md` template validation block):
 
 **Frontmatter Required Fields**:
+
 - `doc_type` (must equal "spoke")
 - `status` (enum: draft, active, deprecated, superseded)
 - `date_created` (pattern: YYYY-MM-DD)
@@ -53,15 +57,18 @@ Spoke documents must satisfy (from `spoke.md` template validation block):
 - `hub_document` (pattern: `.*\.md$`)
 
 **Conditional Constraints**:
+
 - If `status` = "superseded", then `superseded_by` field required
 
 **Section Requirements**:
+
 - Spoke documents have flexible section requirements (minimal structure validation)
 - Content-driven organization based on implementation needs
 
 ## Differences from Hub Validation
 
 Spokes have **more flexible structure** than hubs:
+
 - No minimum section requirements
 - No subsection count constraints
 - No filename pattern (any descriptive name allowed)

@@ -56,6 +56,7 @@ Token payload contains claims identifying user and authorization scope.
 ```
 
 **Key Claims**:
+
 - `sub`: User UUID (subject identifier)
 - `roles`: User role assignments for coarse-grained authorization
 - `permissions`: Specific permissions for fine-grained authorization
@@ -70,21 +71,24 @@ RSA signature computed over header and payload using private key. Signature veri
 
 **Example**:
 
-```rust
+```go
 // Token generation (auth service only)
-let claims = Claims {
-    sub: user.id,
-    name: user.name,
-    email: user.email,
-    roles: user.roles,
-    permissions: user.permissions,
-    iat: now(),
-    exp: now() + 24_hours,
-    iss: "trapperkeeper-auth".to_string(),
-    aud: "trapperkeeper-api".to_string(),
-};
+claims := Claims{
+    Sub:         user.ID,
+    Name:        user.Name,
+    Email:       user.Email,
+    Roles:       user.Roles,
+    Permissions: user.Permissions,
+    Iat:         time.Now().Unix(),
+    Exp:         time.Now().Add(24 * time.Hour).Unix(),
+    Iss:         "trapperkeeper-auth",
+    Aud:         "trapperkeeper-api",
+}
 
-let token = encode(&header, &claims, &private_key)?;
+token, err := jwt.EncodeToken(&header, &claims, privateKey)
+if err != nil {
+    return "", err
+}
 ```
 
 ## Token Validation
@@ -101,42 +105,48 @@ All services validate JWT tokens on every authenticated request. Validation incl
 
 **Example**:
 
-```rust
-pub fn validate_token(token: &str, public_key: &RsaPublicKey) -> Result<Claims, AuthError> {
+```go
+func ValidateToken(token string, publicKey *rsa.PublicKey) (*Claims, error) {
     // Decode and verify signature
-    let token_data = decode::<Claims>(
-        token,
-        &DecodingKey::from_rsa_components(&public_key),
-        &Validation::new(Algorithm::RS256)
-    )?;
+    tokenData, err := jwt.ParseWithClaims(token, &Claims{}, func(t *jwt.Token) (interface{}, error) {
+        if _, ok := t.Method.(*jwt.SigningMethodRSA); !ok {
+            return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+        }
+        return publicKey, nil
+    })
+    if err != nil {
+        return nil, fmt.Errorf("token decode failed: %w", err)
+    }
 
-    let claims = token_data.claims;
+    claims, ok := tokenData.Claims.(*Claims)
+    if !ok || !tokenData.Valid {
+        return nil, errors.New("invalid token claims")
+    }
 
     // Verify expiration
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)?
-        .as_secs();
-    if claims.exp <= now {
-        return Err(AuthError::TokenExpired);
+    now := time.Now().Unix()
+    if claims.Exp <= now {
+        return nil, ErrTokenExpired
     }
 
     // Verify issuer
-    if claims.iss != "trapperkeeper-auth" {
-        return Err(AuthError::InvalidIssuer);
+    if claims.Iss != "trapperkeeper-auth" {
+        return nil, ErrInvalidIssuer
     }
 
     // Verify audience
-    if !claims.aud.contains("trapperkeeper-api") {
-        return Err(AuthError::InvalidAudience);
+    if claims.Aud != "trapperkeeper-api" {
+        return nil, ErrInvalidAudience
     }
 
-    Ok(claims)
+    return claims, nil
 }
 ```
 
 **Error Handling**: Validation failures return specific error types enabling appropriate HTTP status codes (401 for invalid/expired tokens, 403 for insufficient permissions).
 
 **Cross-References**:
+
 - doc/06-security/authorization.md: How claims feed authorization decisions
 - doc/08-resilience/error-handling.md: Authentication error handling patterns
 - error-handling-index.md: Standard error response format
@@ -151,36 +161,43 @@ Tokens issued after successful authentication (username/password or multi-factor
 
 **Example**:
 
-```rust
-pub async fn authenticate(
-    username: &str,
-    password: &str,
-    mfa_code: Option<&str>
-) -> Result<TokenResponse, AuthError> {
+```go
+func Authenticate(ctx context.Context, username, password string, mfaCode *string) (*TokenResponse, error) {
     // Verify password
-    let user = verify_password(username, password).await?;
+    user, err := verifyPassword(ctx, username, password)
+    if err != nil {
+        return nil, err
+    }
 
     // Verify MFA if enabled
-    if user.mfa_enabled {
-        let code = mfa_code.ok_or(AuthError::MfaRequired)?;
-        verify_mfa_code(&user, code)?;
+    if user.MFAEnabled {
+        if mfaCode == nil {
+            return nil, ErrMFARequired
+        }
+        if err := verifyMFACode(user, *mfaCode); err != nil {
+            return nil, err
+        }
     }
 
     // Generate token
-    let token = generate_token(&user)?;
+    token, err := generateToken(user)
+    if err != nil {
+        return nil, err
+    }
 
     // Log issuance
-    log_auth_event(AuthEvent::TokenIssued {
-        user_id: user.id,
-        timestamp: now(),
-        ip: request_ip(),
-    });
-
-    Ok(TokenResponse {
-        token,
-        expires_at: now() + 24_hours,
-        token_type: "Bearer",
+    logAuthEvent(AuthEvent{
+        Type:      "TokenIssued",
+        UserID:    user.ID,
+        Timestamp: time.Now(),
+        IP:        requestIP(ctx),
     })
+
+    return &TokenResponse{
+        Token:     token,
+        ExpiresAt: time.Now().Add(24 * time.Hour),
+        TokenType: "Bearer",
+    }, nil
 }
 ```
 
@@ -191,6 +208,7 @@ Tokens automatically expire after 24 hours requiring re-authentication. No token
 Design decision: No refresh tokens simplifies implementation and reduces security risk (refresh tokens become high-value targets). 24-hour lifetime provides reasonable UX without refresh complexity.
 
 **Cross-References**:
+
 - doc/06-security/README.md: Token rotation strategy discussion
 - ../06-security/authentication-web-ui.md: Authentication design rationale and user management
 
@@ -213,6 +231,7 @@ RSA signature verification: ~100μs on modern CPUs. Public key cached in memory 
 Total validation overhead: ~100μs per request acceptable for our performance targets (<50ms p99 latency).
 
 **Cross-References**:
+
 - performance-index.md: Authentication performance targets
 - doc/05-performance/README.md: Overall performance model
 
@@ -224,28 +243,43 @@ Claims not cached - validation performed on every request ensuring consistent au
 
 **Example**:
 
-```rust
+```go
 // Public key cache with TTL
-static PUBLIC_KEY_CACHE: Lazy<RwLock<Option<(RsaPublicKey, Instant)>>> =
-    Lazy::new(|| RwLock::new(None));
-
-pub fn get_public_key() -> Result<RsaPublicKey, AuthError> {
-    let cache = PUBLIC_KEY_CACHE.read();
-
-    if let Some((key, cached_at)) = cache.as_ref() {
-        if cached_at.elapsed() < Duration::from_secs(3600) {
-            return Ok(key.clone());
-        }
+var (
+    publicKeyCache struct {
+        sync.RWMutex
+        key      *rsa.PublicKey
+        cachedAt time.Time
     }
+)
 
-    drop(cache);
+func GetPublicKey() (*rsa.PublicKey, error) {
+    publicKeyCache.RLock()
+    if publicKeyCache.key != nil && time.Since(publicKeyCache.cachedAt) < time.Hour {
+        key := publicKeyCache.key
+        publicKeyCache.RUnlock()
+        return key, nil
+    }
+    publicKeyCache.RUnlock()
 
     // Cache miss or expired - fetch new key
-    let mut cache = PUBLIC_KEY_CACHE.write();
-    let key = fetch_public_key_from_auth_service()?;
-    *cache = Some((key.clone(), Instant::now()));
+    publicKeyCache.Lock()
+    defer publicKeyCache.Unlock()
 
-    Ok(key)
+    // Double-check after acquiring write lock
+    if publicKeyCache.key != nil && time.Since(publicKeyCache.cachedAt) < time.Hour {
+        return publicKeyCache.key, nil
+    }
+
+    key, err := fetchPublicKeyFromAuthService()
+    if err != nil {
+        return nil, err
+    }
+
+    publicKeyCache.key = key
+    publicKeyCache.cachedAt = time.Now()
+
+    return key, nil
 }
 ```
 
@@ -266,14 +300,17 @@ pub fn get_public_key() -> Result<RsaPublicKey, AuthError> {
 ## Related Documents
 
 **Dependencies** (read these first):
+
 - ../06-security/authentication-web-ui.md: Authentication design decisions and rationale
 - ../06-security/authentication-sensor-api.md: API authentication requirements
 
 **Related Spokes** (siblings in this hub):
+
 - doc/06-security/authorization.md: Complements authentication with authorization using token claims
 - doc/06-security/threat-mitigation.md: Rate limiting protects authentication endpoints
 - doc/06-security/tls-certificates.md: TLS secures token transmission
 
 **Extended by** (documents building on this):
+
 - web-ui-authentication.md: Web UI authentication flows using JWT tokens
 - api-client-authentication.md: API client authentication patterns

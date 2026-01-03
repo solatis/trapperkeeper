@@ -10,7 +10,7 @@ Architecture documentation for validation automation (validate.py and related to
 
 ## Files
 
-**`architecture.md`** - Read when implementing analyzer.py or validation scripts, understanding validation algorithms, troubleshooting validation errors, setting up CI/CD checks, or extending tooling capabilities
+**`architecture.md`** - Read when implementing validate.py or validation scripts, understanding validation algorithms, troubleshooting validation errors, setting up CI/CD checks, or extending tooling capabilities
 
 **`linters.md`** - Read when need formatting commands (prettier, markdownlint), troubleshooting formatting or linting errors, setting up editor integration, or understanding CI/CD formatting checks
 

@@ -10,9 +10,11 @@ Successfully migrated the CLAUDE.md template (`doc/_meta/02-templates/claude-md.
 ## Deliverables Completed
 
 ### 1. Updated Template ✅
+
 **File**: `/doc/_meta/02-templates/claude-md.md`
 
 Added comprehensive validation frontmatter block containing:
+
 - `schema_version: 1`
 - 3 conditional predicates (readme_exists, has_md_files, has_subdirs)
 - Title pattern validation
@@ -23,17 +25,20 @@ Added comprehensive validation frontmatter block containing:
 **Validation Status**: ✅ Passes JSON Schema validation (`validation_schema.json`)
 
 ### 2. Test Fixtures ✅
+
 **Directory**: `/doc/scripts/fixtures/claude-md/`
 
 Created 10 test fixtures covering all validation rules:
 
 #### Valid Fixtures (4)
+
 1. `valid-minimal.md` - Minimal valid CLAUDE.md (Purpose only)
 2. `valid-with-hub.md` - With Hub section (README.md)
 3. `valid-with-files.md` - With Files section (multiple .md files)
 4. `valid-complete.md` - Complete with all sections
 
 #### Invalid Fixtures (6)
+
 1. `invalid-title.md` - Wrong title pattern
 2. `invalid-forbidden-pattern.md` - Contains 3 forbidden patterns
 3. `invalid-missing-purpose.md` - Missing required Purpose section
@@ -42,11 +47,13 @@ Created 10 test fixtures covering all validation rules:
 6. `invalid-missing-trigger.md` - Missing " - Read when " triggers
 
 #### Documentation
+
 - `README.md` - Comprehensive fixture documentation with test coverage matrix
 
 ### 3. Schema Validation ✅
 
 Validated that the template's validation frontmatter:
+
 - ✅ Is valid YAML syntax
 - ✅ Passes JSON Schema validation against `validation_schema.json`
 - ✅ Contains all required fields (schema_version)
@@ -58,23 +65,27 @@ Validated that the template's validation frontmatter:
 All rules from `validate.py` lines 470-602 are now in template frontmatter:
 
 ### Basic Rules
+
 - ✅ Title pattern: `^# .+ Guide for LLM Agents$`
 - ✅ Max lines: 50
 - ✅ No frontmatter in CLAUDE.md files (note: this is a special rule for CLAUDE.md output, not the template)
 
 ### Forbidden Patterns
+
 - ✅ `(?i)how to` - how-to instructions
 - ✅ `(?i)step 1` - step-by-step procedures
 - ✅ `(?i)contains information` - explanatory content
 - ✅ `(?i)describes` - explanatory content
 
 ### Required Sections
+
 - ✅ Purpose (must_exist: true, max_paragraphs: 3)
 - ✅ Hub (require_if: readme_exists, content_pattern for README.md)
 - ✅ Files (require_if: has_md_files, must_list_all_md, entry_pattern)
 - ✅ Subdirectories (require_if: has_subdirs, must_list_all_subdirs, entry_pattern)
 
 ### Conditional Logic
+
 - ✅ `readme_exists: file_exists("README.md")`
 - ✅ `has_md_files: md_files_exist(exclude=["README.md", "CLAUDE.md"])`
 - ✅ `has_subdirs: subdirs_exist()`
@@ -92,6 +103,7 @@ The documentation work is complete. The developer agent needs to:
 ## Test Coverage
 
 The fixtures cover all validation rule types:
+
 - ✅ Title pattern validation
 - ✅ Line limits (max_lines)
 - ✅ Forbidden patterns (4 patterns)
@@ -138,6 +150,7 @@ This milestone serves as the validation checkpoint for the entire template-drive
 ✅ **Ready**: Test fixtures cover all rule types and edge cases
 
 The template migration demonstrates that the approach is sound and ready for:
+
 - M7: Hub template migration
 - M8: Spoke template migration
 - M9: Index template migration

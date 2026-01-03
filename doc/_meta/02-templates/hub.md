@@ -19,7 +19,6 @@ validation:
     required_fields:
       - doc_type
       - status
-      - date_created
       - primary_category
       - consolidated_spokes
     field_constraints:
@@ -27,8 +26,6 @@ validation:
         enum: ["hub"]
       status:
         enum: ["draft", "active", "deprecated", "superseded"]
-      date_created:
-        pattern: "^\\d{4}-\\d{2}-\\d{2}$"
       consolidated_spokes:
         type: array
         min_items: 3
@@ -76,12 +73,12 @@ consistent discoverability across the documentation.
 FRONTMATTER REQUIREMENTS:
 - doc_type: MUST be 'hub'
 - status: active|draft|deprecated|superseded
-- date_created: ISO-8601 date (YYYY-MM-DD)
 - primary_category: Choose ONE from list above
 - consolidated_spokes: List of spoke files (minimum 3 for product docs, can be fewer for _meta/)
 - tags: Relevant keywords for discovery
 - cross_cutting: List of cross-cutting concerns this hub addresses (optional)
 - maintainer: Team or person responsible for this hub
+NOTE: Document dates are tracked via git history, not frontmatter.
 -->
 
 ## Context

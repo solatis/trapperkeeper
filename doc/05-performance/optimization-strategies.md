@@ -3,7 +3,7 @@ doc_type: spoke
 status: active
 date_created: 2025-11-07
 primary_category: performance
-hub_document: /Users/lmergen/git/trapperkeeper/doc/05-performance/README.md
+hub_document: doc/05-performance/README.md
 tags:
   - optimization
   - performance
@@ -16,7 +16,7 @@ tags:
 
 Performance optimization requires systematic trade-off analysis balancing sampling, data restructuring, rule splitting, operator substitution, and caching strategies. This document provides a comprehensive decision framework for developers when rules exceed performance targets, eliminating guesswork through explicit criteria and combined effects analysis.
 
-**Hub Document**: This document is part of the Performance Architecture. See Performance Hub for strategic overview and cost model details.
+**Hub Document**: This document is part of the Performance Architecture. See [Performance Hub](README.md) for strategic overview and cost model details.
 
 ## Performance Budget Breakdown
 
@@ -62,6 +62,7 @@ The sub-millisecond target allows minimal intrusion in high-performance/high-loa
 No fixed threshold (highly data-dependent):
 
 - **General guidance**: Priority >10,000 warrants review
+- **Rationale**: 10,000 corresponds to the upper bound of single-wildcard operations (cost range 1,000-10,000 per cost model). Rules exceeding this typically involve nested wildcards or complex string operations
 - **Consider**: Rule complexity, wildcard usage, field type, operator choice
 - **Mitigation**: Use sampling (`sample_rate`) to reduce load for expensive rules
 

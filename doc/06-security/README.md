@@ -92,14 +92,14 @@ TrapperKeeper implements **two distinct authentication approaches** serving fund
 
 **Why Two Different Approaches:**
 
-| Aspect                  | Web UI (Humans)      | Sensor API (Machines)         |
-| ----------------------- | -------------------- | ----------------------------- |
-| Client lifecycle        | Interactive sessions | Long-running processes        |
-| Re-authentication       | Users can re-login   | Sensors cannot re-login       |
-| Session duration        | Short (24 hours)     | Long (until revoked)          |
-| State management        | Cookies in browser   | API key in configuration      |
-| Authentication overhead | Bcrypt acceptable    | HMAC required for performance |
-| Credential recovery     | Password reset flows | Revoke and regenerate         |
+| Aspect                  | Web UI (Humans)                | Sensor API (Machines)         |
+| ----------------------- | ------------------------------ | ----------------------------- |
+| Client lifecycle        | Interactive sessions           | Long-running processes        |
+| Re-authentication       | Users can re-login             | Sensors cannot re-login       |
+| Session duration        | Short (24 hours of inactivity) | Long (until revoked)          |
+| State management        | Cookies in browser             | API key in configuration      |
+| Authentication overhead | Bcrypt acceptable              | HMAC required for performance |
+| Credential recovery     | Password reset flows           | Revoke and regenerate         |
 
 **Key Points:**
 
@@ -278,7 +278,7 @@ High-level mapping to SOC2 Trust Service Criteria for certification preparation.
 
 **Benefits:**
 
-- Unified security architecture eliminates fragmentation across 6+ ADRs
+- Unified security architecture eliminates fragmentation across multiple documents
 - Clear navigation to all security implementation documents
 - Explains rationale for dual authentication strategy (prevents future unification attempts)
 - Documents security boundaries and trust model for single-tenant architecture

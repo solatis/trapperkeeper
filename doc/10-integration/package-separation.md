@@ -3,7 +3,7 @@ doc_type: spoke
 status: active
 date_created: 2025-11-07
 primary_category: architecture
-hub_document: /Users/lmergen/git/trapperkeeper/doc/02-architecture/README.md
+hub_document: doc/10-integration/README.md
 tags:
   - module-architecture
   - client-server-separation
@@ -187,7 +187,7 @@ func ParseDNFExpression(expr string) ([]types.OrGroup, error) {
 }
 ```
 
-**Cross-Reference**: See [Data: Rule Expression Language](../03-data/README.md) for complete parsing specification.
+**Cross-Reference**: See [Rule Engine: Rule Expression Language](../04-rule-engine/README.md) for complete parsing specification.
 
 ### 4. Native SDKs: Lean Client-Side Libraries
 
@@ -238,13 +238,18 @@ package trapperkeeper
 
 import (
     "context"
-    pb "trapperkeeper/proto/sensor/v1"
+
+    "github.com/trapperkeeper/trapperkeeper/internal/rules"
+    "github.com/trapperkeeper/trapperkeeper/internal/types"
+    pb "github.com/trapperkeeper/trapperkeeper/proto/sensor/v1"
     "google.golang.org/grpc"
 )
 
 type Client struct {
-    client pb.SensorAPIClient
-    buffer *EventBuffer
+    conn      *grpc.ClientConn
+    client    pb.SensorAPIClient
+    buffer    *EventBuffer
+    evaluator *rules.Evaluator  // Shares rule evaluation with server
 }
 
 func NewClient(url string) (*Client, error) {
@@ -253,12 +258,14 @@ func NewClient(url string) (*Client, error) {
         return nil, err
     }
     return &Client{
-        client: pb.NewSensorAPIClient(conn),
-        buffer: NewEventBuffer(1000),
+        conn:      conn,
+        client:    pb.NewSensorAPIClient(conn),
+        buffer:    NewEventBuffer(1000),
+        evaluator: rules.NewEvaluator(),
     }, nil
 }
 
-func (c *Client) SubmitEvent(ctx context.Context, event *pb.Event) error {
+func (c *Client) SubmitEvent(ctx context.Context, event *types.Event) error {
     c.buffer.Push(event)
     if c.buffer.ShouldFlush() {
         return c.Flush(ctx)
@@ -268,10 +275,15 @@ func (c *Client) SubmitEvent(ctx context.Context, event *pb.Event) error {
 
 func (c *Client) Flush(ctx context.Context) error {
     events := c.buffer.Drain()
-    _, err := c.client.SubmitEvents(ctx, &pb.SubmitEventsRequest{Events: events})
+    _, err := c.client.SubmitEvents(ctx, &pb.SubmitEventsRequest{Events: toPB(events)})
     return err
 }
 ```
+
+**Key Difference from Python/Java**: The Go SDK imports internal/types and
+internal/rules directly. This is possible because sdks/go/ is a package within
+the main module, not a separate module. Python and Java SDKs use generated
+protobuf types instead since they cannot import Go packages.
 
 **Conformance Test Suite**: All SDK implementations (Python, Java, Go) must pass the same conformance test suite to ensure identical rule evaluation behavior across languages.
 

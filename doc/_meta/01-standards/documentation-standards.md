@@ -3,7 +3,7 @@ doc_type: spoke
 status: active
 date_created: 2025-11-08
 primary_category: documentation
-hub_document: README.md
+hub_document: doc/_meta/01-standards/README.md
 tags:
   - standards
   - validation
@@ -33,6 +33,7 @@ All templates must include a `validation` block in frontmatter defining structur
 **Purpose**: Ensures forward compatibility when DSL evolves.
 
 **Example**:
+
 ```yaml
 validation:
   schema_version: 1
@@ -62,6 +63,7 @@ Templates must include validation rules covering:
 **Filename requirement**: All hubs must be named `README.md` (enforced via `filename_pattern: "^README\\.md$"`).
 
 **Frontmatter requirements**:
+
 ```yaml
 frontmatter:
   required_fields:
@@ -93,6 +95,7 @@ frontmatter:
 ### Spoke Documents
 
 **Frontmatter requirements**:
+
 ```yaml
 frontmatter:
   required_fields:
@@ -123,6 +126,7 @@ frontmatter:
 **Length requirement**: Maximum 50 lines (60 for root doc/CLAUDE.md).
 
 **Forbidden patterns**:
+
 ```yaml
 forbidden:
   - pattern: "(?i)how to"
@@ -176,6 +180,7 @@ The validation DSL supports eight rule types and four predicates for conditional
 - **forbid_if**: Section forbidden when condition true
 
 **Example**:
+
 ```yaml
 conditions:
   readme_exists: file_exists("README.md")
@@ -193,6 +198,7 @@ All documentation changes must pass validation before merging.
 ### Validation Commands
 
 **Frontmatter validation**:
+
 ```bash
 ./doc/scripts/validate.py frontmatter
 ```
@@ -200,6 +206,7 @@ All documentation changes must pass validation before merging.
 Checks all documents for required frontmatter fields, enum values, date formats, and conditional constraints.
 
 **Hub-spoke validation**:
+
 ```bash
 ./doc/scripts/validate.py hub-spoke
 ```
@@ -207,6 +214,7 @@ Checks all documents for required frontmatter fields, enum values, date formats,
 Checks bidirectional relationships between hubs and spokes, including 100% back-reference compliance.
 
 **Template validation**:
+
 ```bash
 ./doc/scripts/validate.py template doc/_meta/02-templates/hub.md
 ```
@@ -214,6 +222,7 @@ Checks bidirectional relationships between hubs and spokes, including 100% back-
 Validates template frontmatter against `validation_schema.json` and checks template-specific rules.
 
 **Full validation**:
+
 ```bash
 ./doc/scripts/validate.py validate-all
 ```
@@ -232,6 +241,7 @@ Runs all validation checks in sequence.
 Validation errors include file path, line number, rule violated, expected value, and actual value.
 
 **Example error**:
+
 ```
 [ERROR] doc/06-security/authentication.md:1: title_pattern
   Detail: Title does not match required pattern
@@ -240,6 +250,7 @@ Validation errors include file path, line number, rule violated, expected value,
 ```
 
 **Severity levels**:
+
 - **error**: Blocks commit
 - **warn**: Informational only
 
@@ -262,6 +273,7 @@ Standards evolve through documented governance procedures.
 Breaking changes to validation DSL increment schema_version.
 
 **Migration procedure**:
+
 1. Implement new schema_version validator
 2. Support both old and new versions during transition
 3. Update all templates to new schema_version
@@ -273,17 +285,20 @@ Breaking changes to validation DSL increment schema_version.
 ## Related Documents
 
 **Dependencies**:
+
 - **README.md**: Hub document providing standards overview
 - **hub-and-spoke-architecture.md**: Hub creation and structure requirements
 - **frontmatter-reference.md**: Frontmatter field definitions and constraints
 - **claude-md-format.md**: CLAUDE.md format specification
 
 **References**:
-- **doc/_meta/02-templates/README.md**: Template usage including validation examples
-- **doc/_meta/04-tooling/validation-dsl-reference.md**: Complete DSL syntax reference
-- **doc/_meta/04-tooling/architecture.md**: Validation system implementation
+
+- **doc/\_meta/02-templates/README.md**: Template usage including validation examples
+- **doc/\_meta/04-tooling/validation-dsl-reference.md**: Complete DSL syntax reference
+- **doc/\_meta/04-tooling/architecture.md**: Validation system implementation
 - **doc/scripts/validation_schema.json**: JSON Schema for validation blocks
 
 **Extended by**:
-- **doc/_meta/03-governance/quarterly-review.md**: Procedures for updating standards
-- **doc/_meta/03-governance/hub-consolidation.md**: Hub creation governance
+
+- **doc/\_meta/03-governance/quarterly-review.md**: Procedures for updating standards
+- **doc/\_meta/03-governance/hub-consolidation.md**: Hub creation governance

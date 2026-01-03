@@ -4,7 +4,7 @@ status: active
 date_created: 2025-11-06
 date_updated: 2025-11-07
 primary_category: documentation
-hub_document: README.md
+hub_document: doc/_meta/01-standards/README.md
 tags:
   - standards
   - frontmatter
@@ -34,7 +34,7 @@ This means:
 1. **NO version history SECTIONS in document body** - No "Version History", "Revision Log", "Change Log", or similar sections
 2. **NO version/revision FIELDS in YAML frontmatter** - No fields named `version`, `revision`, `changelog`, `history`, or similar
 
-Both prohibitions apply to product documentation only (not `doc/_meta/`). Use `date_created` and `date_updated` for temporal tracking. Git provides full history.
+Both prohibitions apply to product documentation only (not `doc/_meta/`). Document dates are tracked via git history rather than frontmatter fields. Use `git log --follow <file>` to retrieve date information.
 
 ## Schema Files
 
@@ -87,27 +87,19 @@ doc_type: spoke
 status: active
 ```
 
-### date_created (required)
+### date_created (deprecated)
+
+**Status**: No longer required. Document dates are tracked via git history.
 
 **Type**: string (date format YYYY-MM-DD)
-**Description**: Date the document was originally created
+**Description**: Legacy field for document creation date. Existing fields may remain but are not required for new documents.
 
-**Example**:
+### date_updated (deprecated)
 
-```yaml
-date_created: 2025-11-06
-```
-
-### date_updated (optional)
+**Status**: No longer required. Document dates are tracked via git history.
 
 **Type**: string (date format YYYY-MM-DD)
-**Description**: Date of last significant update (not minor typo fixes)
-
-**Example**:
-
-```yaml
-date_updated: 2025-11-15
-```
+**Description**: Legacy field for update tracking. Use `git log --follow <file>` instead.
 
 ### primary_category (required)
 

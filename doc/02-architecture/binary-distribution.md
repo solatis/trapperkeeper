@@ -3,7 +3,7 @@ doc_type: spoke
 status: active
 date_created: 2025-11-07
 primary_category: architecture
-hub_document: /Users/lmergen/git/trapperkeeper/doc/02-architecture/README.md
+hub_document: doc/02-architecture/README.md
 tags:
   - single-binary
   - subcommands
@@ -19,7 +19,7 @@ TrapperKeeper requires unified distribution packaging both services (`tk-sensor-
 
 Traditional multi-binary approaches require coordinating versions across artifacts, managing separate deployment pipelines, and handling dependency conflicts between services. Single binary with subcommands eliminates these coordination problems while maintaining service independence at runtime.
 
-**Hub Document**: This document is part of the Architecture Hub. See Architecture Overview for strategic context on unified binary distribution within TrapperKeeper's two-service architecture.
+**Hub Document**: This document is part of the Architecture Hub. See [Architecture Overview](README.md) for strategic context on unified binary distribution within TrapperKeeper's two-service architecture.
 
 ## Single Binary Architecture
 
@@ -72,7 +72,7 @@ Go modules enable unified build with shared dependencies.
 ```go
 module github.com/trapperkeeper/trapperkeeper
 
-go 1.25
+go 1.23  // Always latest stable; see 10-integration/dependency-management.md
 
 require (
     google.golang.org/grpc v1.60.0
@@ -83,6 +83,9 @@ require (
     modernc.org/sqlite v1.28.0        // SQLite driver
     // ... other shared dependencies
 )
+
+// Version policy: latest stable on first use, minor upgrades freely,
+// major upgrades require expert decision.
 ```
 
 **Directory Structure**:
@@ -578,7 +581,7 @@ services:
 **Related Spokes** (siblings in this hub):
 
 - API Service Architecture: sensor-api subcommand implementation
-- SDK Model: SDK dependencies on internal/client package (not full binary)
+- SDK Model: Go SDK (sdks/go/) imports internal/rules but avoids internal/core
 
 **Extended by**:
 

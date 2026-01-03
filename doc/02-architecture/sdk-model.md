@@ -3,7 +3,7 @@ doc_type: spoke
 status: active
 date_created: 2025-11-07
 primary_category: architecture
-hub_document: /Users/lmergen/git/trapperkeeper/doc/02-architecture/README.md
+hub_document: doc/02-architecture/README.md
 tags:
   - sdk
   - ephemeral
@@ -19,7 +19,7 @@ TrapperKeeper SDKs must integrate seamlessly with data processing frameworks (Ai
 
 The SDK model prioritizes developer experience through minimal boilerplate, explicit control over buffers and network I/O, and fail-safe defaults that degrade gracefully when dependencies are unavailable. SDKs are pure native implementations using gRPC client libraries, avoiding server-side dependencies to keep distributions lean (~5-10MB).
 
-**Hub Document**: This document is part of the Architecture Hub. See Architecture Overview for strategic context on developer-first SDK design within TrapperKeeper's two-service architecture.
+**Hub Document**: This document is part of the Architecture Hub. See [Architecture Overview](README.md) for strategic context on developer-first SDK design within TrapperKeeper's two-service architecture.
 
 ## Ephemeral Sensor Pattern
 
@@ -126,7 +126,7 @@ Developers control when events are sent to the server via explicit `flush()` cal
 ### Buffer Pattern
 
 ```python
-sensor = Sensor(api_key=api_key, buffer_size=1000)
+sensor = Sensor(api_key=api_key, buffer_size=128)
 
 # Events buffered locally
 for i in range(5000):
@@ -194,7 +194,7 @@ sensor = Sensor(
     api_key=api_key,
     on_api_failure='fail_safe',  # Options: fail_safe, fail_closed, fail_open
     cache_rules=True,             # Cache rules for offline evaluation
-    cache_ttl=3600               # Cache TTL: 1 hour
+    cache_ttl=300                # Cache TTL: 5 minutes
 )
 ```
 
@@ -208,7 +208,7 @@ sensor = Sensor(
 
 - SDK caches rules from last successful sync
 - Cache persists across process restarts (optional)
-- Cache TTL configurable (default: 1 hour)
+- Cache TTL configurable (default: 5 minutes)
 - Expired cache triggers sync attempt, falls back to cached rules if sync fails
 
 **Benefits**:
@@ -339,7 +339,7 @@ All SDK implementations must pass a shared conformance test suite ensuring:
 - **Rule Evaluation Consistency**: Identical rule evaluation results across languages
 - **Type Coercion Semantics**: Consistent type conversion behavior
 - **Field Path Resolution**: Identical wildcard expansion and nested path handling
-- **DNF Evaluation**: Same short-circuit and evaluation order guarantees
+- **DNF Evaluation**: Consistent match/no-match semantics (short-circuit and evaluation order are SDK discretion)
 
 **Test Suite Location**: `tests/conformance/`
 

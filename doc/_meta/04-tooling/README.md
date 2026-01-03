@@ -106,9 +106,9 @@ CI/CD integration ensures validation runs on every documentation change with mer
 
 **Dependencies** (foundational documents):
 
-- **doc/_meta/01-standards/README.md**: Standards that validation enforces
-- **doc/_meta/README.md**: Parent meta-documentation hub
+- **doc/\_meta/01-standards/README.md**: Standards that validation enforces
+- **doc/\_meta/README.md**: Parent meta-documentation hub
 
 **References** (related hubs):
 
-- **doc/_meta/03-governance/README.md**: Governance procedures enforced through validation
+- **doc/\_meta/03-governance/README.md**: Governance procedures enforced through validation

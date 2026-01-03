@@ -82,7 +82,7 @@ CLAUDE.md format standard defines fast-index navigation files that guide LLM age
 - **claude-md-format.md**: Complete format specification, trigger patterns, forbidden content, length limits
 - **claude-md-structure.md**: Structural organization patterns, section ordering, consistency requirements
 
-**Example**: `**\`authentication.md\`** - Read when implementing login, session management, or user verification` provides clear trigger condition.
+**Example**: `**\`authentication.md\`\*\* - Read when implementing login, session management, or user verification` provides clear trigger condition.
 
 ### Validation and Quality Standards
 
@@ -100,9 +100,9 @@ Standards must be enforceable through automated validation to maintain documenta
 **Cross-References:**
 
 - **documentation-standards.md**: Validation requirements by document type, DSL syntax overview, CI enforcement
-- **doc/_meta/04-tooling/validation-dsl-reference.md**: Complete validation DSL reference with examples
-- **doc/_meta/04-tooling/architecture.md**: Validation implementation details, algorithms, CI/CD integration
-- **doc/_meta/03-governance/hub-consolidation.md**: Procedures for updating standards
+- **doc/\_meta/04-tooling/validation-dsl-reference.md**: Complete validation DSL reference with examples
+- **doc/\_meta/04-tooling/architecture.md**: Validation implementation details, algorithms, CI/CD integration
+- **doc/\_meta/03-governance/hub-consolidation.md**: Procedures for updating standards
 
 **Example**: `validate.py validate-all` checks frontmatter schema, hub-spoke bidirectional links, CLAUDE.md format, template validation rules, producing zero-exit on success.
 
@@ -134,11 +134,11 @@ Standards must be enforceable through automated validation to maintain documenta
 
 **Dependencies** (foundational documents):
 
-- **doc/_meta/README.md**: Parent meta-documentation hub
+- **doc/\_meta/README.md**: Parent meta-documentation hub
 - **doc/CLAUDE.md**: Root navigation entry point implementing these standards
 
 **References** (related hubs):
 
-- **doc/_meta/02-templates/README.md**: Provides templates implementing these standards
-- **doc/_meta/03-governance/README.md**: Defines procedures for maintaining standards
-- **doc/_meta/04-tooling/README.md**: Implements validation automation for standards
+- **doc/\_meta/02-templates/README.md**: Provides templates implementing these standards
+- **doc/\_meta/03-governance/README.md**: Defines procedures for maintaining standards
+- **doc/\_meta/04-tooling/README.md**: Implements validation automation for standards

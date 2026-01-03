@@ -3,7 +3,7 @@ doc_type: spoke
 status: active
 date_created: 2025-11-07
 primary_category: deployment
-hub_document: /Users/lmergen/git/trapperkeeper/doc/09-operations/README.md
+hub_document: doc/09-operations/README.md
 tags:
   - web-framework
   - net/http
@@ -16,7 +16,7 @@ tags:
 
 ## Context
 
-TrapperKeeper's web UI service requires HTTP routing for server-side rendered HTML with CSRF protection, form validation, and static asset serving. This document specifies the Go 1.25 stdlib net/http framework selection, middleware chain pattern, html/template integration, and session management.
+TrapperKeeper's web UI service requires HTTP routing for server-side rendered HTML with CSRF protection, form validation, and static asset serving. This document specifies the Go stdlib net/http framework selection, middleware chain pattern, html/template integration, and session management.
 
 **Hub Document**: This spoke is part of [Operations Overview](README.md). See the hub's Web Framework section for strategic context.
 
@@ -24,7 +24,7 @@ TrapperKeeper's web UI service requires HTTP routing for server-side rendered HT
 
 ### Framework Rationale
 
-**Selected**: Go 1.25 stdlib net/http with Go 1.22+ path parameters
+**Selected**: Go stdlib net/http with Go 1.22+ path parameters
 
 **Benefits**:
 
@@ -75,8 +75,8 @@ import (
 
 ```go
 mux := http.NewServeMux()
-mux.HandleFunc("POST /rules", createRule)
-mux.HandleFunc("GET /rules", listRules)
+mux.HandleFunc("POST /rule", createRule)
+mux.HandleFunc("GET /rule", listRules)
 
 // Middleware chain wrapping (outer to inner)
 handler := loggingMiddleware(
@@ -169,7 +169,7 @@ handler := sessionManager.LoadAndSave(
 **Template Integration**:
 
 ```html
-<form method="POST" action="/rules/create">
+<form method="POST" action="/rule/create">
   <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}" />
   <!-- form fields -->
 </form>
@@ -182,7 +182,7 @@ handler := sessionManager.LoadAndSave(
 CSRF token validation failed. Please refresh and try again.
 ```
 
-**Cross-Reference**: See [Validation: Unified Validation and Input Sanitization](../07/validation/README.md) Section 3.6 for complete CSRF validation.
+**Cross-Reference**: See [Validation: Unified Validation and Input Sanitization](../07-validation/README.md) for CSRF validation specifications.
 
 ### Custom Redirect Middleware
 
@@ -310,7 +310,7 @@ func listRules(w http.ResponseWriter, r *http.Request) {
 
 **HTML Escaping**: html/template automatically escapes HTML by default (prevents XSS).
 
-**Cross-Reference**: See [Validation: Unified Validation and Input Sanitization](../07-validation/README.md) Section 4.2 for complete HTML escaping specifications.
+**Cross-Reference**: See [Validation: Unified Validation and Input Sanitization](../07-validation/README.md) for HTML escaping specifications.
 
 ## Form Validation
 
@@ -384,7 +384,7 @@ func createRule(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    http.Redirect(w, r, "/rules/"+ruleID, http.StatusSeeOther)
+    http.Redirect(w, r, "/rule/"+ruleID, http.StatusSeeOther)
 }
 ```
 
@@ -393,7 +393,7 @@ func createRule(w http.ResponseWriter, r *http.Request) {
 - **400 Bad Request**: Validation failure (return rendered form with errors)
 - **422 Unprocessable Entity**: Semantic validation failure (duplicate rule name)
 
-**Cross-Reference**: See [Validation: Unified Validation and Input Sanitization](../07-validation/README.md) Section 3.6 for complete form validation rules.
+**Cross-Reference**: See [Validation: Unified Validation and Input Sanitization](../07-validation/README.md) for form validation specifications.
 
 ## Static Asset Serving
 
@@ -522,7 +522,7 @@ func TestCreateRuleSuccess(t *testing.T) {
     mux := createApp()
 
     formData := strings.NewReader("name=TestRule&description=Test")
-    req := httptest.NewRequest("POST", "/rules/create", formData)
+    req := httptest.NewRequest("POST", "/rule/create", formData)
     req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
     rr := httptest.NewRecorder()
@@ -547,7 +547,7 @@ import (
 func TestRulesListRendering(t *testing.T) {
     mux := createApp()
 
-    req := httptest.NewRequest("GET", "/rules", nil)
+    req := httptest.NewRequest("GET", "/rule", nil)
     rr := httptest.NewRecorder()
     mux.ServeHTTP(rr, req)
 

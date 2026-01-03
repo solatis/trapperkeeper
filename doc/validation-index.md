@@ -37,7 +37,7 @@ TrapperKeeper validation uses a 4-layer responsibility model: UI Layer (user exp
 
 - **[Validation Hub](07-validation/README.md)** - Strategic overview of validation architecture → See Section 2 for complete 4-layer model
 - **[Responsibility Matrix](07-validation/responsibility-matrix.md)** - Detailed layer-by-layer validation assignments with SDK/server scope markers for all 12 validation types
-- **[Integration Overview](10-integration/README.md)** - How validation logic distributes across internal/rules, internal/client, internal/core packages
+- **[Integration Overview](10-integration/README.md)** - How validation logic distributes across internal/rules, sdks/go/, internal/core packages
 
 ### 12 Validation Types
 
@@ -71,7 +71,7 @@ Validation logic splits between SDK (client-side) and server (API/database) base
 
 ### Centralized Validation with go-playground/validator
 
-All validation logic uses go-playground/validator as the standard validation library, shared by both SDKs (internal/client) and server (internal/core). Single source of truth eliminates duplication, ensures consistent validation across SDK languages, and simplifies maintenance. Validation includes rule expression syntax/semantics, field path syntax, type coercion, and rule complexity limits.
+All validation logic uses go-playground/validator as the standard validation library, shared by Go SDK (sdks/go/) and server (internal/core) via internal/rules. Single source of truth eliminates duplication, ensures consistent validation across SDK languages, and simplifies maintenance. Validation includes rule expression syntax/semantics, field path syntax, type coercion, and rule complexity limits.
 
 **Relevant Documentation:**
 

@@ -9,11 +9,11 @@ tags:
   - dnf
   - evaluation
 consolidated_spokes:
-  - doc/04-rule-engine/expression-language.md
-  - doc/04-rule-engine/field-path-resolution.md
-  - doc/04-rule-engine/type-system-coercion.md
-  - doc/04-rule-engine/schema-evolution.md
-  - doc/04-rule-engine/lifecycle.md
+  - expression-language.md
+  - field-path-resolution.md
+  - type-system-coercion.md
+  - schema-evolution.md
+  - lifecycle.md
 cross_cutting:
   - validation
   - performance
@@ -26,7 +26,7 @@ maintainer: Rule Engine Team
 
 TrapperKeeper's rule engine evaluates data quality rules against streaming records with strict performance requirements (<1ms per record) while maintaining usability for non-programmers. The rule system must handle arbitrary data structures without schema pre-registration, support complex boolean logic, provide predictable firewall-style evaluation semantics, and handle missing fields gracefully during schema evolution.
 
-The architecture spans multiple interconnected concerns: expression syntax and evaluation semantics, runtime field resolution with wildcard support, type handling with explicit coercion rules, missing field behavior during schema changes, and operational lifecycle controls for safe production deployment. These concerns were previously fragmented across separate documents, creating complexity for both implementors and rule authors.
+The architecture spans multiple interconnected concerns: expression syntax and evaluation semantics, runtime field resolution with wildcard support, type handling with explicit coercion rules, missing field behavior during schema changes, and operational lifecycle controls for safe production deployment. This hub integrates these interconnected concerns to provide a cohesive view for both implementors and rule authors.
 
 This hub consolidates the complete rule engine architecture, providing strategic overview of the DNF-based expression system, field resolution mechanisms, type coercion strategies, schema evolution handling, and operational controls. It serves as the primary entry point for understanding how TrapperKeeper evaluates rules against streaming data.
 
@@ -148,12 +148,12 @@ Each condition specifies `field_type` independently (`numeric`, `text`, `boolean
 
 **Domain Boundary Comparison**:
 
-| Scenario | Validation Domain | Behavior | `on_missing_field` Applies? |
-|----------|-------------------|----------|----------------------------|
-| Missing field in rule definition JSON | Internal (Strict) | API validation error (400 response) | NO - API rejects request |
-| Missing field in incoming event data | External (Best-effort) | Runtime evaluation policy | YES - skip/match/error mode applies |
-| Type coercion failure in incoming data | External (Best-effort) | Condition fails, continue evaluation | NO - treated as condition failed |
-| Null value in incoming event data | External (Best-effort) | Defers to policy (treated as missing) | YES - skip/match/error mode applies |
+| Scenario                               | Validation Domain      | Behavior                              | `on_missing_field` Applies?         |
+| -------------------------------------- | ---------------------- | ------------------------------------- | ----------------------------------- |
+| Missing field in rule definition JSON  | Internal (Strict)      | API validation error (400 response)   | NO - API rejects request            |
+| Missing field in incoming event data   | External (Best-effort) | Runtime evaluation policy             | YES - skip/match/error mode applies |
+| Type coercion failure in incoming data | External (Best-effort) | Condition fails, continue evaluation  | NO - treated as condition failed    |
+| Null value in incoming event data      | External (Best-effort) | Defers to policy (treated as missing) | YES - skip/match/error mode applies |
 
 **Cross-References:**
 

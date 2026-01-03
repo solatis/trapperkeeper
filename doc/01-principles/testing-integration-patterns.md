@@ -3,7 +3,7 @@ doc_type: spoke
 status: active
 date_created: 2025-11-07
 primary_category: testing
-hub_document: /Users/lmergen/git/trapperkeeper/doc/01-principles/README.md
+hub_document: doc/01-principles/README.md
 tags:
   - docker
   - database-fixtures
@@ -19,7 +19,7 @@ Integration tests require consistent, repeatable patterns for Docker fixtures, d
 
 This document provides concrete implementation patterns for integration testing infrastructure supporting TrapperKeeper's Integration-First Testing philosophy.
 
-**Hub Document**: This document is part of the Principles Hub. See Principles Architecture and Testing Philosophy for strategic overview of integration-first testing approach.
+**Hub Document**: This document is part of the Principles Hub. See [Principles Overview](README.md) and Testing Philosophy for strategic overview of integration-first testing approach.
 
 ## Docker Fixture Configuration
 

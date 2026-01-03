@@ -31,15 +31,19 @@ def example_function():
 ## Edge Cases and Limitations
 
 **Known Limitations**:
+
 - Limitation 1: Description and workaround
 
 **Edge Cases**:
+
 - Edge case 1: Expected behavior
 
 ## Related Documents
 
 **Dependencies**:
+
 - foundation.md: Foundational concepts required
 
 **Related Spokes**:
+
 - sibling-spoke.md: Related implementation

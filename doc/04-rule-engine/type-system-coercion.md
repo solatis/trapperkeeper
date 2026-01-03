@@ -3,7 +3,7 @@ doc_type: spoke
 status: active
 date_created: 2025-11-07
 primary_category: architecture
-hub_document: /Users/lmergen/git/trapperkeeper/doc/04-rule-engine/README.md
+hub_document: doc/04-rule-engine/README.md
 tags:
   - type-system
   - type-coercion
@@ -449,7 +449,7 @@ Evaluated against: `readings = [{"temp": 10}, {"temp": "invalid"}, {"temp": 30}]
 **Edge Cases**:
 
 - **Empty strings**: Treated as non-numeric, coercion fails for `field_type="int"` or `field_type="float"`
-- **Leading/trailing whitespace**: May cause coercion failure depending on parser implementation
+- **Leading/trailing whitespace**: MUST be trimmed before parsing. All SDKs strip whitespace to ensure consistent coercion behavior across implementations
 - **Special float values**: `Infinity`, `NaN` handling depends on language implementation
 
 ## Related Documents

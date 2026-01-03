@@ -5,7 +5,7 @@ status: active
 date_created: 2025-11-06
 date_updated: 2025-11-08
 primary_category: documentation
-hub_document: README.md
+hub_document: doc/_meta/02-templates/README.md
 tags:
   - templates
   - index
@@ -18,18 +18,24 @@ validation:
     required_fields:
       - doc_type
       - status
-      - date_created
       - primary_category
-      - cross_cutting_concern
+      - cross_cutting
     field_constraints:
       doc_type:
         enum: ["index"]
       status:
         enum: ["draft", "active", "deprecated", "superseded"]
-      date_created:
-        pattern: "^\\d{4}-\\d{2}-\\d{2}$"
-      cross_cutting_concern:
-        enum: ["security", "performance", "validation", "observability", "error-handling"]
+      cross_cutting:
+        type: array
+        items:
+          enum:
+            [
+              "security",
+              "performance",
+              "validation",
+              "observability",
+              "error-handling",
+            ]
     conditional_constraints:
       - if_field: status
         equals: superseded

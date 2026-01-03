@@ -3,7 +3,7 @@ doc_type: spoke
 status: active
 date_created: 2025-11-07
 primary_category: security
-hub_document: /Users/lmergen/git/trapperkeeper/doc/06-security/README.md
+hub_document: doc/06-security/README.md
 tags:
   - encryption
   - bcrypt
@@ -72,7 +72,7 @@ TrapperKeeper requires comprehensive encryption strategy documenting what IS and
 
 **Storage**:
 
-- Database stores HMAC-SHA256 hash of full key (32 bytes)
+- Database stores SHA256 hash of full key (32 bytes)
 - Secret IDs stored separately for O(1) lookup
 - Plaintext keys never stored (shown once at creation)
 
@@ -113,7 +113,7 @@ TrapperKeeper requires comprehensive encryption strategy documenting what IS and
 
 **Implementation**:
 
-- Web UI: HTTPS on port 8080 (TLS 1.3)
+- Web UI: Port 8080 (TLS 1.3 in production)
 - Sensor API: gRPC TLS on port 50051 (TLS 1.3)
 - Cipher suites: TLS_AES_256_GCM_SHA384, TLS_AES_128_GCM_SHA256, TLS_CHACHA20_POLY1305_SHA256
 - Separate certificates for each service
@@ -389,7 +389,7 @@ TrapperKeeper requires comprehensive encryption strategy documenting what IS and
 - [Authentication (Sensor API)](authentication-sensor-api.md): HMAC-SHA256 API key authentication implementation context
 - [TLS/HTTPS Strategy](tls-https-strategy.md): TLS transport encryption implementation context
 - [Configuration Security](configuration-security.md): Secrets via environment variables constraint, config file rejection
-- [Database Backend](../03-data/database-backend.md): Database backend flexibility maintained by application-layer encryption
+- [Database Backend](../09-operations/database-backend.md): Database backend flexibility maintained by application-layer encryption
 
 **Related Spokes** (siblings in this hub):
 

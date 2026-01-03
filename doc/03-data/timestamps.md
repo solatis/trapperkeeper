@@ -3,7 +3,7 @@ doc_type: spoke
 status: active
 date_created: 2025-11-07
 primary_category: architecture
-hub_document: /Users/lmergen/git/trapperkeeper/doc/03-data/README.md
+hub_document: doc/03-data/README.md
 tags:
   - timestamps
   - protobuf
@@ -19,7 +19,7 @@ TrapperKeeper handles timestamps across multiple architectural boundaries (gRPC 
 
 Each layer uses optimal timestamp representation for that context: Protocol Buffers for wire format, time.Time for Go application logic, database TIMESTAMP types for persistence. Explicit conversion functions at boundaries prevent format mixing and maintain type safety.
 
-**Hub Document**: This document is part of the Data Hub. See Data Architecture for strategic overview of multi-layer timestamp handling within TrapperKeeper's data model.
+**Hub Document**: This document is part of the Data Hub. See [Data Architecture](README.md) for strategic overview of multi-layer timestamp handling within TrapperKeeper's data model.
 
 ## Layer-Specific Representations
 

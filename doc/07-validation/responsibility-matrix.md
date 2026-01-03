@@ -3,7 +3,7 @@ doc_type: spoke
 status: active
 date_created: 2025-11-10
 primary_category: validation
-hub_document: /Users/lmergen/git/trapperkeeper/doc/07-validation/README.md
+hub_document: doc/07-validation/README.md
 tags:
   - validation
   - responsibility-matrix
@@ -16,7 +16,7 @@ tags:
 
 This matrix consolidates validation layer responsibilities for all 12 validation types across the four enforcement layers (UI, API, Runtime, Database). Each validation type specifies which layer enforces which checks, with explicit SDK vs Server scope markers for Runtime layer validations.
 
-**Hub Document**: This document is part of the Validation Architecture. See Validation Hub for complete validation strategy and cross-references to detailed implementation patterns.
+**Hub Document**: This document is part of the Validation Architecture. See [Validation Hub](README.md) for complete validation strategy and cross-references to detailed implementation patterns.
 
 ## Legend
 

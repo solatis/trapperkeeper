@@ -3,7 +3,7 @@ doc_type: spoke
 status: active
 date_created: 2025-11-07
 primary_category: performance
-hub_document: /Users/lmergen/git/trapperkeeper/doc/05-performance/README.md
+hub_document: doc/05-performance/README.md
 tags:
   - batch-processing
   - vectorization
@@ -17,7 +17,7 @@ tags:
 
 TrapperKeeper's SDK model integrates into data processing pipelines where frameworks like Pandas and Apache Spark operate on batches of data rather than individual records. These frameworks expose vectorized operations (NumPy for Pandas, RDD/DataFrame transformations for Spark) that are orders of magnitude faster than row-by-row iteration. Vectorized batch processing provides 10-100× speedup over sequential evaluation.
 
-**Hub Document**: This document is part of the Performance Architecture. See Performance Hub for strategic overview and sampling strategies.
+**Hub Document**: This document is part of the Performance Architecture. See [Performance Hub](README.md) for strategic overview and sampling strategies.
 
 ## Vectorized Rule Evaluation
 

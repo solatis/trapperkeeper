@@ -3,7 +3,7 @@ doc_type: spoke
 status: active
 date_created: 2025-11-07
 primary_category: deployment
-hub_document: /Users/lmergen/git/trapperkeeper/doc/09-operations/README.md
+hub_document: doc/09-operations/README.md
 tags:
   - cli
   - cobra

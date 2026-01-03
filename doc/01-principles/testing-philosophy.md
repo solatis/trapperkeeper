@@ -3,7 +3,7 @@ doc_type: spoke
 status: active
 date_created: 2025-11-07
 primary_category: testing
-hub_document: /Users/lmergen/git/trapperkeeper/doc/01-principles/README.md
+hub_document: doc/01-principles/README.md
 tags:
   - testing-trophy
   - integration-first
@@ -18,11 +18,11 @@ TrapperKeeper faces unique testing challenges that make traditional test pyramid
 
 Traditional test pyramids assume stable pre-registered schemas, persistent infrastructure, large teams with dedicated QA resources, and low diversity in data shapes. These assumptions do not hold for TrapperKeeper.
 
-**Hub Document**: This document is part of the Principles Hub. See Principles Architecture for the comprehensive architectural foundation that establishes Integration-First Testing as core principle #6.
+**Hub Document**: This document is part of the Principles Hub. See [Principles Overview](README.md) for the comprehensive architectural foundation that establishes Integration-First Testing as core principle #6.
 
 ## Integration-First Testing Strategy
 
-We adopt an **Integration-First Testing** strategy implementing Principles ADR Principle #6, organized around the Testing Trophy model rather than the traditional pyramid.
+We adopt an **Integration-First Testing** strategy, organized around the Testing Trophy model rather than the traditional pyramid.
 
 This approach prioritizes integration tests as the primary testing strategy, with static analysis as the foundation and unit tests reserved for complex logic only. The Testing Trophy model better aligns with TrapperKeeper's architectural realities: schema-agnostic design, ephemeral sensors, and small team constraints.
 

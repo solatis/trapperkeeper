@@ -1,13 +1,10 @@
 ---
 doc_type: index
 status: active
-date_created: 2025-11-07
-date_updated: 2025-11-07
 primary_category: performance
 cross_cutting:
   - performance
 maintainer: Performance Team
-last_review: 2025-11-07
 next_review: 2026-02-07
 ---
 
@@ -50,15 +47,15 @@ Different operators have different computational costs. String operations (prefi
 - **[Performance Hub](05-performance/README.md)** - Operator cost categories → See Section 2.3 for operator classification
 - **[Type System and Coercion](04-rule-engine/type-system-coercion.md)** - Type coercion impact on operator costs
 
-### Field Type Multipliers
+### Field Structure Multipliers
 
-Field types affect lookup costs. Arrays and nested objects require additional traversal compared to simple scalar fields. The cost model uses field type multipliers to account for this complexity: scalars (1x), arrays (10x), nested objects (10x), arrays of objects (100x).
+Field structures affect lookup costs through traversal complexity. Arrays and nested objects require additional traversal compared to simple scalar fields. The cost model uses field structure multipliers to account for this complexity: scalars (1x), arrays (10x), nested objects (10x), arrays of objects (100x). These structure multipliers are distinct from field type multipliers (int, string, boolean, etc.) which affect execution costs based on data type operations.
 
 **Relevant Documentation:**
 
-- **[Cost Model](05-performance/cost-model.md)** - Canonical field type multiplier table → See Section 3 for complete multipliers
-- **[Performance Hub](05-performance/README.md)** - Field type multiplier rationale → See Section 2.2 for field complexity impact
-- **[Field Path Resolution](04-rule-engine/field-path-resolution.md)** - How field types affect runtime resolution performance
+- **[Performance Hub](05-performance/README.md)** - Field structure multiplier rationale → See Section 2.2 for field complexity impact
+- **[Cost Model](05-performance/cost-model.md)** - Field type multipliers (int, string, boolean) → See Section 3 for data type operation costs
+- **[Field Path Resolution](04-rule-engine/field-path-resolution.md)** - How field structures affect runtime resolution performance
 
 ### Nested Wildcard Limits
 
@@ -103,7 +100,7 @@ Rules pre-compile to nested predicates at rule sync time, eliminating runtime pa
 
 ### Performance Budget and Thresholds
 
-TrapperKeeper enforces performance budgets at rule creation and compilation time. Rules exceeding cost thresholds are rejected or flagged for optimization. Warning thresholds provide feedback before hard limits are reached. Budget enforcement prevents performance regressions from poorly constructed rules.
+TrapperKeeper enforces performance budgets at rule creation and compilation time. Rules exceeding hard limits (>2 nested wildcards) are rejected with 400 errors by the API. Rules exceeding soft limits (>1 nested wildcard without sampling enabled) trigger warnings but are accepted. Budget enforcement prevents performance regressions from poorly constructed rules.
 
 **Relevant Documentation:**
 
@@ -186,8 +183,6 @@ TrapperKeeper enforces performance budgets at rule creation and compilation time
 
 ## Maintenance Notes
 
-**Last Updated**: 2025-11-07
-**Last Review**: 2025-11-07
 **Next Review**: 2026-02-07 (quarterly)
 **Maintainer**: Performance Team
 

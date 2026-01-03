@@ -3,7 +3,7 @@ doc_type: spoke
 status: active
 date_created: 2025-11-07
 primary_category: architecture
-hub_document: /Users/lmergen/git/trapperkeeper/doc/04-rule-engine/README.md
+hub_document: doc/04-rule-engine/README.md
 tags:
   - expression-language
   - dnf
@@ -107,7 +107,8 @@ Each condition in an `all` array has this structure:
   "field_type": "numeric",
   "op": "gt",
   "value": 100,
-  "on_missing_field": "skip"
+  "on_missing_field": "skip",
+  "on_coercion_fail": "skip"
 }
 ```
 
@@ -126,6 +127,13 @@ Each condition in an `all` array has this structure:
   - **Default**: `"skip"` (aligns with Least Intrusive by Default principle)
   - **Database**: NOT NULL with default value
   - See Schema Evolution for complete missing field handling semantics
+- **`on_coercion_fail`**: Enum (`"skip"`, `"match"`, `"error"`), **required**, default `"skip"`
+  - `"skip"`: Coercion fails → condition doesn't match, continue evaluation (best-effort parsing)
+  - `"match"`: Coercion fails → treat as matching condition (detect bad data)
+  - `"error"`: Coercion fails → raise exception, fail pipeline (strict type validation)
+  - **Default**: `"skip"` (aligns with best-effort evaluation principle)
+  - **Database**: NOT NULL with default value
+  - See Schema Evolution for complete coercion failure handling semantics
 
 **Rationale**: Per-condition `field_type` enables mixed-type rules (e.g., numeric comparison AND string prefix check). Array-based field paths enable natural JSON serialization of complex paths with wildcards and array indices. Per-condition `on_missing_field` enables fine-grained missing field handling within a single rule.
 

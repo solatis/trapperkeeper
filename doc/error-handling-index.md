@@ -1,13 +1,10 @@
 ---
 doc_type: index
 status: active
-date_created: 2025-11-07
-date_updated: 2025-11-07
 primary_category: error-handling
 cross_cutting:
   - error-handling
 maintainer: Resilience Team
-last_review: 2025-11-07
 next_review: 2026-02-07
 ---
 
@@ -215,8 +212,6 @@ Fail-open-with-cache mode uses in-memory rule cache with TTL (default 5 minutes)
 
 ## Maintenance Notes
 
-**Last Updated**: 2025-11-07
-**Last Review**: 2025-11-07
 **Next Review**: 2026-02-07 (quarterly)
 **Maintainer**: Resilience Team
 

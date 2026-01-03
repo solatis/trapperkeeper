@@ -31,9 +31,11 @@ This document serves as the hub.
 Content here.
 
 **Key Points:**
+
 - Point 1
 
 **Cross-References:**
+
 - spoke1.md
 
 **Example**: Example here.
@@ -43,9 +45,11 @@ Content here.
 More content.
 
 **Key Points:**
+
 - Point 2
 
 **Cross-References:**
+
 - spoke2.md
 
 **Example**: Example here.
@@ -55,9 +59,11 @@ More content.
 Even more content.
 
 **Key Points:**
+
 - Point 3
 
 **Cross-References:**
+
 - spoke3.md
 
 **Example**: Example here.
@@ -65,14 +71,17 @@ Even more content.
 ## Consequences
 
 **Benefits:**
+
 - Benefit 1
 
 **Trade-offs:**
+
 - Trade-off 1
 
 ## Related Documents
 
 **Consolidated Spokes**:
+
 - spoke1.md
 - spoke2.md
 - spoke3.md

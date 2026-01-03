@@ -131,7 +131,7 @@ Five cross-cutting concerns span multiple domains. These indexes aggregate relat
 #### Example 2: Understanding security
 
 1. Click: [Security Hub](06-security/README.md)
-2. Click: [Authentication Strategy](06-security/README.md#authentication-strategies) section
+2. Click: [Authentication Strategy](06-security/README.md#2-dual-authentication-strategy) section
 3. Click: [Web Authentication](06-security/authentication-web-ui.md) or [API Authentication](06-security/authentication-sensor-api.md) details
 
 #### Example 3: Understanding performance
@@ -178,7 +178,7 @@ primary_category: architecture|api|database|security|performance|validation|conf
 ---
 ```
 
-See [`_meta/standards/frontmatter-reference.md`](_meta/standards/frontmatter-reference.md) for complete field definitions.
+See [`_meta/01-standards/frontmatter-reference.md`](_meta/01-standards/frontmatter-reference.md) for complete field definitions.
 
 ## For LLM Agents
 

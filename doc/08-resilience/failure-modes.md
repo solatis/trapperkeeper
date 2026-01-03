@@ -159,9 +159,17 @@ Scenario: Sensor attempts to send events but API returns error or times out.
 
 ### Rule Synchronization
 
-- Fixed interval: 30 seconds (configurable)
-- No exponential backoff (stateless protocol, short-lived sensors)
+- Fixed interval: 30 seconds (configurable, valid range: 3-900 seconds)
+- No exponential backoff (intentional exception to general retry strategy)
 - No jitter required (sensors sync independently)
+
+**Rationale for Exception**: Rule sync deliberately avoids exponential backoff despite general system pattern (documented in error-handling-index.md) because:
+
+1. **Stateless Protocol**: No persistent connections means each sync is independent—exponential backoff designed for connection-based protocols with state accumulation
+2. **Short-Lived Sensors**: Ephemeral sensors live minutes to hours—exponential backoff (1s, 2s, 4s, 8s, 16s, max 60s) could consume significant portion of sensor lifetime for temporary network hiccups
+3. **Fixed Interval Sufficiency**: Sync frequency drives rule freshness, not retry speed—predictable 30-second intervals provide consistent staleness bounds across fleet
+4. **No Thundering Herd Risk**: Sensors start at random times with independent sync cycles—jitter and backoff unnecessary when synchronization naturally staggered across fleet
+5. **Operator Control**: Fixed interval allows operators to tune sync frequency based on network conditions without complex backoff parameter tuning
 
 ### Event Posting
 

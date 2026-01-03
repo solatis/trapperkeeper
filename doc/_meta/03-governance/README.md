@@ -37,7 +37,7 @@ Hub consolidation governance defines when to create hubs, how to consolidate spo
 **Key Points:**
 
 - Create hub when 3+ spokes address common domain (product docs)
-- Every _meta/ subdirectory requires hub regardless of spoke count
+- Every \_meta/ subdirectory requires hub regardless of spoke count
 - Quarterly hub freshness reviews check alignment with spokes
 - 90%+ back-reference compliance required
 - Hub creation involves consolidation planning, spoke analysis, strategic synthesis
@@ -125,14 +125,13 @@ Template maintenance defines procedures for creating new documentation templates
 - **cross-cutting-index-governance.md**: Maps to Cross-Cutting Index Governance subsection
 - **documentation-evolution-principle.md**: Maps to Documentation Evolution Principle subsection
 - **template-maintenance.md**: Maps to Template Maintenance subsection
-- **adr-migration-map.md**: Maps to ADR Migration Mapping subsection
 
 **Dependencies** (foundational documents):
 
-- **doc/_meta/01-standards/README.md**: Standards that governance procedures maintain
-- **doc/_meta/README.md**: Parent meta-documentation hub
+- **doc/\_meta/01-standards/README.md**: Standards that governance procedures maintain
+- **doc/\_meta/README.md**: Parent meta-documentation hub
 
 **References** (related hubs):
 
-- **doc/_meta/02-templates/README.md**: Templates used during governed procedures
-- **doc/_meta/04-tooling/README.md**: Validation tooling enforcing governance policies
+- **doc/\_meta/02-templates/README.md**: Templates used during governed procedures
+- **doc/\_meta/04-tooling/README.md**: Validation tooling enforcing governance policies

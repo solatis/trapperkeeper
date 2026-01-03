@@ -3,7 +3,7 @@ doc_type: spoke
 status: active
 date_created: 2025-11-07
 primary_category: security
-hub_document: /Users/lmergen/git/trapperkeeper/doc/06-security/README.md
+hub_document: doc/06-security/README.md
 tags:
   - authentication
   - web-ui
@@ -61,7 +61,9 @@ TrapperKeeper uses **scs (alexedwards/scs)** for persistent session management w
 - Generate cryptographically secure random session ID
 - Store session data in database (encrypted by scs)
 - Set cookie with security attributes (see Cookie Security Configuration)
-- Session expires after 24 hours of inactivity
+- Session lifetime:
+  - Default: 24 hours of inactivity
+  - Remember-me option: 30 days (when user opts in via login form checkbox)
 
 **Session Validation** (on each request):
 
@@ -187,7 +189,12 @@ import (
 
 // Configure session manager with expiry cleanup
 sessionManager := scs.New()
-sessionManager.Lifetime = 24 * time.Hour // Session expires after 24 hours of inactivity
+sessionManager.Lifetime = 24 * time.Hour // Default session lifetime: 24 hours of inactivity
+
+// Remember-me session extension (set per-session based on login form checkbox)
+// if rememberMe {
+//     sessionManager.SetDeadline(ctx, time.Now().Add(30*24*time.Hour))
+// }
 
 // Spawn background cleanup task (using database store with cleanup support)
 go func() {
@@ -253,7 +260,7 @@ On first run (empty users table), TrapperKeeper auto-creates default admin accou
 
 **Dependencies** (read these first):
 
-- [Web Framework](../../09-operations/web-framework.md): HTTP middleware system, scs integration
+- [Web Framework](../09-operations/web-framework.md): HTTP middleware system, scs integration
 - [TLS/HTTPS Strategy](tls-https-strategy.md): Cookie secure flag coordination with TLS deployment modes
 - [Identifiers (UUIDv7)](../03-data/identifiers-uuidv7.md): UUIDv7 for user_id identifiers
 

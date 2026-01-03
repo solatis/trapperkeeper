@@ -3,7 +3,7 @@ doc_type: spoke
 status: active
 date_created: 2025-11-07
 primary_category: architecture
-hub_document: /Users/lmergen/git/trapperkeeper/doc/02-architecture/README.md
+hub_document: doc/02-architecture/README.md
 tags:
   - grpc
   - protobuf
@@ -19,7 +19,7 @@ The `tk-sensor-api` service provides gRPC communication between sensors and Trap
 
 The API uses Protocol Buffers for schema evolution support, ETAG-based synchronization to minimize bandwidth, and HMAC authentication for security. Protocol buffer compilation is handled by `buf` or `protoc` enabling both client (SDK) and server (API service) to share generated types.
 
-**Hub Document**: This document is part of the Architecture Hub. See Architecture Overview for strategic context on the two-service model and how gRPC sensor communication fits within TrapperKeeper's architecture.
+**Hub Document**: This document is part of the Architecture Hub. See [Architecture Overview](README.md) for strategic context on the two-service model and how gRPC sensor communication fits within TrapperKeeper's architecture.
 
 ## gRPC Service Definition
 
@@ -88,7 +88,7 @@ message EventResult {
 **Batch Processing**:
 
 - SDK buffers events locally until explicit `flush()`
-- Batch size configurable (default: 1000 events)
+- Batch size configurable (default: 128 events)
 - Partial failures supported: Some events succeed, others fail
 - Results array provides per-event status
 
@@ -132,7 +132,7 @@ message GetDiagnosticsResponse {
 **Cross-References**:
 
 - SDK Model Section 5: Diagnostic information exposure
-- Operational Endpoints: Health check integration
+- Health Check Endpoints: Health check integration
 
 ## Protocol Buffer Schemas
 
@@ -367,7 +367,7 @@ API service targets:
 
 - **Throughput**: 10,000 events/second per instance
 - **Latency**: p99 < 100ms for `ReportEvents` RPC
-- **Batch size**: 1000 events optimal (configurable)
+- **Batch size**: 128 events default (configurable)
 - **Rule sync**: p99 < 50ms for ETAG cache hit
 
 **Optimization Strategies**:

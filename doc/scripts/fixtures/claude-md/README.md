@@ -5,24 +5,32 @@ Test fixtures for validating CLAUDE.md files against the validation rules define
 ## Valid Fixtures
 
 ### `valid-minimal.md`
+
 Minimal valid CLAUDE.md with only the required Purpose section. Tests:
+
 - Valid title pattern
 - Required Purpose section exists
 - No forbidden patterns
 - Within line limit
 
 ### `valid-with-hub.md`
+
 CLAUDE.md with Hub section. Tests:
+
 - Hub section with proper README.md entry
 - Proper trigger pattern: " - Read when "
 
 ### `valid-with-files.md`
+
 CLAUDE.md with Files section. Tests:
+
 - Multiple file entries with proper triggers
-- Entry pattern: `**\`filename.md\`** - Read when`
+- Entry pattern: `**\`filename.md\`\*\* - Read when`
 
 ### `valid-complete.md`
+
 Complete CLAUDE.md with all sections. Tests:
+
 - Purpose, Hub, Files, and Subdirectories sections
 - All sections follow proper patterns
 - Subdirectory entries with trailing slash: `dirname/`
@@ -30,12 +38,15 @@ Complete CLAUDE.md with all sections. Tests:
 ## Invalid Fixtures
 
 ### `invalid-title.md`
+
 **Expected Error**: Title doesn't match pattern `^# .+ Guide for LLM Agents$`
 
 Tests that title validation catches improper titles.
 
 ### `invalid-forbidden-pattern.md`
+
 **Expected Errors**: Multiple forbidden patterns detected:
+
 - "contains information" (explanatory content)
 - "how to" (how-to instructions)
 - "step 1" (step-by-step procedures)
@@ -43,21 +54,25 @@ Tests that title validation catches improper titles.
 Tests that forbidden pattern detection works correctly.
 
 ### `invalid-missing-purpose.md`
+
 **Expected Error**: Missing required Purpose section
 
 Tests that required section validation works (has ## Overview instead).
 
 ### `invalid-too-long.md`
+
 **Expected Error**: Exceeds max_lines limit (50 lines)
 
 Tests line limit validation with 55+ lines.
 
 ### `invalid-purpose-too-verbose.md`
+
 **Expected Error**: Purpose section exceeds max_paragraphs (3)
 
 Tests paragraph counting within a section.
 
 ### `invalid-missing-trigger.md`
+
 **Expected Error**: File entries missing " - Read when " trigger pattern
 
 Tests that entry_pattern validation catches improper triggers.
@@ -65,6 +80,7 @@ Tests that entry_pattern validation catches improper triggers.
 ## Test Coverage
 
 These fixtures cover:
+
 - ✅ Title pattern validation
 - ✅ Required sections (Purpose)
 - ✅ Conditional sections (Hub, Files, Subdirectories)
@@ -89,6 +105,7 @@ Invalid fixtures are tested directly from this directory since they should fail 
 ### Manual Testing
 
 Test all fixtures:
+
 ```bash
 cd doc/scripts/fixtures/claude-md
 python3 ../../validate.py validate-claude-md
@@ -127,6 +144,7 @@ for fixture in ['invalid-title.md', 'invalid-forbidden-pattern.md',
 ## Usage
 
 These fixtures are used by the validation test suite to ensure that:
+
 1. Template validation frontmatter passes JSON Schema validation
 2. validate.py correctly parses validation rules from template
 3. Valid fixtures pass validation

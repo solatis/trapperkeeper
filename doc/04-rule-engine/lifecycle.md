@@ -3,10 +3,10 @@ doc_type: spoke
 status: active
 date_created: 2025-11-07
 primary_category: architecture
-hub_document: /Users/lmergen/git/trapperkeeper/doc/04-rule-engine/README.md
+hub_document: doc/04-rule-engine/README.md
 tags:
   - lifecycle
-  - dry-run
+  - immutable
   - operational-controls
   - rule-management
 cross_cutting:
@@ -21,43 +21,128 @@ TrapperKeeper rules run against live production data pipelines, making operation
 
 **Hub Document**: This document is part of the Rule Engine Architecture. See [Rule Engine Architecture](README.md) for strategic overview and relationships to expression language, field resolution, type coercion, and schema evolution.
 
-## Dry-Run Mode
+## Immutable Rules Design
 
-Rules can be marked for dry-run execution, enabling production testing without impact:
+Rules are immutable: every modification creates a new rule record with a new `rule_id`. Old versions are preserved until retention cleanup. This design follows functional programming principles where state changes create new values rather than mutating existing ones.
 
-**Implementation**:
+### Design Rationale
 
-- Rules have `dry_run BOOLEAN NOT NULL DEFAULT FALSE` column in database
-- When `dry_run = TRUE`, API server **transforms action to "observe"** before sending to sensors
-- Sensors see rule as `action: "observe"` regardless of actual configured action
-- Event records capture both actual action (`"drop"`, `"error"`) and effective action (`"observe"`)
+**Why immutable rules?**
 
-**Event schema addition**:
+- **Stateless reasoning**: Immutable data is simpler to reason about -- no hidden state changes, no race conditions on updates
+- **ETAG simplicity**: `ETAG = SHA256(sorted active rule_ids)` -- any rule change creates new ID, ETAG automatically changes
+- **Audit trail built-in**: All rule versions preserved until retention cleanup, events reference exact version evaluated
+- **Conflict-free concurrency**: Append-only eliminates last-write-wins bugs -- concurrent edits both succeed, creating separate versions
+- **No database triggers**: Simple application logic, no reliance on complex database internals
 
-```json
-{
-  "event_id": "01936a3e-8f2a-7b3c-9d5e-123456789abc",
-  "action": "observe",
-  "rule": {
-    "rule_id": "01936a3e-1234-7b3c-9d5e-abcdef123456",
-    "action": "drop",
-    "dry_run": true
-  }
+**What we avoid:**
+
+- No `modified_at` timestamp tracking (rules never modified)
+- No database triggers for timestamp updates
+- No query-time transformations for dry-run mode
+- No optimistic locking or version counters
+
+### Rule Schema
+
+```sql
+CREATE TABLE rules (
+  rule_id UUID PRIMARY KEY,      -- Immutable, unique per version (UUIDv7)
+  name TEXT NOT NULL,
+  action TEXT NOT NULL,          -- 'observe', 'drop', 'error'
+  conditions TEXT NOT NULL,      -- JSON-encoded DNF conditions
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  deleted_at TIMESTAMP,          -- Soft-delete timestamp
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_by TEXT,               -- Operator identity
+  INDEX idx_enabled_deleted (enabled, deleted_at)
+);
+```
+
+- `rule_id`: Unique per version, immutable, used in events and ETAG
+- No version tracking or lineage grouping (see Explicit Non-Goals)
+
+### Version Creation Flow
+
+When operator modifies a rule:
+
+1. Application soft-deletes old rule record (`deleted_at = NOW()`)
+2. Application creates new rule record with new `rule_id`
+3. ETAG changes automatically (new rule_id in hash)
+4. Sensors receive new rules on next sync (0-30s)
+
+```
+rule_id=AAA, action=observe  (active)
+    |
+    v (operator changes action to 'drop')
+rule_id=AAA soft-deleted, rule_id=BBB created with action=drop  (active)
+    |
+    v (operator adjusts conditions)
+rule_id=BBB soft-deleted, rule_id=CCC created  (active)
+```
+
+**Active rules query**:
+
+```sql
+SELECT * FROM rules
+WHERE enabled = TRUE
+  AND deleted_at IS NULL;
+```
+
+### ETAG Computation
+
+ETAG is deterministic hash of active rule IDs:
+
+```go
+func computeETAG(rules []Rule) string {
+    ids := make([]string, len(rules))
+    for i, r := range rules {
+        ids[i] = r.RuleID.String()
+    }
+    sort.Strings(ids)
+    hash := sha256.Sum256([]byte(strings.Join(ids, ",")))
+    return hex.EncodeToString(hash[:])
 }
 ```
 
-**Rationale**:
+**Properties**:
 
-- Transformation happens in API layer, not SDK (keeps sensors simple)
-- Sensors unaware of dry-run concept (they just execute observe actions)
-- Events record actual action for analysis: "Would this rule have dropped 1000 records?"
-- No performance overhead in SDK (no conditional logic in hot path)
+- Any new rule version = new rule_id = new ETAG
+- Any rule deletion = rule_id removed = new ETAG
+- Deterministic: same set of active rules = same ETAG
+- No timestamp component needed
 
-**Web UI indication**:
+## Production Testing (Replacing Dry-Run)
 
-- Dry-run rules display with visual badge: "DRY RUN MODE"
-- Event viewer shows: "Would have dropped (dry-run)"
-- Recommended workflow: Create rule → enable dry-run → validate events → disable dry-run
+The immutable design eliminates the need for a `dry_run` boolean. Production testing uses the standard version workflow with `action: observe`.
+
+### Testing Workflow
+
+1. **Create observe version**: New rule with `action: observe`
+2. **Monitor events**: Events show rule matched with observe action
+3. **Analyze impact**: "This rule would have dropped 1000 records"
+4. **Promote to production**: Create new version with `action: drop`
+5. **Deactivate test version**: Set `deleted_at` on observe version
+
+```
+Testing:    rule_id=AAA, action=observe  (active)
+               |
+               v (satisfied with testing)
+AAA soft-deleted, rule_id=BBB created with action=drop  (active)
+```
+
+**Benefits over dry_run boolean**:
+
+- System is action-agnostic (no special dry_run transformation logic)
+- Events capture exact rule state (action=observe recorded directly)
+- No ETAG invalidation ambiguity (new version = new ETAG)
+- Simpler API (no dry_run field to track)
+
+**Web UI workflow**:
+
+- "Test this rule" button creates observe-action version
+- Event viewer shows "observe" action directly (no transformation)
+- "Promote to production" creates new version with real action
+- "Discard test" sets deleted_at on observe version
 
 ## Emergency Pause All Rules
 
@@ -67,7 +152,7 @@ Global kill switch for production incidents:
 
 - Server maintains in-memory boolean flag: `rulesGloballyPaused`
 - Flag toggled via POST `/api/admin/rules/pause` and `/api/admin/rules/resume`
-- When paused, API server returns **empty rule set** with special ETAG: `"PAUSED"`
+- When paused, API server returns empty rule set with special ETAG: `"PAUSED"`
 - Sensors receive empty array, effectively disabling all rules
 
 **API response when paused**:
@@ -106,99 +191,63 @@ Toggle rules without deletion, preserving configuration:
 **Implementation**:
 
 - Rules have `enabled BOOLEAN NOT NULL DEFAULT TRUE` column
-- Disabled rules filtered out in API query: `WHERE enabled = TRUE`
+- Disabled rules filtered out in API query: `WHERE enabled = TRUE AND deleted_at IS NULL`
 - Never sent to sensors (not included in ETAG calculation)
 - Preserved in database for re-enabling later
 
 **State transitions**:
 
 ```
-CREATE → enabled=true  (default)
-DISABLE → enabled=false (hidden from sensors)
-ENABLE → enabled=true  (visible to sensors)
-DELETE → removed from database (permanent)
+CREATE  -> enabled=true, deleted_at=NULL  (default)
+DISABLE -> enabled=false                   (hidden from sensors)
+ENABLE  -> enabled=true                    (visible to sensors)
+DELETE  -> deleted_at=NOW()                (soft-delete, cleanup later)
 ```
-
-**Web UI controls**:
-
-- Toggle switch on rule detail page
-- Bulk operations: "Disable selected rules"
-- Visual indicator for disabled rules (grayed out in rule list)
-- Confirmation modal: "Enable this rule? It will apply to all matching sensors in ~30 seconds"
 
 **Rationale**:
 
 - Safer than deletion (configuration preserved)
-- No version history needed (rule still exists in database)
+- Enable/disable is in-place boolean update (exception to immutability for operational controls)
 - Clear distinction between "temporarily disabled" and "deleted"
 - Simple boolean filter in query (no performance impact)
 
-## Concurrent Modification Handling
+## Data Retention
 
-Last-write-wins strategy for MVP simplicity:
+Database retention is independent of event storage retention. Both use 28-day default windows with daily cleanup.
 
-**Implementation**:
+### Retention Model
 
-- Rules have `modified_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP`
-- Updated automatically on every UPDATE via database trigger or ORM hook
-- No optimistic locking, no version column in MVP
-- Concurrent edits result in last commit overwriting previous changes
+**Event storage**: 28-day retention, events older than window deleted first.
 
-**Web UI indication**:
+**Database rules**: Rules with `deleted_at` older than retention window AND no remaining event references are permanently deleted.
 
-- Display "Last modified: 2 minutes ago by <alice@example.com>" on rule detail page
-- Timestamp updates on page load (warns operator of recent changes)
-- No edit conflict detection or merge resolution
+**Cleanup order** (critical for referential integrity):
 
-**Example conflict scenario**:
+1. Delete events older than 28 days
+2. Delete rules where `deleted_at < NOW() - 29 days` AND `rule_id NOT IN (SELECT DISTINCT rule_id FROM events)`
 
-1. Operator A loads rule at 10:00:00, `modified_at = 09:55:00`
-2. Operator B loads same rule at 10:00:05, `modified_at = 09:55:00`
-3. Operator B saves changes at 10:01:00, `modified_at = 10:01:00`
-4. Operator A saves changes at 10:02:00, `modified_at = 10:02:00`
-5. **Result**: Operator A's changes overwrite Operator B's changes (no conflict warning)
+The 29-day buffer (vs 28-day event retention) prevents race conditions where an event is created just as cleanup runs.
 
-**Mitigation**:
+### Storage Estimates
 
-- Document expected behavior in user guide
-- Log all rule modifications with operator identity for incident analysis
-- Display recent change timestamp prominently in UI
+At 10K logical rules, 10 changes/rule/month, 28-day retention:
 
-**Rationale**:
+- Rule versions: ~10K \* 10 = 100K records
+- Storage: 100K \* 5KB average = 500MB
+- Negligible compared to event storage
 
-- Optimistic locking adds complexity for rare conflict scenario
-- Team size (5 engineers) makes conflicts unlikely
-- Simple timestamp tracking sufficient for debugging
-- Can add version-based locking in future if conflicts become problem
+### Independence Principle
 
-## Rollback Strategy
+**Critical design requirement**: Event storage MUST NOT depend on database rule data.
 
-No automated versioning; manual recovery only:
+Events embed complete rule snapshots at evaluation time. This separation enables:
 
-**MVP approach**:
+- Independent retention policies (events may be kept longer than rule versions)
+- Event storage can be queried without database access
+- Audit trail self-contained in event records
+- Database can be rebuilt from events if needed
 
-- No rule version history table
-- No "revert to previous version" button
-- Deleted rules require manual re-creation
-
-**Manual recovery options**:
-
-1. **Database backups**: Restore from hourly/daily database snapshots
-2. **Disable instead of delete**: Use enable/disable for temporary removal
-3. **Audit logs**: Reconstruct rule from logged parameters (if comprehensive logging implemented)
-
-**Rationale**:
-
-- Version history requires significant engineering (versioned table, UI for comparing versions)
-- Operators can copy rule JSON before modifications (manual backup)
-- Enable/disable feature reduces need for deletion
-- Accept risk for MVP, revisit if recovery incidents occur
-
-**Future enhancement path**:
-
-- Add `rule_versions` table with snapshot on every modification
-- Web UI for browsing history and one-click revert
-- Automatic snapshots before bulk operations
+See Event Schema and Storage for rule snapshot requirements.
 
 ## Change Propagation Timeline
 
@@ -207,7 +256,7 @@ Rule changes propagate via eventual consistency model:
 **Timeline for rule update**:
 
 1. Operator saves rule in Web UI (t=0s)
-2. Database transaction commits (t=0.05s)
+2. New rule version created, database transaction commits (t=0.05s)
 3. Sensor polls API at next sync interval (t=0-30s, avg 15s)
 4. Sensor receives new ETAG, fetches updated rules (t=15.1s)
 5. Sensor applies updated rules to next record (t=15.1s)
@@ -215,61 +264,82 @@ Rule changes propagate via eventual consistency model:
 **Implications**:
 
 - No guarantee of instant propagation
-- Sensors may evaluate records using stale cached rules for up to 30 seconds
-- Events capture rule snapshots precisely to handle this eventual consistency
-- Rule metadata in events is point-in-time data, not hard-linked to admin UI rules
-- Critical updates: Reduce sync interval temporarily or restart sensors
+- Sensors may evaluate records using previous rule version for up to 30 seconds
+- Events capture exact rule snapshot, preserving audit trail across propagation delay
 - Emergency pause propagates at next sync (up to 30s delay)
 
 **Design Philosophy - Eventual Consistency**:
 
 TrapperKeeper is explicitly designed as a loosely coupled distributed system that embraces eventual consistency. Rule propagation delays are an accepted tradeoff for operational simplicity and sensor autonomy:
 
-- **Accepted stale data**: Sensors may use rules that are up to 30 seconds out of date (configurable sync interval)
-- **Point-in-time snapshots**: Events capture the complete rule definition as it existed when evaluated, preserving audit trail
-- **No hard references**: Rule metadata in events is captured metadata at evaluation time, not references to admin UI rules
-- **Guaranteed convergence**: All sensors synchronize within configurable time window (default 30s)
-- **Operator control**: Sync interval tunable per sensor to balance freshness vs API load
+- **Accepted stale data**: Sensors may use rules that are up to 30 seconds out of date
+- **Point-in-time snapshots**: Events capture complete rule definition as evaluated
+- **No hard references**: Event rule_snapshot is captured data, not database foreign key
+- **Guaranteed convergence**: All sensors synchronize within configurable time window
 
-This design aligns with Ephemeral Sensors principle and SDK caching model, prioritizing sensor autonomy over immediate consistency.
+## Rollback Strategy
 
-**Configuration**:
+Immutable rules provide natural version history within retention window.
 
-- Sync interval configurable per sensor via SDK initialization
-- Lower interval increases API load (more frequent polls)
-- Recommended default: 30 seconds (balance freshness vs overhead)
+**Revert to previous version**:
+
+1. Query versions: `SELECT * FROM rules WHERE lineage_id = $1 ORDER BY created_at DESC`
+2. Identify target version
+3. Create new version copying target version's content
+4. Result: New current version with old configuration
+
+**Benefits over mutable design**:
+
+- All versions preserved (no need for separate version history table)
+- Revert is just creating new version with old content
+- Audit trail shows full history including reverts
+
+**Limitations**:
+
+- Versions older than retention window are deleted
+- For longer retention, adjust retention policy or archive to cold storage
+
+## Explicit Non-Goals
+
+The following features are explicitly out of scope. This is intentional to maintain simplicity.
+
+**Version History UI**: No UI for viewing previous versions of a rule. If operators need to see what a rule looked like in the past, they query events -- the rule snapshot is embedded there.
+
+**Rollback**: No "revert to previous version" button. Operators recreate rules manually if needed, using event snapshots as reference.
+
+**Cross-Version Correlation**: No mechanism to correlate events across rule versions. Events are self-contained with full snapshots. Query by rule name if needed.
+
+**Concurrent Edit Handling**: Concurrent edits result in undefined behavior. If operator A and B both edit the same rule simultaneously, one may get an error or create an orphan version. This is acceptable -- concurrent rule editing is rare and operators can refresh and retry. No optimistic locking, no conflict detection, no merge resolution.
 
 ## Edge Cases and Limitations
 
 **Known Limitations**:
 
-- **No Conflict Prevention**: Concurrent edits result in silent overwrites
-- **No Version History**: Cannot inspect previous rule states or revert changes
-- **Manual Rollback**: Deleted rules require manual re-creation from backups
-- **Eventual Consistency**: Rule changes propagate with up to 30s delay
-- **Limited Auditability**: No built-in change history (depends on external logging)
-- **In-Memory Pause State**: Global pause resets on service restart (mitigated by fail-safe default)
+- **Retention-bounded**: Soft-deleted rules older than 28 days are permanently deleted
+- **Eventual consistency**: Rule changes propagate with up to 30s delay
+- **Enable/disable exception**: Boolean toggle is in-place update (not immutable)
+- **No version history**: Previous versions are soft-deleted and eventually purged
 
 **Edge Cases**:
 
-- **Multiple operators editing same rule**: Last-write-wins, no conflict detection
-- **Delete during dry-run**: Rule deleted while dry-run events still being generated
-- **Rapid enable/disable**: Multiple state changes within sync interval may be missed by sensors
+- **Rapid edits**: Multiple edits within sync interval -- sensor gets latest on next sync
+- **Concurrent edits**: Undefined behavior, may result in errors or orphan versions (acceptable)
+- **Delete during testing**: Observe version deleted while events still being generated -- events have snapshot, unaffected
 - **Service restart during pause**: Global pause flag resets to FALSE (rules resume automatically)
 
 ## Related Documents
 
 **Dependencies** (read these first):
 
-- Rule Expression Language: Adds operational controls to the rule engine
+- Rule Expression Language: Defines rule schema that lifecycle controls operate on
 - SDK Model: Leverages ephemeral sensor caching for rule distribution
-- API Service Architecture: Documents ETAG-based conditional sync mechanism for rule propagation
+- API Service Architecture: Documents ETAG-based conditional sync mechanism
 
 **Related Spokes** (siblings in this hub):
 
-- Expression Language: Defines rule schema that lifecycle controls operate on
-- Schema Evolution: Dry-run mode enables testing schema evolution scenarios
+- Expression Language: Defines conditions JSON structure
+- Schema Evolution: Missing field handling in rule evaluation
 
-**Extended by** (documents building on this):
+**Extended by**:
 
-- Event Schema and Storage: Events capture the rule that triggered them, including dry-run state
+- Event Schema and Storage: Rule snapshot embedding requirement

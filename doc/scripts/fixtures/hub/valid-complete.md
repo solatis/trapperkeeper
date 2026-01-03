@@ -47,6 +47,7 @@ Strategic approach centers on token-based authentication with JWT tokens for sta
 This relates to Authorization by providing verified identity claims used for access control decisions.
 
 **Key Points:**
+
 - Token-based authentication using JWT provides stateless verification
 - Multi-factor authentication required for admin access
 - Rate limiting protects against brute-force attacks
@@ -54,6 +55,7 @@ This relates to Authorization by providing verified identity claims used for acc
 - Authentication failures logged for security monitoring
 
 **Cross-References:**
+
 - authentication.md Section 2: JWT token structure and claims
 - authentication.md Section 3: Token rotation implementation
 - threat-mitigation.md Section 1: Rate limiting configuration
@@ -70,6 +72,7 @@ Strategic approach implements least-privilege by default with explicit grants re
 This builds on Authentication by consuming verified identity claims and relates to Audit Logging by recording all authorization decisions.
 
 **Key Points:**
+
 - Attribute-based access control (ABAC) for flexible policies
 - Least-privilege by default with explicit grants
 - Resource ownership checked for all data access
@@ -77,6 +80,7 @@ This builds on Authentication by consuming verified identity claims and relates 
 - Authorization decisions cached for performance with 5-minute TTL
 
 **Cross-References:**
+
 - authorization.md Section 2: ABAC policy language
 - authorization.md Section 4: Resource ownership model
 - authentication.md: Identity claims used in authorization
@@ -93,6 +97,7 @@ Strategic approach encrypts all personally identifiable information (PII) and au
 This complements Encryption in Transit by protecting data when persisted to storage.
 
 **Key Points:**
+
 - AES-256-GCM encryption for all PII and credentials
 - Field-level encryption granularity for flexible data models
 - Key rotation every 90 days with transparent re-encryption
@@ -100,6 +105,7 @@ This complements Encryption in Transit by protecting data when persisted to stor
 - Performance impact minimal due to hardware acceleration
 
 **Cross-References:**
+
 - encryption.md Section 3: Field-level encryption implementation
 - encryption.md Section 5: Key rotation procedures
 - database-schema.md: Which fields require encryption
@@ -115,6 +121,7 @@ Strategic approach enforces TLS for all external and internal service communicat
 This complements Encryption at Rest by protecting data during transmission.
 
 **Key Points:**
+
 - TLS 1.3 required for all network communication
 - Strong cipher suites only (no CBC mode, no RSA key exchange)
 - Certificate rotation automated through ACME protocol
@@ -122,6 +129,7 @@ This complements Encryption at Rest by protecting data during transmission.
 - TLS termination at gateway with re-encryption to backends
 
 **Cross-References:**
+
 - tls-certificates.md Section 2: Certificate lifecycle management
 - tls-certificates.md Section 4: mTLS configuration for services
 - deployment-guide.md: TLS certificate deployment procedures
@@ -137,6 +145,7 @@ Strategic approach implements defense-in-depth with multiple overlapping protect
 This relates to all other security areas by providing foundational protections.
 
 **Key Points:**
+
 - Rate limiting at multiple layers: IP, user, endpoint
 - Input validation and sanitization for all user input
 - Parameterized queries prevent SQL injection
@@ -144,6 +153,7 @@ This relates to all other security areas by providing foundational protections.
 - Security headers (CSP, HSTS, X-Frame-Options) on all responses
 
 **Cross-References:**
+
 - threat-mitigation.md Section 2: Rate limiting implementation
 - threat-mitigation.md Section 4: DDoS mitigation strategy
 - validation-index.md: Input validation patterns
@@ -160,6 +170,7 @@ Strategic approach captures authentication, authorization, data access, and admi
 This supports all other security areas by providing visibility into security events.
 
 **Key Points:**
+
 - All authentication and authorization events logged
 - Data access logging for sensitive information
 - Administrative actions logged with full context
@@ -167,6 +178,7 @@ This supports all other security areas by providing visibility into security eve
 - Retention period 1 year for compliance
 
 **Cross-References:**
+
 - observability-index.md Section 3: Audit logging implementation
 - authentication.md Section 6: Authentication event logging
 - authorization.md Section 5: Authorization decision logging
@@ -182,6 +194,7 @@ Strategic approach combines rule-based detection for known threats and anomaly d
 This builds on Audit Logging by analyzing security events in real-time.
 
 **Key Points:**
+
 - Real-time analysis of security events
 - Automated alerting for critical threats
 - Anomaly detection for unusual patterns
@@ -189,6 +202,7 @@ This builds on Audit Logging by analyzing security events in real-time.
 - Security dashboard for operations team
 
 **Cross-References:**
+
 - observability-index.md Section 4: Security monitoring implementation
 - threat-mitigation.md Section 6: Security alert response procedures
 
@@ -197,6 +211,7 @@ This builds on Audit Logging by analyzing security events in real-time.
 ## Consequences
 
 **Benefits:**
+
 - Unified security strategy ensures consistent protection across components
 - Defense-in-depth provides multiple overlapping layers of security
 - Centralized security guidance reduces implementation errors
@@ -204,6 +219,7 @@ This builds on Audit Logging by analyzing security events in real-time.
 - Comprehensive audit logging supports compliance and incident response
 
 **Trade-offs:**
+
 - Security measures add latency (token validation, encryption overhead)
 - Key management adds operational complexity
 - Multi-layer security requires coordination across teams
@@ -213,6 +229,7 @@ This builds on Audit Logging by analyzing security events in real-time.
 ## Related Documents
 
 **Consolidated Spokes** (this hub consolidates):
+
 - authentication.md: Maps to Authentication section (detailed JWT implementation)
 - authorization.md: Maps to Authorization section (ABAC policy implementation)
 - encryption.md: Maps to Encryption at Rest and Encryption in Transit sections
@@ -220,13 +237,16 @@ This builds on Audit Logging by analyzing security events in real-time.
 - threat-mitigation.md: Maps to Threat Mitigation section (rate limiting, DDoS)
 
 **Dependencies** (foundational documents):
+
 - ../01-principles/README.md: Architectural Principles establishing security as foundational principle
 - ../02-architecture/README.md: Architecture Overview defining security boundaries between services
 
 **References** (related hubs/documents):
+
 - validation-index.md: Complements security with input validation
 - error-handling-index.md: Constrains security error disclosure
 - observability-index.md: Implements audit logging and monitoring
 
 **Extended by**:
+
 - compliance-guide.md: Maps security controls to compliance requirements

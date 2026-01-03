@@ -4,7 +4,7 @@ status: active
 date_created: 2025-11-06
 date_updated: 2025-11-07
 primary_category: documentation
-hub_document: README.md
+hub_document: doc/_meta/03-governance/README.md
 tags:
   - governance
   - cross-cutting
@@ -283,7 +283,7 @@ Cross-cutting indexes must be updated when:
 
 ### Automated Validation
 
-**Tool**: `python doc/scripts/analyzer.py validate-indexes`
+**Tool**: `python doc/scripts/validate.py validate-indexes`
 
 **Checks**:
 
@@ -311,7 +311,7 @@ Cross-cutting indexes follow a rotating quarterly review schedule:
 
 **Review Checklist**:
 
-- [ ] Run `analyzer.py validate-indexes` and fix issues
+- [ ] Run `validate.py validate-indexes` and fix issues
 - [ ] Verify all links functional (automated + manual spot-check)
 - [ ] Check for new documents with cross_cutting frontmatter missing from index
 - [ ] Review Domain Coverage Matrix for completeness

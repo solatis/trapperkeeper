@@ -3,7 +3,7 @@ doc_type: spoke
 status: active
 date_created: 2025-11-07
 primary_category: validation
-hub_document: /Users/lmergen/git/trapperkeeper/doc/07-validation/README.md
+hub_document: doc/07-validation/README.md
 tags:
   - ui-validation
   - forms
@@ -16,7 +16,7 @@ tags:
 
 UI layer validation provides first line of defense for user input, focusing on immediate feedback and prevention of invalid combinations. Server-side rendering with HTML5 validation provides security and accessibility while maintaining simplicity principles (minimal JavaScript).
 
-**Hub Document**: This document is part of the Validation Architecture. See Validation Hub for complete validation strategy and layer distribution.
+**Hub Document**: This document is part of the Validation Architecture. See [Validation Hub](README.md) for complete validation strategy and layer distribution.
 
 ## HTML5 Form Validation
 

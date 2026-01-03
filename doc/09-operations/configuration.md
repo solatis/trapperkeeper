@@ -3,7 +3,7 @@ doc_type: spoke
 status: active
 date_created: 2025-11-07
 primary_category: configuration
-hub_document: /Users/lmergen/git/trapperkeeper/doc/09-operations/README.md
+hub_document: doc/09-operations/README.md
 tags:
   - configuration
   - toml
@@ -58,8 +58,8 @@ csrf_enabled = true
 # Database connection pooling
 [database]
 max_connections = 10
-connection_timeout_ms = 5000
-idle_timeout_ms = 600000  # 10 minutes
+connection_timeout_ms = 3000
+idle_timeout_ms = 300000  # 5 minutes
 migrations_on_startup = true
 
 # Performance tuning

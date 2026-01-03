@@ -6,9 +6,10 @@ primary_category: architecture
 consolidated_spokes:
   - api-service.md
   - sdk-model.md
+  - service-architecture.md
   - binary-distribution.md
   - ../10-integration/README.md
-  - ../10-integration/crate-separation.md
+  - ../10-integration/package-separation.md
   - ../10-integration/monorepo-structure.md
 tags:
   - two-service

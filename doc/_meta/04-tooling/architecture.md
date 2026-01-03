@@ -4,7 +4,7 @@ status: active
 date_created: 2025-11-06
 date_updated: 2025-11-07
 primary_category: documentation
-hub_document: README.md
+hub_document: doc/_meta/04-tooling/README.md
 tags:
   - tooling
   - architecture
@@ -16,7 +16,7 @@ maintainer: Documentation Team
 
 ## Purpose
 
-This document defines the architecture, interfaces, and governance model for documentation automation tooling in Trapperkeeper. It provides design guidance for analyzer.py, validators, and CI/CD integration to ensure consistent documentation quality.
+This document defines the architecture, interfaces, and governance model for documentation automation tooling in Trapperkeeper. It provides design guidance for validate.py, validators, and CI/CD integration to ensure consistent documentation quality.
 
 ## Overview
 
@@ -28,14 +28,14 @@ Documentation tooling serves three primary functions:
 
 All tooling is implemented in Python for consistency and maintainability.
 
-## Core Tool: analyzer.py
+## Core Tool: validate.py
 
 ### Architecture
 
-`analyzer.py` implements a subcommand architecture pattern:
+`validate.py` implements a subcommand architecture pattern:
 
 ```
-analyzer.py
+validate.py
 ├── validate-all           # Master validation command
 ├── validate-frontmatter   # YAML frontmatter validation
 ├── validate-hub-spoke     # Bidirectional link validation
@@ -62,7 +62,7 @@ analyzer.py
 **Usage**:
 
 ```bash
-python doc/scripts/analyzer.py validate-frontmatter [--strict] [paths...]
+python doc/scripts/validate.py validate-frontmatter [--strict] [paths...]
 ```
 
 **Algorithm**:
@@ -96,7 +96,7 @@ python doc/scripts/analyzer.py validate-frontmatter [--strict] [paths...]
 **Usage**:
 
 ```bash
-python doc/scripts/analyzer.py validate-hub-spoke [--strict]
+python doc/scripts/validate.py validate-hub-spoke [--strict]
 ```
 
 **Algorithm**:
@@ -133,7 +133,7 @@ python doc/scripts/analyzer.py validate-hub-spoke [--strict]
 **Usage**:
 
 ```bash
-python doc/scripts/analyzer.py validate-indexes [--strict]
+python doc/scripts/validate.py validate-indexes [--strict]
 ```
 
 **Algorithm**:
@@ -166,7 +166,7 @@ python doc/scripts/analyzer.py validate-indexes [--strict]
 **Usage**:
 
 ```bash
-python doc/scripts/analyzer.py validate-links [--strict] [--external]
+python doc/scripts/validate.py validate-links [--strict] [--external]
 ```
 
 **Algorithm**:
@@ -206,7 +206,7 @@ python doc/scripts/analyzer.py validate-links [--strict] [--external]
 **Usage**:
 
 ```bash
-python doc/scripts/analyzer.py generate-index --concern security [--output path]
+python doc/scripts/validate.py generate-index --concern security [--output path]
 ```
 
 **Algorithm**:
@@ -251,7 +251,7 @@ python doc/scripts/analyzer.py generate-index --concern security [--output path]
 **Usage**:
 
 ```bash
-python doc/scripts/analyzer.py check-hub-freshness
+python doc/scripts/validate.py check-hub-freshness
 ```
 
 **Algorithm**:
@@ -283,7 +283,7 @@ Recommendation: Review hub for synchronization with spoke changes
 **Usage**:
 
 ```bash
-python doc/scripts/analyzer.py validate-all [--strict]
+python doc/scripts/validate.py validate-all [--strict]
 ```
 
 **Execution Order**:
@@ -436,11 +436,11 @@ jobs:
 
       - name: Validate documentation
         run: |
-          python doc/scripts/analyzer.py validate-all --strict
+          python doc/scripts/validate.py validate-all --strict
 
       - name: Check hub freshness
         run: |
-          python doc/scripts/analyzer.py check-hub-freshness
+          python doc/scripts/validate.py check-hub-freshness
 ```
 
 ### Merge Gate
@@ -474,7 +474,7 @@ If validation exceeds 30 seconds, optimize or parallelize.
 
 **Responsibilities**:
 
-- Maintain analyzer.py and validators
+- Maintain validate.py and validators
 - Fix bugs in tooling
 - Add new validation rules as needed
 - Update configuration files
@@ -561,7 +561,7 @@ When running multiple tools:
 prettier --write "doc/**/*.md"
 
 # 2. Validate structure (fast, fails fast)
-python doc/scripts/analyzer.py validate-all --strict
+python doc/scripts/validate.py validate-all --strict
 
 # 3. Check external links (slow, optional)
 lychee doc/**/*.md
@@ -569,7 +569,7 @@ lychee doc/**/*.md
 
 ## Implementation Pseudocode
 
-### analyzer.py Structure
+### validate.py Structure
 
 ```python
 #!/usr/bin/env python3
@@ -660,7 +660,7 @@ def handle_validate_all(args):
     print("VALIDATION SUMMARY")
     print('='*60)
     for name, exit_code in results.items():
-        status = "✓ PASSED" if exit_code == 0 else "✗ FAILED"
+        status = "[OK] PASSED" if exit_code == 0 else "[FAIL] FAILED"
         print(f"{name}: {status}")
 
     # Check hub freshness (informational only)

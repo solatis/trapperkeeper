@@ -20,7 +20,7 @@ tags:
 
 ## Context
 
-Data validation concepts currently appear across seven ADRs without a unified strategy. This fragmentation creates critical security gaps in input sanitization, validation responsibility ambiguity across layers, and contradicts the centralized validation principle. The current pain points include no comprehensive input sanitization specifications for security-critical operations, unclear responsibility boundaries between UI, API, Runtime, and Database layers, validation logic scattered across multiple documents, missing guidance on critical security controls (UTF-8 validation, HTML escaping, SQL injection prevention), and inconsistent error handling strategies across system layers.
+Data validation concepts span multiple documents, requiring a unified strategy. Without consolidation, critical security gaps emerge in input sanitization, validation responsibility becomes ambiguous across layers, and the centralized validation principle cannot be enforced. The current pain points include no comprehensive input sanitization specifications for security-critical operations, unclear responsibility boundaries between UI, API, Runtime, and Database layers, validation logic scattered across multiple documents, missing guidance on critical security controls (UTF-8 validation, HTML escaping, SQL injection prevention), and inconsistent error handling strategies across system layers.
 
 This hub consolidates validation implementation strategy from domain-specific ADRs while architectural principles document the validation philosophy. The architectural principles establish the philosophical foundation (validate early in development, validate once in production, debug vs release mode strategy, centralization principle); this hub provides the complete validation architecture with layer-specific responsibilities, security specifications, and error handling standards.
 
@@ -107,11 +107,11 @@ The validation strategy covers 12 distinct validation types, each with explicit 
 1. **Structural Format Validation**: UUID format, timestamp format/precision, field path syntax
 2. **Rule Expression Validation**: Expression syntax, operator/field-type compatibility, nested wildcards (max 2), field_ref no-wildcard rule, on_missing_field enum, sample_rate range (0.0-1.0), array homogeneity
 3. **Type Coercion and Conversion**: Numeric/text/boolean coercion, type mismatch detection, null vs coercion failure distinction
-4. **Resource Limits**: Event buffer (128 count, 1MB size, 128MB total), metadata (64 pairs, 64KB total), tag length (128 chars), nested depth limits
+4. **Resource Limits**: Event buffer (128 count, 1MB size, 128MB total), metadata (64 pairs, 128-char keys, 1KB values, 64KB total), tag length (128 chars), nested depth limits
 5. **Configuration and Startup Validation**: Config value types (boolean, integer, duration, port, path, URL, log level), dependencies, secrets in files rejection, database connection, CLI arguments
 6. **Web Form Input Validation**: Form field lengths, email format, proper HTTP status codes (422 vs 400), CSRF token validation
 7. **Authentication and Credentials Validation**: Password hashing (bcrypt), API key format (tk-v1-{id}-{random}), HMAC-SHA256 signature, session expiry (24h)
-8. **TLS and Transport Security Validation**: Certificate validation (expiry, key match), timestamp drift (<100ms warning)
+8. **TLS and Transport Security Validation**: Certificate validation (expiry, key match), timestamp drift (>100ms warning, >5000ms error)
 9. **Data Integrity Validation**: Migration checksums (SHA256), migration sequence tracking
 10. **Runtime Field Resolution Validation**: Missing field detection, type mismatch handling, on_missing_field policy enforcement
 11. **Performance and Cost Validation**: Rule cost budget validation (<1ms target), sampling rate validation

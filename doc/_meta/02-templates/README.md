@@ -144,13 +144,13 @@ Redirect stub template handles document moves and consolidations, preventing bro
 
 **Dependencies** (foundational documents):
 
-- **doc/_meta/01-standards/README.md**: Standards that templates implement
-- **doc/_meta/README.md**: Parent meta-documentation hub
+- **doc/\_meta/01-standards/README.md**: Standards that templates implement
+- **doc/\_meta/README.md**: Parent meta-documentation hub
 
 **References** (related hubs):
 
-- **doc/_meta/03-governance/README.md**: Procedures for using templates during documentation creation
-- **doc/_meta/04-tooling/README.md**: Validation tooling that checks template compliance
+- **doc/\_meta/03-governance/README.md**: Procedures for using templates during documentation creation
+- **doc/\_meta/04-tooling/README.md**: Validation tooling that checks template compliance
 
 ## Adding Validation to Templates
 
@@ -251,4 +251,4 @@ validation:
 
 ### Validation DSL Reference
 
-For complete syntax, predicates, and troubleshooting, see **doc/_meta/04-tooling/validation-dsl-reference.md**.
+For complete syntax, predicates, and troubleshooting, see **doc/\_meta/04-tooling/validation-dsl-reference.md**.

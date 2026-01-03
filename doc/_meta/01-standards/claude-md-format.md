@@ -4,7 +4,7 @@ status: active
 date_created: 2025-11-06
 date_updated: 2025-11-07
 primary_category: documentation
-hub_document: README.md
+hub_document: doc/_meta/01-standards/README.md
 tags:
   - standards
   - claude-md
@@ -31,7 +31,7 @@ CLAUDE.md files are pure navigation aids optimized for LLM agent discovery. They
 - **Filename**: MUST be exactly `CLAUDE.md` (all caps)
 - **Location**: MUST be in the directory it describes (e.g., `doc/03-data/CLAUDE.md` describes `doc/03-data/`)
 - **Coverage**: Every numbered category directory (01-principles, 02-architecture, etc.) MUST have a CLAUDE.md
-- **_meta/ Coverage**: Every subdirectory in `_meta/` (standards/, templates/, governance/, tooling/) MUST have a CLAUDE.md
+- **\_meta/ Coverage**: Every subdirectory in `_meta/` (standards/, templates/, governance/, tooling/) MUST have a CLAUDE.md
 
 ### Frontmatter
 
@@ -73,10 +73,12 @@ Omit sections 3-5 if they don't apply (e.g., directory has no hub, no files, or 
 - No explanations of concepts or architectural decisions
 
 **Good examples:**
+
 - "Standards for validation architecture, authentication patterns, and rule expression processing."
 - "Templates providing copy-paste starting points with inline guidance for creating documentation."
 
 **Bad examples:**
+
 - ❌ "This directory is important because it contains all the security-related documentation which helps developers understand our security architecture..." (too verbose)
 - ❌ "Contains stuff about validation" (too vague)
 
@@ -93,10 +95,12 @@ Omit sections 3-5 if they don't apply (e.g., directory has no hub, no files, or 
 - Use format: "Read when [doing X]" or "Read when [need Y]"
 
 **Good triggers:**
+
 - "Read when understanding validation strategy across 4 layers"
 - "Read when implementing or troubleshooting security controls"
 
 **Bad triggers:**
+
 - ❌ "Important overview document" (not a trigger)
 - ❌ "Contains information about..." (explanatory, not trigger)
 
@@ -130,17 +134,20 @@ Omit sections 3-5 if they don't apply (e.g., directory has no hub, no files, or 
 ### Trigger Requirements
 
 Triggers MUST be:
+
 - **Specific**: Clear threshold or condition for when to read
 - **Actionable**: Describes a task, need, or situation
 - **Concise**: 5-15 words typically
 
 Triggers MUST NOT:
+
 - Explain what the file contains (that's duplication)
 - Provide how-to instructions (that's in the file itself)
 - Include philosophical rationale (that's in the file itself)
 - Be vague (e.g., "useful information")
 
 **Good trigger patterns:**
+
 - "Read when [implementing X]"
 - "Read when [understanding Y]"
 - "Read when [debugging Z]"
@@ -148,6 +155,7 @@ Triggers MUST NOT:
 - "Read when [validation fails with X error]"
 
 **Bad trigger patterns:**
+
 - "Contains information about X" (explanatory)
 - "Describes how to do Y" (explanatory)
 - "Important file" (vague)
@@ -172,6 +180,7 @@ CLAUDE.md files MUST NOT contain:
 - **Depth 0 (doc/CLAUDE.md)**: Can be slightly longer (up to 60 lines) due to root-level navigation needs
 
 If exceeding maximum:
+
 - Triggers are too verbose (make them more concise)
 - Forbidden content is present (remove explanations, how-tos, rationale)
 - Too many files/subdirs (consider consolidation via hub document)
@@ -217,7 +226,7 @@ Validation architecture, input sanitization standards, and validation responsibi
 **`examples/`** - Read when need concrete validation implementation examples
 ```
 
-### CLAUDE.md for _meta/ Directory
+### CLAUDE.md for \_meta/ Directory
 
 ```markdown
 # Documentation Meta-Documentation Guide for LLM Agents
@@ -250,19 +259,21 @@ validate-claude-md checker MUST enforce:
 6. **Hub section** (if README.md exists in directory): MUST list README.md with trigger
 7. **Files section** (if .md files exist): MUST list all .md files except README.md and CLAUDE.md
 8. **Subdirectories section** (if subdirs exist): MUST list all immediate subdirectories
-9. **Trigger format**: Each file/subdir MUST have ` - Read when ` trigger pattern
+9. **Trigger format**: Each file/subdir MUST have `- Read when` trigger pattern
 10. **No forbidden patterns**: MUST NOT contain "how to", "step 1", "contains information", "describes"
 11. **Length limit**: MUST NOT exceed 50 lines (60 for doc/CLAUDE.md)
 
 ## Coverage Requirements
 
 **Product Documentation**:
+
 - Every numbered category directory (01-principles, 02-architecture, 03-data, etc.) MUST have CLAUDE.md
 - Subdirectories MAY have CLAUDE.md if they contain multiple files or subdirs
 
 **Meta-Documentation**:
-- doc/_meta/ MUST have CLAUDE.md
-- Every _meta/ subdirectory (standards/, templates/, governance/, tooling/) MUST have CLAUDE.md
+
+- doc/\_meta/ MUST have CLAUDE.md
+- Every \_meta/ subdirectory (standards/, templates/, governance/, tooling/) MUST have CLAUDE.md
 
 ## Relationship to Other Documents
 
@@ -271,6 +282,7 @@ validate-claude-md checker MUST enforce:
 - **Difference**: README.md has frontmatter and detailed content; CLAUDE.md has neither
 
 Think of it as:
+
 - CLAUDE.md = Fast index with opening triggers (optimized for quick LLM discovery)
 - README.md (hub) = Strategic overview with detailed navigation (optimized for understanding domain)
 
@@ -279,6 +291,7 @@ Think of it as:
 ### When to Update
 
 CLAUDE.md MUST be updated when:
+
 - New .md file added to directory (add to Files section)
 - .md file removed from directory (remove from Files section)
 - New subdirectory added (add to Subdirectories section)
@@ -305,6 +318,6 @@ The root `doc/CLAUDE.md` serves as entry point for all documentation navigation 
 
 - **Length**: Up to 60 lines allowed (vs 50 for other CLAUDE.md files)
 - **Purpose**: May be 2-3 sentences (vs 1-2 for subdirectories)
-- **Scope**: Lists both numbered category directories AND special files/directories (_meta, README.md, indexes)
+- **Scope**: Lists both numbered category directories AND special files/directories (\_meta, README.md, indexes)
 
 This exception exists because root CLAUDE.md is the LLM agent's first navigation touchpoint and benefits from slightly more context.

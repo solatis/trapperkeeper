@@ -3,7 +3,7 @@ doc_type: spoke
 status: active
 date_created: 2025-11-07
 primary_category: database
-hub_document: /Users/lmergen/git/trapperkeeper/doc/09-operations/README.md
+hub_document: doc/09-operations/README.md
 tags:
   - database
   - sqlite
@@ -469,6 +469,57 @@ CREATE TABLE rules (
 ```
 
 **Cross-Reference**: See [Data: UUIDv7 Identifiers](../03-data/identifiers-uuidv7.md) for UUIDv7 identifier design.
+
+### Core Table Schemas
+
+**Tenants Table**:
+
+```sql
+CREATE TABLE tenants (
+    tenant_id CHAR(36) PRIMARY KEY,
+    name VARCHAR(128) NOT NULL,
+    created_at TIMESTAMP NOT NULL,
+    modified_at TIMESTAMP NOT NULL,
+    deleted_at TIMESTAMP,
+
+    INDEX idx_deleted (deleted_at)
+);
+```
+
+**Sensors Table**:
+
+```sql
+CREATE TABLE sensors (
+    sensor_id CHAR(36) PRIMARY KEY,
+    tenant_id CHAR(36) NOT NULL,
+    name VARCHAR(128) NOT NULL,
+    created_at TIMESTAMP NOT NULL,
+    modified_at TIMESTAMP NOT NULL,
+    deleted_at TIMESTAMP,
+
+    INDEX idx_tenant_deleted (tenant_id, deleted_at)
+);
+```
+
+**Event Rule Matches Table** (junction table for many-to-many event-rule relationships):
+
+```sql
+CREATE TABLE event_rule_matches (
+    event_id CHAR(36) NOT NULL,
+    rule_id CHAR(36) NOT NULL,
+    matched_at TIMESTAMP NOT NULL,
+
+    PRIMARY KEY (event_id, rule_id),
+    INDEX idx_rule_matched (rule_id, matched_at),
+    INDEX idx_event (event_id)
+);
+```
+
+**Design Notes**:
+
+- `tenants`: Top-level isolation boundary for multi-tenancy (MVP: single tenant only)
+- `sensors`: Data sources that generate events (FK to tenants)
+- `event_rule_matches`: Records which rules matched which events (no tenant_id needed -- event_id determines tenant)
 
 ### Soft Deletes
 
