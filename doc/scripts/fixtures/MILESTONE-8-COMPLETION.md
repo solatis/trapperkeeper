@@ -18,11 +18,10 @@ validation:
   schema_version: 1
 
   frontmatter:
-    required_fields: [doc_type, status, date_created, primary_category, cross_cutting_concern]
+    required_fields: [doc_type, status, primary_category, cross_cutting_concern]
     field_constraints:
       doc_type: {enum: ["index"]}
       status: {enum: ["draft", "active", "deprecated", "superseded"]}
-      date_created: {pattern: "^\d{4}-\d{2}-\d{2}$"}
       cross_cutting_concern: {enum: ["security", "performance", "validation", "observability", "error-handling"]}
     conditional_constraints:
       - if_field: status, equals: superseded, then_required: [superseded_by]
@@ -36,7 +35,7 @@ validation:
 
 - `valid-security.md` - Complete security index with all required fields
 - `valid-performance.md` - Complete performance index
-- `invalid-frontmatter.md` - Missing required fields (date_created, cross_cutting_concern)
+- `invalid-frontmatter.md` - Missing required field (cross_cutting_concern)
 - `invalid-concern.md` - Invalid cross_cutting_concern enum value
 - `README.md` - Test case documentation
 

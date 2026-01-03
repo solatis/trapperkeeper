@@ -79,7 +79,6 @@ Hub documents must satisfy (from `hub.md` template validation block):
 
 - `doc_type` (must equal "hub")
 - `status` (enum: draft, active, deprecated, superseded)
-- `date_created` (pattern: YYYY-MM-DD)
 - `primary_category`
 - `consolidated_spokes` (array, min 3 items)
 

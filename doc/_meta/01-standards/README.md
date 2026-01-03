@@ -1,7 +1,6 @@
 ---
 doc_type: hub
 status: active
-date_created: 2025-11-07
 primary_category: documentation
 consolidated_spokes:
   - hub-and-spoke-architecture.md
@@ -53,7 +52,7 @@ Frontmatter metadata standard specifies required YAML metadata fields for all do
 
 **Key Points:**
 
-- All documentation requires frontmatter with doc_type, status, date_created, primary_category
+- All documentation requires frontmatter with doc_type, status, primary_category
 - Spokes must include hub_document back-reference field
 - Hubs must include consolidated_spokes list (minimum 3 for product docs)
 - Forbidden fields include version, revision, changelog (use git for history)

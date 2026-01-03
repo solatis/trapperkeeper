@@ -1,7 +1,6 @@
 ---
 doc_type: spoke
 status: active
-date_created: 2025-11-07
 primary_category: database
 hub_document: doc/03-data/README.md
 tags:

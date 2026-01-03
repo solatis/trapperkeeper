@@ -1,7 +1,6 @@
 ---
 doc_type: hub
 status: active
-date_created: 2025-01-15
 date_updated: 2025-01-20
 primary_category: security
 consolidated_spokes:

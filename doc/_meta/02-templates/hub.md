@@ -2,7 +2,6 @@
 doc_type: template
 template_for: hub
 status: active
-date_created: 2025-11-06
 date_updated: 2025-11-07
 primary_category: documentation
 tags:

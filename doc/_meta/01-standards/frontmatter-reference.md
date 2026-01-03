@@ -1,7 +1,6 @@
 ---
 doc_type: spoke
 status: active
-date_created: 2025-11-06
 date_updated: 2025-11-07
 primary_category: documentation
 hub_document: doc/_meta/01-standards/README.md
@@ -295,7 +294,6 @@ cross_cutting:
 ---
 doc_type: hub
 status: active
-date_created: 2025-11-04
 date_updated: 2025-11-05
 primary_category: security
 tags:
@@ -323,7 +321,6 @@ authors:
 ---
 doc_type: spoke
 status: active
-date_created: 2025-11-05
 primary_category: security
 tags:
   - authentication
@@ -345,7 +342,6 @@ authors:
 ---
 doc_type: spoke
 status: superseded
-date_created: 2025-10-28
 date_updated: 2025-11-05
 primary_category: validation
 superseded_by: doc/validation/unified-validation.md

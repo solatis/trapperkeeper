@@ -1,7 +1,6 @@
 ---
 doc_type: index
 status: active
-date_created: 2025-11-07
 date_updated: 2025-11-07
 primary_category: validation
 cross_cutting:

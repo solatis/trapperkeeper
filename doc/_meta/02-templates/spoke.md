@@ -2,7 +2,6 @@
 doc_type: template
 template_for: spoke
 status: active
-date_created: 2025-11-06
 date_updated: 2025-11-07
 primary_category: documentation
 tags:
@@ -53,7 +52,6 @@ SPOKE NAMING: Use descriptive filenames that reflect the focused topic
 
 doc_type: spoke
 status: draft
-date_created: YYYY-MM-DD
 primary_category: [architecture|api|database|security|performance|validation|configuration|testing|deployment|error-handling]
 hub_document: doc/[domain]/README.md
 tags:

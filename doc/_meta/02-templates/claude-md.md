@@ -2,7 +2,6 @@
 doc_type: template
 template_for: claude-md
 status: active
-date_created: 2025-11-06
 date_updated: 2025-11-07
 primary_category: documentation
 hub_document: doc/_meta/02-templates/README.md

@@ -1,7 +1,6 @@
 ---
 doc_type: guide
 status: active
-date_created: 2025-11-07
 primary_category: documentation
 ---
 
@@ -173,7 +172,6 @@ All product documentation includes YAML frontmatter with required fields:
 ---
 doc_type: hub|spoke|index|guide|reference
 status: active|draft|deprecated|superseded
-date_created: YYYY-MM-DD
 primary_category: architecture|api|database|security|performance|validation|configuration|testing|deployment|error-handling
 ---
 ```

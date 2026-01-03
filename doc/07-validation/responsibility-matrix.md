@@ -1,7 +1,6 @@
 ---
 doc_type: spoke
 status: active
-date_created: 2025-11-10
 primary_category: validation
 hub_document: doc/07-validation/README.md
 tags:

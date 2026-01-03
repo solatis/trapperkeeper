@@ -1,7 +1,6 @@
 ---
 doc_type: index
 status: active
-date_created: 2025-11-08
 primary_category: testing
 cross_cutting_concern: testing-quality
 ---

@@ -1,7 +1,6 @@
 ---
 doc_type: spoke
 status: active
-date_created: 2025-11-10
 primary_category: observability
 hub_document: doc/08-resilience/README.md
 tags:

@@ -2,7 +2,6 @@
 doc_type: template
 template_for: redirect-stub
 status: active
-date_created: 2025-11-06
 date_updated: 2025-11-08
 primary_category: documentation
 hub_document: doc/_meta/02-templates/README.md
@@ -45,7 +44,6 @@ This template should only be used if specific migration needs arise.
 
 doc_type: redirect-stub
 status: superseded
-date_created: YYYY-MM-DD
 date_deprecated: YYYY-MM-DD
 superseded_by: doc/path/to/new/document.md
 primary_category: [original category]

@@ -29,7 +29,6 @@ Complete performance index meeting all requirements:
 
 Missing required frontmatter fields:
 
-- MISSING: date_created
 - MISSING: cross_cutting_concern
 - Should fail frontmatter validation
 

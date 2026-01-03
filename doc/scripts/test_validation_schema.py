@@ -349,7 +349,7 @@ def test_frontmatter_required_fields():
     validation_block = {
         "schema_version": 1,
         "frontmatter": {
-            "required_fields": ["doc_type", "status", "date_created"]
+            "required_fields": ["doc_type", "status", "primary_category"]
         }
     }
     validate(instance=validation_block, schema=VALIDATION_SCHEMA)
@@ -376,7 +376,7 @@ def test_frontmatter_field_constraints_pattern():
         "schema_version": 1,
         "frontmatter": {
             "field_constraints": {
-                "date_created": {
+                "last_review": {
                     "pattern": r"^\d{4}-\d{2}-\d{2}$"
                 }
             }
@@ -509,7 +509,6 @@ def test_complete_hub_validation_block():
             "required_fields": [
                 "doc_type",
                 "status",
-                "date_created",
                 "primary_category",
                 "consolidated_spokes"
             ],
@@ -519,9 +518,6 @@ def test_complete_hub_validation_block():
                 },
                 "status": {
                     "enum": ["draft", "active", "deprecated", "superseded"]
-                },
-                "date_created": {
-                    "pattern": r"^\d{4}-\d{2}-\d{2}$"
                 },
                 "consolidated_spokes": {
                     "type": "array",
@@ -573,7 +569,6 @@ def test_complete_spoke_validation_block():
             "required_fields": [
                 "doc_type",
                 "status",
-                "date_created",
                 "primary_category",
                 "hub_document"
             ],
@@ -638,7 +633,7 @@ def test_cross_cutting_index_validation_block():
         "schema_version": 1,
         "title_pattern": "^# .+ Index$",
         "frontmatter": {
-            "required_fields": ["doc_type", "status", "date_created"],
+            "required_fields": ["doc_type", "status", "primary_category"],
             "field_constraints": {
                 "doc_type": {
                     "enum": ["index"]

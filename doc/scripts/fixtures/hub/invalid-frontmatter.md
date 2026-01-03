@@ -1,7 +1,6 @@
 ---
 doc_type: hub
 status: active
-date_created: 2025-01-15
 # Missing primary_category - REQUIRED field
 # Missing consolidated_spokes - REQUIRED field
 ---

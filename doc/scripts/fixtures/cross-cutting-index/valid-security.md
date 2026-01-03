@@ -1,7 +1,6 @@
 ---
 doc_type: index
 status: active
-date_created: 2025-11-08
 date_updated: 2025-11-08
 primary_category: security
 cross_cutting_concern: security

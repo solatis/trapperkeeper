@@ -1,7 +1,6 @@
 ---
 doc_type: hub
 status: active
-date_created: 2025-11-07
 date_updated: 2025-11-11
 primary_category: documentation
 consolidated_spokes:

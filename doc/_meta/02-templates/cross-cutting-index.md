@@ -2,7 +2,6 @@
 doc_type: template
 template_for: cross-cutting-index
 status: active
-date_created: 2025-11-06
 date_updated: 2025-11-08
 primary_category: documentation
 hub_document: doc/_meta/02-templates/README.md
@@ -74,7 +73,6 @@ REQUIRED READING BEFORE USING THIS TEMPLATE:
 
 doc_type: index
 status: active
-date_created: YYYY-MM-DD
 date_updated: YYYY-MM-DD
 primary_category: [category]
 cross_cutting:

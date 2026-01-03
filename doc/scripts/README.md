@@ -1,7 +1,6 @@
 ---
 doc_type: hub
 status: active
-date_created: 2025-01-02
 primary_category: documentation
 consolidated_spokes:
   - validate.py

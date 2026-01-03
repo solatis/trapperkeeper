@@ -1,7 +1,6 @@
 ---
 doc_type: hub
 status: active
-date_created: 2025-11-07
 primary_category: architecture
 consolidated_spokes:
   - package-separation.md

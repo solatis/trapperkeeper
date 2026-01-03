@@ -1,7 +1,6 @@
 ---
 doc_type: hub
 status: active
-date_created: 2025-01-15
 primary_category: architecture
 consolidated_spokes:
   - spoke1.md

@@ -1,7 +1,6 @@
 ---
 doc_type: reference
 status: active
-date_created: 2025-11-08
 primary_category: tooling
 hub_document: doc/_meta/04-tooling/README.md
 tags:
@@ -291,7 +290,6 @@ validation:
     required_fields:
       - doc_type
       - status
-      - date_created
       - primary_category
 ```
 
@@ -318,8 +316,6 @@ validation:
         enum: ["hub", "spoke", "index"]
       status:
         enum: ["draft", "active", "deprecated", "superseded"]
-      date_created:
-        pattern: "^\\d{4}-\\d{2}-\\d{2}$"
       consolidated_spokes:
         type: array
         min_items: 3
@@ -575,7 +571,6 @@ Basic validation with title and length constraints:
 doc_type: template
 template_for: simple-doc
 status: active
-date_created: 2025-11-08
 primary_category: documentation
 
 validation:
@@ -597,7 +592,6 @@ Navigation file with conditional section requirements:
 doc_type: template
 template_for: claude-md
 status: active
-date_created: 2025-11-08
 primary_category: documentation
 
 validation:
@@ -654,7 +648,6 @@ Hub template with comprehensive frontmatter validation:
 doc_type: template
 template_for: hub
 status: active
-date_created: 2025-11-08
 primary_category: documentation
 
 validation:
@@ -666,7 +659,6 @@ validation:
     required_fields:
       - doc_type
       - status
-      - date_created
       - primary_category
       - consolidated_spokes
 
@@ -675,8 +667,6 @@ validation:
         enum: ["hub"]
       status:
         enum: ["draft", "active", "deprecated", "superseded"]
-      date_created:
-        pattern: "^\\d{4}-\\d{2}-\\d{2}$"
       consolidated_spokes:
         type: array
         min_items: 3
@@ -715,7 +705,6 @@ CLAUDE.md with file listing format enforcement:
 doc_type: template
 template_for: claude-md-strict
 status: active
-date_created: 2025-11-08
 primary_category: documentation
 
 validation:
@@ -750,7 +739,6 @@ Comprehensive validation with all rule types:
 doc_type: template
 template_for: comprehensive-hub
 status: active
-date_created: 2025-11-08
 primary_category: documentation
 
 validation:
@@ -1000,7 +988,6 @@ Create minimal test documents to isolate failures:
 ---
 doc_type: test
 status: active
-date_created: 2025-11-08
 primary_category: testing
 ---
 # Test Guide

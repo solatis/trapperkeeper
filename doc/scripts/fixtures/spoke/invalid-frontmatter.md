@@ -1,7 +1,6 @@
 ---
 doc_type: spoke
 status: active
-date_created: 2025-01-15
 # Missing primary_category - REQUIRED
 # Missing hub_document - REQUIRED
 ---

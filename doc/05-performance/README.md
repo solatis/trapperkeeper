@@ -1,7 +1,6 @@
 ---
 doc_type: hub
 status: active
-date_created: 2025-11-07
 primary_category: performance
 consolidated_spokes:
   - cost-model.md

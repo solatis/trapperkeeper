@@ -52,7 +52,6 @@ Spoke documents must satisfy (from `spoke.md` template validation block):
 
 - `doc_type` (must equal "spoke")
 - `status` (enum: draft, active, deprecated, superseded)
-- `date_created` (pattern: YYYY-MM-DD)
 - `primary_category`
 - `hub_document` (pattern: `.*\.md$`)
 

@@ -8,7 +8,7 @@ primary_category: security
 
 ## Overview
 
-This document is missing required frontmatter fields (date_created and cross_cutting_concern).
+This document is missing required frontmatter field (cross_cutting_concern).
 
 ## Consolidated Documents
 

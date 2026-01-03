@@ -2,7 +2,6 @@
 doc_type: spoke
 hub_document: doc/01-principles/README.md
 status: active
-date_created: 2026-01-02
 primary_category: architecture
 title: Schema-Agnostic Architecture
 tags:

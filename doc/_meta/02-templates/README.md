@@ -1,7 +1,6 @@
 ---
 doc_type: hub
 status: active
-date_created: 2025-11-07
 primary_category: documentation
 consolidated_spokes:
   - hub.md
@@ -165,7 +164,6 @@ Simplest validation with title and length constraints:
 doc_type: template
 template_for: simple-doc
 status: active
-date_created: 2025-11-08
 primary_category: documentation
 
 validation:
@@ -186,7 +184,6 @@ Full validation with conditions, frontmatter checks, and section requirements:
 doc_type: template
 template_for: claude-md
 status: active
-date_created: 2025-11-08
 primary_category: documentation
 
 validation:
@@ -209,7 +206,6 @@ validation:
     required_fields:
       - doc_type
       - status
-      - date_created
 
   required_sections:
     - name: "Purpose"

@@ -1,7 +1,6 @@
 ---
 doc_type: spoke
 status: active
-date_created: 2025-11-08
 primary_category: documentation
 hub_document: doc/_meta/01-standards/README.md
 tags:
@@ -69,7 +68,6 @@ frontmatter:
   required_fields:
     - doc_type
     - status
-    - date_created
     - primary_category
     - consolidated_spokes
   field_constraints:
@@ -77,8 +75,6 @@ frontmatter:
       enum: ["hub"]
     status:
       enum: ["draft", "active", "deprecated", "superseded"]
-    date_created:
-      pattern: "^\\d{4}-\\d{2}-\\d{2}$"
     consolidated_spokes:
       type: array
       min_items: 3
@@ -101,7 +97,6 @@ frontmatter:
   required_fields:
     - doc_type
     - status
-    - date_created
     - primary_category
     - hub_document
   field_constraints:

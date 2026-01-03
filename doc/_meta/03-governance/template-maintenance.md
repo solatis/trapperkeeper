@@ -1,7 +1,6 @@
 ---
 doc_type: spoke
 status: active
-date_created: 2025-11-08
 primary_category: governance
 hub_document: doc/_meta/03-governance/README.md
 tags:
@@ -52,7 +51,6 @@ Update frontmatter with template-specific fields:
 doc_type: template
 template_for: my-new-doc-type
 status: active
-date_created: 2025-11-08
 primary_category: documentation
 maintainer: Documentation Team
 
@@ -67,7 +65,6 @@ validation:
 - `doc_type: template` - Identifies file as template
 - `template_for: <type>` - Document type this template creates
 - `status: active` - Template lifecycle state
-- `date_created: YYYY-MM-DD` - Creation date
 - `primary_category: documentation` - Category classification
 - `validation.schema_version: 1` - DSL version
 
@@ -88,7 +85,6 @@ validation:
     required_fields:
       - doc_type
       - status
-      - date_created
     field_constraints:
       status:
         enum: ["draft", "active", "deprecated"]
@@ -111,7 +107,6 @@ cat > test_new_template/example.md << 'EOF'
 ---
 doc_type: my-new-doc-type
 status: active
-date_created: 2025-11-08
 primary_category: testing
 ---
 
@@ -267,7 +262,6 @@ cat > api-reference.md << 'EOF'
 doc_type: template
 template_for: api-reference
 status: active
-date_created: 2025-11-08
 primary_category: documentation
 maintainer: Documentation Team
 
@@ -306,7 +300,6 @@ cat > ../scripts/fixtures/test_api_reference/sensor-api.md << 'EOF'
 ---
 doc_type: api-reference
 status: active
-date_created: 2025-11-08
 primary_category: api
 api_version: v1.0
 hub_document: README.md
@@ -463,7 +456,6 @@ cat > doc/scripts/fixtures/edge_case_hub/README.md << 'EOF'
 ---
 doc_type: hub
 status: active
-date_created: 2025-11-08
 primary_category: testing
 consolidated_spokes:
   - spoke1.md
@@ -601,7 +593,6 @@ cat > test_my_template/example.md << 'EOF'
 ---
 doc_type: my-doc-type
 status: active
-date_created: 2025-11-08
 primary_category: testing
 ---
 
