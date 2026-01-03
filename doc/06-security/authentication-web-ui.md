@@ -21,16 +21,19 @@ The Web UI requires authentication to control access to rule management, user ad
 
 ## Cookie-Based Session Authentication
 
-TrapperKeeper uses **scs (alexedwards/scs)** for persistent session management with database backend.
+TrapperKeeper uses **scs (alexedwards/scs)** for session management with a custom database store adapter.
 
 ### Implementation Components
 
 **Session Storage**:
 
-- Sessions stored in database using scs with database backend
+- Custom `Store` interface implementation wraps TrapperKeeper's database layer
+- Preserves database backend flexibility (SQLite/PostgreSQL/MySQL) without depending on SCS-specific stores
 - Session data encrypted by scs before persistence
 - Automated expiry management via background cleanup task
 - Session cleanup runs once per hour
+
+**Cross-Reference**: See [Database Backend](../09-operations/database-backend.md) for sessions table schema.
 
 **Password Hashing**:
 
@@ -41,9 +44,20 @@ TrapperKeeper uses **scs (alexedwards/scs)** for persistent session management w
 
 **User Roles**:
 
-- MVP: All users are administrators (no role distinction)
-- Two roles defined for future: `admin` and `user`
-- Role field stored in users table for schema evolution
+TrapperKeeper implements role-based access control with three roles in a strict hierarchy:
+
+| Role       | Permissions                                                                    |
+| ---------- | ------------------------------------------------------------------------------ |
+| `admin`    | User management (create/delete users, assign roles) + all operator permissions |
+| `operator` | Create/edit/delete rules, view events, system configuration                    |
+| `observer` | Read-only access: view rules and events, no mutations                          |
+
+Role enforcement:
+
+- Roles apply to Web UI only; Sensor API uses separate HMAC key authentication
+- Users have exactly one role (no multi-role assignment)
+- Default role for new users: `observer` (explicit selection required in UI, least privilege)
+- Role stored in users table, checked on each request via authorization middleware
 
 ### Session Lifecycle
 
@@ -69,8 +83,8 @@ TrapperKeeper uses **scs (alexedwards/scs)** for persistent session management w
 - Extract session cookie from request headers
 - Lookup session in database by session ID
 - Verify session not expired (scs handles expiry)
-- Load user_id from session data
-- Attach user context to request for authorization
+- Load user_id and role from session data
+- Attach user context (including role) to request for authorization
 
 **Logout Flow**:
 
@@ -105,6 +119,74 @@ sessionManager.Cookie.Path = "/"               // Explicit path scope
 - Cookies blocked on cross-site POST requests (CSRF protection)
 - More permissive than Strict (avoids broken external links)
 - Complements token-based CSRF protection
+
+## Authorization
+
+### Role-Based Access Control Middleware
+
+Authorization middleware enforces role permissions on every request after authentication.
+
+**Middleware Chain Order**:
+
+1. Session validation (authentication)
+2. Force password change check
+3. Role authorization check
+4. CSRF validation (for mutations)
+5. Request handler
+
+**Implementation**:
+
+```go
+// RequireRole returns middleware that enforces minimum role level
+func RequireRole(minRole string) func(http.Handler) http.Handler {
+    roleLevel := map[string]int{
+        "observer": 1,
+        "operator": 2,
+        "admin":    3,
+    }
+
+    return func(next http.Handler) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            ctx := r.Context()
+            userRole := sessionManager.GetString(ctx, "role")
+
+            if roleLevel[userRole] < roleLevel[minRole] {
+                http.Error(w, "Forbidden", http.StatusForbidden)
+                return
+            }
+
+            next.ServeHTTP(w, r)
+        })
+    }
+}
+```
+
+**Route Protection**:
+
+```go
+// Observer routes (read-only)
+mux.Handle("GET /rules", RequireRole("observer")(listRulesHandler))
+mux.Handle("GET /events", RequireRole("observer")(listEventsHandler))
+
+// Operator routes (mutations)
+mux.Handle("POST /rules", RequireRole("operator")(createRuleHandler))
+mux.Handle("PUT /rules/{id}", RequireRole("operator")(updateRuleHandler))
+mux.Handle("DELETE /rules/{id}", RequireRole("operator")(deleteRuleHandler))
+
+// Admin routes (user management)
+mux.Handle("GET /users", RequireRole("admin")(listUsersHandler))
+mux.Handle("POST /users", RequireRole("admin")(createUserHandler))
+mux.Handle("DELETE /users/{id}", RequireRole("admin")(deleteUserHandler))
+mux.Handle("PUT /users/{id}/role", RequireRole("admin")(updateUserRoleHandler))
+```
+
+**Authorization Failures**:
+
+- Return 403 Forbidden (not 401 -- user is authenticated but lacks permission)
+- Log authorization failure with user_id, requested resource, and required role
+- Do not reveal what role is required in error response
+
+## CSRF Protection
 
 ### CSRF Protection Implementation
 

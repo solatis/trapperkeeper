@@ -514,6 +514,41 @@ CREATE TABLE event_rule_matches (
 );
 ```
 
+**Users Table** (Web UI authentication):
+
+```sql
+CREATE TABLE users (
+    user_id CHAR(36) PRIMARY KEY,
+    tenant_id CHAR(36) NOT NULL,
+    username VARCHAR(128) NOT NULL UNIQUE,
+    password_hash CHAR(60) NOT NULL,
+    role VARCHAR(32) NOT NULL DEFAULT 'observer',
+    force_password_change BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL,
+    modified_at TIMESTAMP NOT NULL,
+    deleted_at TIMESTAMP,
+
+    INDEX idx_tenant_deleted (tenant_id, deleted_at),
+    INDEX idx_username (username)
+);
+```
+
+Valid role values: `admin`, `operator`, `observer`. See [Web UI Authentication](../06-security/authentication-web-ui.md) for role permissions.
+
+**Sessions Table** (SCS session storage with custom store adapter):
+
+```sql
+CREATE TABLE sessions (
+    token CHAR(43) PRIMARY KEY,
+    data BLOB NOT NULL,
+    expiry TIMESTAMP NOT NULL,
+
+    INDEX idx_expiry (expiry)
+);
+```
+
+TrapperKeeper implements the SCS `Store` interface with a custom adapter rather than using SCS's built-in database stores. This preserves database backend flexibility -- the same schema works across SQLite, PostgreSQL, and MySQL without depending on SCS-specific store implementations.
+
 **Design Notes**:
 
 - `tenants`: Top-level isolation boundary for multi-tenancy (MVP: single tenant only)

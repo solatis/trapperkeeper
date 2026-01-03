@@ -81,13 +81,19 @@ Prevent duplicate identifiers.
 
 ```sql
 CREATE TABLE users (
-    user_id TEXT PRIMARY KEY,
-    username TEXT NOT NULL UNIQUE,  -- Prevent duplicate usernames
-    email TEXT UNIQUE                -- Optional email uniqueness
+    user_id CHAR(36) PRIMARY KEY,
+    tenant_id CHAR(36) NOT NULL,
+    username VARCHAR(128) NOT NULL UNIQUE,  -- Prevent duplicate usernames
+    password_hash CHAR(60) NOT NULL,
+    role VARCHAR(32) NOT NULL DEFAULT 'observer',  -- admin, operator, observer
+    force_password_change BOOLEAN NOT NULL DEFAULT FALSE,
+    -- ... audit fields omitted
 );
 
 CREATE UNIQUE INDEX idx_api_keys_id ON api_keys(api_key_id);
 ```
+
+**Cross-Reference**: See [Database Backend](../09-operations/database-backend.md) for complete table schemas.
 
 **Rationale**: Unique constraints at database level guarantee uniqueness even under concurrent writes. Application layer can pre-check but database provides final enforcement.
 
