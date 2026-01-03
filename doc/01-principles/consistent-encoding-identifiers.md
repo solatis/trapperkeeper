@@ -14,6 +14,12 @@ tags:
 
 # Consistent Encoding and Identifiers
 
+## Context
+
+This document establishes UTF-8 as the universal text encoding and UUIDv7 as the standard identifier format across all TrapperKeeper components.
+
+**Hub Document**: See [Architectural Principles](README.md) for the complete set of foundational principles and how they interrelate.
+
 ## Core Principle
 
 **Use UTF-8 everywhere and UUIDv7 for all identifiers.**

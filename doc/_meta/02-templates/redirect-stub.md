@@ -44,7 +44,6 @@ This template should only be used if specific migration needs arise.
 
 doc_type: redirect-stub
 status: superseded
-date_deprecated: YYYY-MM-DD
 superseded_by: doc/path/to/new/document.md
 primary_category: [original category]
 
@@ -88,6 +87,20 @@ USAGE NOTES:
 2. No Implementation Details: Only provide redirection information
 3. Not Indexed: Redirect stubs should not appear in search indexes or navigation
 4. Automated Generation: Prefer generating from script rather than manual creation
+
+WHEN TO USE:
+- Individual document moves (e.g., doc/foo.md -> doc/bar/foo.md)
+- Document consolidation (multiple docs merged into one)
+- Document splits (one doc becomes multiple spokes)
+
+WHEN NOT REQUIRED:
+- Wholesale directory restructuring (e.g., migrating adr/ to doc/ structure)
+- Major documentation rewrites where old structure is replaced entirely
+- Internal reorganization where no external links exist
+
+For bulk migrations, document the restructuring in git commit messages and
+update any cross-references in the new structure. Redirect stubs for every
+deleted file would create maintenance burden without providing navigation value.
 
 Creation Script (if needed):
 python doc/scripts/create-redirect-stub.py \

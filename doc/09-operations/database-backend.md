@@ -485,21 +485,6 @@ CREATE TABLE tenants (
 );
 ```
 
-**Sensors Table**:
-
-```sql
-CREATE TABLE sensors (
-    sensor_id CHAR(36) PRIMARY KEY,
-    tenant_id CHAR(36) NOT NULL,
-    name VARCHAR(128) NOT NULL,
-    created_at TIMESTAMP NOT NULL,
-    modified_at TIMESTAMP NOT NULL,
-    deleted_at TIMESTAMP,
-
-    INDEX idx_tenant_deleted (tenant_id, deleted_at)
-);
-```
-
 **Event Rule Matches Table** (junction table for many-to-many event-rule relationships):
 
 ```sql
@@ -552,8 +537,8 @@ TrapperKeeper implements the SCS `Store` interface with a custom adapter rather 
 **Design Notes**:
 
 - `tenants`: Top-level isolation boundary for multi-tenancy (MVP: single tenant only)
-- `sensors`: Data sources that generate events (FK to tenants)
 - `event_rule_matches`: Records which rules matched which events (no tenant_id needed -- event_id determines tenant)
+- No `sensors` table: Sensors are ephemeral and require no server-side persistence (see [Ephemeral Sensors](../01-principles/ephemeral-sensors.md))
 
 ### Soft Deletes
 

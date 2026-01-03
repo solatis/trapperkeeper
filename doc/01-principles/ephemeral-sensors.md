@@ -13,6 +13,12 @@ tags:
 
 # Ephemeral Sensors
 
+## Context
+
+This document defines the ephemeral sensor model: sensors are short-lived, stateless, and require no server-side registration.
+
+**Hub Document**: See [Architectural Principles](README.md) for the complete set of foundational principles and how they interrelate.
+
 ## Core Principle
 
 **Sensors are short-lived by design, tied to job lifecycles.**

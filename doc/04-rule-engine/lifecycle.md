@@ -31,7 +31,7 @@ Rules are immutable: every modification creates a new rule record with a new `ru
 - **Stateless reasoning**: Immutable data is simpler to reason about -- no hidden state changes, no race conditions on updates
 - **ETAG simplicity**: `ETAG = SHA256(sorted active rule_ids)` -- any rule change creates new ID, ETAG automatically changes
 - **Audit trail built-in**: All rule versions preserved until retention cleanup, events reference exact version evaluated
-- **Conflict-free concurrency**: Append-only eliminates last-write-wins bugs -- concurrent edits both succeed, creating separate versions
+- **Simplified concurrency**: Append-only avoids complex locking -- concurrent edits may create orphan versions (see Explicit Non-Goals)
 - **No database triggers**: Simple application logic, no reliance on complex database internals
 
 **What we avoid:**
@@ -58,7 +58,7 @@ CREATE TABLE rules (
 ```
 
 - `rule_id`: Unique per version, immutable, used in events and ETAG
-- No version tracking or lineage grouping (see Explicit Non-Goals)
+- No version tracking, lineage grouping, or rollback mechanism (see Explicit Non-Goals)
 
 ### Version Creation Flow
 
@@ -275,28 +275,6 @@ TrapperKeeper is explicitly designed as a loosely coupled distributed system tha
 - **Point-in-time snapshots**: Events capture complete rule definition as evaluated
 - **No hard references**: Event rule_snapshot is captured data, not database foreign key
 - **Guaranteed convergence**: All sensors synchronize within configurable time window
-
-## Rollback Strategy
-
-Immutable rules provide natural version history within retention window.
-
-**Revert to previous version**:
-
-1. Query versions: `SELECT * FROM rules WHERE lineage_id = $1 ORDER BY created_at DESC`
-2. Identify target version
-3. Create new version copying target version's content
-4. Result: New current version with old configuration
-
-**Benefits over mutable design**:
-
-- All versions preserved (no need for separate version history table)
-- Revert is just creating new version with old content
-- Audit trail shows full history including reverts
-
-**Limitations**:
-
-- Versions older than retention window are deleted
-- For longer retention, adjust retention policy or archive to cold storage
 
 ## Explicit Non-Goals
 

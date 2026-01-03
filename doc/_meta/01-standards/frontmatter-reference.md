@@ -152,9 +152,9 @@ authors:
 
 ```yaml
 consolidated_spokes:
-  - doc/security/authentication.md
-  - doc/security/authorization.md
-  - doc/security/tls-configuration.md
+  - doc/06-security/authentication-web-ui.md
+  - doc/06-security/authentication-sensor-api.md
+  - doc/06-security/tls-https-strategy.md
 ```
 
 ### maintainer (optional but recommended for hubs)
@@ -227,7 +227,7 @@ Both patterns serve different audiences and purposes. Do not treat them as alter
 **Example**:
 
 ```yaml
-hub_document: doc/security/README.md
+hub_document: doc/06-security/README.md
 ```
 
 ## Relationship Fields (All Documents)
@@ -241,8 +241,8 @@ hub_document: doc/security/README.md
 
 ```yaml
 depends_on:
-  - doc/architecture/core-principles.md
-  - doc/api/protocol-design.md
+  - doc/02-architecture/README.md
+  - doc/02-architecture/api-service.md
 ```
 
 ### extended_by (optional)
@@ -254,8 +254,8 @@ depends_on:
 
 ```yaml
 extended_by:
-  - doc/security/advanced-tls.md
-  - doc/security/certificate-rotation.md
+  - doc/06-security/tls-https-strategy.md
+  - doc/06-security/encryption.md
 ```
 
 ### superseded_by (required if status is 'superseded')
@@ -267,7 +267,7 @@ extended_by:
 
 ```yaml
 status: superseded
-superseded_by: doc/security/unified-authentication.md
+superseded_by: doc/06-security/authentication-web-ui.md
 ```
 
 ## Cross-Cutting Concern Fields
@@ -294,20 +294,19 @@ cross_cutting:
 ---
 doc_type: hub
 status: active
-date_updated: 2025-11-05
 primary_category: security
 tags:
   - authentication
   - encryption
   - compliance
 consolidated_spokes:
-  - doc/security/authentication-web-ui.md
-  - doc/security/authentication-sensor-api.md
-  - doc/security/tls-configuration.md
+  - doc/06-security/authentication-web-ui.md
+  - doc/06-security/authentication-sensor-api.md
+  - doc/06-security/tls-https-strategy.md
 cross_cutting:
   - security
 depends_on:
-  - doc/architecture/core-principles.md
+  - doc/02-architecture/README.md
 maintainer: Security Team
 authors:
   - Alice Engineer
@@ -326,11 +325,11 @@ tags:
   - authentication
   - sessions
   - cookies
-hub_document: doc/security/README.md
+hub_document: doc/06-security/README.md
 cross_cutting:
   - security
 depends_on:
-  - doc/security/README.md
+  - doc/06-security/README.md
 authors:
   - Alice Engineer
 ---
@@ -342,9 +341,8 @@ authors:
 ---
 doc_type: spoke
 status: superseded
-date_updated: 2025-11-05
 primary_category: validation
-superseded_by: doc/validation/unified-validation.md
+superseded_by: doc/07-validation/README.md
 tags:
   - deprecated
 ---

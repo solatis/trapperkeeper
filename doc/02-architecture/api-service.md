@@ -146,11 +146,9 @@ message Rule {
   RuleState state = 3;
   Action action = 4;
   repeated OrGroup or_groups = 5;
-  OnMissingField on_missing_field = 6;
-  double sample_rate = 7;
-  repeated ScopeTag scope_tags = 8;
-  google.protobuf.Timestamp created_at = 9;
-  google.protobuf.Timestamp modified_at = 10;
+  double sample_rate = 6;
+  repeated ScopeTag scope_tags = 7;
+  google.protobuf.Timestamp created_at = 8;
 }
 
 message OrGroup {
@@ -163,6 +161,60 @@ message Condition {
   Operator op = 2;
   ConditionValue value = 3;
   FieldType field_type = 4;
+  OnMissingField on_missing_field = 5;
+  OnCoercionFail on_coercion_fail = 6;
+}
+
+message ConditionValue {
+  oneof value_type {
+    string string_value = 1;
+    double numeric_value = 2;
+    bool boolean_value = 3;
+    NullValue null_value = 4;
+    StringArray string_array = 5;   // For IN operator
+    NumericArray numeric_array = 6; // For IN operator
+  }
+}
+
+message StringArray {
+  repeated string values = 1;
+}
+
+message NumericArray {
+  repeated double values = 1;
+}
+
+message ScopeTag {
+  string key = 1;
+  string value = 2;
+}
+
+enum NullValue {
+  NULL_VALUE = 0;
+}
+
+enum Operator {
+  OPERATOR_UNSPECIFIED = 0;
+  OPERATOR_EQ = 1;
+  OPERATOR_NEQ = 2;
+  OPERATOR_LT = 3;
+  OPERATOR_LTE = 4;
+  OPERATOR_GT = 5;
+  OPERATOR_GTE = 6;
+  OPERATOR_PREFIX = 7;
+  OPERATOR_SUFFIX = 8;
+  OPERATOR_CONTAINS = 9;
+  OPERATOR_IN = 10;
+  OPERATOR_EXISTS = 11;
+  OPERATOR_IS_NULL = 12;
+}
+
+enum FieldType {
+  FIELD_TYPE_UNSPECIFIED = 0;
+  FIELD_TYPE_NUMERIC = 1;
+  FIELD_TYPE_TEXT = 2;
+  FIELD_TYPE_BOOLEAN = 3;
+  FIELD_TYPE_ANY = 4;
 }
 
 enum RuleState {
@@ -176,13 +228,21 @@ enum Action {
   ACTION_UNSPECIFIED = 0;
   ACTION_OBSERVE = 1;
   ACTION_DROP = 2;
+  ACTION_FAIL = 3;
 }
 
 enum OnMissingField {
   ON_MISSING_FIELD_UNSPECIFIED = 0;
   ON_MISSING_FIELD_SKIP = 1;
-  ON_MISSING_FIELD_ERROR = 2;
-  ON_MISSING_FIELD_NULL = 3;
+  ON_MISSING_FIELD_MATCH = 2;
+  ON_MISSING_FIELD_FAIL = 3;
+}
+
+enum OnCoercionFail {
+  ON_COERCION_FAIL_UNSPECIFIED = 0;
+  ON_COERCION_FAIL_SKIP = 1;
+  ON_COERCION_FAIL_MATCH = 2;
+  ON_COERCION_FAIL_FAIL = 3;
 }
 ```
 
@@ -190,8 +250,9 @@ enum OnMissingField {
 
 - DNF representation: `or_groups` contain `conditions` (AND within group, OR between groups)
 - Explicit ordering: `group_index` ensures deterministic evaluation
-- State machine: `DRAFT → ACTIVE → DISABLED` lifecycle
-- Missing field handling: Configurable per rule via `on_missing_field`
+- State machine: `DRAFT -> ACTIVE -> DISABLED` lifecycle
+- Immutable rules: No modified_at timestamp (rules are never modified, only replaced)
+- Per-condition policies: `on_missing_field` and `on_coercion_fail` configured per condition for fine-grained control
 
 **Cross-References**:
 

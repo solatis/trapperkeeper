@@ -13,6 +13,12 @@ tags:
 
 # Least Intrusive by Default
 
+## Context
+
+This document defines TrapperKeeper's failure handling philosophy: degrade gracefully rather than block production pipelines.
+
+**Hub Document**: See [Architectural Principles](README.md) for the complete set of foundational principles and how they interrelate.
+
 ## Core Principle
 
 **System degrades to pass-through rather than failing pipelines.**

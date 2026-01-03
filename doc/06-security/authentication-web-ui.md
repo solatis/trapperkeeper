@@ -75,7 +75,7 @@ Role enforcement:
 - Store session data in database (encrypted by scs)
 - Set cookie with security attributes (see Cookie Security Configuration)
 - Session lifetime:
-  - Default: 24 hours of inactivity
+  - Default: 168 hours (7 days) of inactivity
   - Remember-me option: 30 days (when user opts in via login form checkbox)
 
 **Session Validation** (on each request):
@@ -270,7 +270,7 @@ import (
 
 // Configure session manager with expiry cleanup
 sessionManager := scs.New()
-sessionManager.Lifetime = 24 * time.Hour // Default session lifetime: 24 hours of inactivity
+sessionManager.Lifetime = 168 * time.Hour // Default session lifetime: 168 hours (7 days) of inactivity
 
 // Remember-me session extension (set per-session based on login form checkbox)
 // if rememberMe {
@@ -325,7 +325,7 @@ On first run (empty users table), TrapperKeeper auto-creates default admin accou
 
 **Known Limitations**:
 
-- Session cleanup background task: If service crashes, orphaned sessions remain until next cleanup (mitigated by 24-hour expiry)
+- Session cleanup background task: If service crashes, orphaned sessions remain until next cleanup (mitigated by 7-day expiry)
 - Cookie secure flag detection: Relies on correct `X-Forwarded-Proto` header configuration in reverse proxy (operator responsibility)
 - No multi-factor authentication (MFA) in MVP
 - No password reset flow in MVP (admin must manually update database)

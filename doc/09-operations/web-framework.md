@@ -214,6 +214,40 @@ func forcePasswordChangeMiddleware(next http.Handler) http.Handler {
 
 **Rationale**: Middleware-based redirect ensures force password change cannot be bypassed.
 
+## Web UI Routes
+
+Complete route table for the Web UI service.
+
+### Route Table
+
+| Method | Path               | Handler              | Required Role | Description             |
+| ------ | ------------------ | -------------------- | ------------- | ----------------------- |
+| GET    | `/login`           | loginPage            | -             | Login form              |
+| POST   | `/login`           | loginSubmit          | -             | Process login           |
+| POST   | `/logout`          | logout               | observer      | End session             |
+| GET    | `/change-password` | changePasswordPage   | observer      | Password change form    |
+| POST   | `/change-password` | changePasswordSubmit | observer      | Process password change |
+| GET    | `/dashboard`       | dashboard            | observer      | Main dashboard          |
+| GET    | `/rules`           | listRules            | observer      | List all rules          |
+| GET    | `/rules/create`    | createRulePage       | operator      | Create rule form        |
+| POST   | `/rules`           | createRule           | operator      | Create new rule         |
+| GET    | `/rules/{id}`      | viewRule             | observer      | View rule details       |
+| GET    | `/rules/{id}/edit` | editRulePage         | operator      | Edit rule form          |
+| PUT    | `/rules/{id}`      | updateRule           | operator      | Update existing rule    |
+| DELETE | `/rules/{id}`      | deleteRule           | operator      | Delete rule             |
+| GET    | `/users`           | listUsers            | admin         | List all users          |
+| GET    | `/users/create`    | createUserPage       | admin         | Create user form        |
+| POST   | `/users`           | createUser           | admin         | Create new user         |
+| DELETE | `/users/{id}`      | deleteUser           | admin         | Delete user             |
+| PUT    | `/users/{id}/role` | updateUserRole       | admin         | Change user role        |
+| GET    | `/healthz`         | healthCheck          | -             | Liveness probe          |
+| GET    | `/readyz`          | readinessCheck       | -             | Readiness probe         |
+| GET    | `/static/*`        | staticFiles          | -             | Static assets           |
+
+**Role Enforcement**: Routes with Required Role are protected by `RequireRole` middleware. See [Web UI Authentication](../06-security/authentication-web-ui.md) for role definitions (admin, operator, observer).
+
+**Cross-Reference**: See [Health Endpoints](health-endpoints.md) for `/healthz` and `/readyz` specifications.
+
 ## Server-Side Rendering with html/template
 
 ### Template Engine Configuration

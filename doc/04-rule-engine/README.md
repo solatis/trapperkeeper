@@ -43,7 +43,7 @@ TrapperKeeper maintains two completely separate validation domains with distinct
 
 **DOMAIN 2: External User Data (WEAK, BEST-EFFORT)** — Incoming events, sensor readings, pandas dataframes, and any user-provided data being evaluated by rules use best-effort semantics. We do NOT enforce strict schemas on incoming data. The `on_missing_field` policy is EXCLUSIVELY a runtime evaluation policy for THIS domain. Type coercion and missing field handling enable graceful degradation when external data doesn't match rule expectations, allowing partial evaluation rather than pipeline failures.
 
-**Critical Distinction**: This separation prevents confusion between API validation (strict, catches malformed rule JSON) and runtime evaluation (lenient, handles schema drift in incoming data). Users implementing strict data quality checks must use `on_missing_field="error"` explicitly in rule conditions—this is NOT the default behavior for incoming data.
+**Critical Distinction**: This separation prevents confusion between API validation (strict, catches malformed rule JSON) and runtime evaluation (lenient, handles schema drift in incoming data). Users implementing strict data quality checks must use `on_missing_field="fail"` explicitly in rule conditions—this is NOT the default behavior for incoming data.
 
 ### Expression Language and Schema
 
@@ -143,16 +143,16 @@ Each condition specifies `field_type` independently (`numeric`, `text`, `boolean
 - **Coercion failures**: Treated as condition failed (NOT missing field), evaluation continues
 - Per-element coercion in wildcard arrays enables best-effort evaluation
 
-**Null vs Coercion Failure**: A critical architectural distinction exists between null-like values and type coercion failures. Null-like values (JSON `null`, missing fields) defer to `on_missing_field` policy (skip/match/error). Type coercion failures (e.g., `"abc"` coerced to numeric) cause the condition to fail immediately and NEVER trigger `on_missing_field`. This enables best-effort evaluation where unparseable values don't halt processing, while null indicates intentional absence requiring policy decision. See Type System Section 11-12 and Schema Evolution Section 5 for complete semantics.
+**Null vs Coercion Failure**: A critical architectural distinction exists between null-like values and type coercion failures. Null-like values (JSON `null`, missing fields) defer to `on_missing_field` policy (skip/match/fail). Type coercion failures (e.g., `"abc"` coerced to numeric) cause the condition to fail immediately and NEVER trigger `on_missing_field`. This enables best-effort evaluation where unparseable values don't halt processing, while null indicates intentional absence requiring policy decision. See Type System Section 11-12 and Schema Evolution Section 5 for complete semantics.
 
 **Domain Boundary Comparison**:
 
-| Scenario                               | Validation Domain      | Behavior                              | `on_missing_field` Applies?         |
-| -------------------------------------- | ---------------------- | ------------------------------------- | ----------------------------------- |
-| Missing field in rule definition JSON  | Internal (Strict)      | API validation error (400 response)   | NO - API rejects request            |
-| Missing field in incoming event data   | External (Best-effort) | Runtime evaluation policy             | YES - skip/match/error mode applies |
-| Type coercion failure in incoming data | External (Best-effort) | Condition fails, continue evaluation  | NO - treated as condition failed    |
-| Null value in incoming event data      | External (Best-effort) | Defers to policy (treated as missing) | YES - skip/match/error mode applies |
+| Scenario                               | Validation Domain      | Behavior                              | `on_missing_field` Applies?        |
+| -------------------------------------- | ---------------------- | ------------------------------------- | ---------------------------------- |
+| Missing field in rule definition JSON  | Internal (Strict)      | API validation error (400 response)   | NO - API rejects request           |
+| Missing field in incoming event data   | External (Best-effort) | Runtime evaluation policy             | YES - skip/match/fail mode applies |
+| Type coercion failure in incoming data | External (Best-effort) | Condition fails, continue evaluation  | NO - treated as condition failed   |
+| Null value in incoming event data      | External (Best-effort) | Defers to policy (treated as missing) | YES - skip/match/fail mode applies |
 
 **Cross-References:**
 
@@ -190,7 +190,7 @@ Each condition specifies `field_type` independently (`numeric`, `text`, `boolean
 
 ### Schema Evolution
 
-Missing field handling uses explicit per-condition configuration with three modes: `skip` (default, least intrusive), `match` (detect incomplete records), `error` (strict validation). Integrates with field path resolution and type coercion.
+Missing field handling uses explicit per-condition configuration with three modes: `skip` (default, least intrusive), `match` (detect incomplete records), `fail` (strict validation). Integrates with field path resolution and type coercion.
 
 **Key Points:**
 
@@ -220,7 +220,7 @@ Missing field handling uses explicit per-condition configuration with three mode
         {
           "field": ["customer", "id"],
           "op": "exists",
-          "on_missing_field": "error"
+          "on_missing_field": "fail"
         },
         {
           "field": ["customer", "email"],
@@ -239,23 +239,23 @@ Operational controls enable safe production deployment with dry-run testing, eme
 
 **Key Points:**
 
-- **Dry-run mode**: API transforms action to "observe" before sending to sensors
+- **Production testing**: Operators create new rule versions with `action: observe` for testing, then create new versions with real actions when satisfied
 - **Emergency pause**: In-memory flag returns empty rule set with special ETAG "PAUSED"
 - **Enable/disable**: Boolean column filters rules from API query without deletion
-- **Concurrency**: Last-write-wins strategy with `modified_at` timestamp tracking
+- **Concurrency**: Append-only immutable rules. No `modified_at` tracking. Concurrent edits may create orphan versions.
 - **Propagation**: Eventual consistency model with 0-30s delay (average 15s)
-- No automated version history (manual recovery via database backups)
+- **Version creation**: Every modification creates new rule with new `rule_id`, old version soft-deleted
 
 **Cross-References:**
 
-- Lifecycle Section 1: Dry-run mode implementation and event schema
-- Lifecycle Section 2: Emergency pause all rules mechanism
-- Lifecycle Section 3: Individual rule enable/disable controls
-- Lifecycle Section 4: Concurrent modification handling
-- Lifecycle Section 5: Rollback strategy
-- Lifecycle Section 6: Change propagation timeline and eventual consistency
+- Lifecycle Section 1: Immutable rules design and version creation flow
+- Lifecycle Section 2: Production testing workflow (replacing dry-run)
+- Lifecycle Section 3: Emergency pause all rules mechanism
+- Lifecycle Section 4: Individual rule enable/disable controls
+- Lifecycle Section 5: Change propagation timeline and eventual consistency
+- Lifecycle Section 6: Rollback strategy with soft-deleted versions
 
-**Example**: Dry-run event recording both actual and effective actions:
+**Example**: Testing workflow with observe-action versions:
 
 ```json
 {
@@ -263,8 +263,7 @@ Operational controls enable safe production deployment with dry-run testing, eme
   "action": "observe",
   "rule": {
     "rule_id": "01936a3e-1234-7b3c-9d5e-abcdef123456",
-    "action": "drop",
-    "dry_run": true
+    "action": "observe"
   }
 }
 ```

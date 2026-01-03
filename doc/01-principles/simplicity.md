@@ -13,6 +13,12 @@ tags:
 
 # Simplicity (Pragmatic Minimalism)
 
+## Context
+
+This document establishes pragmatic minimalism as a core architectural principle for TrapperKeeper development.
+
+**Hub Document**: See [Architectural Principles](README.md) for the complete set of foundational principles and how they interrelate.
+
 ## Core Principle
 
 **Avoid over-engineering, defer complexity to future iterations.**

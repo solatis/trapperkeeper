@@ -188,12 +188,12 @@ TrapperKeeper enforces performance budgets at rule creation and compilation time
 
 **Known Gaps**:
 
-- Benchmark suite documentation (benchmarks exist but not documented)
 - Performance profiling guide for rule authors
 - Real-world performance case studies from production deployments
 
 **Planned Additions**:
 
+- Benchmark suite implementation and documentation
 - Performance testing framework integration with CI/CD
 - Automated performance regression detection
 - Performance optimization cookbook with common patterns

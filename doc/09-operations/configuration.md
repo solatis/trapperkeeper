@@ -56,7 +56,7 @@ csrf_enabled = true
 
 # Database connection pooling
 [database]
-max_connections = 10
+max_connections = 16
 connection_timeout_ms = 3000
 idle_timeout_ms = 300000  # 5 minutes
 migrations_on_startup = true
@@ -128,8 +128,8 @@ log_file = "/var/log/trapperkeeper/{hostname}-{pid}.log"
 **[performance]**: Performance tuning
 
 - `batch_size`: Batch operation size
-- `cache_enabled`: Enable caching
-- `cache_ttl_seconds`: Cache entry lifetime
+- `cache_enabled`: Enable sensor-side rule caching
+- `cache_ttl_seconds`: How frequently sensors query the central API for rule changes (default: 300 seconds / 5 minutes). This is a sensor-side configuration -- there is no server-side rule cache.
 
 ## Default File Paths
 

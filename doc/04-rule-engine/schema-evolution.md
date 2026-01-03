@@ -32,7 +32,7 @@ Every condition has an `on_missing_field` configuration option:
 | ------- | ------------------------------------------------------------ | ------------------------- |
 | `skip`  | Field missing → condition doesn't match, continue evaluation | Default, least intrusive  |
 | `match` | Field missing → condition matches                            | Detect incomplete records |
-| `error` | Field missing → raise exception, fail pipeline               | Strict validation         |
+| `fail`  | Field missing → condition fails, rule doesn't match          | Strict validation         |
 
 **Default**: `skip` (least intrusive by default)
 
@@ -48,13 +48,13 @@ Every condition has an `on_coercion_fail` configuration option that controls beh
 | ------- | ------------------------------------------------------------- | ---------------------------- |
 | `skip`  | Coercion fails → condition doesn't match, continue evaluation | Default, best-effort parsing |
 | `match` | Coercion fails → condition matches                            | Detect bad data              |
-| `error` | Coercion fails → raise exception, fail pipeline               | Strict type validation       |
+| `fail`  | Coercion fails → condition fails, rule doesn't match          | Strict type validation       |
 
 **Default**: `skip` (best-effort evaluation by default)
 
 **Database schema**: `on_coercion_fail TEXT NOT NULL DEFAULT 'skip'` on condition, not rule
 
-**Rationale**: Parallel to `on_missing_field`, coercion failures represent a distinct failure mode requiring explicit control. Default "skip" enables lenient evaluation where bad values don't halt processing, while "error" mode enables strict type contract enforcement. The "match" mode enables data quality monitoring to detect records with invalid types.
+**Rationale**: Parallel to `on_missing_field`, coercion failures represent a distinct failure mode requiring explicit control. Default "skip" enables lenient evaluation where bad values don't halt processing, while "fail" mode enables strict type contract enforcement. The "match" mode enables data quality monitoring to detect records with invalid types.
 
 **Critical distinction from `on_missing_field`**:
 
@@ -98,7 +98,7 @@ Every condition has an `on_coercion_fail` configuration option that controls beh
 - Rule checking `department == "Engineering"`:
   - `on_missing_field="skip"`: Rule doesn't match (default)
   - `on_missing_field="match"`: Rule matches (detects removal)
-  - `on_missing_field="error"`: Pipeline fails
+  - `on_missing_field="fail"`: Pipeline fails
 
 **Rationale**: Breaking changes require explicit choice. Default "skip" prevents pipeline failures.
 
@@ -118,7 +118,7 @@ Every condition has an `on_coercion_fail` configuration option that controls beh
 - If coercion impossible (e.g., `"abc"` to numeric): Behavior depends on `on_coercion_fail` policy
   - `on_coercion_fail="skip"` (default): Condition doesn't match, continue evaluation
   - `on_coercion_fail="match"`: Condition matches (detect bad data)
-  - `on_coercion_fail="error"`: Raise exception, fail pipeline
+  - `on_coercion_fail="fail"`: Condition fails, rule doesn't match
 - Does NOT trigger `on_missing_field` policy (coercion failures are distinct from missing fields)
 - Only null-like values (e.g., `{"user_id": null}`) trigger `on_missing_field` policy
 
@@ -138,7 +138,7 @@ Every condition has an `on_coercion_fail` configuration option that controls beh
         {
           "field": ["customer", "id"],
           "op": "exists",
-          "on_missing_field": "error" // Required field
+          "on_missing_field": "fail" // Required field
         },
         {
           "field": ["customer", "email"],
@@ -171,7 +171,7 @@ Every condition has an `on_coercion_fail` configuration option that controls beh
 
 ## Interaction with Type System
 
-> **WARNING - Critical Architectural Boundary**: `on_missing_field` and `on_coercion_fail` are independent policies. Only null-like values (JSON `null`, missing fields) trigger `on_missing_field` policy. Type coercion failures trigger `on_coercion_fail` policy (NOT `on_missing_field`). For strict validation of both field presence and type correctness, set BOTH policies to "error". Setting only `on_missing_field="error"` will NOT catch coercion failures like "abc" -> numeric.
+> **WARNING - Critical Architectural Boundary**: `on_missing_field` and `on_coercion_fail` are independent policies. Only null-like values (JSON `null`, missing fields) trigger `on_missing_field` policy. Type coercion failures trigger `on_coercion_fail` policy (NOT `on_missing_field`). For strict validation of both field presence and type correctness, set BOTH policies to "fail". Setting only `on_missing_field="fail"` will NOT catch coercion failures like "abc" -> numeric.
 
 Missing field handling integrates with type coercion. **Critical distinction**: Null-like values and coercion failures are handled by separate policies.
 
@@ -227,9 +227,9 @@ Missing field handling integrates with type coercion. **Critical distinction**: 
 - Missing field or null-like value: Rule matches
 - Use case: Data quality monitoring to detect incomplete records
 
-**Mode: `error`**
+**Mode: `fail`**
 
-- Missing field or null-like value: Raise exception, fail pipeline
+- Missing field or null-like value: Condition fails, rule doesn't match
 - Use case: Strict validation where schema contract must be enforced for field presence
 
 **`on_coercion_fail` modes**:
@@ -244,17 +244,17 @@ Missing field handling integrates with type coercion. **Critical distinction**: 
 - Coercion failure: Condition matches
 - Use case: Data quality monitoring to detect records with invalid types
 
-**Mode: `error`**
+**Mode: `fail`**
 
-- Coercion failure: Raise exception, fail pipeline
+- Coercion failure: Condition fails, rule doesn't match
 - Use case: Strict validation where type contract must be enforced
 
 **Combined strict validation**:
 
-Setting both `on_missing_field="error"` AND `on_coercion_fail="error"` enforces strict validation that catches:
+Setting both `on_missing_field="fail"` AND `on_coercion_fail="fail"` enforces strict validation that catches:
 
-- Missing fields and null values (via `on_missing_field="error"`)
-- Type coercion failures (via `on_coercion_fail="error"`)
+- Missing fields and null values (via `on_missing_field="fail"`)
+- Type coercion failures (via `on_coercion_fail="fail"`)
 
 This combination ensures complete validation of field presence AND type correctness.
 
@@ -306,7 +306,7 @@ This combination ensures complete validation of field presence AND type correctn
 }
 ```
 
-### Example 3: Enforce required fields (error mode)
+### Example 3: Enforce required fields (fail mode)
 
 ```json
 {
@@ -321,7 +321,7 @@ This combination ensures complete validation of field presence AND type correctn
           "field_type": "text",
           "op": "exists",
           "value": null,
-          "on_missing_field": "error"
+          "on_missing_field": "fail"
         }
       ]
     }
@@ -344,7 +344,7 @@ This combination ensures complete validation of field presence AND type correctn
           "field_type": "text",
           "op": "exists",
           "value": null,
-          "on_missing_field": "error" // Required field
+          "on_missing_field": "fail" // Required field
         },
         {
           "field": ["customer", "email"],
@@ -374,8 +374,8 @@ This combination ensures complete validation of field presence AND type correctn
           "field_type": "numeric",
           "op": "gt",
           "value": 100,
-          "on_missing_field": "error",
-          "on_coercion_fail": "error"
+          "on_missing_field": "fail",
+          "on_coercion_fail": "fail"
         }
       ]
     }
@@ -387,9 +387,9 @@ This combination ensures complete validation of field presence AND type correctn
 
 - `{"temperature": 105}`: Match (numeric, > 100)
 - `{"temperature": "105"}`: Match (coerces to 105, > 100)
-- `{"temperature": "abc"}`: Raise exception (coercion fails, on_coercion_fail="error")
-- `{}`: Raise exception (missing field, on_missing_field="error")
-- `{"temperature": null}`: Raise exception (null treated as missing, on_missing_field="error")
+- `{"temperature": "abc"}`: Condition fails (coercion fails, on_coercion_fail="fail")
+- `{}`: Condition fails (missing field, on_missing_field="fail")
+- `{"temperature": null}`: Condition fails (null treated as missing, on_missing_field="fail")
 
 ### Example 6: Detect bad data with on_coercion_fail match mode
 
@@ -436,7 +436,7 @@ This combination ensures complete validation of field presence AND type correctn
           "op": "gte",
           "value": 18,
           "on_missing_field": "skip",
-          "on_coercion_fail": "error"
+          "on_coercion_fail": "fail"
         }
       ]
     }
@@ -448,7 +448,7 @@ This combination ensures complete validation of field presence AND type correctn
 
 - `{"user": {"age": 25}}`: Match (numeric, >= 18)
 - `{"user": {"age": "25"}}`: Match (coerces to 25, >= 18)
-- `{"user": {"age": "abc"}}`: Raise exception (coercion fails, on_coercion_fail="error")
+- `{"user": {"age": "abc"}}`: Condition fails (coercion fails, on_coercion_fail="fail")
 - `{}`: No match (missing field, on_missing_field="skip")
 - `{"user": {}}`: No match (missing age field, on_missing_field="skip")
 

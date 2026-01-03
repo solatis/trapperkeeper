@@ -83,7 +83,7 @@ Above example: Match if `(temperature > 100 AND sensor_id starts with "TEMP-") O
 | `rule_id`     | UUIDv7   | Yes      | Server-generated identifier, never user-provided                                             |
 | `name`        | string   | Yes      | User-provided name, 1-128 chars, UTF-8, **not unique** (duplicates allowed like AWS console) |
 | `description` | string   | No       | Plain text description, 1-1024 chars, UTF-8, newline/tabs ok, no markdown                    |
-| `action`      | enum     | Yes      | `"observe"`, `"drop"`, or `"error"`                                                          |
+| `action`      | enum     | Yes      | `"observe"`, `"drop"`, or `"fail"`                                                           |
 | `sample_rate` | float    | No       | Default 1.0 (100%), range [0.0, 1.0], applied before field extraction                        |
 | `scope.tags`  | string[] | Yes      | Which sensors this rule applies to                                                           |
 | `any`         | array    | Yes      | OR groups (minimum one group)                                                                |
@@ -119,17 +119,17 @@ Each condition in an `all` array has this structure:
 - **`value`**: Comparison value (string, number, boolean, or null depending on operator). Omitted or ignored for `is_null` and `exists` operators. **Mutually exclusive with `field_ref`**.
 - **`values`**: Array of comparison values for `in` operator only (1-64 elements, all same type). **Not used with other operators**.
 - **`field_ref`**: Array path to another field in same record for cross-field comparisons. **Mutually exclusive with `value`**. **No wildcards allowed**.
-- **`on_missing_field`**: Enum (`"skip"`, `"match"`, `"error"`), **required**, default `"skip"`
+- **`on_missing_field`**: Enum (`"skip"`, `"match"`, `"fail"`), **required**, default `"skip"`
   - `"skip"`: Field missing → condition doesn't match, continue evaluation (least intrusive)
   - `"match"`: Field missing → treat as matching condition (detect incomplete records)
-  - `"error"`: Field missing → raise exception, fail pipeline (strict validation)
+  - `"fail"`: Field missing → condition fails, rule doesn't match (strict validation)
   - **Default**: `"skip"` (aligns with Least Intrusive by Default principle)
   - **Database**: NOT NULL with default value
   - See Schema Evolution for complete missing field handling semantics
-- **`on_coercion_fail`**: Enum (`"skip"`, `"match"`, `"error"`), **required**, default `"skip"`
+- **`on_coercion_fail`**: Enum (`"skip"`, `"match"`, `"fail"`), **required**, default `"skip"`
   - `"skip"`: Coercion fails → condition doesn't match, continue evaluation (best-effort parsing)
   - `"match"`: Coercion fails → treat as matching condition (detect bad data)
-  - `"error"`: Coercion fails → raise exception, fail pipeline (strict type validation)
+  - `"fail"`: Coercion fails → condition fails, rule doesn't match (strict type validation)
   - **Default**: `"skip"` (aligns with best-effort evaluation principle)
   - **Database**: NOT NULL with default value
   - See Schema Evolution for complete coercion failure handling semantics

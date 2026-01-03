@@ -79,13 +79,13 @@ sensor = Sensor(
 
 **Failure mode behavior matrix**:
 
-| Scenario                       | fail-safe (default)             | fail-closed           | fail-open-with-cache     |
-| ------------------------------ | ------------------------------- | --------------------- | ------------------------ |
-| API unreachable at startup     | Operate as no-op, retry         | Exception, halt       | Operate as no-op, retry  |
-| API unreachable during sync    | Use cache until TTL, then no-op | Exception, halt       | Use cache indefinitely   |
-| Cache expired, API unreachable | Empty rule set (no-op)          | Exception, halt       | Use stale cache          |
-| Event POST failure             | Log warning, continue           | Log warning, continue | Log warning, continue    |
-| Network partition (5+ minutes) | Pass-through mode               | Pipeline halted       | Operate with stale rules |
+| Scenario                       | fail-safe (default)             | fail-closed           | fail-open-with-cache                                                         |
+| ------------------------------ | ------------------------------- | --------------------- | ---------------------------------------------------------------------------- |
+| API unreachable at startup     | Operate as no-op, retry         | Exception, halt       | Operate as no-op, retry                                                      |
+| API unreachable during sync    | Use cache until TTL, then no-op | Exception, halt       | Use stale cache until TTL expires, then fall back to configured failure mode |
+| Cache expired, API unreachable | Empty rule set (no-op)          | Exception, halt       | Use stale cache                                                              |
+| Event POST failure             | Log warning, continue           | Log warning, continue | Log warning, continue                                                        |
+| Network partition (5+ minutes) | Pass-through mode               | Pipeline halted       | Operate with stale rules                                                     |
 
 **Rationale**: Per-sensor configuration allows flexibility for different pipeline requirements without per-rule complexity. Fail-safe default protects most users while enabling strict mode when needed.
 

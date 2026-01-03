@@ -166,6 +166,8 @@ User-provided metadata has strict limits preventing resource exhaustion.
 - Total metadata size: 64KB maximum (sum of all keys + values)
 - Character restrictions: UTF-8 encoding, no control characters (except values may contain newlines/tabs)
 
+**Note**: These limits are independent bounds. Using maximum values for all constraints simultaneously (64 pairs x 1152 bytes = 73KB) would exceed the 64KB total limit. In practice, most use cases involve either many small key-value pairs OR fewer pairs with larger values.
+
 ### Validation Errors
 
 ```python

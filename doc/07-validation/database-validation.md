@@ -53,12 +53,12 @@ Referential integrity between tables.
 ### Foreign Key Examples
 
 ```sql
-CREATE TABLE rule_event_assignments (
-    event_id TEXT PRIMARY KEY,
+CREATE TABLE event_rule_matches (
+    event_id TEXT NOT NULL,
     rule_id TEXT NOT NULL,
-    sensor_id TEXT NOT NULL,
-    FOREIGN KEY (rule_id) REFERENCES rules(rule_id) ON DELETE CASCADE,
-    FOREIGN KEY (sensor_id) REFERENCES sensors(sensor_id) ON DELETE CASCADE
+    matched_at TIMESTAMP NOT NULL,
+    PRIMARY KEY (event_id, rule_id),
+    FOREIGN KEY (rule_id) REFERENCES rules(rule_id) ON DELETE CASCADE
 );
 ```
 

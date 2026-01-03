@@ -80,7 +80,7 @@ Rule: `readings[*].temp > 15`
 
 - With `on_missing_field="skip"` (default): **Does not match** (least intrusive)
 - With `on_missing_field="match"`: **Matches** (detects incomplete data)
-- With `on_missing_field="error"`: **Raises exception** (strict validation)
+- With `on_missing_field="fail"`: **Condition fails**, rule doesn't match (strict validation)
 
 **Rationale**:
 

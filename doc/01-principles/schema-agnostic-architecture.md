@@ -13,6 +13,12 @@ tags:
 
 # Schema-Agnostic Architecture
 
+## Context
+
+This document explains why TrapperKeeper's server has no schema knowledge and how field path resolution works at runtime in SDKs.
+
+**Hub Document**: See [Architectural Principles](README.md) for the complete set of foundational principles and how they interrelate.
+
 ## Core Principle
 
 **The central server has zero understanding of data schemas.**

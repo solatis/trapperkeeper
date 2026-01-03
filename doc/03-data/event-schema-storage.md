@@ -175,6 +175,12 @@ Complete event schema with required and optional fields.
 - `rule_snapshot`: **Required** - Complete rule definition at evaluation time (see Audit Trail Preservation)
 - `record_snapshot`: Subset of payload that caused match
 
+### Diagnostic Fields (populated when rules match)
+
+- **`matched_field`**: The resolved field path that triggered the match (wildcards resolved to actual indices). Type: string. Example: `"$.users[2].email"`
+- **`matched_value`**: The actual value that satisfied the condition. Type: varies by field_type.
+- **`matched_condition`**: Path to the specific condition that triggered the match. Type: array. Example: `["any", 0, "all", 1]` meaning OR group 0, AND condition 1.
+
 **Cross-References**:
 
 - Identifiers (UUIDv7): Event ID generation
