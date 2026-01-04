@@ -1,5 +1,11 @@
 # internal/
 
+## Files
+
+| File        | What                                | When to read                           |
+| ----------- | ----------------------------------- | -------------------------------------- |
+| `README.md` | Package architecture and boundaries | Understanding dependency graph, design |
+
 ## Subdirectories
 
 | Directory   | What                                | When to read                                   |
