@@ -20,7 +20,7 @@ tags:
 
 ## Context
 
-TrapperKeeper's operational architecture must support rapid deployment with zero-friction evaluation (SQLite default), production-grade backends (PostgreSQL/MySQL), and clear configuration management across file/environment/CLI sources. A five-engineer team requires operational simplicity without sacrificing production requirements.
+TrapperKeeper's operational architecture must support rapid deployment with zero-friction evaluation (SQLite default), production-grade backends (PostgreSQL), and clear configuration management across file/environment/CLI sources. A five-engineer team requires operational simplicity without sacrificing production requirements.
 
 Traditional approaches create friction: ORMs introduce complexity, automatic migrations risk data loss, multi-binary deployments increase coordination overhead. TrapperKeeper needs operational patterns balancing developer velocity with production safety: explicit migrations, multi-source configuration with clear precedence, unified CLI, and framework selections optimizing for small teams.
 
@@ -28,7 +28,7 @@ This hub consolidates operational decisions establishing configuration strategy,
 
 ## Decision
 
-We implement **explicit operational controls** with multi-source configuration (file/env/CLI), multi-database support (SQLite/PostgreSQL/MySQL), explicit migrations requiring operator approval, cobra-based CLI with subcommands, net/http web framework, and standardized health endpoints.
+We implement **explicit operational controls** with multi-source configuration (file/env/CLI), multi-database support (SQLite/PostgreSQL), explicit migrations requiring operator approval, cobra-based CLI with subcommands, net/http web framework, and standardized health endpoints.
 
 This document serves as the operations hub providing strategic overview with cross-references to detailed implementation documents for configuration, databases, migrations, CLI, web framework, and health checks.
 
@@ -74,22 +74,25 @@ export TK_HMAC_SECRET="secret-key"  # Secrets via env only
 
 ### Multi-Database Backend Support
 
-SQLite default for zero-configuration, PostgreSQL/MySQL for production, with lowest-common-denominator SQL.
+SQLite default for zero-configuration, PostgreSQL for production, with lowest-common-denominator SQL.
 
 **Supported Databases**:
 
 - **SQLite**: Zero-configuration default, development and small deployments
 - **PostgreSQL**: Production deployments, full SQL feature set
-- **MySQL**: Enterprise on-premise (often existing infrastructure)
+
+**Future Targets** (not currently implemented):
+
+- **MySQL**: Potential future support for enterprise on-premise environments
 
 **Database Strategy**:
 
 - database/sql with driver-specific implementations for database access
-- Lowest-common-denominator SQL works across all three databases
-- Database-specific migrations (`migrations/sqlite/`, `migrations/postgres/`, `migrations/mysql/`)
+- Lowest-common-denominator SQL works across both databases
+- Database-specific migrations (`migrations/sqlite/`, `migrations/postgres/`)
 - Connection pooling: 16 connections per service instance
 
-**Shared Access**: Both `tk-sensor-api` and `tk-web-ui` share same database with SQLite multiple writer support or PostgreSQL/MySQL native concurrency.
+**Shared Access**: Both `tk-sensor-api` and `tk-web-ui` share same database with SQLite multiple writer support or PostgreSQL native concurrency.
 
 **Cross-References**:
 
@@ -101,13 +104,10 @@ SQLite default for zero-configuration, PostgreSQL/MySQL for production, with low
 ```bash
 # SQLite (default)
 ./trapperkeeper sensor-api --data-dir /var/lib/trapperkeeper
-# → Uses /var/lib/trapperkeeper/trapperkeeper.db
+# -> Uses /var/lib/trapperkeeper/trapperkeeper.db
 
 # PostgreSQL (production)
 ./trapperkeeper sensor-api --db-url postgres://localhost/trapperkeeper
-
-# MySQL (enterprise)
-./trapperkeeper sensor-api --db-url mysql://localhost/trapperkeeper
 ```
 
 ### Explicit Migration Strategy
@@ -232,7 +232,7 @@ Standardized endpoints for container orchestration and monitoring.
 **Benefits:**
 
 - Zero-configuration startup: SQLite default enables instant evaluation
-- Production-ready: PostgreSQL/MySQL support for scale
+- Production-ready: PostgreSQL support for scale
 - Operational safety: Explicit migrations prevent accidental schema changes
 - Configuration flexibility: Multiple sources adapt to deployment context
 - Deployment simplicity: Single binary with subcommands
@@ -252,14 +252,14 @@ Standardized endpoints for container orchestration and monitoring.
 - Configuration precedence must be documented for operators
 - Health check endpoints must be configured in container orchestration
 - Connection pool sizing affects concurrent request capacity
-- SQLite suitable for development/evaluation, PostgreSQL/MySQL for production
+- SQLite suitable for development/evaluation, PostgreSQL for production
 
 ## Related Documents
 
 **Consolidated Spokes** (this hub consolidates):
 
 - Configuration Management: Maps to multi-source configuration section, provides complete precedence rules
-- Database Backend: Maps to database section, provides SQLite/PostgreSQL/MySQL support
+- Database Backend: Maps to database section, provides SQLite/PostgreSQL support
 - Database Migrations: Maps to explicit migrations section, provides migration tracking
 - CLI Design: Maps to unified CLI section, provides cobra configuration
 - Web Framework: Maps to net/http section, provides framework selection rationale

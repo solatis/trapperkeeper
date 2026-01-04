@@ -364,9 +364,6 @@ trapperkeeper migrate --db-url "sqlite:///var/lib/trapperkeeper/trapperkeeper.db
 # PostgreSQL migration
 trapperkeeper migrate --db-url "postgresql://user:pass@localhost/trapperkeeper"
 
-# MySQL migration
-trapperkeeper migrate --db-url "mysql://user:pass@localhost/trapperkeeper"
-
 # Use configuration file for database URL
 trapperkeeper --config-file /custom/config.toml migrate
 ```

@@ -127,7 +127,7 @@ CHECK constraints not used due to backend variations.
 ### Rationale
 
 - **SQLite limitations**: CHECK constraints have syntax and feature differences from PostgreSQL
-- **Backend flexibility**: Multi-database support (SQLite, PostgreSQL, MySQL) per architectural principles
+- **Backend flexibility**: Multi-database support (SQLite, PostgreSQL) per architectural principles
 - **Application-layer validation**: Range checks, enum validation, complex logic validated at API layer before persistence
 
 **Alternative**: Application-layer validation before database writes ensures consistent behavior across all database backends.

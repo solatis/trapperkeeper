@@ -78,8 +78,7 @@ require (
     google.golang.org/protobuf v1.32.0
     github.com/spf13/cobra v1.8.0
     github.com/lib/pq v1.10.9          // PostgreSQL driver
-    github.com/go-sql-driver/mysql v1.7.1  // MySQL driver
-    modernc.org/sqlite v1.28.0        // SQLite driver
+    modernc.org/sqlite v1.28.0         // SQLite driver
     // ... other shared dependencies
 )
 
@@ -333,12 +332,7 @@ internal/core/db/
     │   ├── 000001_initial_schema.down.sql
     │   ├── 000002_add_indices.up.sql
     │   └── 000002_add_indices.down.sql
-    ├── postgres/
-    │   ├── 000001_initial_schema.up.sql
-    │   ├── 000001_initial_schema.down.sql
-    │   ├── 000002_add_indices.up.sql
-    │   └── 000002_add_indices.down.sql
-    └── mysql/
+    └── postgres/
         ├── 000001_initial_schema.up.sql
         ├── 000001_initial_schema.down.sql
         ├── 000002_add_indices.up.sql

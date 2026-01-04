@@ -14,7 +14,7 @@ tags:
 
 ## Context
 
-TrapperKeeper handles timestamps across multiple architectural boundaries (gRPC protocol, Go application code, database persistence) requiring consistent conversion utilities preserving precision while ensuring compatibility across SQLite, PostgreSQL, and MySQL backends.
+TrapperKeeper handles timestamps across multiple architectural boundaries (gRPC protocol, Go application code, database persistence) requiring consistent conversion utilities preserving precision while ensuring compatibility across SQLite and PostgreSQL backends.
 
 Each layer uses optimal timestamp representation for that context: Protocol Buffers for wire format, time.Time for Go application logic, database TIMESTAMP types for persistence. Explicit conversion functions at boundaries prevent format mixing and maintain type safety.
 
@@ -100,7 +100,7 @@ type Event struct {
 
 Database-specific storage with varying precision:
 
-**PostgreSQL/MySQL**:
+**PostgreSQL**:
 
 ```sql
 CREATE TABLE events (
@@ -123,7 +123,6 @@ CREATE TABLE events (
 **Precision**:
 
 - PostgreSQL: Microsecond (6 decimal places)
-- MySQL: Microsecond (6 decimal places)
 - SQLite: Nanosecond (via TEXT ISO8601)
 
 **database/sql Mapping**: Automatic conversion between `time.Time` and database TIMESTAMP
@@ -292,7 +291,7 @@ Database precision varies requiring awareness of limits.
 
 ### Precision Loss
 
-**Nanosecond -> Microsecond** (PostgreSQL/MySQL):
+**Nanosecond -> Microsecond** (PostgreSQL):
 
 ```go
 original := time.Now().UTC() // Nanosecond precision
@@ -410,7 +409,7 @@ func TestDatabasePrecisionLoss(t *testing.T) {
     original := time.Now().UTC()
     stored := storeAndRetrieveTimestamp(db, original)
 
-    // PostgreSQL/MySQL lose nanoseconds
+    // PostgreSQL loses nanoseconds
     diffNanos := original.Sub(stored).Abs().Nanoseconds()
     if diffNanos >= 1000 { // Within 1 microsecond
         t.Errorf("precision loss too large: %d ns", diffNanos)

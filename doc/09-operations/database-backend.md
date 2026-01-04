@@ -7,7 +7,6 @@ tags:
   - database
   - sqlite
   - postgresql
-  - mysql
   - dotsql
   - jmoiron-sqlx
   - connection-pooling
@@ -17,7 +16,7 @@ tags:
 
 ## Context
 
-TrapperKeeper requires persistent storage for relational data (rules, sensors, configurations) supporting multiple deployment scenarios: development and small deployments (easy setup), enterprise on-premise (existing database infrastructure), and multi-tenant cloud (production-grade database). This document specifies the multi-database backend strategy with SQLite, PostgreSQL, and MySQL support.
+TrapperKeeper requires persistent storage for relational data (rules, sensors, configurations) supporting multiple deployment scenarios: development and small deployments (easy setup), enterprise on-premise (existing database infrastructure), and multi-tenant cloud (production-grade database). This document specifies the multi-database backend strategy with SQLite and PostgreSQL support.
 
 **Hub Document**: This spoke is part of [Operations Overview](README.md). See the hub's Multi-Database Backend Support section for strategic context.
 
@@ -25,15 +24,18 @@ TrapperKeeper requires persistent storage for relational data (rules, sensors, c
 
 ### Design Principle
 
-Write lowest common denominator SQL that works across all three databases, avoiding database-specific features to maintain portability.
+Write lowest common denominator SQL that works across both databases, avoiding database-specific features to maintain portability.
 
 **Supported Databases**:
 
 - **SQLite**: Zero-configuration default for development, evaluation, and small deployments
 - **PostgreSQL**: Production deployments with full SQL feature set
-- **MySQL**: Enterprise on-premise environments with existing MySQL infrastructure
 
-**Key Constraint**: Cannot use database-specific features (PostgreSQL JSONB operators, MySQL-specific syntax, SQLite extensions).
+**Future Targets** (not currently implemented):
+
+- **MySQL**: Potential future support for enterprise environments with existing MySQL infrastructure
+
+**Key Constraint**: Cannot use database-specific features (PostgreSQL JSONB operators, SQLite extensions).
 
 ### Database Selection Strategy
 
@@ -46,12 +48,12 @@ Write lowest common denominator SQL that works across all three databases, avoid
 
 **Production Deployments**:
 
-- Use PostgreSQL (recommended) or MySQL
+- Use PostgreSQL (recommended)
 - Connection pooling (16 connections per service instance)
 - Native concurrent access
 - Backup/replication infrastructure
 
-**Migration Path**: Start with SQLite for evaluation, migrate to PostgreSQL/MySQL for production without code changes.
+**Migration Path**: Start with SQLite for evaluation, migrate to PostgreSQL for production without code changes.
 
 ## SQLite as Default
 
@@ -121,7 +123,7 @@ trapperkeeper web-ui --data-dir /var/lib/trapperkeeper --port 8080
 
 **Result**: Both services access `/var/lib/trapperkeeper/trapperkeeper.db` concurrently without conflicts.
 
-## PostgreSQL/MySQL for Production
+## PostgreSQL for Production
 
 ### Connection String Format
 
@@ -131,18 +133,12 @@ trapperkeeper web-ui --data-dir /var/lib/trapperkeeper --port 8080
 trapperkeeper sensor-api --db-url "postgresql://user:password@localhost:5432/trapperkeeper"
 ```
 
-**MySQL**:
-
-```bash
-trapperkeeper sensor-api --db-url "mysql://user:password@localhost:3306/trapperkeeper"
-```
-
 **Connection String Components**:
 
 - `user`: Database user with full privileges
 - `password`: User password (use environment variables for secrets)
 - `host`: Database server hostname or IP
-- `port`: Database server port (5432 for PostgreSQL, 3306 for MySQL)
+- `port`: Database server port (5432 for PostgreSQL)
 - `database`: Database name (`trapperkeeper`)
 
 **Security Note**: Use environment variables for credentials:
@@ -156,7 +152,7 @@ trapperkeeper sensor-api
 
 ### Database Driver Selection
 
-Go's database/sql package supports all three databases through standard database drivers:
+Go's database/sql package supports both databases through standard database drivers:
 
 ```go
 import (
@@ -164,15 +160,13 @@ import (
 
     _ "github.com/mattn/go-sqlite3"          // SQLite driver
     _ "github.com/lib/pq"                     // PostgreSQL driver
-    _ "github.com/go-sql-driver/mysql"        // MySQL driver
 )
 ```
 
 **Runtime Selection**: Database driver selected at runtime based on connection string URL scheme:
 
-- `sqlite3://` or `sqlite://` → SQLite driver (github.com/mattn/go-sqlite3)
-- `postgresql://` or `postgres://` → PostgreSQL driver (github.com/lib/pq)
-- `mysql://` → MySQL driver (github.com/go-sql-driver/mysql)
+- `sqlite3://` or `sqlite://` -> SQLite driver (github.com/mattn/go-sqlite3)
+- `postgresql://` or `postgres://` -> PostgreSQL driver (github.com/lib/pq)
 
 **Binary Size Impact**: All imported drivers are included in binary. For deployment-specific optimization, import only required drivers to reduce binary size.
 
@@ -202,19 +196,18 @@ CREATE TABLE rules (
 
 - PostgreSQL UUID type (use CHAR(36) instead)
 - PostgreSQL JSONB type (use TEXT with JSON serialization)
-- MySQL AUTO_INCREMENT (use UUIDv7 for IDs)
 - SQLite extensions (FTS, R\*Tree)
 
 **Type Mapping**:
 
-| Go Type          | SQLite                       | PostgreSQL            | MySQL        |
-| ---------------- | ---------------------------- | --------------------- | ------------ |
-| string           | TEXT                         | VARCHAR/TEXT          | VARCHAR/TEXT |
-| int32/int64      | INTEGER                      | INTEGER/BIGINT        | INT/BIGINT   |
-| bool             | INTEGER                      | BOOLEAN               | TINYINT(1)   |
-| float32/float64  | REAL                         | REAL/DOUBLE PRECISION | FLOAT/DOUBLE |
-| time.Time        | INTEGER (Unix epoch) or TEXT | TIMESTAMP             | TIMESTAMP    |
-| UUID (as string) | CHAR(36)                     | CHAR(36)              | CHAR(36)     |
+| Go Type          | SQLite                       | PostgreSQL            |
+| ---------------- | ---------------------------- | --------------------- |
+| string           | TEXT                         | VARCHAR/TEXT          |
+| int32/int64      | INTEGER                      | INTEGER/BIGINT        |
+| bool             | INTEGER                      | BOOLEAN               |
+| float32/float64  | REAL                         | REAL/DOUBLE PRECISION |
+| time.Time        | INTEGER (Unix epoch) or TEXT | TIMESTAMP             |
+| UUID (as string) | CHAR(36)                     | CHAR(36)              |
 
 **Cross-Reference**: See [Data: Timestamp Representation](../03-data/timestamps.md) for complete timestamp handling across databases.
 
@@ -287,8 +280,6 @@ idle_timeout_ms = 300000
 
 **PostgreSQL Default**: 100 max_connections (adjust postgresql.conf if needed)
 
-**MySQL Default**: 151 max_connections (adjust my.cnf if needed)
-
 ## Database-Specific Migrations
 
 ### Migration Organization
@@ -300,10 +291,7 @@ migrations/
 ├── sqlite/
 │   ├── 001_initial_schema.sql
 │   └── 002_add_indices.sql
-├── postgres/
-│   ├── 001_initial_schema.sql
-│   └── 002_add_indices.sql
-└── mysql/
+└── postgres/
     ├── 001_initial_schema.sql
     └── 002_add_indices.sql
 ```
@@ -329,16 +317,6 @@ CREATE TABLE rules (
     rule_id CHAR(36) PRIMARY KEY,
     tenant_id CHAR(36) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL  -- Microsecond precision
-);
-```
-
-**MySQL** (`migrations/mysql/001_initial_schema.sql`):
-
-```sql
-CREATE TABLE rules (
-    rule_id CHAR(36) PRIMARY KEY,
-    tenant_id CHAR(36) NOT NULL,
-    created_at TIMESTAMP(6) NOT NULL  -- Microsecond precision
 );
 ```
 
@@ -408,13 +386,11 @@ Must handle minor SQL dialect differences:
 **Placeholders**:
 
 - SQLite/PostgreSQL: `?` or `$1, $2, $3`
-- MySQL: `?`
 
 **RETURNING Clause**:
 
 - PostgreSQL: Supported (`INSERT ... RETURNING *`)
 - SQLite: Supported (version 3.35+)
-- MySQL: NOT supported (use `LAST_INSERT_ID()`)
 
 **Example: Cross-Database Insert**:
 
@@ -426,14 +402,6 @@ err := db.QueryRow(query, ruleID, name).Scan(&ruleID)
 if err != nil {
     return err
 }
-
-// MySQL alternative (no RETURNING)
-query := "INSERT INTO rules (rule_id, name) VALUES (?, ?)"
-_, err := db.Exec(query, ruleID, name)
-if err != nil {
-    return err
-}
-// Use ruleID generated before insert
 ```
 
 **Design Pattern**: Use explicit ID generation (UUIDv7) instead of database-generated IDs to avoid RETURNING clause dependency.
@@ -532,7 +500,7 @@ CREATE TABLE sessions (
 );
 ```
 
-TrapperKeeper implements the SCS `Store` interface with a custom adapter rather than using SCS's built-in database stores. This preserves database backend flexibility -- the same schema works across SQLite, PostgreSQL, and MySQL without depending on SCS-specific store implementations.
+TrapperKeeper implements the SCS `Store` interface with a custom adapter rather than using SCS's built-in database stores. This preserves database backend flexibility -- the same schema works across SQLite and PostgreSQL without depending on SCS-specific store implementations.
 
 **Design Notes**:
 

@@ -151,7 +151,7 @@ Timestamps represented differently at each architectural boundary optimized for 
 
 **Layer 3 - Database Layer** (TIMESTAMP types):
 
-- PostgreSQL/MySQL: Microsecond precision
+- PostgreSQL: Microsecond precision
 - SQLite: Nanosecond precision (TEXT ISO8601)
 - Varies by backend
 - Query-optimized storage
@@ -264,7 +264,7 @@ System added: `$tk.*` fields
 **Trade-offs:**
 
 - Storage overhead: Full audit trail increases storage 2-3x vs minimal events
-- Precision loss: Database timestamps lose nanoseconds (PostgreSQL/MySQL)
+- Precision loss: Database timestamps lose nanoseconds (PostgreSQL)
 - Multiple formats: Timestamps represented differently at each layer
 - Reserved namespace: Users cannot use `$` prefix for custom metadata
 - JSONL limitations: No in-place updates (append-only only)

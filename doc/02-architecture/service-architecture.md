@@ -230,7 +230,7 @@ Services can scale independently based on load characteristics:
 **Web UI Scaling**:
 
 - Multiple `tk-web-ui` instances for operator access
-- Session store backed by database or Redis
+- Session store backed by database (custom SCS store adapter)
 - Lower scaling requirements (fewer operators than sensors)
 
 ### Vertical Scaling

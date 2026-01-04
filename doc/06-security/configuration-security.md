@@ -353,12 +353,14 @@ services:
       - secrets.env # Not committed to version control
 ```
 
-### Cloud Secret Managers (AWS, GCP, Azure)
+### Cloud Secret Managers (Future Target)
 
-**AWS Secrets Manager**:
+Cloud secret manager integration (AWS Secrets Manager, GCP Secret Manager, Azure Key Vault) is **out of scope for MVP** but planned for future implementation.
+
+**Current Workaround**: Use init containers or sidecar patterns to fetch secrets from cloud providers before service startup, then pass via environment variables:
 
 ```bash
-# Retrieve secret from AWS Secrets Manager
+# Example: Retrieve secret from AWS Secrets Manager via init script
 export TK_HMAC_SECRET=$(aws secretsmanager get-secret-value \
   --secret-id trapperkeeper/hmac-secret \
   --query SecretString \
@@ -368,7 +370,7 @@ export TK_HMAC_SECRET=$(aws secretsmanager get-secret-value \
 trapperkeeper sensor-api
 ```
 
-**Integration**: Use init containers or sidecar patterns to fetch secrets before service startup.
+**Future Implementation**: Native integration with cloud secret managers would enable automatic secret rotation and simplified deployment without init containers.
 
 ## Edge Cases and Limitations
 

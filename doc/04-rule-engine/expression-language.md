@@ -91,7 +91,7 @@ Above example: Match if `(temperature > 100 AND sensor_id starts with "TEMP-") O
 
 **Key design notes**:
 
-- **`rule_id` is UUIDv7**: Use native UUID database type where supported (PostgreSQL, MySQL) for performance
+- **`rule_id` is UUIDv7**: Use native UUID database type where supported (PostgreSQL) for performance
 - **No priority field**: Priority dynamically calculated by API server based on rule complexity, not persisted in database
 - **Name duplication**: Allowed intentionally to match user expectations from AWS/GCP consoles
 - **Sample rate optimization**: When `sample_rate` is exactly 0.0 or 1.0, skip random number generation entirely

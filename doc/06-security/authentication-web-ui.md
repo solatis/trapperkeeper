@@ -28,7 +28,7 @@ TrapperKeeper uses **scs (alexedwards/scs)** for session management with a custo
 **Session Storage**:
 
 - Custom `Store` interface implementation wraps TrapperKeeper's database layer
-- Preserves database backend flexibility (SQLite/PostgreSQL/MySQL) without depending on SCS-specific stores
+- Preserves database backend flexibility (SQLite/PostgreSQL) without depending on SCS-specific stores
 - Session data encrypted by scs before persistence
 - Automated expiry management via background cleanup task
 - Session cleanup runs once per hour

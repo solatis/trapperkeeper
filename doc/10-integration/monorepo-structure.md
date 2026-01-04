@@ -76,8 +76,7 @@ trapperkeeper/
 │           └── v1/               # Protocol buffer definitions
 ├── migrations/
 │   ├── sqlite/                   # SQLite migrations
-│   ├── postgres/                 # PostgreSQL migrations
-│   └── mysql/                    # MySQL migrations
+│   └── postgres/                 # PostgreSQL migrations
 ├── sdks/
 │   ├── python/                   # Python SDK
 │   ├── java/                     # Java SDK
@@ -436,10 +435,7 @@ migrations/
 ├── sqlite/
 │   ├── 001_initial_schema.sql
 │   └── 002_add_indices.sql
-├── postgres/
-│   ├── 001_initial_schema.sql
-│   └── 002_add_indices.sql
-└── mysql/
+└── postgres/
     ├── 001_initial_schema.sql
     └── 002_add_indices.sql
 ```

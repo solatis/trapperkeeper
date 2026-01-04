@@ -47,9 +47,6 @@ trapperkeeper migrate --db-url "sqlite:///var/lib/trapperkeeper/trapperkeeper.db
 
 # PostgreSQL migration
 trapperkeeper migrate --db-url "postgresql://user:pass@localhost/trapperkeeper"
-
-# MySQL migration
-trapperkeeper migrate --db-url "mysql://user:pass@localhost/trapperkeeper"
 ```
 
 **Migration Process**:
@@ -145,11 +142,7 @@ migrations/
 │   ├── 001_initial_schema.sql
 │   ├── 002_add_indices.sql
 │   └── 003_add_columns.sql
-├── postgres/
-│   ├── 001_initial_schema.sql
-│   ├── 002_add_indices.sql
-│   └── 003_add_columns.sql
-└── mysql/
+└── postgres/
     ├── 001_initial_schema.sql
     ├── 002_add_indices.sql
     └── 003_add_columns.sql
@@ -170,9 +163,6 @@ var sqliteMigrations embed.FS
 //go:embed postgres/*.sql
 var postgresMigrations embed.FS
 
-//go:embed mysql/*.sql
-var mysqlMigrations embed.FS
-
 // SelectMigrations returns appropriate embed.FS based on database URL
 func SelectMigrations(dbURL string) (embed.FS, string, error) {
     switch {
@@ -180,8 +170,6 @@ func SelectMigrations(dbURL string) (embed.FS, string, error) {
         return sqliteMigrations, "sqlite", nil
     case strings.HasPrefix(dbURL, "postgres"):
         return postgresMigrations, "postgres", nil
-    case strings.HasPrefix(dbURL, "mysql"):
-        return mysqlMigrations, "mysql", nil
     default:
         return embed.FS{}, "", fmt.Errorf("unsupported database: %s", dbURL)
     }
@@ -207,7 +195,7 @@ func SelectMigrations(dbURL string) (embed.FS, string, error) {
 
 - Migrations applied in lexicographic order (001 before 002 before 003)
 - Zero-padded numbers (001, 002, ..., 010, 011) for consistent sorting
-- Same numbering across all database backends (sqlite/postgres/mysql)
+- Same numbering across all database backends (sqlite/postgres)
 
 ### Migration Naming Convention
 
@@ -311,7 +299,7 @@ Error: Migration checksum mismatch
 
 Each migration file wrapped in transaction on best-effort basis:
 
-**PostgreSQL/MySQL**:
+**PostgreSQL**:
 
 ```sql
 -- Full transactional protection for most DDL
@@ -333,7 +321,7 @@ COMMIT;
 
 **Database Differences**:
 
-- **PostgreSQL/MySQL**: Full transactional DDL support (rollback on error)
+- **PostgreSQL**: Full transactional DDL support (rollback on error)
 - **SQLite**: Implicit commits on schema changes (limited transactional protection)
 
 ### Idempotent Migration Pattern
@@ -457,16 +445,9 @@ CREATE INDEX idx_rules_tenant_deleted ON rules(tenant_id, deleted_at);
 CREATE INDEX CONCURRENTLY idx_rules_tenant_deleted ON rules(tenant_id, deleted_at);
 ```
 
-**MySQL** (`migrations/mysql/002_add_indices.sql`):
-
-```sql
-CREATE INDEX idx_rules_tenant_deleted ON rules(tenant_id, deleted_at) ALGORITHM=INPLACE;
-```
-
 **Differences**:
 
 - PostgreSQL: `CONCURRENTLY` for non-blocking index creation
-- MySQL: `ALGORITHM=INPLACE` for online index creation
 - SQLite: Standard syntax (no concurrent support)
 
 **Cross-Reference**: See [Database Backend](database-backend.md) for complete database-specific SQL guidelines.
