@@ -1,17 +1,12 @@
-# Tooling Guide for LLM Agents
+# 04-tooling/
 
-## Purpose
-
-Architecture documentation for validation automation (validate.py and related tools).
-
-## Hub
-
-**`README.md`** - Read when understanding validation tooling architecture, navigating to specific validation details, or learning CI/CD integration
+Architecture documentation for validation automation.
 
 ## Files
 
-**`architecture.md`** - Read when implementing validate.py or validation scripts, understanding validation algorithms, troubleshooting validation errors, setting up CI/CD checks, or extending tooling capabilities
-
-**`linters.md`** - Read when need formatting commands (prettier, markdownlint), troubleshooting formatting or linting errors, setting up editor integration, or understanding CI/CD formatting checks
-
-**`validation-dsl-reference.md`** - Read when creating templates with validation rules, debugging validation failures, or understanding DSL syntax and predicates
+| File                          | What                     | When to read                                 |
+| ----------------------------- | ------------------------ | -------------------------------------------- |
+| `README.md`                   | Tooling architecture hub | Understanding validation tools, CI/CD        |
+| `architecture.md`             | validate.py architecture | Implementing validation, troubleshooting     |
+| `linters.md`                  | Formatting commands      | Setting up prettier, markdownlint, editors   |
+| `validation-dsl-reference.md` | DSL syntax reference     | Creating templates with rules, debugging DSL |

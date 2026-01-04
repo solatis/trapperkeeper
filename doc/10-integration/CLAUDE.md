@@ -1,24 +1,12 @@
-# Integration Guide for LLM Agents
+# 10-integration/
 
-## Purpose
-
-Go module architecture with internal/ package organization, monorepo structure,
-and clean separation between client (SDK) and server concerns.
-
-## Hub
-
-**`README.md`** - Read when understanding integration strategy, Go module
-architecture, or package organization patterns
+Go module architecture with internal/ packages and monorepo structure.
 
 ## Files
 
-**`monorepo-structure.md`** - Read when understanding repository layout (go.mod,
-internal/, cmd/, sdks/), directory organization, or build architecture with go
-build
-
-**`package-separation.md`** - Read when understanding package boundaries
-(internal/types, internal/protobuf, internal/rules), implementing clean package
-separation between SDK and server, or managing internal/ package visibility
-
-**`dependency-management.md`** - Read when understanding Go/Python/Java
-versioning policies, vendoring strategy, or dependency upgrade decisions
+| File                       | What                | When to read                                 |
+| -------------------------- | ------------------- | -------------------------------------------- |
+| `README.md`                | Integration hub     | Understanding module architecture            |
+| `monorepo-structure.md`    | Repository layout   | Understanding directory organization         |
+| `package-separation.md`    | Package boundaries  | Implementing clean SDK/server separation     |
+| `dependency-management.md` | Versioning policies | Understanding vendoring, dependency upgrades |

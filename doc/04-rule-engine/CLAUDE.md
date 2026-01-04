@@ -1,21 +1,14 @@
-# Rule Engine Architecture Guide for LLM Agents
+# 04-rule-engine/
 
-## Purpose
-
-Rule expression evaluation system including DNF schema, field path resolution, type coercion, schema evolution handling, and operational lifecycle controls for sub-millisecond evaluation.
-
-## Hub
-
-**`README.md`** - Read when understanding rule engine philosophy, DNF expression structure, validation domain boundaries, or overall rule evaluation strategy
+Rule expression evaluation with DNF schema, field paths, type coercion, and lifecycle controls.
 
 ## Files
 
-**`expression-language.md`** - Read when implementing DNF schema, understanding condition structure, operator semantics, or rule compilation logic
-
-**`field-path-resolution.md`** - Read when implementing field path resolution, understanding wildcard semantics, nested path handling, or cross-field comparisons
-
-**`type-system-coercion.md`** - Read when implementing type coercion, understanding field type multipliers, null value semantics, or coercion failure handling
-
-**`schema-evolution.md`** - Read when implementing missing field policies, understanding on_missing_field modes, or handling schema drift in incoming data
-
-**`lifecycle.md`** - Read when implementing dry-run mode, emergency pause, enable/disable controls, or understanding rule propagation timing
+| File                       | What                            | When to read                                  |
+| -------------------------- | ------------------------------- | --------------------------------------------- |
+| `README.md`                | Rule engine hub                 | Understanding DNF structure, validation scope |
+| `expression-language.md`   | DNF schema, condition structure | Implementing rule compilation, operators      |
+| `field-path-resolution.md` | Field path resolution           | Implementing wildcards, nested paths          |
+| `type-system-coercion.md`  | Type coercion rules             | Implementing field types, null semantics      |
+| `schema-evolution.md`      | Missing field policies          | Implementing on_missing_field modes           |
+| `lifecycle.md`             | Rule lifecycle controls         | Implementing dry-run, pause, enable/disable   |

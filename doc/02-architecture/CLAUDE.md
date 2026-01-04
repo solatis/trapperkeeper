@@ -1,19 +1,13 @@
-# Architecture Guide for LLM Agents
+# 02-architecture/
 
-## Purpose
-
-Two-service architecture (gRPC sensor API + HTTP web UI) with unified binary distribution, SDK model, and Go module structure.
-
-## Hub
-
-**`README.md`** - Read when understanding two-service model, service boundaries, or overall system architecture
+Two-service architecture with gRPC sensor API, HTTP web UI, unified binary, and SDK model.
 
 ## Files
 
-**`service-architecture.md`** - Read when understanding service separation rationale, gRPC vs HTTP boundaries, or deployment model
-
-**`api-service.md`** - Read when implementing gRPC sensor API, ETAG synchronization, or HMAC authentication with grpc-go
-
-**`sdk-model.md`** - Read when understanding SDK architecture, client-side rule evaluation, or gRPC client implementation patterns
-
-**`binary-distribution.md`** - Read when implementing Go subcommands (cobra), understanding unified binary strategy, or build architecture with go build
+| File                      | What                         | When to read                                |
+| ------------------------- | ---------------------------- | ------------------------------------------- |
+| `README.md`               | Architecture hub             | Understanding two-service model, boundaries |
+| `service-architecture.md` | Service separation rationale | Understanding gRPC vs HTTP, deployment      |
+| `api-service.md`          | gRPC sensor API design       | Implementing ETAG sync, HMAC auth           |
+| `sdk-model.md`            | SDK architecture             | Implementing client-side rule evaluation    |
+| `binary-distribution.md`  | Unified binary strategy      | Implementing cobra subcommands, go build    |

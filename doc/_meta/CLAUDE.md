@@ -1,19 +1,18 @@
-# Meta-Documentation Guide for LLM Agents
+# \_meta/
 
-## Purpose
+Standards, templates, governance, and tooling for documentation.
 
-Standards, templates, governance, and tooling for writing and maintaining Trapperkeeper documentation.
+## Files
 
-## Hub
-
-**`README.md`** - Read when creating, updating, or maintaining any documentation
+| File        | What                   | When to read                                |
+| ----------- | ---------------------- | ------------------------------------------- |
+| `README.md` | Meta-documentation hub | Creating, updating, or maintaining any docs |
 
 ## Subdirectories
 
-**`01-standards/`** - Read when need requirements, quality criteria, or validation rules
-
-**`02-templates/`** - Read when creating new hub, spoke, index, or CLAUDE.md files
-
-**`03-governance/`** - Read when maintaining hubs, resolving conflicts, or conducting quarterly reviews
-
-**`04-tooling/`** - Read when implementing, debugging, or understanding validation automation
+| Directory        | What                           | When to read                            |
+| ---------------- | ------------------------------ | --------------------------------------- |
+| `01-standards/`  | Requirements, quality criteria | Checking validation rules, format specs |
+| `02-templates/`  | Copy-paste templates           | Creating hub, spoke, index, CLAUDE.md   |
+| `03-governance/` | Procedures, workflows          | Maintaining hubs, resolving conflicts   |
+| `04-tooling/`    | Validation automation          | Implementing or debugging validate.py   |

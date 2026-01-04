@@ -1,23 +1,19 @@
-# Scripts Guide for LLM Agents
+# scripts/
 
-## Purpose
-
-Validation automation for Trapperkeeper documentation. Ensures structural integrity, hub-spoke relationships, and template compliance.
-
-## Hub
-
-**`README.md`** - Read when understanding validation tool usage, available subcommands, or troubleshooting validation errors
+Validation automation for documentation integrity.
 
 ## Files
 
-**`validate.py`** - Read when implementing validation logic, understanding subcommand architecture, or debugging validation failures
-
-**`rule_evaluator.py`** - Read when understanding template-driven validation engine or adding new validation rules
-
-**`predicates.py`** - Read when implementing DSL predicates (section_exists, forbidden_text, etc.) or debugging predicate logic
-
-**`markdown_parser.py`** - Read when parsing markdown structure (sections, headings, lists) or debugging parse errors
+| File                 | What                      | When to read                                |
+| -------------------- | ------------------------- | ------------------------------------------- |
+| `README.md`          | Validation tool usage     | Understanding subcommands, troubleshooting  |
+| `validate.py`        | Main validation script    | Implementing validation, debugging failures |
+| `rule_evaluator.py`  | Template-driven engine    | Adding new validation rules                 |
+| `predicates.py`      | DSL predicates            | Implementing section_exists, forbidden_text |
+| `markdown_parser.py` | Markdown structure parser | Parsing sections, headings, debugging parse |
 
 ## Subdirectories
 
-**`fixtures/`** - Read when understanding test fixtures, validation examples, or adding new test cases
+| Directory   | What          | When to read                      |
+| ----------- | ------------- | --------------------------------- |
+| `fixtures/` | Test fixtures | Understanding validation examples |

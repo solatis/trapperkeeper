@@ -1,19 +1,13 @@
-# Performance Architecture Guide for LLM Agents
+# 05-performance/
 
-## Purpose
-
-Performance optimization strategy including cost models, sampling, batch processing, and sub-millisecond evaluation targets for Go implementation.
-
-## Hub
-
-**`README.md`** - Read when understanding performance philosophy, cost model principles, or optimization strategy overview
+Performance optimization including cost models, sampling, and batch processing.
 
 ## Files
 
-**`cost-model.md`** - Read when implementing rule priority calculation, understanding field type multipliers, or wildcard cost impacts
-
-**`optimization-strategies.md`** - Read when optimizing rule evaluation, implementing field path caching, or understanding Go-specific performance patterns
-
-**`sampling.md`** - Read when implementing probabilistic sampling, understanding sample_rate semantics, or reducing evaluation load
-
-**`batch-processing.md`** - Read when implementing batch event processing, understanding goroutine concurrency patterns, or optimizing throughput
+| File                         | What                      | When to read                                |
+| ---------------------------- | ------------------------- | ------------------------------------------- |
+| `README.md`                  | Performance hub           | Understanding optimization strategy         |
+| `cost-model.md`              | Rule priority calculation | Implementing field type multipliers, costs  |
+| `optimization-strategies.md` | Go-specific optimizations | Implementing field path caching             |
+| `sampling.md`                | Probabilistic sampling    | Implementing sample_rate, reducing load     |
+| `batch-processing.md`        | Batch event processing    | Implementing goroutine patterns, throughput |

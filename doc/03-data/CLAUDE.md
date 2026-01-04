@@ -1,19 +1,13 @@
-# Data Architecture Guide for LLM Agents
+# 03-data/
 
-## Purpose
-
-Event storage model (JSONL files), UUIDv7 identifiers, timestamp handling across boundaries, and metadata namespace management for Go implementation.
-
-## Hub
-
-**`README.md`** - Read when understanding data architecture, event storage strategy, or schema-agnostic design
+Event storage model, UUIDv7 identifiers, timestamps, and metadata namespace management.
 
 ## Files
 
-**`event-schema-storage.md`** - Read when implementing JSONL event storage, understanding audit trail preservation, or database schema design
-
-**`identifiers-uuidv7.md`** - Read when implementing UUIDv7 generation (github.com/google/uuid), understanding time-ordering properties, or identifier strategy
-
-**`timestamps.md`** - Read when implementing time.Time handling across SDK/gRPC/database boundaries, understanding timezone policies, or timestamp validation
-
-**`metadata-namespace.md`** - Read when implementing metadata field handling, understanding reserved namespace (client.\*), or field path resolution with metadata
+| File                      | What                    | When to read                                 |
+| ------------------------- | ----------------------- | -------------------------------------------- |
+| `README.md`               | Data architecture hub   | Understanding event storage, schema-agnostic |
+| `event-schema-storage.md` | JSONL event storage     | Implementing audit trails, database schema   |
+| `identifiers-uuidv7.md`   | UUIDv7 generation       | Implementing time-ordered identifiers        |
+| `timestamps.md`           | Timestamp handling      | Implementing time across SDK/gRPC/database   |
+| `metadata-namespace.md`   | Metadata field handling | Implementing reserved namespace (client.\*)  |

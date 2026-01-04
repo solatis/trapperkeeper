@@ -1,21 +1,14 @@
-# Standards Guide for LLM Agents
-
-## Purpose
+# 01-standards/
 
 Formal requirements, schemas, and quality criteria for documentation.
 
-## Hub
-
-**`README.md`** - Read when understanding documentation standards strategy, navigating to specific standard documents, or learning how standards interrelate
-
 ## Files
 
-**`claude-md-format.md`** - Read when creating or updating CLAUDE.md files, questioning CLAUDE.md structure or requirements, or verifying CLAUDE.md compliance
-
-**`claude-md-structure.md`** - Read when understanding CLAUDE.md navigation principles or forbidden content patterns
-
-**`documentation-standards.md`** - Read when implementing validation requirements, understanding DSL syntax, or checking CI enforcement rules
-
-**`frontmatter-reference.md`** - Read when adding frontmatter to documents, validating field names or values, or checking required vs optional fields
-
-**`hub-and-spoke-architecture.md`** - Read when creating hub documents, questioning hub structure or quality requirements, or understanding 3-click navigation metric
+| File                            | What                        | When to read                                 |
+| ------------------------------- | --------------------------- | -------------------------------------------- |
+| `README.md`                     | Standards strategy overview | Navigating standards, understanding scope    |
+| `claude-md-format.md`           | CLAUDE.md format spec       | Creating or updating CLAUDE.md files         |
+| `claude-md-structure.md`        | CLAUDE.md navigation rules  | Understanding forbidden content patterns     |
+| `documentation-standards.md`    | Validation requirements     | Implementing validation, checking DSL rules  |
+| `frontmatter-reference.md`      | Frontmatter field reference | Adding frontmatter, checking required fields |
+| `hub-and-spoke-architecture.md` | Hub-spoke structure spec    | Creating hubs, understanding 3-click metric  |

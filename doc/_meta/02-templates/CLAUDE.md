@@ -1,21 +1,14 @@
-# Templates Guide for LLM Agents
+# 02-templates/
 
-## Purpose
-
-Canonical copy-paste templates with inline guidance for creating documentation.
-
-## Hub
-
-**`README.md`** - Read when understanding templates strategy, navigating to specific template files, or learning how templates implement standards
+Canonical copy-paste templates with inline guidance.
 
 ## Files
 
-**`claude-md.md`** - Read when creating or updating CLAUDE.md navigation files
-
-**`cross-cutting-index.md`** - Read when creating security, performance, validation, observability, or error-handling indexes
-
-**`hub.md`** - Read when creating hub documents
-
-**`redirect-stub.md`** - Read when moving or consolidating documents
-
-**`spoke.md`** - Read when creating spoke documents
+| File                     | What                         | When to read                              |
+| ------------------------ | ---------------------------- | ----------------------------------------- |
+| `README.md`              | Templates strategy           | Understanding template purpose, selection |
+| `claude-md.md`           | CLAUDE.md template           | Creating or updating CLAUDE.md files      |
+| `cross-cutting-index.md` | Cross-cutting index template | Creating security/perf/validation indexes |
+| `hub.md`                 | Hub document template        | Creating hub documents                    |
+| `redirect-stub.md`       | Redirect stub template       | Moving or consolidating documents         |
+| `spoke.md`               | Spoke document template      | Creating spoke documents                  |

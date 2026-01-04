@@ -1,47 +1,31 @@
-# Trapperkeeper Documentation Guide for LLM Agents
+# doc/
 
-## Purpose
-
-Technical documentation for Trapperkeeper system architecture, implementation patterns, validation rules, performance characteristics, and operational procedures. Organized using hub-and-spoke pattern with cross-cutting indexes for security, performance, validation, observability, and error-handling.
-
-## Hub
-
-**`README.md`** - Read when understanding overall documentation structure, navigation patterns, or high-level project overview
+Technical documentation for TrapperKeeper architecture, implementation patterns, and operations.
 
 ## Files
 
-**`error-handling-index.md`** - Read when understanding error handling patterns, failure modes, or error recovery strategies across system layers
-
-**`observability-index.md`** - Read when implementing logging, metrics, tracing, or operational visibility features
-
-**`performance-index.md`** - Read when optimizing latency, throughput, resource usage, or understanding cost models
-
-**`security-index.md`** - Read when implementing authentication, encryption, threat mitigation, or compliance features
-
-**`validation-index.md`** - Read when implementing input validation, sanitization, type checking, or schema enforcement
+| File                      | What                             | When to read                                     |
+| ------------------------- | -------------------------------- | ------------------------------------------------ |
+| `README.md`               | Documentation structure overview | Understanding navigation, hub-spoke patterns     |
+| `error-handling-index.md` | Cross-cutting error handling     | Understanding failure modes, recovery strategies |
+| `observability-index.md`  | Cross-cutting observability      | Implementing logging, metrics, tracing           |
+| `performance-index.md`    | Cross-cutting performance        | Optimizing latency, throughput, resource usage   |
+| `security-index.md`       | Cross-cutting security           | Implementing auth, encryption, threat mitigation |
+| `validation-index.md`     | Cross-cutting validation         | Implementing input validation, sanitization      |
 
 ## Subdirectories
 
-**`_meta/`** - Read when creating documentation, need templates or standards, maintaining hubs, or implementing validation tooling
-
-**`01-principles/`** - Read when understanding testing philosophy, architectural principles, or foundational design decisions
-
-**`02-architecture/`** - Read when understanding system architecture, service boundaries, API design, or SDK model
-
-**`03-data/`** - Read when understanding data schemas, identifiers, event storage, or database backend
-
-**`04-rule-engine/`** - Read when understanding rule expression language, field path resolution, type coercion, or rule evaluation
-
-**`05-performance/`** - Read when implementing performance optimizations, understanding cost models, or sampling strategies
-
-**`06-security/`** - Read when implementing authentication, encryption, TLS, or threat mitigation
-
-**`07-validation/`** - Read when implementing validation across UI, API, runtime, or database layers
-
-**`08-resilience/`** - Read when implementing error handling, failure modes, or degradation strategies
-
-**`09-operations/`** - Read when understanding deployment, configuration, database operations, or CLI design
-
-**`10-integration/`** - Read when understanding monorepo structure, package boundaries, or build architecture
-
-**`scripts/`** - Read when running validation tools or understanding documentation automation
+| Directory          | What                             | When to read                                        |
+| ------------------ | -------------------------------- | --------------------------------------------------- |
+| `_meta/`           | Documentation standards, tooling | Creating docs, using templates, running validation  |
+| `01-principles/`   | Architectural principles         | Understanding design philosophy, testing strategy   |
+| `02-architecture/` | System architecture              | Understanding services, API design, SDK model       |
+| `03-data/`         | Data schemas, storage            | Understanding events, identifiers, timestamps       |
+| `04-rule-engine/`  | Rule expression language         | Understanding field paths, type coercion, operators |
+| `05-performance/`  | Performance optimization         | Understanding cost models, sampling, batching       |
+| `06-security/`     | Security architecture            | Understanding auth, TLS, encryption                 |
+| `07-validation/`   | Validation architecture          | Understanding 4-layer validation model              |
+| `08-resilience/`   | Error handling, degradation      | Understanding failure modes, logging, monitoring    |
+| `09-operations/`   | Configuration, deployment        | Understanding config, database, CLI, migrations     |
+| `10-integration/`  | Module structure                 | Understanding package organization, dependencies    |
+| `scripts/`         | Validation tooling               | Running doc validation, debugging failures          |

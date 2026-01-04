@@ -1,19 +1,13 @@
-# Resilience Architecture Guide for LLM Agents
+# 08-resilience/
 
-## Purpose
-
-Error handling strategy implementing least intrusive principle with error taxonomy, degradation patterns, slog logging standards, and monitoring thresholds for Go implementation.
-
-## Hub
-
-**`README.md`** - Read when understanding resilience philosophy, least intrusive principle, or error handling strategy overview
+Error handling with least intrusive principle, taxonomy, and monitoring.
 
 ## Files
 
-**`error-taxonomy.md`** - Read when implementing error handling, understanding error categories (validation/network/database/protocol/type/field), or (T, error) return patterns
-
-**`failure-modes.md`** - Read when implementing degradation strategies, understanding fail-safe vs fail-fast decisions, or circuit breaker patterns
-
-**`logging-standards.md`** - Read when implementing structured logging with slog, understanding log levels, or formatting log output for Go services
-
-**`monitoring-strategy.md`** - Read when implementing metrics with prometheus/client_golang, understanding alert thresholds, or observability patterns
+| File                     | What                         | When to read                                     |
+| ------------------------ | ---------------------------- | ------------------------------------------------ |
+| `README.md`              | Resilience hub               | Understanding least intrusive principle          |
+| `error-taxonomy.md`      | Error categories             | Implementing error handling, (T, error) patterns |
+| `failure-modes.md`       | Degradation strategies       | Implementing fail-safe vs fail-fast, circuits    |
+| `logging-standards.md`   | Structured logging with slog | Implementing log levels, formatting              |
+| `monitoring-strategy.md` | Prometheus metrics           | Implementing alert thresholds, observability     |

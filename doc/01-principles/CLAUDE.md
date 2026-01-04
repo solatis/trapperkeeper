@@ -1,27 +1,17 @@
-# Architectural Principles Guide for LLM Agents
+# 01-principles/
 
-## Purpose
-
-Architectural principles establishing schema-agnostic design, least intrusive defaults, pragmatic minimalism, and comprehensive testing philosophy for Go implementation.
-
-## Hub
-
-**`README.md`** - Read when understanding core architectural principles, schema-agnostic design, or least intrusive behavior patterns
+Architectural principles for schema-agnostic design, least intrusive defaults, and testing philosophy.
 
 ## Files
 
-**`schema-agnostic-architecture.md`** - Read when understanding schema-agnostic design, field path resolution, runtime type handling, or why server has no schema knowledge
-
-**`least-intrusive-defaults.md`** - Read when implementing fail-safe modes, degradation strategies, missing field handling, or understanding default behavior priorities
-
-**`ephemeral-sensors.md`** - Read when understanding sensor lifecycle, in-memory state management, or stateless design patterns for container/serverless environments
-
-**`simplicity.md`** - Read when making architectural decisions, evaluating feature complexity, understanding MVP scope constraints, or applying YAGNI principle
-
-**`consistent-encoding-identifiers.md`** - Read when implementing UTF-8 handling, UUIDv7 generation, time-ordered identifiers, or understanding encoding standards
-
-**`testing-philosophy.md`** - Read when understanding testing strategy, test categorization (unit/integration/property), or Go testing.T patterns
-
-**`testing-integration-patterns.md`** - Read when implementing integration tests, database fixtures, or understanding test isolation strategies with Go's testing framework
-
-**`testing-examples.md`** - Read when writing tests for rule evaluation, field resolution, type coercion, or needing concrete test examples using testing.T
+| File                                 | What                       | When to read                                    |
+| ------------------------------------ | -------------------------- | ----------------------------------------------- |
+| `README.md`                          | Principles hub             | Understanding core design philosophy            |
+| `schema-agnostic-architecture.md`    | Schema-agnostic design     | Understanding field paths, runtime types        |
+| `least-intrusive-defaults.md`        | Fail-safe default patterns | Implementing degradation, missing field modes   |
+| `ephemeral-sensors.md`               | Sensor lifecycle patterns  | Understanding in-memory state, stateless design |
+| `simplicity.md`                      | MVP scope constraints      | Making architecture decisions, applying YAGNI   |
+| `consistent-encoding-identifiers.md` | UTF-8 and UUIDv7 standards | Implementing encoding, identifier generation    |
+| `testing-philosophy.md`              | Testing strategy           | Understanding test categories, Go patterns      |
+| `testing-integration-patterns.md`    | Integration test patterns  | Implementing integration tests, fixtures        |
+| `testing-examples.md`                | Concrete test examples     | Writing tests for rules, field resolution       |
