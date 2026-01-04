@@ -80,8 +80,10 @@ mux.HandleFunc("GET /rule", listRules)
 // Middleware chain wrapping (outer to inner)
 handler := loggingMiddleware(
     sessionManager.LoadAndSave(
-        csrf.Protect(csrfKey)(
-            forcePasswordChangeMiddleware(mux),
+        timezoneMiddleware(
+            csrf.Protect(csrfKey)(
+                forcePasswordChangeMiddleware(mux),
+            ),
         ),
     ),
 )
@@ -93,13 +95,15 @@ handler := loggingMiddleware(
 
 1. Request arrives -> loggingMiddleware (logging)
 2. -> sessionManager.LoadAndSave (load session)
-3. -> csrf.Protect (validate CSRF token)
-4. -> forcePasswordChangeMiddleware (check force_password_change)
-5. -> Route handler (listRules)
-6. Response -> forcePasswordChangeMiddleware
-7. -> csrf.Protect (add CSRF cookie)
-8. -> sessionManager.LoadAndSave (save session)
-9. -> loggingMiddleware (log response)
+3. -> timezoneMiddleware (read tz cookie, add to context)
+4. -> csrf.Protect (validate CSRF token)
+5. -> forcePasswordChangeMiddleware (check force_password_change)
+6. -> Route handler (listRules)
+7. Response -> forcePasswordChangeMiddleware
+8. -> csrf.Protect (add CSRF cookie)
+9. -> timezoneMiddleware (no-op on response)
+10. -> sessionManager.LoadAndSave (save session)
+11. -> loggingMiddleware (log response)
 
 ### Session Management Middleware
 
@@ -214,6 +218,41 @@ func forcePasswordChangeMiddleware(next http.Handler) http.Handler {
 
 **Rationale**: Middleware-based redirect ensures force password change cannot be bypassed.
 
+### Timezone Middleware
+
+Reads browser-detected timezone from cookie and adds to request context for template formatting:
+
+```go
+import (
+    "context"
+    "net/http"
+    "time"
+)
+
+type contextKey string
+
+const TimezoneKey contextKey = "timezone"
+
+func timezoneMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        tz := "UTC" // default fallback
+        if cookie, err := r.Cookie("tz"); err == nil {
+            if loc, err := time.LoadLocation(cookie.Value); err == nil {
+                tz = loc.String()
+            }
+        }
+        ctx := context.WithValue(r.Context(), TimezoneKey, tz)
+        next.ServeHTTP(w, r.WithContext(ctx))
+    })
+}
+```
+
+**Cookie Detection**: Browser sets `tz` cookie via inline JavaScript on first page load. See [Timezone Presentation](../03-data/timezone-presentation.md) for complete implementation.
+
+**Fallback Behavior**: Invalid or missing timezone defaults to UTC with explicit label in templates.
+
+**Cross-Reference**: See [Data: Timezone Presentation](../03-data/timezone-presentation.md) for browser-side detection and design rationale.
+
 ## Web UI Routes
 
 Complete route table for the Web UI service.
@@ -289,6 +328,17 @@ templates/
 <html>
   <head>
     <title>{{block "title" .}}TrapperKeeper{{end}}</title>
+    <script>
+      (function () {
+        if (!document.cookie.includes("tz=")) {
+          var tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+          document.cookie =
+            "tz=" +
+            encodeURIComponent(tz) +
+            ";path=/;max-age=31536000;SameSite=Lax";
+        }
+      })();
+    </script>
     <link rel="stylesheet" href="/static/css/style.css?v={{ .AssetHash }}" />
   </head>
   <body>
@@ -296,6 +346,8 @@ templates/
   </body>
 </html>
 ```
+
+**Timezone Detection**: Inline script in `<head>` detects browser timezone and sets cookie before page renders. Runs once per browser (cookie persists 1 year).
 
 **Child Template** (`templates/rules-list.html`):
 
@@ -344,6 +396,38 @@ func listRules(w http.ResponseWriter, r *http.Request) {
 **HTML Escaping**: html/template automatically escapes HTML by default (prevents XSS).
 
 **Cross-Reference**: See [Validation: Unified Validation and Input Sanitization](../07-validation/README.md) for HTML escaping specifications.
+
+### Timezone-Aware Template Functions
+
+Template functions format timestamps in user's timezone (from request context):
+
+```go
+func templateFuncs(ctx context.Context) template.FuncMap {
+    loc := getTimezone(ctx) // reads from context, defaults to UTC
+    return template.FuncMap{
+        "formatTime": func(t time.Time) string {
+            return t.In(loc).Format("Jan 2, 2006, 3:04 PM")
+        },
+        "formatDate": func(t time.Time) string {
+            return t.In(loc).Format("Jan 2, 2006")
+        },
+        "formatDateTime": func(t time.Time) string {
+            return t.In(loc).Format("2006-01-02 15:04:05")
+        },
+    }
+}
+```
+
+**Template Usage**:
+
+```html
+<td>{{ formatTime .CreatedAt }}</td>
+<td>{{ formatDate .EventDate }}</td>
+```
+
+**First-Request Behavior**: Before timezone cookie is set, times display as UTC with explicit "UTC" suffix.
+
+**Cross-Reference**: See [Data: Timezone Presentation](../03-data/timezone-presentation.md) for format standards and display patterns.
 
 ## Form Validation
 
@@ -615,6 +699,10 @@ func TestRulesListRendering(t *testing.T) {
 **Related Spokes** (siblings in this hub):
 
 - [CLI Design](cli-design.md): `web-ui` subcommand configuration
+
+**Data References**:
+
+- [Data: Timezone Presentation](../03-data/timezone-presentation.md): Browser timezone detection, server-side formatting, display standards
 
 **Security References**:
 

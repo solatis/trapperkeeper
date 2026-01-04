@@ -6,6 +6,7 @@ consolidated_spokes:
   - event-schema-storage.md
   - identifiers-uuidv7.md
   - timestamps.md
+  - timezone-presentation.md
   - metadata-namespace.md
 tags:
   - events
@@ -149,12 +150,19 @@ Timestamps represented differently at each architectural boundary optimized for 
 - Type-safe operations
 - UTC timezone enforced
 
-**Layer 3 - Database Layer** (TIMESTAMP types):
+**Layer 3 - Database Layer** (database-specific types):
 
-- PostgreSQL: Microsecond precision
-- SQLite: Nanosecond precision (TEXT ISO8601)
-- Varies by backend
-- Query-optimized storage
+- PostgreSQL: `TIMESTAMP WITHOUT TIME ZONE` (microsecond precision)
+- SQLite: TEXT in RFC 3339 format (nanosecond precision)
+- All storage in UTC
+- Query-optimized per database
+
+**Layer 4 - Presentation Layer** (user-local time):
+
+- Browser detects timezone via `Intl.DateTimeFormat`, stores in cookie
+- Server middleware reads cookie, adds timezone to request context
+- Templates format timestamps in user's local timezone
+- Reporting and exports use session timezone
 
 **Conversion Points**:
 
@@ -164,17 +172,19 @@ Explicit conversions at boundary crossings:
 - Go -> gRPC: `timestamppb.New(t)`
 - Go -> Database: database/sql automatic mapping
 - Database -> Go: database/sql automatic mapping
+- Go -> Presentation: `time.Time.In(userTimezone)` in template functions
 
 **Key Principles**:
 
-- UTC everywhere: No local timezone assumptions
+- UTC storage: All persistence layers store UTC
+- User-local display: Presentation layer converts to user's timezone
 - Explicit conversions: Clear boundary crossing points
 - Type safety: Compiler prevents format mixing
-- Standard tooling: Leverage existing ecosystem
 
 **Cross-References**:
 
 - Timestamp Representation: Complete conversion specifications
+- Timezone Presentation: Browser detection, server-side formatting
 - Event Schema and Storage: Timestamp field usage
 - Database Backend: Database TIMESTAMP type configuration
 
@@ -284,6 +294,7 @@ System added: `$tk.*` fields
 - Event Schema and Storage: Maps to event storage model section, provides complete JSONL specification
 - Identifiers (UUIDv7): Maps to UUIDv7 strategy section, provides generation algorithm
 - Timestamp Representation: Maps to multi-layer timestamps section, provides conversion utilities
+- Timezone Presentation: Maps to presentation layer section, provides browser detection and server-side formatting
 - Client Metadata Namespace: Maps to metadata namespace section, provides validation rules
 
 **Dependencies** (foundational documents):

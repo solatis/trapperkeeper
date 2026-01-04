@@ -16,9 +16,35 @@ tags:
 
 TrapperKeeper handles timestamps across multiple architectural boundaries (gRPC protocol, Go application code, database persistence) requiring consistent conversion utilities preserving precision while ensuring compatibility across SQLite and PostgreSQL backends.
 
-Each layer uses optimal timestamp representation for that context: Protocol Buffers for wire format, time.Time for Go application logic, database TIMESTAMP types for persistence. Explicit conversion functions at boundaries prevent format mixing and maintain type safety.
+Each layer uses optimal timestamp representation for that context: Protocol Buffers for wire format, time.Time for Go application logic, database-specific types for persistence. Explicit conversion functions at boundaries prevent format mixing and maintain type safety.
 
 **Hub Document**: This document is part of the Data Hub. See [Data Architecture](README.md) for strategic overview of multi-layer timestamp handling within TrapperKeeper's data model.
+
+## Design Principles
+
+### Database-Dependent Storage
+
+Timestamp storage format is intentionally database-dependent. Different databases have different optimal representations:
+
+- **PostgreSQL**: Native `TIMESTAMP WITHOUT TIME ZONE` with microsecond precision
+- **SQLite**: TEXT in RFC 3339 format (ISO 8601) with nanosecond precision
+
+The critical contract: the database storage layer MUST serialize Go `time.Time` values on write and deserialize back to `time.Time` on read. Application code works exclusively with `time.Time` -- storage format is an implementation detail hidden behind the database layer.
+
+This approach accepts that migrations are database-specific (already true for other reasons) in exchange for optimal storage and querying characteristics per database.
+
+### UTC-Only Storage
+
+All timestamps are stored in UTC. PostgreSQL columns use `TIMESTAMP WITHOUT TIME ZONE` with the application-enforced invariant that all values are UTC. SQLite stores RFC 3339 strings with explicit `Z` suffix.
+
+Rationale:
+
+- Eliminates timezone conversion bugs at the storage layer
+- Simplifies reasoning about stored values (always UTC)
+- Avoids PostgreSQL `TIMESTAMP WITH TIME ZONE` complexity (stores UTC internally but converts on display based on session timezone)
+- Enables direct timestamp comparison without timezone normalization
+
+**Presentation Layer**: Timezone handling for display (converting UTC to user's local timezone) is a presentation concern, not a storage concern. See [Timezone Presentation](timezone-presentation.md) for the complete design.
 
 ## Layer-Specific Representations
 
@@ -96,17 +122,17 @@ type Event struct {
 
 - Event Schema and Storage: Event timestamp fields
 
-### Database Layer (TIMESTAMP types)
+### Database Layer (Database-Specific Types)
 
-Database-specific storage with varying precision:
+Storage format varies by database, but all implementations serialize/deserialize to `time.Time`:
 
 **PostgreSQL**:
 
 ```sql
 CREATE TABLE events (
-    event_id UUID PRIMARY KEY,
-    client_timestamp TIMESTAMP NOT NULL,  -- Microsecond precision
-    server_received_at TIMESTAMP NOT NULL
+    event_id CHAR(36) PRIMARY KEY,
+    client_timestamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,  -- Microsecond precision, UTC
+    server_received_at TIMESTAMP WITHOUT TIME ZONE NOT NULL
 );
 ```
 
@@ -115,7 +141,7 @@ CREATE TABLE events (
 ```sql
 CREATE TABLE events (
     event_id TEXT PRIMARY KEY,
-    client_timestamp TEXT NOT NULL,  -- ISO8601, nanosecond precision
+    client_timestamp TEXT NOT NULL,  -- RFC 3339 format, nanosecond precision
     server_received_at TEXT NOT NULL
 );
 ```
@@ -123,9 +149,9 @@ CREATE TABLE events (
 **Precision**:
 
 - PostgreSQL: Microsecond (6 decimal places)
-- SQLite: Nanosecond (via TEXT ISO8601)
+- SQLite: Nanosecond (via TEXT RFC 3339)
 
-**database/sql Mapping**: Automatic conversion between `time.Time` and database TIMESTAMP
+**Go Integration**: The `database/sql` driver handles conversion transparently. PostgreSQL's `lib/pq` driver converts `TIMESTAMP WITHOUT TIME ZONE` to `time.Time` (interpreted as UTC). SQLite's `mattn/go-sqlite3` driver parses RFC 3339 TEXT into `time.Time`.
 
 **Cross-References**:
 
@@ -263,14 +289,14 @@ func validateTimestamp(ts time.Time) error {
 **Database**: Stores UTC timestamps
 
 ```sql
--- PostgreSQL: TIMESTAMP WITHOUT TIME ZONE (UTC assumed)
+-- PostgreSQL: TIMESTAMP WITHOUT TIME ZONE (application-enforced UTC)
 CREATE TABLE events (
-    client_timestamp TIMESTAMP NOT NULL
+    client_timestamp TIMESTAMP WITHOUT TIME ZONE NOT NULL
 );
 
--- SQLite: TEXT with explicit 'Z' suffix
+-- SQLite: TEXT in RFC 3339 format with 'Z' suffix
 CREATE TABLE events (
-    client_timestamp TEXT NOT NULL  -- "2025-10-29T10:00:00.000Z"
+    client_timestamp TEXT NOT NULL  -- "2025-10-29T10:00:00.000000000Z"
 );
 ```
 
@@ -432,6 +458,7 @@ func TestDatabasePrecisionLoss(t *testing.T) {
 
 - Event Schema and Storage: Timestamp field usage
 - Client Metadata Namespace: System timestamp metadata
+- [Timezone Presentation](timezone-presentation.md): UTC to local time conversion for display
 
 **Extended by**:
 

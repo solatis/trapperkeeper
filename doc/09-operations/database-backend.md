@@ -172,25 +172,25 @@ import (
 
 ### Schema Compatibility Across Databases
 
-Lowest common denominator SQL ensures schema compatibility:
+Lowest common denominator SQL ensures schema compatibility for most column types. Timestamps are the exception -- they require database-specific types.
 
-**Example Schema** (works across all databases):
+**Portable Types** (work identically across databases):
 
 ```sql
--- Common SQL syntax supported by all three databases
+-- Common SQL syntax supported by both databases
 CREATE TABLE rules (
     rule_id CHAR(36) PRIMARY KEY,  -- UUIDv7 as string
     tenant_id CHAR(36) NOT NULL,
     name VARCHAR(128) NOT NULL,
     description TEXT,
-    enabled BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMP NOT NULL,
-    modified_at TIMESTAMP NOT NULL,
-    deleted_at TIMESTAMP,
-
-    INDEX idx_tenant_deleted (tenant_id, deleted_at)
+    enabled BOOLEAN NOT NULL DEFAULT TRUE
 );
 ```
+
+**Database-Specific Types** (require separate migrations):
+
+- Timestamps: SQLite uses TEXT (RFC 3339), PostgreSQL uses TIMESTAMP WITHOUT TIME ZONE
+- See [Database-Specific Migrations](#database-specific-migrations) for migration organization
 
 **Avoided Database-Specific Features**:
 
@@ -200,14 +200,16 @@ CREATE TABLE rules (
 
 **Type Mapping**:
 
-| Go Type          | SQLite                       | PostgreSQL            |
-| ---------------- | ---------------------------- | --------------------- |
-| string           | TEXT                         | VARCHAR/TEXT          |
-| int32/int64      | INTEGER                      | INTEGER/BIGINT        |
-| bool             | INTEGER                      | BOOLEAN               |
-| float32/float64  | REAL                         | REAL/DOUBLE PRECISION |
-| time.Time        | INTEGER (Unix epoch) or TEXT | TIMESTAMP             |
-| UUID (as string) | CHAR(36)                     | CHAR(36)              |
+| Go Type          | SQLite   | PostgreSQL                  |
+| ---------------- | -------- | --------------------------- |
+| string           | TEXT     | VARCHAR/TEXT                |
+| int32/int64      | INTEGER  | INTEGER/BIGINT              |
+| bool             | INTEGER  | BOOLEAN                     |
+| float32/float64  | REAL     | REAL/DOUBLE PRECISION       |
+| time.Time        | TEXT     | TIMESTAMP WITHOUT TIME ZONE |
+| UUID (as string) | CHAR(36) | CHAR(36)                    |
+
+**Timestamp Storage**: Timestamp handling is intentionally database-specific. SQLite stores RFC 3339 formatted TEXT; PostgreSQL uses native `TIMESTAMP WITHOUT TIME ZONE`. Both serialize/deserialize transparently to Go `time.Time`. All timestamps are UTC -- this is an application-enforced invariant.
 
 **Cross-Reference**: See [Data: Timestamp Representation](../03-data/timestamps.md) for complete timestamp handling across databases.
 
@@ -306,7 +308,7 @@ migrations/
 CREATE TABLE rules (
     rule_id CHAR(36) PRIMARY KEY,
     tenant_id CHAR(36) NOT NULL,
-    created_at INTEGER NOT NULL  -- Unix timestamp (nanoseconds)
+    created_at TEXT NOT NULL  -- RFC 3339 format, UTC
 );
 ```
 
@@ -316,7 +318,7 @@ CREATE TABLE rules (
 CREATE TABLE rules (
     rule_id CHAR(36) PRIMARY KEY,
     tenant_id CHAR(36) NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL  -- Microsecond precision
+    created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL  -- Microsecond precision, UTC
 );
 ```
 
@@ -420,14 +422,16 @@ MVP supports single-tenant only in functionality, but database schemas prepared 
 - `modified_at`: Timestamp, updated on every modification
 - `deleted_at`: Timestamp, set on soft delete (NULL if not deleted)
 
-**Example Table Schema**:
+**Note on Schema Examples**: The schemas below use `TIMESTAMP` as shorthand for the conceptual type. Actual migrations use database-specific types: `TEXT` for SQLite, `TIMESTAMP WITHOUT TIME ZONE` for PostgreSQL. See [Database-Specific Migrations](#database-specific-migrations).
+
+**Example Table Schema** (conceptual):
 
 ```sql
 CREATE TABLE rules (
     rule_id CHAR(36) PRIMARY KEY,
     tenant_id CHAR(36) NOT NULL,
     name VARCHAR(128) NOT NULL,
-    created_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP NOT NULL,   -- SQLite: TEXT, PostgreSQL: TIMESTAMP WITHOUT TIME ZONE
     modified_at TIMESTAMP NOT NULL,
     deleted_at TIMESTAMP,
 

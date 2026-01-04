@@ -196,9 +196,10 @@ Standard library net/http for HTTP service providing server-side rendered HTML w
 
 **Web UI Characteristics**:
 
-- Pure server-side rendering (no JavaScript in MVP)
+- Pure server-side rendering (minimal JavaScript -- timezone detection only)
 - Form-based interactions with CSRF protection
 - Session management with sliding expiration
+- Timezone-aware timestamp formatting (browser-detected, server-rendered)
 - Static asset serving with embedded assets
 
 **Cross-References**:
