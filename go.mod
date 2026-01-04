@@ -9,6 +9,7 @@ require (
 )
 
 require (
+	github.com/leanovate/gopter v0.2.11 // indirect
 	golang.org/x/net v0.47.0 // indirect
 	golang.org/x/sys v0.38.0 // indirect
 	golang.org/x/text v0.31.0 // indirect
