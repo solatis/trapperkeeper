@@ -22,7 +22,7 @@ The API uses Protocol Buffers for schema evolution support, ETAG-based synchroni
 
 ## gRPC Service Definition
 
-The sensor API provides three core RPC methods defined in `proto/trapperkeeper/sensor/v1/sensor_api.proto`:
+The sensor API provides two core RPC methods defined in `proto/trapperkeeper/sensor/v1/sensor_api.proto`:
 
 ### SyncRules RPC
 
@@ -102,36 +102,6 @@ message EventResult {
 - SDK Model Section 4: Explicit buffer management
 - Event Schema and Storage: Event validation rules
 - Batch Processing and Vectorization: Performance optimizations
-
-### GetDiagnostics RPC
-
-Retrieves SDK diagnostic information for troubleshooting:
-
-```protobuf
-rpc GetDiagnostics(GetDiagnosticsRequest) returns (GetDiagnosticsResponse) {}
-
-message GetDiagnosticsRequest {
-  string sensor_id = 1;
-}
-
-message GetDiagnosticsResponse {
-  int32 buffered_events_count = 1;
-  int32 rules_synced_count = 2;
-  google.protobuf.Timestamp last_sync_time = 3;
-  repeated string active_rule_ids = 4;
-}
-```
-
-**Use Cases**:
-
-- Debugging: Verify sensor has synced rules
-- Monitoring: Check buffer size before flush
-- Troubleshooting: Confirm rule synchronization completed
-
-**Cross-References**:
-
-- SDK Model Section 5: Diagnostic information exposure
-- Health Check Endpoints: Health check integration
 
 ## Protocol Buffer Schemas
 

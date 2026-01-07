@@ -19,9 +19,8 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	SensorAPI_SyncRules_FullMethodName      = "/trapperkeeper.sensor.v1.SensorAPI/SyncRules"
-	SensorAPI_ReportEvents_FullMethodName   = "/trapperkeeper.sensor.v1.SensorAPI/ReportEvents"
-	SensorAPI_GetDiagnostics_FullMethodName = "/trapperkeeper.sensor.v1.SensorAPI/GetDiagnostics"
+	SensorAPI_SyncRules_FullMethodName    = "/trapperkeeper.sensor.v1.SensorAPI/SyncRules"
+	SensorAPI_ReportEvents_FullMethodName = "/trapperkeeper.sensor.v1.SensorAPI/ReportEvents"
 )
 
 // SensorAPIClient is the client API for SensorAPI service.
@@ -36,9 +35,6 @@ type SensorAPIClient interface {
 	// ReportEvents submits a batch of events from sensor to server.
 	// Batching reduces RPC overhead; max batch size enforced server-side.
 	ReportEvents(ctx context.Context, in *ReportEventsRequest, opts ...grpc.CallOption) (*ReportEventsResponse, error)
-	// GetDiagnostics retrieves SDK state for troubleshooting.
-	// Non-production use; disabled in high-performance deployments.
-	GetDiagnostics(ctx context.Context, in *GetDiagnosticsRequest, opts ...grpc.CallOption) (*GetDiagnosticsResponse, error)
 }
 
 type sensorAPIClient struct {
@@ -69,16 +65,6 @@ func (c *sensorAPIClient) ReportEvents(ctx context.Context, in *ReportEventsRequ
 	return out, nil
 }
 
-func (c *sensorAPIClient) GetDiagnostics(ctx context.Context, in *GetDiagnosticsRequest, opts ...grpc.CallOption) (*GetDiagnosticsResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(GetDiagnosticsResponse)
-	err := c.cc.Invoke(ctx, SensorAPI_GetDiagnostics_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // SensorAPIServer is the server API for SensorAPI service.
 // All implementations must embed UnimplementedSensorAPIServer
 // for forward compatibility.
@@ -91,9 +77,6 @@ type SensorAPIServer interface {
 	// ReportEvents submits a batch of events from sensor to server.
 	// Batching reduces RPC overhead; max batch size enforced server-side.
 	ReportEvents(context.Context, *ReportEventsRequest) (*ReportEventsResponse, error)
-	// GetDiagnostics retrieves SDK state for troubleshooting.
-	// Non-production use; disabled in high-performance deployments.
-	GetDiagnostics(context.Context, *GetDiagnosticsRequest) (*GetDiagnosticsResponse, error)
 	mustEmbedUnimplementedSensorAPIServer()
 }
 
@@ -109,9 +92,6 @@ func (UnimplementedSensorAPIServer) SyncRules(context.Context, *SyncRulesRequest
 }
 func (UnimplementedSensorAPIServer) ReportEvents(context.Context, *ReportEventsRequest) (*ReportEventsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ReportEvents not implemented")
-}
-func (UnimplementedSensorAPIServer) GetDiagnostics(context.Context, *GetDiagnosticsRequest) (*GetDiagnosticsResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetDiagnostics not implemented")
 }
 func (UnimplementedSensorAPIServer) mustEmbedUnimplementedSensorAPIServer() {}
 func (UnimplementedSensorAPIServer) testEmbeddedByValue()                   {}
@@ -170,24 +150,6 @@ func _SensorAPI_ReportEvents_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
-func _SensorAPI_GetDiagnostics_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetDiagnosticsRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(SensorAPIServer).GetDiagnostics(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: SensorAPI_GetDiagnostics_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SensorAPIServer).GetDiagnostics(ctx, req.(*GetDiagnosticsRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 // SensorAPI_ServiceDesc is the grpc.ServiceDesc for SensorAPI service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -202,10 +164,6 @@ var SensorAPI_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReportEvents",
 			Handler:    _SensorAPI_ReportEvents_Handler,
-		},
-		{
-			MethodName: "GetDiagnostics",
-			Handler:    _SensorAPI_GetDiagnostics_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
