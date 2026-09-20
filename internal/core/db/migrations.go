@@ -26,7 +26,8 @@ type MigrationStatus struct {
 // MigrateUp runs all pending migrations against the database.
 // Detects driver type, selects appropriate embedded migrations,
 // validates checksums, and applies pending migrations in order.
-func MigrateUp(db *sqlx.DB) error {
+// Returns the number of migrations applied.
+func MigrateUp(db *sqlx.DB) (int, error) {
 	driver := db.DriverName()
 
 	var migrationsFS embed.FS
@@ -40,33 +41,34 @@ func MigrateUp(db *sqlx.DB) error {
 		migrationsFS = embeddedmigrations.PostgresMigrations
 		migrationsDir = "postgres"
 	default:
-		return fmt.Errorf("unsupported database driver: %s", driver)
+		return 0, fmt.Errorf("unsupported database driver: %s", driver)
 	}
 
 	// Create migrations tracking table if not exists
 	if err := createMigrationsTable(db); err != nil {
-		return fmt.Errorf("failed to create migrations table: %w", err)
+		return 0, fmt.Errorf("failed to create migrations table: %w", err)
 	}
 
 	// Parse migration files from embedded filesystem
 	migrations, err := parseMigrationFiles(migrationsFS, migrationsDir)
 	if err != nil {
-		return fmt.Errorf("failed to parse migrations: %w", err)
+		return 0, fmt.Errorf("failed to parse migrations: %w", err)
 	}
 
 	// Validate checksums of already-applied migrations
 	// SHA256 hash detects unauthorized modification of applied migrations
 	if err := validateChecksums(db, migrations); err != nil {
-		return fmt.Errorf("migration checksum validation failed: %w", err)
+		return 0, fmt.Errorf("migration checksum validation failed: %w", err)
 	}
 
 	// Get list of applied migration IDs
 	applied, err := getAppliedMigrations(db)
 	if err != nil {
-		return fmt.Errorf("failed to query applied migrations: %w", err)
+		return 0, fmt.Errorf("failed to query applied migrations: %w", err)
 	}
 
 	// Apply pending migrations in order
+	count := 0
 	for _, m := range migrations {
 		if applied[m.ID] {
 			continue
@@ -78,12 +80,12 @@ func MigrateUp(db *sqlx.DB) error {
 		// If migration succeeds but recording fails, rollback prevents partial state
 		tx, err := db.Beginx()
 		if err != nil {
-			return fmt.Errorf("failed to begin transaction for migration %s: %w", m.ID, err)
+			return count, fmt.Errorf("failed to begin transaction for migration %s: %w", m.ID, err)
 		}
 
 		if err := applyMigration(tx, m); err != nil {
 			tx.Rollback()
-			return fmt.Errorf("failed to apply migration %s: %w", m.ID, err)
+			return count, fmt.Errorf("failed to apply migration %s: %w", m.ID, err)
 		}
 
 		duration := time.Since(start)
@@ -91,15 +93,17 @@ func MigrateUp(db *sqlx.DB) error {
 		// Record migration metadata for audit trail
 		if err := recordMigration(tx, m.ID, m.Checksum, duration); err != nil {
 			tx.Rollback()
-			return fmt.Errorf("failed to record migration %s: %w", m.ID, err)
+			return count, fmt.Errorf("failed to record migration %s: %w", m.ID, err)
 		}
 
 		if err := tx.Commit(); err != nil {
-			return fmt.Errorf("failed to commit migration %s: %w", m.ID, err)
+			return count, fmt.Errorf("failed to commit migration %s: %w", m.ID, err)
 		}
+
+		count++
 	}
 
-	return nil
+	return count, nil
 }
 
 // MigrateStatus returns the status of all migrations (applied and pending).

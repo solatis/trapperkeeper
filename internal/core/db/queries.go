@@ -82,3 +82,8 @@ func (q *Queries) Select(name string, dest interface{}, args ...interface{}) err
 	}
 	return q.db.Select(dest, q.db.Rebind(query), args...)
 }
+
+// Raw retrieves raw SQL string for named query.
+func (q *Queries) Raw(name string) (string, error) {
+	return q.dot.Raw(name)
+}
