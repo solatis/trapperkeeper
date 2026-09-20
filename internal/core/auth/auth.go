@@ -136,3 +136,9 @@ func TenantIDFromContext(ctx context.Context) string {
 	}
 	return ""
 }
+
+// WithTenantID injects tenant ID into context.
+// Used by tests to simulate authenticated requests.
+func WithTenantID(ctx context.Context, tenantID string) context.Context {
+	return context.WithValue(ctx, tenantIDKey, tenantID)
+}
