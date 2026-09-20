@@ -53,7 +53,8 @@ const (
 type OnMissingField int
 
 const (
-	OnMissingSkip OnMissingField = iota
+	OnMissingUnspecified OnMissingField = iota
+	OnMissingSkip
 	OnMissingMatch
 	OnMissingFail
 )
@@ -62,7 +63,8 @@ const (
 type OnCoercionPolicy int
 
 const (
-	OnCoercionSkip OnCoercionPolicy = iota
+	OnCoercionUnspecified OnCoercionPolicy = iota
+	OnCoercionSkip
 	OnCoercionMatch
 	OnCoercionError
 )

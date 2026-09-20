@@ -28,11 +28,12 @@ TrapperKeeper operates on arbitrary incoming data schemas that evolve over time 
 
 Every condition has an `on_missing_field` configuration option:
 
-| Mode    | Behavior                                                     | Use Case                  |
-| ------- | ------------------------------------------------------------ | ------------------------- |
-| `skip`  | Field missing → condition doesn't match, continue evaluation | Default, least intrusive  |
-| `match` | Field missing → condition matches                            | Detect incomplete records |
-| `fail`  | Field missing → condition fails, rule doesn't match          | Strict validation         |
+| Mode          | Behavior                                                      | Use Case                  |
+| ------------- | ------------------------------------------------------------- | ------------------------- |
+| `unspecified` | Treated as `skip` (protobuf zero-value convention)            | Wire format default       |
+| `skip`        | Field missing -> condition doesn't match, continue evaluation | Default, least intrusive  |
+| `match`       | Field missing -> condition matches                            | Detect incomplete records |
+| `fail`        | Field missing -> condition fails, rule doesn't match          | Strict validation         |
 
 **Default**: `skip` (least intrusive by default)
 
@@ -44,11 +45,12 @@ Every condition has an `on_missing_field` configuration option:
 
 Every condition has an `on_coercion_fail` configuration option that controls behavior when type coercion fails (e.g., attempting to coerce "abc" to numeric):
 
-| Mode    | Behavior                                                      | Use Case                     |
-| ------- | ------------------------------------------------------------- | ---------------------------- |
-| `skip`  | Coercion fails → condition doesn't match, continue evaluation | Default, best-effort parsing |
-| `match` | Coercion fails → condition matches                            | Detect bad data              |
-| `fail`  | Coercion fails → condition fails, rule doesn't match          | Strict type validation       |
+| Mode          | Behavior                                                       | Use Case                     |
+| ------------- | -------------------------------------------------------------- | ---------------------------- |
+| `unspecified` | Treated as `skip` (protobuf zero-value convention)             | Wire format default          |
+| `skip`        | Coercion fails -> condition doesn't match, continue evaluation | Default, best-effort parsing |
+| `match`       | Coercion fails -> condition matches                            | Detect bad data              |
+| `fail`        | Coercion fails -> condition fails, rule doesn't match          | Strict type validation       |
 
 **Default**: `skip` (best-effort evaluation by default)
 

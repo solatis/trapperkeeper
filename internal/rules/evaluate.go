@@ -155,12 +155,12 @@ func evaluateCondition(cond CompiledCondition, payload json.RawMessage) (bool, [
 }
 
 // applyMissingPolicy converts OnMissingField policy to boolean match result.
-// SKIP/FAIL -> false, MATCH -> true. Used for null values and missing fields.
+// UNSPECIFIED/SKIP/FAIL -> false, MATCH -> true. Used for null values and missing fields.
 func applyMissingPolicy(policy OnMissingField) bool {
 	switch policy {
 	case OnMissingMatch:
 		return true
-	case OnMissingFail:
+	case OnMissingUnspecified, OnMissingSkip, OnMissingFail:
 		return false
 	default:
 		return false
@@ -168,11 +168,13 @@ func applyMissingPolicy(policy OnMissingField) bool {
 }
 
 // applyCoercionPolicy converts OnCoercionPolicy policy to boolean match result.
-// MATCH -> true, SKIP/ERROR -> false. Used when type coercion fails.
+// MATCH -> true, UNSPECIFIED/SKIP/ERROR -> false. Used when type coercion fails.
 func applyCoercionPolicy(policy OnCoercionPolicy) bool {
 	switch policy {
 	case OnCoercionMatch:
 		return true
+	case OnCoercionUnspecified, OnCoercionSkip, OnCoercionError:
+		return false
 	default:
 		return false
 	}
