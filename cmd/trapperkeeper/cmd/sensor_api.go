@@ -85,7 +85,7 @@ func runSensorAPI(cmd *cobra.Command, args []string) error {
 
 	rulesEngine := rules.NewEngine()
 
-	service, err := api.NewSensorAPIService(database, rulesEngine, cfg)
+	service, err := api.NewSensorAPIService(database, rulesEngine, cfg, queries)
 	if err != nil {
 		return fmt.Errorf("failed to create service: %w", err)
 	}
