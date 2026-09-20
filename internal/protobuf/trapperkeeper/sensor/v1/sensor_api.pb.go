@@ -291,12 +291,13 @@ func (x *ReportEventsResponse) GetRejectedCount() int32 {
 }
 
 type EventResult struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	EventId       string                 `protobuf:"bytes,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
-	Status        EventStatus            `protobuf:"varint,2,opt,name=status,proto3,enum=trapperkeeper.sensor.v1.EventStatus" json:"status,omitempty"`
-	ErrorMessage  string                 `protobuf:"bytes,3,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	EventId          string                 `protobuf:"bytes,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	Status           EventStatus            `protobuf:"varint,2,opt,name=status,proto3,enum=trapperkeeper.sensor.v1.EventStatus" json:"status,omitempty"`
+	ErrorMessage     string                 `protobuf:"bytes,3,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	MatchedRuleCount int32                  `protobuf:"varint,4,opt,name=matched_rule_count,json=matchedRuleCount,proto3" json:"matched_rule_count,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *EventResult) Reset() {
@@ -350,6 +351,13 @@ func (x *EventResult) GetErrorMessage() string {
 	return ""
 }
 
+func (x *EventResult) GetMatchedRuleCount() int32 {
+	if x != nil {
+		return x.MatchedRuleCount
+	}
+	return 0
+}
+
 var File_trapperkeeper_sensor_v1_sensor_api_proto protoreflect.FileDescriptor
 
 const file_trapperkeeper_sensor_v1_sensor_api_proto_rawDesc = "" +
@@ -367,11 +375,12 @@ const file_trapperkeeper_sensor_v1_sensor_api_proto_rawDesc = "" +
 	"\x14ReportEventsResponse\x12>\n" +
 	"\aresults\x18\x01 \x03(\v2$.trapperkeeper.sensor.v1.EventResultR\aresults\x12%\n" +
 	"\x0eaccepted_count\x18\x02 \x01(\x05R\racceptedCount\x12%\n" +
-	"\x0erejected_count\x18\x03 \x01(\x05R\rrejectedCount\"\x8b\x01\n" +
+	"\x0erejected_count\x18\x03 \x01(\x05R\rrejectedCount\"\xb9\x01\n" +
 	"\vEventResult\x12\x19\n" +
 	"\bevent_id\x18\x01 \x01(\tR\aeventId\x12<\n" +
 	"\x06status\x18\x02 \x01(\x0e2$.trapperkeeper.sensor.v1.EventStatusR\x06status\x12#\n" +
-	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage*y\n" +
+	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\x12,\n" +
+	"\x12matched_rule_count\x18\x04 \x01(\x05R\x10matchedRuleCount*y\n" +
 	"\vEventStatus\x12\x1c\n" +
 	"\x18EVENT_STATUS_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15EVENT_STATUS_ACCEPTED\x10\x01\x12\x19\n" +

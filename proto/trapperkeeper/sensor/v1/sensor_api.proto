@@ -44,6 +44,7 @@ message EventResult {
   string event_id = 1;
   EventStatus status = 2;
   string error_message = 3;
+  int32 matched_rule_count = 4;
 }
 
 enum EventStatus {
