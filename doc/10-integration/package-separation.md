@@ -161,8 +161,8 @@ protoc --go_out=. --go-grpc_out=. proto/trapperkeeper/sensor/v1/*.proto
 
 **Contains**:
 
-- Rule parser (DNF expressions)
-- Rule executor
+- Rule compiler (types.Rule -> CompiledRule)
+- Rule evaluator (CompiledRule + payload -> MatchResult)
 - Runtime validation (Validation Hub)
 - Field path resolution
 
@@ -172,19 +172,24 @@ protoc --go_out=. --go-grpc_out=. proto/trapperkeeper/sensor/v1/*.proto
 
 **Consumers**: Native SDKs (SDK-side evaluation), internal/core (server-side validation), cmd/web-ui (validation)
 
-**Example**:
+**Payload Input Convention**: The rule engine operates on general-purpose
+in-memory data structures (`map[string]any` / `[]any` in Go, `dict`/`list` in
+Python, `Map`/`List` in Java). Callers are responsible for converting their
+source format to this representation before calling the evaluator. This design
+is **performance critical** -- it eliminates serialization round-trips on the
+hot path. See [Field Path Resolution](../04-rule-engine/field-path-resolution.md)
+for the full payload representation spec.
 
-```go
-// internal/rules/parser/dnf.go
-package parser
+**Example conversions by caller**:
 
-import "trapperkeeper/internal/types"
-
-func ParseDNFExpression(expr string) ([]types.OrGroup, error) {
-    // Parse DNF expression into OR groups
-    // Each OR group contains AND conditions
-}
-```
+| Caller                 | Source Format         | Conversion                     |
+| ---------------------- | --------------------- | ------------------------------ |
+| Go gRPC server         | `*structpb.Struct`    | `.AsMap()` -> `map[string]any` |
+| Go SDK (JSON input)    | `[]byte`              | `json.Unmarshal` -> `any`      |
+| Python SDK             | `dict` (native)       | No conversion needed           |
+| Python SDK (DataFrame) | `pandas.Series`       | `.to_dict()`                   |
+| Java SDK               | `Map<String, Object>` | No conversion needed           |
+| Java SDK (Spark)       | `Row`                 | `Row.getValuesMap()`           |
 
 **Cross-Reference**: See [Rule Engine: Rule Expression Language](../04-rule-engine/README.md) for complete parsing specification.
 

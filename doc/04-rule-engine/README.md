@@ -99,7 +99,7 @@ Rules use OR-of-ANDs structure (DNF) optimized for pre-compilation and visual UI
 
 ### Field Path Resolution
 
-Field paths reference nested objects and arrays using array notation (`["customer", "address", "zipcode"]`) transmitted as JSON arrays. Wildcards use ANY semantics (match if any element satisfies condition) with optional short-circuit evaluation.
+Field paths reference nested objects and arrays using array notation (`["customer", "address", "zipcode"]`) transmitted as JSON arrays. Wildcards use ANY semantics (match if any element satisfies condition) with optional short-circuit evaluation. The engine operates on general-purpose in-memory data structures (maps and lists), not serialized bytes -- callers convert from their source format before evaluation. See Field Path Resolution spoke for the full payload representation spec.
 
 **Key Points:**
 

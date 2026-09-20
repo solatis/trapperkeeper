@@ -20,6 +20,26 @@ TrapperKeeper operates on arbitrary data structures without schema pre-registrat
 
 **Hub Document**: This document is part of the Rule Engine Architecture. See [Rule Engine Architecture](README.md) for strategic overview and relationships to expression language, type coercion, and schema evolution.
 
+## Payload Representation
+
+The rule engine operates on **general-purpose in-memory data structures**, not a
+specific serialization format. Payloads are represented as nested maps and lists
+using each language's native types:
+
+| Language | Map Type              | List Type | Scalar Types                  |
+| -------- | --------------------- | --------- | ----------------------------- |
+| Go       | `map[string]any`      | `[]any`   | `float64`, `string`, `bool`   |
+| Python   | `dict`                | `list`    | `float`, `str`, `bool`        |
+| Java     | `Map<String, Object>` | `List`    | `Double`, `String`, `Boolean` |
+
+**Rationale**:
+
+- **Format agnostic**: The engine evaluates in-memory trees, not serialized bytes. Callers convert from their source format (JSON, protobuf Struct, DataFrame row, etc.) before evaluation.
+- **Performance critical**: Avoiding serialization round-trips (e.g., protobuf -> JSON -> map) eliminates unnecessary allocations and copies on the hot path.
+- **SDK flexibility**: Each SDK converts from its natural input format. Go server uses `structpb.Struct.AsMap()` for gRPC payloads. Python SDK operates on `dict` directly. Spark SDK extracts rows as maps.
+
+**Conversion responsibility**: The caller -- not the rule engine -- converts payloads to the general-purpose representation. The engine's `Resolve` function traverses the in-memory tree without knowledge of the original format.
+
 ## Field Path Notation
 
 Rules reference fields using dot/bracket syntax, transmitted as JSON arrays:
