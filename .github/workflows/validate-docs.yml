@@ -1,0 +1,34 @@
+name: Validate Documentation
+
+on: [push, pull_request]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r doc/scripts/requirements.txt
+
+      - name: Validate frontmatter
+        run: python doc/scripts/validate.py validate-frontmatter
+
+      - name: Validate hub-spoke relationships
+        run: python doc/scripts/validate.py validate-hub-spoke
+
+      - name: Validate CLAUDE.md files
+        run: python doc/scripts/validate.py validate-claude-md
+
+      - name: Validate hub documents
+        run: python doc/scripts/validate.py validate-hub
+
+      - name: Validate spoke documents
+        run: python doc/scripts/validate.py validate-spoke
+
+      - name: Check validation complexity
+        run: python doc/scripts/validate.py check-complexity
