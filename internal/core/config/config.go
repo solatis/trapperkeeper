@@ -114,3 +114,14 @@ func ParseHMACSecretWithID(envValue string) (secretID string, secret []byte, err
 
 	return secretID, secret, nil
 }
+
+// GenerateAPIKey generates an HMAC-based API key.
+// Format: <secret_id>:<hmac_hex> where HMAC is computed over tenant_id||timestamp.
+func GenerateAPIKey(secretID string, secret []byte, tenantID string, t time.Time) (string, error) {
+	return "", fmt.Errorf("GenerateAPIKey not implemented")
+}
+
+// HashAPIKey computes SHA256 hash of API key for storage.
+func HashAPIKey(apiKey string) string {
+	return ""
+}
