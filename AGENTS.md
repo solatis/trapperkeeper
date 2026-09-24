@@ -59,8 +59,15 @@ alone tell the story:
    line where that fits. Never a paraphrase of the syntax.
 4. Constants say where they came from, impossible branches say why they are
    impossible, hot or odd constructs say what was rejected.
-5. Only state what is known. A missing reason is better than an invented one.
+5. Only state what is known. When the owner is in the session, an unknown
+   reason, or a function you cannot place under the rules above, is a
+   question to the owner through the question tool, asked before the commit
+   that needs it. Never invent a reason and never drop one silently.
+6. After writing a function's comments, read them back top to bottom as
+   separate claims and check each against the code below it. Fix or delete
+   any claim the code does not bear out.
 
-`/doc-discipline [all|placement|narrative] [check] [paths...]` applies or
-checks all of the above; the worked example is in
+This is the primary path: new code is written this way. `/doc-discipline
+[all|placement|narrative] [check] [paths...]` is the repair path; it applies
+or checks all of the above after the fact, and its worked example is in
 `.claude/skills/doc-discipline/narrative.md`.
