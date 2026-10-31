@@ -1,7 +1,7 @@
 use std::process::Command;
 
-/// The binary prints "<name> <version>", the name and version of its package,
-/// and exits zero.
+/// The binary prints "<name> <version>", its own binary name and the version
+/// of its package, and exits zero.
 #[test]
 fn prints_name_and_version() {
     let out = Command::new(env!("CARGO_BIN_EXE_trapperkeeper"))
