@@ -73,7 +73,9 @@ they arrive. A component directory has its own `AGENTS.md`, and inside
 - Clippy pedantic, denied in the workspace lints table (owner, 2026-10-31).
   Rejected: the default group alone, as too lenient; and warning locally while
   denying only in CI, because a commit should fail the same way in both
-  places.
+  places. rustc warnings are denied there too. Cost: nothing builds with a
+  known warning while iterating, and a new stable release that adds a warning
+  breaks the build until the warning is fixed.
 - SDK order: Rust first, then Python, then Go. Later languages (Java, Node.js
   and others) are undecided, and Node.js comes last. They span several
   milestones (owner, 2026-10-31).
