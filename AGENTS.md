@@ -16,6 +16,68 @@ breaks the pipeline.
 | What is decided but not built, what is open   | `doc/decisions.md`      |
 | How does component X work, how do I change it | `<component>/AGENTS.md` |
 
+## Layout
+
+One top-level directory per component. The server side is a Cargo workspace
+whose members are listed one by one in the root `Cargo.toml`. Only directories
+that have code exist; the others are named here so the layout is fixed before
+they arrive. A component directory has its own `AGENTS.md`, and inside
+`server/` each module directory gets one as it appears.
+
+| Directory      | What                                               | Exists                       |
+| -------------- | -------------------------------------------------- | ---------------------------- |
+| `server/`      | the server binary: APIs, store, `serve`, `migrate` | yes, see `server/AGENTS.md`  |
+| `engine/`      | the rule engine crate, embeddable by pipelines     | with M3                      |
+| `sdk/<lang>/`  | one sensor SDK per language                        | Rust with M6, Python with M8 |
+| `web/`         | the browser UI                                     | with M7                      |
+| `conformance/` | the language-neutral evaluation fixtures           | with M3                      |
+
+## How to
+
+- Toolchain: rustup with the `stable` channel. `rust-toolchain.toml` pins the
+  channel and the clippy and rustfmt components.
+- Format: `cargo fmt --all --check`.
+- Lint: `cargo clippy --workspace --all-targets`. The workspace lints table in
+  `Cargo.toml` denies clippy `all`, clippy `pedantic` and rustc warnings, so a
+  lint failure is a build failure locally as in CI.
+- Test: `cargo test --workspace`.
+- CI (`.github/workflows/ci.yml`) runs those four on every push, on five
+  native runners: Linux amd64 and aarch64, Windows amd64 and aarch64, macOS
+  aarch64, always on the current stable. Its five job names are the required
+  status checks of the `master` ruleset, which the owner keeps by hand.
+
+## Why
+
+- Rust for the server side: the web server and the APIs are written in Rust.
+  Performance is extremely important for this project; Rust is correct by
+  construction where a garbage-collected language such as Go is less suited to
+  FFI-style use, which keeps the shared evaluator core option open; the
+  owner's background is heavily C++ and Haskell; and Rust is gaining ground
+  for this kind of project with LLM providers and the wider community
+  (Anthropic, OpenAI, Cloudflare, the Linux kernel). SDK languages are a
+  separate decision (see `doc/overview.md`, Integration surface).
+- Latest stable Rust only, no minimum version (owner, 2026-10-31): code may
+  use any feature as soon as it is stable, and CI builds with the current
+  stable toolchain. Cost: anyone building TrapperKeeper needs an up-to-date
+  toolchain.
+- Monorepo: all components are developed in this one repository, if at all
+  possible. Cross-cutting changes are expected to be common and are far easier
+  to manage as a single PR, and what is released together belongs in one
+  repository; all components are released together. Exception: an SDK
+  language whose publishing requires a standalone repository, decided case by
+  case.
+- One top-level directory per component (owner, 2026-10-31). Rejected:
+  grouping the Rust crates under `crates/`, because each component keeps its
+  `AGENTS.md` beside its code and the Rust sensor SDK belongs with the other
+  SDKs.
+- Clippy pedantic, denied in the workspace lints table (owner, 2026-10-31).
+  Rejected: the default group alone, as too lenient; and warning locally while
+  denying only in CI, because a commit should fail the same way in both
+  places.
+- SDK order: Rust first, then Python, then Go. Later languages (Java, Node.js
+  and others) are undecided, and Node.js comes last. They span several
+  milestones (owner, 2026-10-31).
+
 ## Workflow
 
 The owner is the repository's maintainer, the only person who opens a stage

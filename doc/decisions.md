@@ -35,32 +35,6 @@ each SDK component.
 
 ## Settled, awaiting code
 
-### Rust for the server side
-
-The web server and the APIs are written in Rust. Reasons: performance, which is
-extremely important for this project; correctness; a garbage-collected
-language such as Go is less suitable for FFI-style use, which keeps the shared
-evaluator core option open; Leon's background is heavily C++ and Haskell; and
-Rust is clearly gaining ground for this kind of project with LLM providers and
-the wider community (Anthropic, OpenAI, Cloudflare, the Linux kernel). SDK
-languages are a separate, open decision. Moves to: root `AGENTS.md`, with the
-first crate.
-
-We target the latest stable Rust release only (owner, 2026-10-31). There is no
-minimum supported Rust version below it: code may use any feature as soon as
-it is stable, and CI builds with the current stable toolchain. Cost: anyone
-building TrapperKeeper needs an up-to-date toolchain.
-
-### Monorepo
-
-All components are developed in this one repository, if at all possible.
-Cross-cutting changes are expected to be common and are far easier to manage
-as a single PR, and what is released together belongs in one repository; all
-components are released together. Exception: an SDK language whose publishing
-requires a standalone repository, decided case by case. Target SDK languages:
-Python, Java, Go, Rust, Node.js. Moves to: root `AGENTS.md`, with the first
-code.
-
 ### Management API is the single write path
 
 The archive let the web UI write to the store directly; a CLI and an agent
