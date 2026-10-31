@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 # Members are listed one by one: components sit in top-level directories
-# beside non-Rust ones, so a glob would match the wrong directories.
+# beside non-Rust ones, so no glob describes the Rust members.
 members = ["server"]
 
 [workspace.package]
