@@ -54,5 +54,5 @@ quickly. This is what makes autonomous agent operation acceptable.
 
 Build the simple thing, record what was deferred as a decision, revisit on
 evidence. Work incrementally: no large upfront plans; a design question is
-settled when the code that needs it is written. Prefer integration-level tests and property-based tests over large
+settled when the code that needs it is written. A plan for one issue, written right before its code and deleted once it lands, is how that settling happens; it is not an upfront plan. Prefer integration-level tests and property-based tests over large
 unit suites. One convention per concern.
