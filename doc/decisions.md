@@ -46,6 +46,11 @@ the wider community (Anthropic, OpenAI, Cloudflare, the Linux kernel). SDK
 languages are a separate, open decision. Moves to: root `AGENTS.md`, with the
 first crate.
 
+We target the latest stable Rust release only (owner, 2026-10-31). There is no
+minimum supported Rust version below it: code may use any feature as soon as
+it is stable, and CI builds with the current stable toolchain. Cost: anyone
+building TrapperKeeper needs an up-to-date toolchain.
+
 ### Monorepo
 
 All components are developed in this one repository, if at all possible.
