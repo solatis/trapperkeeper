@@ -28,7 +28,8 @@ else the issues of the unit in this session.
 ## Names
 
 Fixed once, in the seed report, and copied verbatim afterwards; never
-retyped or reworded.
+retyped or reworded. A session without the seed report reads them from the
+plan's header lines.
 
 | Artifact    | Form                                                 | Example                             |
 | ----------- | ---------------------------------------------------- | ----------------------------------- |
@@ -56,6 +57,18 @@ retyped or reworded.
 - No squash-merge, no merge commits, no force-push to `master`. A feature
   branch is rebased and force-pushed (`--force-with-lease`) only where a
   stage skill says so; the owner's invocation of that stage is the request.
+
+## Reading the tree
+
+Every stage starts by reading the tree, the plans and GitHub. Read the
+state as it is, not as a story: a merged issue is a fast-forward, so its
+commits sit on master with no merge commit, its branch is gone, its issue
+is closed and its plan is deleted; that is the workflow working. A leftover
+is a dirty tree, master behind origin, a local branch whose PR is merged or
+closed, or a plan whose issue is closed. In the seed stage each leftover is
+a line under Open questions, not a reason to stop, unless it is the branch
+or plan of an issue in the unit; in the later stages the stage's entry
+check says what a leftover means.
 
 ## Plans
 
@@ -96,8 +109,12 @@ The stage skills say what to do; these skills say how:
 `CHECKPOINT=7200` because the watcher runs beside a plannotator review that
 can take hours. plannotator runs one session at a time: a session opened
 while another is up comes back `dismissed`, so no two ever overlap. Every
-plannotator command runs in the background with a long timeout and blocks
-until the owner decides; the harness wakes you when it exits.
+plannotator command runs in the background with `timeout` 7200000 ms, the
+harness's cap, and blocks until the owner decides; the harness wakes you
+when it exits. A session the time limit stops is run again with the same
+command; the owner's drafts are restored. With a `plannotator` tool in the
+session, call it with the same target and `gate: true` instead of the CLI;
+it returns the same decision.
 
 The `quasardb-workflow`, `shortcut` and `buildkite` skills do not apply in
 this repository, nor do the github skill's "Squash-merge" and "Cherry-pick

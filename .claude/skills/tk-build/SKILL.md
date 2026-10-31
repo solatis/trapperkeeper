@@ -74,13 +74,15 @@ Per issue, the branch decides where the build starts:
 Run `/doc-discipline read` once, before the first code commit of the
 session. Then, issue by issue in landing order:
 
-1. Cut the branch from its base: `git checkout -b <slug> master` after
-   `git pull --ff-only origin master`, or `git checkout -b <slug>
-<parent slug>` for a stacked issue, at the parent branch's current head.
+1. Cut the branch from its base: `git checkout -b <slug> master`, which
+   the entry check has shown in sync with origin, or `git checkout -b
+<slug> <parent slug>` for a stacked issue, at the parent branch's current
+   head.
 2. Land the plan's Commits section in order, one small commit each, each
-   building and passing lint and tests. The plan is followed to the
-   letter; a deviation the code forces is said in the build-stage message,
-   never made silently.
+   building and passing lint and tests with the commands the touched
+   component's `AGENTS.md`, How to, names, or the root `AGENTS.md` for
+   repo-wide ones. The plan is followed to the letter; a deviation the code
+   forces is said in the build-stage message, never made silently.
 
    Every commit carries its comments and document rows as the plan's
    Design and Knowledge sections specify them: the executor composes the
@@ -104,6 +106,13 @@ touched>`, and one small commit per finding.
    not state. Its "Unlanded from the plan" findings are fixed with a
    further small commit each, or reported with the reason each was
    dropped. Keep its report for the build-stage message.
+
+   The reports of steps 3 and 4 are read in this repository's terms: a
+   "Rationale unknown" finding is a question to the owner through the
+   question tool before the push, and the answer lands in one further
+   commit; a "Needs a human" finding is a line of the build-stage message
+   and gets no commit.
+
 5. Push and open the PR, with the github skill's "Create":
 
    ```
@@ -133,48 +142,51 @@ merge stage deletes.
 
 ## The runs and the reviews
 
-The owner reviews the code while CI runs rather than after it. plannotator
-runs one session at a time, and a review diffs the checked-out branch, so
-the reviews run one after another, in landing order, bottom of a stack
-first. For each PR:
+The owner reviews the code while CI runs rather than after it. Two things
+happen on their own schedule during this section, a branch getting new
+commits and a watcher exiting, so both are defined here, before the review
+loop in which they occur.
 
-1. `git checkout <slug>`, then open the review in the background with a
-   long timeout:
+Restack: when a branch gets new commits and other branches of the unit
+stack on it, rebase each of them onto its new head (`git rebase --onto
+<parent> <old parent head> <child>`), `git push --force-with-lease`, and
+start a watcher for each new child head. Their reviews have not run yet,
+because reviews run bottom-up, so no review is lost. A rebase that
+conflicts is stopped and reported; the owner decides.
+
+A watcher's exit says what comes next:
+
+| Exit | Last line                  | Next                                                                                                                                                                                                                                                                                                                               |
+| ---- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | `FINAL <sha> passed`       | Green. Read the runs back for the build-stage message (`gh api 'repos/{owner}/{repo}/actions/runs?head_sha=<sha>'`), never from memory of having started them.                                                                                                                                                                     |
+| 1    | `FINAL <sha> <conclusion>` | Red. Read the log tails. A failure the branch causes is fixed with further small commits on it, pushed, watched again, restacked, and its PR reviewed again, because the owner has not seen the fix. A failure that the same workflow also shows on master's head, or an outage, is reported with the evidence; the owner decides. |
+| 2    | `NORUNS ...`               | CI is in the tree, yet nothing ran for this head: the workflow's triggers do not cover this branch or PR. Stop and report; the issue cannot end without a run.                                                                                                                                                                     |
+| 3    | `STATUS ...`               | The checkpoint passed with runs still going. Relaunch the watcher with the same SHA and keep waiting.                                                                                                                                                                                                                              |
+| 4    | `no repo ...`              | Stop and report.                                                                                                                                                                                                                                                                                                                   |
+
+plannotator runs one session at a time, and a review diffs the checked-out
+branch, so the reviews run one after another, in landing order, bottom of a
+stack first. For each PR:
+
+1. `git checkout <slug>`, then open the review in the background, with the
+   timeout `/tk-workflow`, Tools, fixes:
 
    ```
    plannotator review --base <base> --json
    ```
 
    It blocks until the owner decides in the browser. Do nothing else while
-   it runs except handle a watcher that exits (below). Its stdout is one
-   JSON record; classify it by `decision` alone:
+   it runs except handle a watcher that exits, as the table above says. Its
+   stdout is one JSON record; classify it by `decision` alone:
    - `approved`: the owner's yes on this PR's code. Notes in `message` are
      guidance, quoted in the build-stage message, not a change request.
      Go on to the next PR.
    - `annotated`: the owner's change requests. Address every annotation
      with further small commits on this branch, push, start a watcher for
-     the new head, restack (below), and review this PR again from step 1.
-     The watcher of the superseded head is reported as superseded, not
-     waited for.
+     the new head, restack, and open this PR's review again. The watcher
+     of the superseded head is reported as superseded, not waited for.
    - `dismissed`, or a non-zero exit without a decision: stop and report;
      the owner decides in the conversation.
-
-2. Restack: when a branch gets new commits and other branches of the unit
-   stack on it, rebase each of them onto its new head (`git rebase --onto
-<parent> <old parent head> <child>`), `git push --force-with-lease`, and
-   start a watcher for each new child head. Their reviews have not run yet,
-   because reviews run bottom-up, so no review is lost. A rebase that
-   conflicts is stopped and reported; the owner decides.
-
-A watcher's exit says what comes next:
-
-| Exit | Last line                  | Next                                                                                                                                                                                                                                                                                                                                    |
-| ---- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | `FINAL <sha> passed`       | Green. Read the runs back for the build-stage message (`gh api 'repos/{owner}/{repo}/actions/runs?head_sha=<sha>'`), never from memory of having started them.                                                                                                                                                                          |
-| 1    | `FINAL <sha> <conclusion>` | Red. Read the log tails. A failure the branch causes is fixed with further small commits on it, pushed, watched again, restacked, and reviewed again from step 1, because the owner has not seen the fix. A failure that the same workflow also shows on master's head, or an outage, is reported with the evidence; the owner decides. |
-| 2    | `NORUNS ...`               | CI is in the tree, yet nothing ran for this head: the workflow's triggers do not cover this branch or PR. Stop and report; the issue cannot end without a run.                                                                                                                                                                          |
-| 3    | `STATUS ...`               | The checkpoint passed with runs still going. Relaunch the watcher with the same SHA and keep waiting.                                                                                                                                                                                                                                   |
-| 4    | `no repo ...`              | Stop and report.                                                                                                                                                                                                                                                                                                                        |
 
 An issue's build is over only when its reviewed head is its pushed head,
 its review is `approved`, and that head is green, or, without CI, its local
@@ -200,11 +212,11 @@ reopening the review, so the owner merges a commit they never saw.
 Exactly, per issue in landing order: the issue number and the branch; the
 PR's URL and base; a summary of the change in plain words; each deviation
 from the plan with the reason the code forced it; the doc-discipline
-check's report, or "clean"; the review's decision with its notes quoted, if
-any; the run ids and their state for the reviewed head, and any superseded
-heads, or the local checks that ran when there is no CI; the command `git
-diff <base>...<slug>`. Then one line saying the merge waits for
-`/tk-merge`.
+check's report, or "clean", with its "Needs a human" findings; the review's
+decision with its notes quoted, if any; the run ids and their state for the
+reviewed head, and any superseded heads, or the local checks that ran when
+there is no CI; the command `git diff <base>...<slug>`. Then one line
+saying the merge waits for `/tk-merge`.
 
 Then wait. Do not ask whether to merge; the owner invokes `/tk-merge` when
 they are ready.

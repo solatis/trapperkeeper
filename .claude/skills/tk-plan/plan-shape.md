@@ -20,8 +20,8 @@ has not loaded it, so every shape and reason is said in plain words.
 
 ## Header
 
-The plan starts with the header `/tk-workflow`, Plans, fixes, then a
-blank line, then the sections:
+The plan starts with the header lines that `/tk-workflow` fixes under
+Plans, then a blank line, then the sections:
 
 ```
 Issue: #14
@@ -104,8 +104,8 @@ it is never dropped.
    must ask the owner for if the code turns out a certain way.
 7. **Commits.** The numbered list, one subject each in the commit form of
    the workflow, in landing order: the build commits, then the
-   `/doc-discipline` runs placed after the commits they follow, then the
-   Verify step, last.
+   `/doc-discipline all` and `check` runs the build stage makes after the
+   last of them, then the Verify step, last.
 8. **Open questions and recommendations.** Every question the owner has
    not answered, with your recommendation, one line each. The gate's
    approval settles them.

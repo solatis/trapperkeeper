@@ -6,7 +6,8 @@ disable-model-invocation: true
 
 # /tk-start-next -- session seed, unit chosen with you
 
-This skill takes no task description. You work out what the active
+Run `/tk-workflow` first. This skill takes no task description. You work
+out what the active
 milestone still needs, cut it into right-sized issues, let the owner choose
 which of them form the unit, and then seed the session for that unit
 exactly as `/tk-start` would have, had the owner named those issues.
@@ -52,21 +53,19 @@ Open pull requests:
 
 !`gh pr list --state open --json number,headRefName,baseRefName,title --jq '.[] | "#\(.number) \(.headRefName) -> \(.baseRefName)  \(.title)"' 2>&1 || true`
 
-Read the state as it is, as `/tk-start` describes under Repository state:
-a merged issue has its commits on master, no branch, a closed issue and no
-plan. Leftovers are lines under Open questions.
+Read the state as `/tk-workflow`, Reading the tree, says: a merged issue
+leaves no trace but its commits, and each leftover is a line under Open
+questions.
 
 ## Steps
 
-1. `/tk-workflow`: the rules every later stage is held to, and the gates
-   between them.
-2. Find the gap (below).
-3. `/tk-seed`, with the candidates as the unit, through its context step
+1. Find the gap (below).
+2. `/tk-seed`, with the candidates as the unit, through its context step
    only; return here before shaping anything.
-4. Cut the candidates and ask (below). The owner's pick is the unit.
-5. The rest of `/tk-seed` for the chosen issues: shape, challenge round,
+3. Cut the candidates and ask (below). The owner's pick is the unit.
+4. The rest of `/tk-seed` for the chosen issues: shape, challenge round,
    report, then the wait for `/tk-plan`. The report's Candidates section is
-   present, because steps 2 and 4 ran.
+   present, because steps 1 and 3 ran.
 
 ## Find the gap
 

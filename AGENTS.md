@@ -18,10 +18,14 @@ breaks the pipeline.
 
 ## Workflow
 
+The owner is the repository's maintainer, the only person who opens a stage
+or answers a question. "The question tool" is AskUserQuestion.
+
 Work moves issue by issue through four stages, each opened by the owner:
 `/tk-start` or `/tk-start-next` (seed), `/tk-plan`, `/tk-build`,
-`/tk-merge`. The rules all stages share (branches, commits, issues, the
-uncommitted plans in `.plans/`, the fast-forward onto `master`) are in
+`/tk-merge`. A stage opens only when the owner invokes its skill; a chat
+message opens none. The rules all stages share (branches, commits, issues,
+the uncommitted plans in `.plans/`, the fast-forward onto `master`) are in
 `.claude/skills/tk-workflow/SKILL.md`.
 
 ## Documentation strategy
@@ -76,8 +80,10 @@ alone tell the story:
    any claim the code does not bear out.
 
 This is the primary path: new code is written this way. `/doc-discipline
-[all|placement|narrative] [check] [paths...]` is the repair path; it applies
-or checks all of the above after the fact, and its worked example is in
+[all|placement|narrative|read] [check] [paths...] [plan.md]` is the repair
+path; it applies or checks all of the above after the fact, `read` loads the
+shape before code or a plan is written, and a plan path reconciles the code
+against the reasons the plan promised. Its worked example is in
 `.claude/skills/doc-discipline/narrative.md`.
 
 ## Prose

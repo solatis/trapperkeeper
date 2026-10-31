@@ -19,8 +19,9 @@ project grows, like everything else; change one when it gets in the way.
    a fifth file means the content belongs next to code.
 2. Eviction: when a component directory is created, its section in
    `architecture.md` shrinks to one paragraph plus a pointer, and its entries
-   in `decisions.md` move into the component's `AGENTS.md` under **Why**. Both
-   are deleted here.
+   in `decisions.md` move into the component's `AGENTS.md` under **Why**.
+   What moved is deleted here; the one-paragraph section and its pointer
+   stay.
 3. `decisions.md` is a holding pen, not an archive. No numbering, no status
    history, no superseded entries. An entry exists only while it has no code
    home and says something `principles.md` and `architecture.md` do not.

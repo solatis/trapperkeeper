@@ -27,7 +27,10 @@ repos/{owner}/{repo}/milestones`), for the goals the unit serves.
    parent directory on the way there.
 4. The code in the scoped set and what it depends on, through the
    `codebase-analysis` skill, invoked with the Skill tool once the scope is
-   written down, when the scoped set holds code. Its goals are the unit in
+   written down, when the scoped set holds code. The skill's own description
+   says to run it before any reading; here the documents come first because
+   they fix the vocabulary and the scoped set the skill is given. Its goals
+   are the unit in
    one sentence and the scoped set: the crates or packages, their tests,
    the call sites, and for dependencies the parts the unit will call. Its
    summary is the map of the code, not evidence: a claim from it enters

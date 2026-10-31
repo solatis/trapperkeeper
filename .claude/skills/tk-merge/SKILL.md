@@ -64,7 +64,8 @@ to):
    unchanged in content. A conflict, or a commit whose content changed, is
    a stop: the reviewed code is no longer the code that would merge.
    Otherwise `git push --force-with-lease`, and with CI wait for the new
-   head with `gh-watch.sh` (exit 0) before going on. A stacked PR whose
+   head with `gh-watch.sh` (exit 0; exit 3 means rerun with the same SHA)
+   before going on. A stacked PR whose
    parent was fast-forwarded in this run is already a fast-forward.
 2. Fast-forward and publish, with the github skill's "Fast-forward merge":
 

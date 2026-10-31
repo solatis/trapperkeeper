@@ -7,7 +7,7 @@ argument-hint: <description of the work, or one or more issue numbers (#12 #13)>
 
 # /tk-start -- session seed
 
-The owner describes the upcoming work here:
+Run `/tk-workflow` first. The owner describes the upcoming work here:
 
 <task>
 $ARGUMENTS
@@ -63,20 +63,14 @@ Open pull requests:
 
 !`gh pr list --state open --json number,headRefName,baseRefName,title --jq '.[] | "#\(.number) \(.headRefName) -> \(.baseRefName)  \(.title)"' 2>&1 || true`
 
-Read the state as it is, not as a story: a merged issue is a fast-forward,
-so its commits sit on master with no merge commit, its branch is gone, its
-issue is closed and its plan is deleted; that is the workflow working. A
-leftover is a dirty tree, master behind origin, a local branch whose PR is
-merged or closed, or a plan whose issue is closed. Each leftover is a line
-under Open questions, not a reason to stop, unless it is the branch or plan
-of an issue in the unit.
+Read the state as `/tk-workflow`, Reading the tree, says: a merged issue
+leaves no trace but its commits, and each leftover is a line under Open
+questions.
 
 ## Steps
 
-1. `/tk-workflow`: the rules every later stage is held to, and the gates
-   between them.
-2. For issues in flight: Resume, below.
-3. For a description or not-started issues: `/tk-seed`, with them as the
+1. For issues in flight: Resume, below.
+2. For a description or not-started issues: `/tk-seed`, with them as the
    unit. It loads the context, puts the design choices to the owner,
    writes the seed report, and waits for `/tk-plan`.
 

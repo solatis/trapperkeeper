@@ -11,15 +11,6 @@ the issues the owner chose in `/tk-start-next`. This skill turns them into
 the seed report and stops. It reads and reports only: no code, no
 documents, no plans, no issues, no branches, no commits.
 
-Work through the three references in this order, each read whole before
-its step begins:
-
-1. `context.md`: what the sources are, and how to load the unit's context
-   from them.
-2. `challenge.md`: how to shape each issue and put the unit's choices to
-   the owner.
-3. `report.md`: the report, then the wait.
-
 ## What the sources are
 
 Every document under `doc/`, every `AGENTS.md`, every plan and every issue
@@ -57,3 +48,16 @@ Incorrect: the signing scheme goes into the plan as settled because
 
 A reason you do not have is not invented, in any step; the choice becomes
 an open question instead.
+
+## The steps
+
+Work through the three references in this order, each read whole before
+its step begins:
+
+1. `context.md`: how to load the unit's context from the sources above.
+2. `challenge.md`: how to shape each issue and put the unit's choices to
+   the owner.
+3. `report.md`: the report, then the wait.
+
+`/tk-start` runs the three in a row. `/tk-start-next` runs step 1 for the
+candidates before the owner chooses, and steps 2 and 3 for the chosen unit.

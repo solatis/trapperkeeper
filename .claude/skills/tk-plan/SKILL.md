@@ -33,12 +33,12 @@ Issues named in the argument (empty means the seed report's):
 $ARGUMENTS
 </issues>
 
-A seed report for this unit is in the conversation; its Issues, Decisions,
-Open questions and Proposed commits are the inputs here. Without one, stop
-and say so, unless the argument names issues whose plans exist with
-`Status: draft`: then the plans are the input, and the stage resumes at the
-gate (step 5). A plan with `Status: approved` for an issue in the unit is
-already through this stage: say so and leave it out.
+A seed report for this unit is in the conversation; its Brief, Issues,
+Decisions, Open questions and Proposed commits are the inputs here. Without
+one, stop and say so, unless the argument names issues whose plans exist
+with `Status: draft`: then the plans are the input, and the stage resumes
+at the gate (step 5). A plan with `Status: approved` for an issue in the
+unit is already through this stage: say so and leave it out.
 
 ## Step by step
 
@@ -59,7 +59,20 @@ already through this stage: say so and leave it out.
    `.plans/<slug>-plan.md`, in that shape, with `Status: draft`. Create
    `.plans/` if it is missing; it is gitignored, so nothing here shows in
    `git status`.
-4. Before the gate (below).
+4. Check the plans. A why you cannot verify, or a function you cannot place
+   under the comment rules, is a question to the owner through the question
+   tool, asked now; the answer goes into the plan. What the owner leaves
+   unanswered is an open question of the plan-stage message.
+
+   Read each plan as the executor would: for each commit, can each comment
+   be composed from its specification alone, with every claim traceable to
+   its evidence, and can each of its choices be defended from the Rationale
+   alone? Each "no" is a gap in the Design, Rationale or Knowledge section,
+   filled now. Then read the plans side by side: a decision two plans rest
+   on is a row in both, worded the same; a stacked plan's Base names the
+   other plan's slug, and its commits assume only what the other plan's
+   commits deliver.
+
 5. Yield all of the unit's draft plans through one review session, never
    through a typed question:
 
@@ -68,7 +81,8 @@ already through this stage: say so and leave it out.
    ```
 
    One session, the plans in landing order, one decision for all of them.
-   Run it in the background with a long timeout; do nothing while it runs.
+   Run it in the background, with the timeout `/tk-workflow`, Tools, fixes;
+   do nothing while it runs.
    Its stdout is one JSON decision:
    - `approved` (with optional `feedback`): the owner's yes on these plans,
      and on the plans alone. Change each plan's `Status:` line from `draft`
@@ -98,18 +112,3 @@ so the owner approves the metrics plan before seeing the logging plan it
 stacks on. Or: you ask "Approve the plans?" in the conversation instead of
 running the gate. Or: the gate returns annotations and you start code while
 addressing them.
-
-## Before the gate
-
-A why you cannot verify, or a function you cannot place under the comment
-rules, is a question to the owner through the question tool, asked before
-the gate; the answer goes into the plan. What the owner leaves unanswered
-is an open question of the plan-stage message.
-
-Read each plan as the executor would: for each commit, can each comment be
-composed from its specification alone, with every claim traceable to its
-evidence, and can each of its choices be defended from the Rationale alone?
-Each "no" is a gap in the Design, Rationale or Knowledge section, filled
-now. Then read the plans side by side: a decision two plans rest on is a
-row in both, worded the same; a stacked plan's Base names the other plan's
-slug, and its commits assume only what the other plan's commits deliver.
