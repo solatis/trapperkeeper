@@ -49,13 +49,13 @@ they arrive. A component directory has its own `AGENTS.md`, and inside
 ## Why
 
 - Rust for the server side: the web server and the APIs are written in Rust.
-  Performance is extremely important for this project; Rust is correct by
-  construction where a garbage-collected language such as Go is less suited to
-  FFI-style use, which keeps the shared evaluator core option open; the
-  owner's background is heavily C++ and Haskell; and Rust is gaining ground
-  for this kind of project with LLM providers and the wider community
-  (Anthropic, OpenAI, Cloudflare, the Linux kernel). SDK languages are a
-  separate decision (see `doc/overview.md`, Integration surface).
+  Performance is extremely important for this project, and so is correctness.
+  A garbage-collected language such as Go is less suited to FFI-style use, and
+  Rust keeps the shared evaluator core option open. The owner's background is
+  heavily C++ and Haskell. Rust is gaining ground for this kind of project
+  with LLM providers and the wider community (Anthropic, OpenAI, Cloudflare,
+  the Linux kernel). SDK languages are a separate decision (see
+  `doc/overview.md`, Integration surface).
 - Latest stable Rust only, no minimum version (owner, 2026-10-31): code may
   use any feature as soon as it is stable, and CI builds with the current
   stable toolchain. Cost: anyone building TrapperKeeper needs an up-to-date
