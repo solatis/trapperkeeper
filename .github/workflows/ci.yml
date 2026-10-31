@@ -1,7 +1,8 @@
 name: ci
 
 # Every push on every branch, and no pull_request trigger: the milestone asks
-# for every push, and a second trigger would run each commit twice.
+# for every push, and a second trigger would run each commit twice. A pull
+# request from a fork therefore gets no run.
 on:
   push:
 
