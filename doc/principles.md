@@ -57,15 +57,13 @@ evidence. Work incrementally: no large upfront plans; a design question is
 settled when the code that needs it is written. A plan for one issue, written right before its code and deleted once it lands, is how that settling happens; it is not an upfront plan. Prefer integration-level tests and property-based tests over large
 unit suites. One convention per concern.
 
-## 8. No backwards compatibility before the MVP
+## 8. Backwards compatibility is not a concern
 
-Until the MVP is complete, nothing is kept compatible (owner, 2026-10-31). The
-MVP is milestones M1 to M8 on GitHub; it is complete when all eight are
-closed. Until then the rule format, the wire formats of every API, the
-database schema and its migrations, configuration keys and the SDK interfaces
-change in place: no deprecation periods, no version negotiation, no migration
-path for existing data or deployments. The old shape is replaced, not kept
-beside the new one.
+Nothing is kept compatible (owner, 2026-10-31). The rule format, the wire
+formats of every API, the database schema and its migrations, configuration
+keys and the SDK interfaces change in place: no deprecation periods, no version
+negotiation, no migration path for existing data or deployments. The old shape
+is replaced, not kept beside the new one.
 
-Cost: any deployment or data from before the MVP may break on upgrade and is
-rebuilt rather than migrated.
+Cost: any deployment or data may break on upgrade and is rebuilt rather than
+migrated.
