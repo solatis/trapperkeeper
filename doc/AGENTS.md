@@ -12,6 +12,9 @@ Knowledge that has no home in code, or none yet. Everything else belongs in the
 
 ## Rules
 
+These rules come from the initial setup. They are refined incrementally as the
+project grows, like everything else; change one when it gets in the way.
+
 1. Budget: these four files, about 200 lines each, no subfolders. A need for
    a fifth file means the content belongs next to code.
 2. Eviction: when a component directory is created, its section in
@@ -22,9 +25,8 @@ Knowledge that has no home in code, or none yet. Everything else belongs in the
    history, no superseded entries. An entry exists only while it has no code
    home and says something `principles.md` and `architecture.md` do not.
    Expect it to shrink.
-4. Nothing in `doc/` names an implementation language, framework or library.
-   Such choices are recorded only inside the component that made them. Target
-   SDK languages and supported pipeline frameworks are product facts and are
-   fine.
+4. Language, framework and library choices sit in `decisions.md` only until
+   code carries them, then move to the component that made them, or to the
+   root `AGENTS.md` when they apply repo-wide.
 5. No doc tooling: no frontmatter, no indexes, no linters, no templates. The
    `AGENTS.md` hierarchy is the index.
