@@ -23,7 +23,7 @@ The issues are the argument's, else the unit's issues named in this
 session's plan-stage message. Each issue's plan is the `.plans/*-plan.md`
 whose `Issue:` line names it:
 
-!`grep -H -E '^(Issue|Branch|Base|Status):' .plans/*-plan.md 2>/dev/null || echo none`
+!`grep -H -E -r --include='*-plan.md' '^(Issue|Branch|Base|Status):' .plans 2>/dev/null || echo none`
 
 No plan for an issue, or two plans naming the same issue, is a stop: say
 which, and the owner decides. With no argument and no plan-stage message in

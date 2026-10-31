@@ -57,7 +57,7 @@ Local branches other than master:
 
 Plans on this machine:
 
-!`grep -H -E '^(Issue|Branch|Base|Status):' .plans/*-plan.md 2>/dev/null || echo none`
+!`grep -H -E -r --include='*-plan.md' '^(Issue|Branch|Base|Status):' .plans 2>/dev/null || echo none`
 
 Open pull requests:
 

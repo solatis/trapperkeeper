@@ -25,7 +25,7 @@ Working tree (empty means clean):
 
 Plans on this machine:
 
-!`grep -H -E '^(Issue|Branch|Base|Status):' .plans/*-plan.md 2>/dev/null || echo none`
+!`grep -H -E -r --include='*-plan.md' '^(Issue|Branch|Base|Status):' .plans 2>/dev/null || echo none`
 
 Issues named in the argument (empty means the seed report's):
 
