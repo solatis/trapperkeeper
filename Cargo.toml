@@ -1,0 +1,25 @@
+[workspace]
+resolver = "3"
+# Members are listed one by one: components sit in top-level directories
+# beside non-Rust ones, so a glob would match the wrong directories.
+members = ["server"]
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/solatis/trapperkeeper"
+publish = false
+
+# Lint levels live here, not in CI flags, so a commit fails the same way on a
+# developer's machine as in CI. Every crate inherits them with
+# `[lints] workspace = true`. See the root AGENTS.md, Why.
+[workspace.lints.rust]
+# rustc warnings fail every build, local or CI.
+warnings = "deny"
+
+[workspace.lints.clippy]
+# The pedantic group is the repository's lint level. A single lint is relaxed
+# per case with an entry below these groups, never by lowering a group.
+# Priority -1 lets such a single-lint entry override the group.
+all = { level = "deny", priority = -1 }
+pedantic = { level = "deny", priority = -1 }

@@ -1,2 +1,5 @@
 # Per-issue plans of the tk-* workflow; never committed (.claude/skills/tk-workflow)
 .plans/
+
+# Cargo build output
+/target/
