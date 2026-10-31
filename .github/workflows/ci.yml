@@ -15,9 +15,18 @@ jobs:
     strategy:
       # One red platform must not hide the result of the others.
       fail-fast: false
+      # Native runners per platform, because the tests must execute there;
+      # cross-compiling the arm targets would build and lint only. Labels are
+      # pinned to a release, not -latest, so the matrix changes only when
+      # edited. The job name is the status check name the master ruleset
+      # requires; the owner keeps that list by hand.
       matrix:
         include:
           - { name: linux-amd64, runner: ubuntu-24.04 }
+          - { name: linux-aarch64, runner: ubuntu-24.04-arm }
+          - { name: windows-amd64, runner: windows-2025 }
+          - { name: windows-aarch64, runner: windows-11-arm }
+          - { name: macos-aarch64, runner: macos-15 }
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
