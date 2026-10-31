@@ -17,6 +17,10 @@ user-invocable: false
 - A **milestone** holds goals, never a plan. Issues are cut from what the
   active milestone's goals still need, at scoping time, one unit at a time.
   An issue without a milestone is free-form work and is equally valid.
+- Milestones carry no due dates (owner, 2026-10-31). Their order is their
+  GitHub number, which is creation order, and the active milestone is the
+  open one with the lowest number. A milestone's description is its goal
+  and a "done when" list; it is edited in place as the work teaches more.
 
 Every stage skill takes a set of issues: the ones named in its argument, or
 else the issues of the unit in this session.

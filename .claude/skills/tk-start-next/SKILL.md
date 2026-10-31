@@ -40,9 +40,9 @@ Plans on this machine:
 
 !`grep -H -E '^(Issue|Branch|Base|Status):' .plans/*-plan.md 2>/dev/null || echo none`
 
-Open milestones (number, due date, title, open / closed issues):
+Open milestones (number, title, open / closed issues), lowest number first:
 
-!`gh api 'repos/{owner}/{repo}/milestones?state=open&sort=due_on' --jq '.[] | "\(.number) \(.due_on // "no-due-date") \(.title) open=\(.open_issues) closed=\(.closed_issues)"' 2>&1 || true`
+!`gh api 'repos/{owner}/{repo}/milestones?state=open&per_page=100' --jq 'sort_by(.number) | .[] | "\(.number) \(.title) open=\(.open_issues) closed=\(.closed_issues)"' 2>&1 || true`
 
 Open issues (number, milestone, title):
 
@@ -73,9 +73,10 @@ plan. Leftovers are lines under Open questions.
 Work through these steps in order; each one feeds the next.
 
 1. The milestone. The active milestone is the open milestone with the
-   earliest due date. With no due dates and one open milestone, it is that
-   one. With no due dates and several, or none open, ask the owner through
-   the question tool which goals to work toward, and stop until answered.
+   lowest number: GitHub numbers milestones in creation order, and they are
+   created in the order they are worked. With no open milestone, ask the
+   owner through the question tool which goals to work toward, and stop
+   until answered.
 2. Its goals. Read the milestone's description whole (`gh api
 repos/{owner}/{repo}/milestones/<number>`). The goals are `owner` by
    provenance; any mechanism the description names beyond the goal is
