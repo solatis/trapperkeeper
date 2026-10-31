@@ -53,5 +53,6 @@ quickly. This is what makes autonomous agent operation acceptable.
 ## 7. Simplicity
 
 Build the simple thing, record what was deferred as a decision, revisit on
-evidence. Prefer integration-level tests and property-based tests over large
+evidence. Work incrementally: no large upfront plans; a design question is
+settled when the code that needs it is written. Prefer integration-level tests and property-based tests over large
 unit suites. One convention per concern.
