@@ -53,8 +53,11 @@ evaluation.
 
 ## Integration surface
 
-- Sensor SDKs: Python and Java first; further languages on demand. All SDKs
-  must produce identical match results for identical input.
+- Sensor SDKs: Python, Java, Go and Rust first; Node.js and further languages
+  on demand. Go is in the first set as a stress test: it is the hardest case
+  for publishing and native bindings (see `decisions.md`). Rust is expected to
+  be cheap, as the server side is written in Rust. All SDKs must produce
+  identical match results for identical input.
 - Framework adapters on top of SDKs: dataframe libraries and cluster compute
   engines (vectorized evaluation), workflow schedulers and container
   orchestrators (automatic metadata).
