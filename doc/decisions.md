@@ -17,6 +17,22 @@ writes, weak querying); a dedicated time-series or columnar engine (best fit,
 one more dependency). Decide when the event query API is designed. Because
 events embed rule snapshots, the choice is isolated from the rest of the store.
 
+### Sensor SDK evaluator: shared core or per-language
+
+Decided case by case per SDK. Option one: a shared Rust evaluator core with
+thin bindings per SDK language. It simplifies a lot (one evaluator, agreement
+by construction) but is only viable if it is at least as fast as a native
+implementation in that language and does not complicate installation, which is
+a big if. Option two: reimplement the rule engine in each SDK language, paid
+for by the conformance suite. Weigh the cost of the bindings against the cost
+of each reimplementation. Go is the hard case for a shared core: `go get`
+fetches source with no build step, so native code means requiring a Rust
+toolchain or committing prebuilt libraries per platform. If Go binds to the
+core anyway, CI can publish it through a read-only mirror repository that
+carries the generated artifacts, keeping development in the monorepo. A pure
+Go SDK publishes from a monorepo subdirectory with prefixed tags. Moves to:
+each SDK component.
+
 ## Settled, awaiting code
 
 ### Rust for the server side
