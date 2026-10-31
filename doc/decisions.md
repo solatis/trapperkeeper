@@ -30,6 +30,16 @@ the wider community (Anthropic, OpenAI, Cloudflare, the Linux kernel). SDK
 languages are a separate, open decision. Moves to: root `AGENTS.md`, with the
 first crate.
 
+### Monorepo
+
+All components are developed in this one repository, if at all possible.
+Cross-cutting changes are expected to be common and are far easier to manage
+as a single PR, and what is released together belongs in one repository; all
+components are released together. Exception: an SDK language whose publishing
+requires a standalone repository, decided case by case. Target SDK languages:
+Python, Java, Go, Rust, Node.js. Moves to: root `AGENTS.md`, with the first
+code.
+
 ### Management API is the single write path
 
 The archive let the web UI write to the store directly; a CLI and an agent
