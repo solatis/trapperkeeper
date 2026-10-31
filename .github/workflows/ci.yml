@@ -1,0 +1,34 @@
+name: ci
+
+# Every push on every branch, and no pull_request trigger: the milestone asks
+# for every push, and a second trigger would run each commit twice.
+on:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      # One red platform must not hide the result of the others.
+      fail-fast: false
+      matrix:
+        include:
+          - { name: linux-amd64, runner: ubuntu-24.04 }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      # The cache keys on the installed rustc, so the toolchain comes first.
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      # No -D warnings here: the workspace lints table in Cargo.toml denies
+      # them, so CI and a local build fail the same way.
+      - run: cargo clippy --workspace --all-targets --locked
+      - run: cargo build --workspace --locked
+      # --locked builds the committed Cargo.lock and never resolves anew.
+      - run: cargo test --workspace --locked
