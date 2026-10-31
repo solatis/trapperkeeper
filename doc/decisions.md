@@ -19,6 +19,17 @@ events embed rule snapshots, the choice is isolated from the rest of the store.
 
 ## Settled, awaiting code
 
+### Rust for the server side
+
+The web server and the APIs are written in Rust. Reasons: performance, which is
+extremely important for this project; correctness; a garbage-collected
+language such as Go is less suitable for FFI-style use, which keeps the shared
+evaluator core option open; Leon's background is heavily C++ and Haskell; and
+Rust is clearly gaining ground for this kind of project with LLM providers and
+the wider community (Anthropic, OpenAI, Cloudflare, the Linux kernel). SDK
+languages are a separate, open decision. Moves to: root `AGENTS.md`, with the
+first crate.
+
 ### Management API is the single write path
 
 The archive let the web UI write to the store directly; a CLI and an agent
