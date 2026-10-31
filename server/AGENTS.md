@@ -16,9 +16,8 @@ indexes them.
 
 **Why**:
 
-- Package `trapperkeeper-server`, binary `trapperkeeper`: the milestones name
-  the binary (`trapperkeeper eval` in M3), and the package keeps the `-server`
-  suffix so the bare crate name stays free for the Rust sensor library.
+- The package and the binary have different names; the reason sits at
+  `[[bin]]` in `Cargo.toml`.
 
 **How to**: build, lint and test with the commands in the root `AGENTS.md`,
 How to. Nothing is crate-specific yet.
