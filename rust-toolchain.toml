@@ -1,0 +1,6 @@
+[toolchain]
+# "stable" with no version: the project targets the latest stable release only
+# and has no minimum version (root AGENTS.md, Why).
+channel = "stable"
+components = ["clippy", "rustfmt"]
+profile = "minimal"
