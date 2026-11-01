@@ -1,16 +1,32 @@
-//! The HTTP server: the router and how it is served and stopped. The routes
-//! arrive with the next commits.
+//! The HTTP server: the router, the operational endpoints, and how the server
+//! is served and stopped.
 
 use std::io;
 
 use axum::Router;
+use axum::routing::get;
 use tokio::net::TcpListener;
 
 use crate::config::Settings;
 
-/// Builds the router with every route. Empty until the next commit.
+/// Liveness: the process is running and can answer. Always `ok`.
+async fn healthz() -> &'static str {
+    "ok"
+}
+
+/// Readiness: the instance may receive traffic. `ok` as soon as the listener
+/// is up; the store issue adds the store probe.
+async fn readyz() -> &'static str {
+    // No probe yet, by decision: there is no store in this unit to ask.
+    // TODO(store issue): probe the store here.
+    "ok"
+}
+
+/// Builds the router with every route.
 fn router() -> Router {
     Router::new()
+        .route("/healthz", get(healthz))
+        .route("/readyz", get(readyz))
 }
 
 /// Serves the router on the configured address until a shutdown signal, then
