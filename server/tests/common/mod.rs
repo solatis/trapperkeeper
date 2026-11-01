@@ -3,12 +3,19 @@
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::process::{Child, Command, Stdio};
+use std::sync::{Mutex, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
 
 /// How long a start or a stop may take before a test gives up. Not measured;
 /// generous for a loaded CI runner.
 pub const TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Held from the port pick until the server listens, so two tests of this
+/// process cannot pick the same port: Linux hands a just-freed ephemeral port
+/// out again at once, and without the lock the loser's server failed to bind
+/// while its test talked to the winner's server until that one was killed.
+static SPAWN: Mutex<()> = Mutex::new(());
 
 /// A running `trapperkeeper serve`, killed when dropped so a failing assertion
 /// leaves no process behind.
@@ -32,16 +39,22 @@ impl Drop for Server {
 /// pipes it and drains it, the others pass `Stdio::null()`, because an
 /// undrained pipe blocks the child once it is full.
 pub fn spawn_server(extra_args: &[&str], stdout: Stdio) -> Server {
-    // A race and a timeout, both deliberate:
+    // Three steps under one lock, with a timeout on the last:
     //
     // 1. pick a free port;
     // 2. spawn the server on it;
     // 3. wait until the port accepts a connection.
+    //
+    // The lock serializes the tests of this process from the pick to the
+    // listening server, because the pick leaves a window in which the port is
+    // free and another test would be handed the same one. A poisoned lock is
+    // taken anyway: the test that panicked holding it left nothing to protect.
+    let _spawning = SPAWN.lock().unwrap_or_else(PoisonError::into_inner);
 
-    // 1. Pick a free port by binding port 0 and dropping the listener. The port
-    //    can be taken between the drop and the child's bind; accepted as
-    //    unlikely on loopback, and the binary has no output yet from which to
-    //    read a port it chose itself.
+    // 1. Pick a free port by binding port 0 and dropping the listener. Between
+    //    the drop and the child's bind an unrelated process could take the
+    //    port; accepted as unlikely on loopback, and the binary has no output
+    //    yet from which to read a port it chose itself.
     let addr = TcpListener::bind("127.0.0.1:0")
         .expect("a free port")
         .local_addr()
@@ -62,11 +75,16 @@ pub fn spawn_server(extra_args: &[&str], stdout: Stdio) -> Server {
 
     // 3. Poll a TCP connect until it succeeds, so the test does not need the
     //    server's output to know it is up. A server that exits early fails
-    //    the test now instead of at the timeout.
+    //    the test now instead of at the timeout, and the check runs once more
+    //    after the connect, so a connection to someone else's server on the
+    //    port is not mistaken for ours.
     let deadline = Instant::now() + TIMEOUT;
-    while TcpStream::connect(addr).is_err() {
+    loop {
         if let Some(status) = server.child.try_wait().expect("the child can be polled") {
             panic!("the server exited before listening: {status}");
+        }
+        if TcpStream::connect(addr).is_ok() {
+            break;
         }
         assert!(
             Instant::now() < deadline,
@@ -74,6 +92,14 @@ pub fn spawn_server(extra_args: &[&str], stdout: Stdio) -> Server {
         );
         thread::sleep(Duration::from_millis(20));
     }
+    assert!(
+        server
+            .child
+            .try_wait()
+            .expect("the child can be polled")
+            .is_none(),
+        "the server exited after something else accepted on its port"
+    );
     server
 }
 
