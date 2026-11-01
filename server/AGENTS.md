@@ -33,6 +33,10 @@ arrive with the next M1 issues. Each module directory that appears under
 - Secrets may come from the file or the environment, the command line warns,
   and credentials are never configuration (owner, 2026-11-01):
   `doc/adr/0013-where-secrets-may-come-from.md`. No secret exists yet.
+- Everything is async wherever an async form exists (owner, 2026-11-01):
+  `doc/adr/0014-async-everywhere.md`.
+- The web UI is rendered on the server, no single-page application (owner,
+  2026-11-01): `doc/adr/0015-server-side-rendering-no-spa.md`.
 - Tests drive the binary as a process, one test per behavior, and generate
   their data where it varies (owner, 2026-11-01):
   `doc/adr/0018-integration-tests-over-unit-tests.md`.

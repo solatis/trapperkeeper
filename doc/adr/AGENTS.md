@@ -28,4 +28,6 @@ dropped.
 | `0011-clippy-pedantic-denied-everywhere.md`                       | clippy pedantic and rustc warnings fail every build, local or CI                            |
 | `0012-clap-and-figment-for-the-command-line-and-configuration.md` | clap parses the command line, figment merges the settings layers                            |
 | `0013-where-secrets-may-come-from.md`                             | secrets in the file or the environment, the command line warns, credentials never           |
+| `0014-async-everywhere.md`                                        | async wherever an async form exists, on tokio                                               |
+| `0015-server-side-rendering-no-spa.md`                            | the web UI is rendered on the server, JavaScript only for small widgets                     |
 | `0018-integration-tests-over-unit-tests.md`                       | one test per behavior at the highest observing level; generated data over hand-picked cases |
