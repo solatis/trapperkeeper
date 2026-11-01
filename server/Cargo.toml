@@ -34,11 +34,14 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
 # The request log is tower-http's trace layer; no other tower-http feature yet.
 tower-http = { version = "0.7", features = ["trace"] }
+# The resolved settings are logged as one JSON string, so a reader parses them
+# instead of Rust's Debug text; already in the tree through axum's json feature.
+serde_json = "1"
 
 [dev-dependencies]
-# The probe tests parse the generated document; already in the tree through
-# axum's json feature, so this adds a name and no code.
-serde_json = "1"
+# The settings precedence is one property over generated layers
+# (doc/adr/0018-integration-tests-over-unit-tests.md).
+proptest = "1"
 
 [lints]
 workspace = true

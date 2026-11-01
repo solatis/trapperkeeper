@@ -46,14 +46,17 @@ async fn main() -> ExitCode {
 
     // 3. Install logging at the level the settings resolved to. An error is
     //    printed with eprintln and fails the process, because no subscriber
-    //    exists yet to log it. The resolved settings are then logged at debug,
-    //    so a support case can see what the server believed without reading
-    //    three sources.
+    //    exists yet to log it. The resolved settings are then logged at debug
+    //    as one JSON string, so a support case sees what the server believed
+    //    without reading three sources, and the settings test reads them back
+    //    without parsing Debug text. A struct of plain values always
+    //    serializes.
     if let Err(error) = logging::init(settings.log.level.0) {
         eprintln!("{error}");
         return ExitCode::FAILURE;
     }
-    tracing::debug!(?settings, "settings resolved");
+    let json = serde_json::to_string(&settings).expect("plain values serialize");
+    tracing::debug!(settings = %json, "settings resolved");
 
     // 4. Dispatch on the subcommand.
     match cli.command {

@@ -65,7 +65,9 @@ impl Default for LogSettings {
 
 /// A tracing level filter that reads and writes as its name (`info`,
 /// `debug`), so the file, the environment and the flag all take the same
-/// spelling. A newtype because `LevelFilter` has no serde implementation.
+/// spelling. It reads any case and writes lowercase, so the logged settings
+/// read as a file would be written. A newtype because `LevelFilter` has no
+/// serde implementation.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(try_from = "String", into = "String")]
 pub struct LogLevel(pub LevelFilter);
@@ -88,7 +90,7 @@ impl TryFrom<String> for LogLevel {
 
 impl From<LogLevel> for String {
     fn from(level: LogLevel) -> Self {
-        level.0.to_string()
+        level.0.to_string().to_lowercase()
     }
 }
 
@@ -143,4 +145,3 @@ pub fn load(file: Option<&Path>, overrides: impl Serialize) -> Result<Settings, 
     let settings = figment.extract()?;
     Ok(settings)
 }
-
