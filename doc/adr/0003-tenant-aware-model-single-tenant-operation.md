@@ -1,6 +1,6 @@
 # 0003. Tenant-aware model, single-tenant operation
 
-Date: 2026-09-21. Status: accepted.
+Date: 2026-09-21.
 
 ## Context
 

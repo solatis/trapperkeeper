@@ -24,8 +24,8 @@ project grows, like everything else; change one when it gets in the way.
    that will later hold it is created (owner, 2026-10-31). What moved is
    deleted here; the one-paragraph section and its pointer stay.
 3. `decisions.md` holds open decisions only. A decision, once made, becomes a
-   record in `adr/` and leaves `decisions.md`. A record is never edited; a
-   change of mind is a new record that supersedes the old one (owner,
+   record in `adr/` and leaves `decisions.md`. A changed decision rewrites its
+   record in place; there is no historical trail of decisions (owner,
    2026-11-01).
 4. Language, framework and library choices are records in `adr/`. The
    component that carries one cites the record in its `AGENTS.md` under

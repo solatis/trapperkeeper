@@ -1,6 +1,6 @@
 # 0010. One top-level directory per component
 
-Date: 2026-10-31. Status: accepted.
+Date: 2026-10-31.
 
 ## Context
 

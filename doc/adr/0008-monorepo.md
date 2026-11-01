@@ -1,6 +1,6 @@
 # 0008. Monorepo
 
-Date: 2026-10-31. Status: accepted.
+Date: 2026-10-31.
 
 ## Context
 

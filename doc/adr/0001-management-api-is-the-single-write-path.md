@@ -1,6 +1,6 @@
 # 0001. Management API is the single write path
 
-Date: 2026-09-21. Status: accepted.
+Date: 2026-09-21.
 
 ## Context
 

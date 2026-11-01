@@ -1,6 +1,6 @@
 # 0007. Rust for the server side
 
-Date: 2026-10-31. Status: accepted.
+Date: 2026-10-31.
 
 ## Context
 

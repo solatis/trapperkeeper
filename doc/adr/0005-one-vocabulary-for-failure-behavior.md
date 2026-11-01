@@ -1,6 +1,6 @@
 # 0005. One vocabulary for failure behavior
 
-Date: 2026-09-21. Status: accepted.
+Date: 2026-09-21.
 
 ## Context
 

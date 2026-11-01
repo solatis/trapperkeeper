@@ -1,6 +1,6 @@
 # 0006. Conformance fixtures are the evaluation spec
 
-Date: 2026-09-21. Status: accepted.
+Date: 2026-09-21.
 
 ## Context
 

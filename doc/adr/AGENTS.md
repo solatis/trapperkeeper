@@ -1,15 +1,17 @@
 # doc/adr/
 
 Architecture decision records: one file per decision, saying what was decided,
-why, what lost and what it costs. A record is written once and never edited; a
-change of mind is a new record that names the one it supersedes. Records are
-numbered in the order the decisions were made, and the number is how code
-comments and `AGENTS.md` files cite them.
+why, what lost and what it costs. A record describes the decision as it stands
+today. When a decision changes, its record is rewritten in place, as if the
+older decision had never been made; the repository keeps no historical trail
+of decisions (owner, 2026-11-01). Records are numbered in the order the
+decisions were first made, and the number is how code comments and `AGENTS.md`
+files cite them.
 
-Each record has the same parts: `Date` and `Status` (accepted or superseded by
-a later number) on the first line, then **Context**, **Decision**, **Rejected
-alternatives** and **Consequences**. A part with nothing recorded says so
-rather than being dropped.
+Each record has the same parts: `Date`, the day the decision as written was
+made, then **Context**, **Decision**, **Rejected alternatives** and
+**Consequences**. A part with nothing recorded says so rather than being
+dropped.
 
 | Record                                                 | Decision                                                               |
 | ------------------------------------------------------ | ---------------------------------------------------------------------- |

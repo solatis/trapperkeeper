@@ -1,6 +1,6 @@
 # 0004. Events embed rule snapshots
 
-Date: 2026-09-21. Status: accepted.
+Date: 2026-09-21.
 
 ## Context
 
