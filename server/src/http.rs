@@ -85,19 +85,26 @@ fn router() -> Router {
 ///
 /// An I/O error binding or serving is returned, not printed.
 pub async fn serve(settings: &Settings) -> io::Result<()> {
-    // Bind, then serve until told to stop: a sequence with its own failure at
-    // each step.
+    // Bind, serve, stop: a sequence with its own failure at each step and a
+    // log line at each.
     //
-    // 1. Bind the listen address. Failure here is the common operator error,
-    //    a port in use or an address that is not local, and is returned as is.
+    // 1. Bind the listen address and say so at info; it is the line a test or
+    //    an operator waits for. Failure here is the common operator error, a
+    //    port in use or an address that is not local, and is returned as is.
     let listener = TcpListener::bind(settings.listen).await?;
+    tracing::info!(address = %listener.local_addr()?, "listening");
 
     // 2. Serve until `shutdown_signal` resolves, then finish the in-flight
-    //    requests and return, so a SIGTERM from an orchestrator drains the
-    //    connections instead of cutting them.
+    //    requests, so a SIGTERM from an orchestrator drains the connections
+    //    instead of cutting them.
     axum::serve(listener, router())
         .with_graceful_shutdown(shutdown_signal())
-        .await
+        .await?;
+
+    // 3. Say that the drain completed, so the log can tell a clean stop from a
+    //    crash.
+    tracing::info!("stopped");
+    Ok(())
 }
 
 /// Resolves when the process is asked to stop: SIGINT or SIGTERM on Unix,
@@ -124,4 +131,8 @@ async fn shutdown_signal() {
             .await
             .expect("the Ctrl-C handler installs");
     }
+
+    // Said at info, so the stop that follows is attributable to the signal
+    // rather than to a crash.
+    tracing::info!("shutdown signal received");
 }
