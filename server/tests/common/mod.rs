@@ -1,6 +1,6 @@
 //! Helpers for the tests that run the binary as a process.
 
-use std::io::{Read, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Mutex, PoisonError};
@@ -12,9 +12,9 @@ use std::time::{Duration, Instant};
 pub const TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Held from the port pick until the server listens, so two tests of this
-/// process cannot pick the same port: Linux hands a just-freed ephemeral port
-/// out again at once, and without the lock the loser's server failed to bind
-/// while its test talked to the winner's server until that one was killed.
+/// process cannot be handed the same port. Without it two were, on the Linux
+/// CI runner: the loser's server failed to bind, and its test talked to the
+/// winner's server until that one was killed (run 41285437744).
 static SPAWN: Mutex<()> = Mutex::new(());
 
 /// A running `trapperkeeper serve`, killed when dropped so a failing assertion
@@ -106,32 +106,52 @@ pub fn spawn_server(extra_args: &[&str], stdout: Stdio) -> Server {
 /// One `GET` over a fresh connection; returns the status code and the body.
 pub fn get(addr: SocketAddr, path: &str) -> (u16, String) {
     // Hand-rolled HTTP/1.1, because two literal bodies and one small document
-    // do not justify an HTTP client dependency. Two assumptions:
+    // do not justify an HTTP client dependency.
     //
-    // 1. `Connection: close` makes the server close after the response, so
-    //    reading to EOF ends it.
+    // 1. One request with `Connection: close`, so the server closes once it
+    //    has answered and nothing else is ever sent on the connection.
     let mut stream = TcpStream::connect(addr).expect("the server accepts");
     write!(
         stream,
         "GET {path} HTTP/1.1\r\nHost: {addr}\r\nConnection: close\r\n\r\n"
     )
     .expect("the request is written");
-    let mut response = String::new();
-    stream
-        .read_to_string(&mut response)
-        .expect("the response is read");
 
-    // 2. The response is small and carries a content length, not chunks, so
-    //    the body is everything after the blank line, and the status code is
-    //    the second word of the first line.
-    let (head, body) = response
-        .split_once("\r\n\r\n")
-        .expect("a header block ends with a blank line");
+    // 2. Read the head up to the blank line, then exactly the announced body
+    //    length, and stop. Reading to the end of the stream instead failed on
+    //    the Linux CI runner with "connection reset by peer" after the whole
+    //    response had arrived (run 41285799929); a reset after the last
+    //    announced byte says nothing about the server. The bodies are literals
+    //    or one document, so a content length is always announced.
+    let mut reader = BufReader::new(stream);
+    let mut head = String::new();
+    loop {
+        let mut line = String::new();
+        reader.read_line(&mut line).expect("the head is read");
+        if line == "\r\n" || line.is_empty() {
+            break;
+        }
+        head.push_str(&line);
+    }
     let status = head
         .split_whitespace()
         .nth(1)
         .expect("a status code")
         .parse()
         .expect("a numeric status code");
-    (status, body.to_owned())
+    let length = header(&head, "content-length")
+        .expect("an announced content length")
+        .parse()
+        .expect("a numeric content length");
+    let mut body = vec![0; length];
+    reader.read_exact(&mut body).expect("the body is read");
+    (status, String::from_utf8(body).expect("a UTF-8 body"))
+}
+
+/// The value of the first header named `name`, case-insensitively, trimmed.
+fn header<'a>(head: &'a str, name: &str) -> Option<&'a str> {
+    head.lines().find_map(|line| {
+        let (key, value) = line.split_once(':')?;
+        key.eq_ignore_ascii_case(name).then_some(value.trim())
+    })
 }
