@@ -11,18 +11,19 @@ issues. Each module directory that appears under
 
 **Map**:
 
-| File                  | What                                              | When to read                                                            |
-| --------------------- | ------------------------------------------------- | ----------------------------------------------------------------------- |
-| `Cargo.toml`          | package and binary names; dependencies; lints     | changing a dependency or a lint                                         |
-| `src/main.rs`         | the entry point: parse, dispatch, the placeholder | how a subcommand starts and how it fails                                |
-| `src/cli.rs`          | the command line                                  | adding a flag or a subcommand                                           |
-| `src/config.rs`       | the settings and how they are resolved            | adding a setting, precedence, environment variable names, the log level |
-| `src/http.rs`         | the router, how it is served and stopped          | adding an endpoint, how shutdown works                                  |
-| `src/logging.rs`      | the subscriber: log format and level              | log format, log level, RUST_LOG                                         |
-| `tests/cli.rs`        | runs the binary and checks its command line       | how the binary behaves on the command line                              |
-| `tests/common/mod.rs` | process helpers: spawn the server, GET a route    | writing a test that runs the binary                                     |
-| `tests/http.rs`       | starts the binary and probes its endpoints        | what the probes and the document promise                                |
-| `tests/logs.rs`       | runs the binary piped and checks the log lines    | what a log line contains                                                |
+| File                  | What                                                       | When to read                                                            |
+| --------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `Cargo.toml`          | package and binary names; dependencies; lints              | changing a dependency or a lint                                         |
+| `src/main.rs`         | the entry point: parse, dispatch, the placeholder          | how a subcommand starts and how it fails                                |
+| `src/cli.rs`          | the command line                                           | adding a flag or a subcommand                                           |
+| `src/config.rs`       | the settings and how they are resolved                     | adding a setting, precedence, environment variable names, the log level |
+| `src/http.rs`         | the router, how it is served and stopped                   | adding an endpoint, how shutdown works                                  |
+| `src/logging.rs`      | the subscriber: log format and level                       | log format, log level, RUST_LOG                                         |
+| `tests/cli.rs`        | runs the binary and checks its command line                | how the binary behaves on the command line                              |
+| `tests/common/mod.rs` | process helpers: spawn the server, GET a route             | writing a test that runs the binary                                     |
+| `tests/http.rs`       | starts the binary and probes its endpoints                 | what the probes and the document promise                                |
+| `tests/logs.rs`       | runs the binary piped and checks the log lines             | what a log line contains                                                |
+| `tests/settings.rs`   | the settings precedence as one property through the binary | how precedence is tested                                                |
 
 **Invariants**:
 
