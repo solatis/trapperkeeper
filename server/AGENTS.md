@@ -15,7 +15,7 @@ arrive with the next M1 issues. Each module directory that appears under
 | `Cargo.toml`    | package and binary names; dependencies; lints      | changing a dependency or a lint            |
 | `src/main.rs`   | the entry point: parse, dispatch, the placeholders | how a subcommand starts and how it fails   |
 | `src/cli.rs`    | the command line                                   | adding a flag or a subcommand              |
-| `src/config.rs` | the settings and how they are resolved             | adding a setting, the defaults             |
+| `src/config.rs` | the settings and how they are resolved             | adding a setting, the defaults, the file   |
 | `tests/cli.rs`  | runs the binary and checks its command line        | how the binary behaves on the command line |
 
 **Why**:

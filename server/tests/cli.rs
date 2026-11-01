@@ -50,3 +50,14 @@ fn migrate_is_not_implemented() {
     assert_eq!(out.status.code(), Some(1));
     assert!(stderr(&out).contains("not implemented yet"));
 }
+
+/// A `--config` file that does not exist fails the process before the
+/// subcommand runs, and the message names the path.
+#[test]
+fn missing_config_file_fails() {
+    let out = run(&["--config", "/nonexistent/trapperkeeper.toml", "serve"]);
+    assert_eq!(out.status.code(), Some(1));
+    let err = stderr(&out);
+    assert!(err.contains("/nonexistent/trapperkeeper.toml"));
+    assert!(!err.contains("not implemented yet"));
+}

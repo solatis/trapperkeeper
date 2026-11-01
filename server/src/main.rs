@@ -28,7 +28,7 @@ fn main() -> ExitCode {
 
     // 2. Resolve the settings. An error is printed and fails the process
     //    before any subcommand runs.
-    let settings = match config::load() {
+    let settings = match config::load(cli.config.as_deref()) {
         Ok(settings) => settings,
         Err(error) => {
             eprintln!("{error}");
