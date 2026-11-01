@@ -1,8 +1,7 @@
 //! Runs the binary and checks how it behaves on the command line. The
-//! precedence of the settings layers is tested through `config::load` in
-//! `src/config.rs`; the placeholders cannot show a resolved setting, so the
-//! wiring from a flag to a running server is exercised by the server tests
-//! once `serve` is real.
+//! precedence of the settings layers has no test here: the placeholders show
+//! no resolved setting, so it is tested through the binary once the server
+//! logs its resolved settings (issue #5), as `doc/adr/0018` asks.
 
 use std::process::{Command, Output};
 

@@ -21,9 +21,5 @@ clap = { version = "4", features = ["derive"] }
 figment = { version = "0.10", features = ["toml", "env"] }
 serde = { version = "1", features = ["derive"] }
 
-# Jail gives the settings tests an isolated directory and environment.
-[dev-dependencies]
-figment = { version = "0.10", features = ["test"] }
-
 [lints]
 workspace = true
