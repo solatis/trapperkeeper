@@ -9,6 +9,8 @@ use std::path::PathBuf;
 use clap::{Args, Parser, Subcommand};
 use serde::Serialize;
 
+use crate::config::LogLevel;
+
 /// The parsed command line.
 #[derive(Parser)]
 #[command(name = "trapperkeeper", version, about = "The TrapperKeeper server")]
@@ -26,8 +28,9 @@ pub struct Cli {
 }
 
 /// Settings a flag may override. Every field is optional, and an absent flag
-/// leaves the value of the layers below in place. `Default` is the "no flags"
-/// value the tests pass.
+/// leaves the value of the layers below in place. Nested settings are nested
+/// here too, so the tree matches. `Default` is the "no flags" value the tests
+/// pass.
 #[derive(Args, Serialize, Default)]
 pub struct Overrides {
     /// Address the server listens on, `host:port`.
@@ -37,6 +40,19 @@ pub struct Overrides {
     // fail with a type error.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub listen: Option<SocketAddr>,
+
+    #[command(flatten)]
+    pub log: LogOverrides,
+}
+
+/// Overrides of the `log` table. With no flag set it serializes to an empty
+/// table, which the merge unions into the layer below without changing it.
+#[derive(Args, Serialize, Default)]
+pub struct LogOverrides {
+    /// Lowest log level written: trace, debug, info, warn, error or off.
+    #[arg(long = "log-level", global = true, value_name = "LEVEL")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub level: Option<LogLevel>,
 }
 
 /// The subcommands. Each one resolves the settings first and then runs.

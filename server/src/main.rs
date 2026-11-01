@@ -12,7 +12,6 @@ use clap::Parser;
 
 use cli::{Cli, Command};
 use config::Settings;
-use tracing_subscriber::filter::LevelFilter;
 
 /// Runs the subcommand named on the command line and returns its exit status.
 /// The tokio runtime owns the process: everything below is async wherever an
@@ -34,8 +33,9 @@ async fn main() -> ExitCode {
     //    function.
     let cli = Cli::parse();
 
-    // 2. Resolve the settings. An error is printed and fails the process
-    //    before any subcommand runs.
+    // 2. Resolve the settings. An error is printed with eprintln and fails the
+    //    process before any subcommand runs: the level is a setting, so
+    //    logging cannot start before the settings are known.
     let settings = match config::load(cli.config.as_deref(), &cli.overrides) {
         Ok(settings) => settings,
         Err(error) => {
@@ -44,12 +44,16 @@ async fn main() -> ExitCode {
         }
     };
 
-    // 3. Install logging. An error is printed with eprintln and fails the
-    //    process, because no subscriber exists yet to log it.
-    if let Err(error) = logging::init(LevelFilter::INFO) {
+    // 3. Install logging at the level the settings resolved to. An error is
+    //    printed with eprintln and fails the process, because no subscriber
+    //    exists yet to log it. The resolved settings are then logged at debug,
+    //    so a support case can see what the server believed without reading
+    //    three sources.
+    if let Err(error) = logging::init(settings.log.level.0) {
         eprintln!("{error}");
         return ExitCode::FAILURE;
     }
+    tracing::debug!(?settings, "settings resolved");
 
     // 4. Dispatch on the subcommand.
     match cli.command {

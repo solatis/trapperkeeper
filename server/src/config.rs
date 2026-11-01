@@ -6,10 +6,13 @@
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::Path;
+use std::str::FromStr;
 
 use figment::Figment;
 use figment::providers::{Env, Format, Serialized, Toml};
 use serde::{Deserialize, Serialize};
+use tracing::metadata::ParseLevelFilterError;
+use tracing_subscriber::filter::LevelFilter;
 
 /// Prefix of every environment variable the server reads, so a generic name
 /// such as `LISTEN` on a shared host cannot be mistaken for ours.
@@ -27,6 +30,8 @@ pub const ENV_SEPARATOR: &str = "__";
 pub struct Settings {
     /// Address the server listens on.
     pub listen: SocketAddr,
+    /// The log output.
+    pub log: LogSettings,
 }
 
 impl Default for Settings {
@@ -35,7 +40,55 @@ impl Default for Settings {
             // Loopback, so a fresh install is not reachable from outside until
             // an operator says so.
             listen: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8080),
+            log: LogSettings::default(),
         }
+    }
+}
+
+/// Settings of the log output.
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(deny_unknown_fields)]
+pub struct LogSettings {
+    /// Lowest level written. A `RUST_LOG` directive overrides it.
+    pub level: LogLevel,
+}
+
+impl Default for LogSettings {
+    fn default() -> Self {
+        Self {
+            // Info, because the request lines are info and an operator should
+            // see them without configuring anything.
+            level: LogLevel(LevelFilter::INFO),
+        }
+    }
+}
+
+/// A tracing level filter that reads and writes as its name (`info`,
+/// `debug`), so the file, the environment and the flag all take the same
+/// spelling. A newtype because `LevelFilter` has no serde implementation.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(try_from = "String", into = "String")]
+pub struct LogLevel(pub LevelFilter);
+
+impl FromStr for LogLevel {
+    type Err = ParseLevelFilterError;
+
+    fn from_str(name: &str) -> Result<Self, Self::Err> {
+        name.parse().map(Self)
+    }
+}
+
+impl TryFrom<String> for LogLevel {
+    type Error = ParseLevelFilterError;
+
+    fn try_from(name: String) -> Result<Self, Self::Error> {
+        name.parse()
+    }
+}
+
+impl From<LogLevel> for String {
+    fn from(level: LogLevel) -> Self {
+        level.0.to_string()
     }
 }
 
@@ -90,3 +143,4 @@ pub fn load(file: Option<&Path>, overrides: impl Serialize) -> Result<Settings, 
     let settings = figment.extract()?;
     Ok(settings)
 }
+

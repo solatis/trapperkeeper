@@ -67,3 +67,27 @@ fn listen_flag_is_parsed() {
     assert_eq!(out.status.code(), Some(2));
     assert!(stderr(&out).contains("--listen"));
 }
+
+/// `--log-level` is parsed as a tracing level by clap, so a bad value is a
+/// usage error.
+#[test]
+fn log_level_flag_is_parsed() {
+    let out = run(&["--log-level", "loud", "migrate"]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(stderr(&out).contains("--log-level"));
+}
+
+/// An invalid `RUST_LOG` directive fails the process before the subcommand
+/// runs, and the message names the variable.
+#[test]
+fn invalid_rust_log_fails() {
+    let out = Command::new(env!("CARGO_BIN_EXE_trapperkeeper"))
+        .env("RUST_LOG", "not=a=directive")
+        .arg("migrate")
+        .output()
+        .expect("the binary runs");
+    assert_eq!(out.status.code(), Some(1));
+    let err = stderr(&out);
+    assert!(err.contains("RUST_LOG"));
+    assert!(!err.contains("not implemented yet"));
+}
