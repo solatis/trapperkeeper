@@ -26,9 +26,11 @@ impl Drop for Server {
     }
 }
 
-/// Starts `serve` on a free loopback port with its stdout wired as given, and
-/// returns once the port accepts a connection. Panics when the server does not
-/// come up within `TIMEOUT` or exits first.
+/// Starts `serve` on a free loopback port and returns once the port accepts a
+/// connection. Panics when the server does not come up within `TIMEOUT` or
+/// exits first. `stdout` is wired as given: a test that reads the log lines
+/// pipes it and drains it, the others pass `Stdio::null()`, because an
+/// undrained pipe blocks the child once it is full.
 pub fn spawn_server(extra_args: &[&str], stdout: Stdio) -> Server {
     // A race and a timeout, both deliberate:
     //
