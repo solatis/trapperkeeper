@@ -18,6 +18,8 @@ indexes them.
 
 - The package and the binary have different names; the reason sits at
   `[[bin]]` in `Cargo.toml`.
+- clap parses the command line and figment merges the settings layers:
+  `doc/adr/0012-clap-and-figment-for-the-command-line-and-configuration.md`.
 
 **How to**: build, lint and test with the commands in the root `AGENTS.md`,
 How to. Nothing is crate-specific yet.

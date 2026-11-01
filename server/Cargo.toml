@@ -13,5 +13,17 @@ publish.workspace = true
 name = "trapperkeeper"
 path = "src/main.rs"
 
+# clap parses the command line and figment merges the settings layers; why
+# these two is doc/adr/0012-clap-and-figment-for-the-command-line-and-configuration.md.
+# figment has only the two providers the layers need; the file format is TOML.
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+figment = { version = "0.10", features = ["toml", "env"] }
+serde = { version = "1", features = ["derive"] }
+
+# Jail gives the settings tests an isolated directory and environment.
+[dev-dependencies]
+figment = { version = "0.10", features = ["test"] }
+
 [lints]
 workspace = true
