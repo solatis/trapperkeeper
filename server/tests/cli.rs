@@ -1,5 +1,4 @@
 //! Runs the binary and checks how it behaves on the command line. The
-//! Runs the binary and checks how it behaves on the command line. The
 //! precedence of the settings layers has no test here: the placeholders show
 //! no resolved setting, so it is tested through the binary once the server
 //! logs its resolved settings (issue #5), as `doc/adr/0018` asks. The wiring
