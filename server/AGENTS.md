@@ -3,18 +3,20 @@
 **What**: the single server binary, `trapperkeeper`, built from the package
 `trapperkeeper-server`. It parses two subcommands, `serve` and `migrate`; both
 are placeholders that report "not implemented yet" until issue #4 and the
-store issue fill them in. The configuration, the store and the HTTP APIs
+store issue fill them in. Before a subcommand runs, the binary resolves its
+settings; one setting exists, the listen address. The store and the HTTP APIs
 arrive with the next M1 issues. Each module directory that appears under
 `src/` gets its own `AGENTS.md`, and this file indexes them.
 
 **Map**:
 
-| File           | What                                               | When to read                               |
-| -------------- | -------------------------------------------------- | ------------------------------------------ |
-| `Cargo.toml`   | package and binary names; dependencies; lints      | changing a dependency or a lint            |
-| `src/main.rs`  | the entry point: parse, dispatch, the placeholders | how a subcommand starts and how it fails   |
-| `src/cli.rs`   | the command line                                   | adding a flag or a subcommand              |
-| `tests/cli.rs` | runs the binary and checks its command line        | how the binary behaves on the command line |
+| File            | What                                               | When to read                               |
+| --------------- | -------------------------------------------------- | ------------------------------------------ |
+| `Cargo.toml`    | package and binary names; dependencies; lints      | changing a dependency or a lint            |
+| `src/main.rs`   | the entry point: parse, dispatch, the placeholders | how a subcommand starts and how it fails   |
+| `src/cli.rs`    | the command line                                   | adding a flag or a subcommand              |
+| `src/config.rs` | the settings and how they are resolved             | adding a setting, the defaults             |
+| `tests/cli.rs`  | runs the binary and checks its command line        | how the binary behaves on the command line |
 
 **Why**:
 
