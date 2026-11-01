@@ -32,6 +32,8 @@ utoipa-axum = "0.3"
 # format and level rules are doc/adr/0017-tracing-for-structured-logs.md.
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
+# The request log is tower-http's trace layer; no other tower-http feature yet.
+tower-http = { version = "0.7", features = ["trace"] }
 
 [dev-dependencies]
 # The probe tests parse the generated document; already in the tree through

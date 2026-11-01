@@ -8,6 +8,8 @@ use std::io;
 use axum::routing::get;
 use axum::{Json, Router};
 use tokio::net::TcpListener;
+use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
+use tracing::Level;
 use utoipa::OpenApi;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
@@ -45,11 +47,12 @@ async fn readyz() -> &'static str {
     "ok"
 }
 
-/// Builds the router with every route and the API document that describes
-/// them, served at `/openapi.json`.
+/// Builds the router with every route, the API document that describes them,
+/// served at `/openapi.json`, and the request log.
 fn router() -> Router {
     // The document must be split off before the route that serves it is
-    // added, or it would describe itself; the order is the point.
+    // added, or it would describe itself, and the trace layer must wrap every
+    // route including that one; the order is the point.
     //
     // 1. Register each annotated handler through `routes!`, so the handler and
     //    its description enter together and neither can be forgotten.
@@ -61,7 +64,18 @@ fn router() -> Router {
 
     // 3. Add the route that serves the document as JSON; it is not in the
     //    document itself.
-    router.route("/openapi.json", get(move || async move { Json(api) }))
+    let router = router.route("/openapi.json", get(move || async move { Json(api) }));
+
+    // 4. Wrap the whole router with the trace layer. Its span and its response
+    //    event are raised to INFO, so each request is one info line with
+    //    method, URI, status and latency at the default level. tower-http
+    //    emits both at DEBUG, where its "started processing request" and "end
+    //    of stream" events stay, because one line per request is the point.
+    router.layer(
+        TraceLayer::new_for_http()
+            .make_span_with(DefaultMakeSpan::new().level(Level::INFO))
+            .on_response(DefaultOnResponse::new().level(Level::INFO)),
+    )
 }
 
 /// Serves the router on the configured address until a shutdown signal, then
