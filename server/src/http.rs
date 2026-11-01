@@ -1,5 +1,7 @@
 //! The HTTP server: the router, the operational endpoints, the API document
-//! generated from the handlers, and how the server is served and stopped.
+//! generated from the handlers, and how the server is served and stopped. The
+//! probe paths follow the Kubernetes convention, and the document sits at the
+//! conventional file name.
 
 use std::io;
 
@@ -25,6 +27,8 @@ struct ApiDoc;
     responses((status = OK, description = "the process is alive", body = String))
 )]
 async fn healthz() -> &'static str {
+    // The literal rather than a JSON object: an orchestrator reads the status
+    // code and a person reads the body, so there is no shape worth keeping.
     "ok"
 }
 
