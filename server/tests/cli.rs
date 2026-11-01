@@ -1,4 +1,8 @@
-//! Runs the binary and checks how it behaves on the command line.
+//! Runs the binary and checks how it behaves on the command line. The
+//! precedence of the settings layers is tested through `config::load` in
+//! `src/config.rs`; the placeholders cannot show a resolved setting, so the
+//! wiring from a flag to a running server is exercised by the server tests
+//! once `serve` is real.
 
 use std::process::{Command, Output};
 

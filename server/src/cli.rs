@@ -13,7 +13,8 @@ use serde::Serialize;
 #[derive(Parser)]
 #[command(name = "trapperkeeper", version, about = "The TrapperKeeper server")]
 pub struct Cli {
-    /// Path of the TOML configuration file. No file is read when absent.
+    /// Path of the TOML configuration file. No file is read when absent, so a
+    /// stray file in the working directory changes nothing.
     #[arg(long, global = true, value_name = "PATH")]
     pub config: Option<PathBuf>,
 
