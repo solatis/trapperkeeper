@@ -18,6 +18,7 @@ issues. Each module directory that appears under
 | `src/cli.rs`          | the command line                                  | adding a flag or a subcommand                            |
 | `src/config.rs`       | the settings and how they are resolved            | adding a setting, precedence, environment variable names |
 | `src/http.rs`         | the router, how it is served and stopped          | adding an endpoint, how shutdown works                   |
+| `src/logging.rs`      | the subscriber: log format and level              | log format, log level, RUST_LOG                          |
 | `tests/cli.rs`        | runs the binary and checks its command line       | how the binary behaves on the command line               |
 | `tests/common/mod.rs` | process helpers: spawn the server, GET a route    | writing a test that runs the binary                      |
 | `tests/http.rs`       | starts the binary and probes its endpoints        | what the probes and the document promise                 |
@@ -48,6 +49,9 @@ issues. Each module directory that appears under
 - axum with tower middleware serves HTTP, and utoipa generates the API
   document from the handlers (owner, 2026-11-01):
   `doc/adr/0016-axum-and-utoipa-for-http.md`.
+- tracing writes the logs, JSON under a pipe and readable in a terminal, at a
+  level setting that `RUST_LOG` overrides (owner, 2026-11-01):
+  `doc/adr/0017-tracing-for-structured-logs.md`.
 - Tests drive the binary as a process, one test per behavior, and generate
   their data where it varies (owner, 2026-11-01):
   `doc/adr/0018-integration-tests-over-unit-tests.md`.

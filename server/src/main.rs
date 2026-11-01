@@ -4,6 +4,7 @@
 mod cli;
 mod config;
 mod http;
+mod logging;
 
 use std::process::ExitCode;
 
@@ -11,19 +12,22 @@ use clap::Parser;
 
 use cli::{Cli, Command};
 use config::Settings;
+use tracing_subscriber::filter::LevelFilter;
 
 /// Runs the subcommand named on the command line and returns its exit status.
 /// The tokio runtime owns the process: everything below is async wherever an
 /// async form exists.
 #[tokio::main]
 async fn main() -> ExitCode {
-    // Three stages, each with its own way of failing, and the order is the
-    // rule: the settings are resolved before any subcommand runs, so a bad
-    // configuration fails the same way for every subcommand.
+    // Four stages, each with its own way of failing, and the order is the
+    // rule: the settings are resolved before logging starts and before any
+    // subcommand runs, so a bad configuration fails the same way for every
+    // subcommand.
     //
     // 1. parse the command line;
     // 2. resolve the settings;
-    // 3. dispatch on the subcommand.
+    // 3. install logging;
+    // 4. dispatch on the subcommand.
 
     // 1. Parse the command line. clap prints help, the version or a usage
     //    error itself and exits with status 2, so no error reaches this
@@ -40,7 +44,14 @@ async fn main() -> ExitCode {
         }
     };
 
-    // 3. Dispatch on the subcommand.
+    // 3. Install logging. An error is printed with eprintln and fails the
+    //    process, because no subscriber exists yet to log it.
+    if let Err(error) = logging::init(LevelFilter::INFO) {
+        eprintln!("{error}");
+        return ExitCode::FAILURE;
+    }
+
+    // 4. Dispatch on the subcommand.
     match cli.command {
         Command::Serve => serve(&settings).await,
         Command::Migrate => migrate(&settings),

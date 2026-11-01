@@ -28,6 +28,10 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal
 axum = "0.8"
 utoipa = "6"
 utoipa-axum = "0.3"
+# tracing is the logging facade and tracing-subscriber writes the lines; the
+# format and level rules are doc/adr/0017-tracing-for-structured-logs.md.
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
 
 [dev-dependencies]
 # The probe tests parse the generated document; already in the tree through
