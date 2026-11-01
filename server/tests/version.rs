@@ -1,3 +1,7 @@
+// Temporary. This test exists so that `cargo test` executes real code on every
+// CI platform before the server has any. The issue that adds the subcommands
+// removes it (owner, 2026-11-01).
+
 use std::process::Command;
 
 /// The binary prints "<name> <version>", its own binary name and the version

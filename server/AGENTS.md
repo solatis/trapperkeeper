@@ -8,11 +8,11 @@ indexes them.
 
 **Map**:
 
-| File               | What                                                         | When to read                          |
-| ------------------ | ------------------------------------------------------------ | ------------------------------------- |
-| `Cargo.toml`       | package and binary names; lints inherited from the workspace | changing a dependency or a lint       |
-| `src/main.rs`      | the entry point                                              | always short to read                  |
-| `tests/version.rs` | runs the binary and checks its version line                  | adding the first test of a subcommand |
+| File               | What                                                                                     | When to read                          |
+| ------------------ | ---------------------------------------------------------------------------------------- | ------------------------------------- |
+| `Cargo.toml`       | package and binary names; lints inherited from the workspace                             | changing a dependency or a lint       |
+| `src/main.rs`      | the entry point                                                                          | always short to read                  |
+| `tests/version.rs` | runs the binary and checks its version line; temporary, removed by the subcommands issue | adding the first test of a subcommand |
 
 **Why**:
 
