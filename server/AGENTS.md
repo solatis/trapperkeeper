@@ -33,6 +33,9 @@ arrive with the next M1 issues. Each module directory that appears under
 - Secrets may come from the file or the environment, the command line warns,
   and credentials are never configuration (owner, 2026-11-01):
   `doc/adr/0013-where-secrets-may-come-from.md`. No secret exists yet.
+- Tests drive the binary as a process, one test per behavior, and generate
+  their data where it varies (owner, 2026-11-01):
+  `doc/adr/0018-integration-tests-over-unit-tests.md`.
 
 **How to**: build, lint and test with the commands in the root `AGENTS.md`,
 How to. `cargo run -- --help` shows the command line.
