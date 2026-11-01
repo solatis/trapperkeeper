@@ -1,7 +1,10 @@
 //! Runs the binary and checks how it behaves on the command line. The
+//! Runs the binary and checks how it behaves on the command line. The
 //! precedence of the settings layers has no test here: the placeholders show
 //! no resolved setting, so it is tested through the binary once the server
-//! logs its resolved settings (issue #5), as `doc/adr/0018` asks.
+//! logs its resolved settings (issue #5), as `doc/adr/0018` asks. The wiring
+//! from a flag to a running server is exercised by the server tests, which
+//! start `serve` with `--listen`.
 
 use std::process::{Command, Output};
 
@@ -37,16 +40,8 @@ fn no_subcommand_is_a_usage_error() {
     assert!(stderr(&out).contains("Usage:"));
 }
 
-/// `serve` is a placeholder: it fails with a status other than clap's 2 and
+/// `migrate` is a placeholder: it fails with a status other than clap's 2 and
 /// says so on stderr.
-#[test]
-fn serve_is_not_implemented() {
-    let out = run(&["serve"]);
-    assert_eq!(out.status.code(), Some(1));
-    assert!(stderr(&out).contains("not implemented yet"));
-}
-
-/// `migrate` is a placeholder in the same way.
 #[test]
 fn migrate_is_not_implemented() {
     let out = run(&["migrate"]);
