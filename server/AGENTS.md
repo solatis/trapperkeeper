@@ -25,6 +25,10 @@ issues. Each module directory that appears under
 - A setting is added in `config::Settings` with a default, and its flag in
   `cli::Overrides` with `skip_serializing_if`, so the two trees stay the same
   shape and an absent flag changes nothing.
+- Every handler carries a `utoipa::path` annotation and enters the router
+  through `routes!`; a handler added with `.route` is missing from the API
+  document. A handler's doc comment is its operation summary in that document,
+  so it is written for the API's readers.
 
 **Why**:
 
