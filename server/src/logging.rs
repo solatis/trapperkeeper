@@ -51,9 +51,9 @@ pub fn init(level: LevelFilter) -> Result<(), Error> {
 
     // 1. A RUST_LOG directive, when the variable is present, replaces the
     //    setting, because its syntax can raise one crate's level for
-    //    debugging. It is parsed strictly rather than with the fallback of
-    //    `try_from_default_env`, because a typo there would silently log at
-    //    the setting's level. Otherwise the filter is the level alone.
+    //    debugging. It is parsed strictly: the usual idiom of falling back to
+    //    a default filter when it does not parse would let a typo silently log
+    //    at the setting's level. Otherwise the filter is the level alone.
     let filter = if env::var_os(DIRECTIVE_VAR).is_some() {
         EnvFilter::try_from_default_env().map_err(Error::InvalidDirective)?
     } else {
