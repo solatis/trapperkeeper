@@ -121,7 +121,8 @@ retries sync at a fixed interval. Unreported events beyond the buffer are lost.
   best-effort for user data, governed by per-condition policies.
 - **Operations.** One distributable with subcommands per role; explicit
   migration step, services refuse to start on pending migrations; config
-  precedence CLI over environment over file; secrets only via environment;
-  TLS terminated directly or by a proxy.
+  precedence CLI over environment over file; secrets may come from the file
+  or the environment, the command line warns (`adr/0013`); TLS terminated
+  directly or by a proxy.
 - **Observability.** Structured logs, metrics endpoint, liveness and readiness
   endpoints on every service.

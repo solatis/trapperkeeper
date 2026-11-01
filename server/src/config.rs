@@ -1,7 +1,8 @@
 //! Settings of the server and how they are resolved. Four layers, lowest
 //! first: the defaults in `Settings::default`, the TOML file named on the
 //! command line, the environment variables prefixed `TRAPPERKEEPER_`, and the
-//! command line flags. The last layer merged wins.
+//! command line flags. The last layer merged wins. Secrets have no mechanism
+//! yet; where they may come from is doc/adr/0013-where-secrets-may-come-from.md.
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::Path;

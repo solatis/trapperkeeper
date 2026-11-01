@@ -13,17 +13,18 @@ made, then **Context**, **Decision**, **Rejected alternatives** and
 **Consequences**. A part with nothing recorded says so rather than being
 dropped.
 
-| Record                                                            | Decision                                                               |
-| ----------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `0001-management-api-is-the-single-write-path.md`                 | every write that is not an event goes through one API                  |
-| `0002-ai-agent-is-an-external-client.md`                          | the agent is a client with its own principal and manages rules only    |
-| `0003-tenant-aware-model-single-tenant-operation.md`              | everything carries a tenant id, one default tenant ships               |
-| `0004-events-embed-rule-snapshots.md`                             | an event carries the rule as it was evaluated                          |
-| `0005-one-vocabulary-for-failure-behavior.md`                     | pass-through, halt, cached per sensor; skip, match, fail per condition |
-| `0006-conformance-fixtures-are-the-evaluation-spec.md`            | fixtures, not prose, define evaluation                                 |
-| `0007-rust-for-the-server-side.md`                                | the server and its APIs are written in Rust                            |
-| `0008-monorepo.md`                                                | all components live in this repository                                 |
-| `0009-latest-stable-rust-only.md`                                 | no minimum Rust version below the current stable                       |
-| `0010-one-top-level-directory-per-component.md`                   | `server/`, `engine/`, `sdk/<lang>/`, `web/`, `conformance/`            |
-| `0011-clippy-pedantic-denied-everywhere.md`                       | clippy pedantic and rustc warnings fail every build, local or CI       |
-| `0012-clap-and-figment-for-the-command-line-and-configuration.md` | clap parses the command line, figment merges the settings layers       |
+| Record                                                            | Decision                                                                          |
+| ----------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `0001-management-api-is-the-single-write-path.md`                 | every write that is not an event goes through one API                             |
+| `0002-ai-agent-is-an-external-client.md`                          | the agent is a client with its own principal and manages rules only               |
+| `0003-tenant-aware-model-single-tenant-operation.md`              | everything carries a tenant id, one default tenant ships                          |
+| `0004-events-embed-rule-snapshots.md`                             | an event carries the rule as it was evaluated                                     |
+| `0005-one-vocabulary-for-failure-behavior.md`                     | pass-through, halt, cached per sensor; skip, match, fail per condition            |
+| `0006-conformance-fixtures-are-the-evaluation-spec.md`            | fixtures, not prose, define evaluation                                            |
+| `0007-rust-for-the-server-side.md`                                | the server and its APIs are written in Rust                                       |
+| `0008-monorepo.md`                                                | all components live in this repository                                            |
+| `0009-latest-stable-rust-only.md`                                 | no minimum Rust version below the current stable                                  |
+| `0010-one-top-level-directory-per-component.md`                   | `server/`, `engine/`, `sdk/<lang>/`, `web/`, `conformance/`                       |
+| `0011-clippy-pedantic-denied-everywhere.md`                       | clippy pedantic and rustc warnings fail every build, local or CI                  |
+| `0012-clap-and-figment-for-the-command-line-and-configuration.md` | clap parses the command line, figment merges the settings layers                  |
+| `0013-where-secrets-may-come-from.md`                             | secrets in the file or the environment, the command line warns, credentials never |

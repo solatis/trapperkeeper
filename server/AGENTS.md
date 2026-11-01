@@ -30,6 +30,9 @@ arrive with the next M1 issues. Each module directory that appears under
   `[[bin]]` in `Cargo.toml`.
 - clap parses the command line and figment merges the settings layers:
   `doc/adr/0012-clap-and-figment-for-the-command-line-and-configuration.md`.
+- Secrets may come from the file or the environment, the command line warns,
+  and credentials are never configuration (owner, 2026-11-01):
+  `doc/adr/0013-where-secrets-may-come-from.md`. No secret exists yet.
 
 **How to**: build, lint and test with the commands in the root `AGENTS.md`,
 How to. `cargo run -- --help` shows the command line.
