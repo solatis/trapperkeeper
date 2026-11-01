@@ -54,7 +54,8 @@ pub type Error = Box<figment::Error>;
 pub fn load(file: Option<&Path>, overrides: impl Serialize) -> Result<Settings, Error> {
     // The layers are merged lowest first, and `merge` takes the incoming
     // scalar, so the last layer merged wins: defaults, then file, then
-    // environment, then flags.
+    // environment, then flags. figment's `join` would keep the existing value
+    // instead and invert the precedence.
     //
     // 1. Start from the defaults, so every field has a value and a partial
     //    layer above is enough.

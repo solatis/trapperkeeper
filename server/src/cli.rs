@@ -31,8 +31,9 @@ pub struct Cli {
 pub struct Overrides {
     /// Address the server listens on, `host:port`.
     #[arg(long, global = true, value_name = "ADDR")]
-    // An absent flag must serialize to nothing: a `null` would be taken by the
-    // merge and erase the value of the layer below.
+    // An absent flag must serialize to nothing: serialized as a null, it would
+    // be taken by the merge over the layer below, and extraction would then
+    // fail with a type error.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub listen: Option<SocketAddr>,
 }
