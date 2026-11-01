@@ -22,6 +22,7 @@ issues. Each module directory that appears under
 | `tests/cli.rs`        | runs the binary and checks its command line       | how the binary behaves on the command line                              |
 | `tests/common/mod.rs` | process helpers: spawn the server, GET a route    | writing a test that runs the binary                                     |
 | `tests/http.rs`       | starts the binary and probes its endpoints        | what the probes and the document promise                                |
+| `tests/logs.rs`       | runs the binary piped and checks the log lines    | what a log line contains                                                |
 
 **Invariants**:
 
