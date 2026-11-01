@@ -49,7 +49,7 @@ evaluation.
 | Metadata   | Key-value context on events. A reserved prefix carries system context (SDK type and version, scheduler and orchestrator identifiers); rest is user-defined. |
 | Operator   | Human managing rules. Roles: admin, operator, observer.                                                                                                     |
 | Principal  | Anything that authenticates to the management API: a human, a CLI credential, the AI agent.                                                                 |
-| Tenant     | Owner of rules, keys, users and events. See `decisions.md`.                                                                                                 |
+| Tenant     | Owner of rules, keys, users and events. See `adr/0003`.                                                                                                     |
 
 ## Integration surface
 
