@@ -13,7 +13,8 @@ breaks the pipeline.
 | What is the product, for whom, vocabulary     | `doc/overview.md`       |
 | Which components exist, how they talk         | `doc/architecture.md`   |
 | What trade-offs do we always make the same    | `doc/principles.md`     |
-| What is decided but not built, what is open   | `doc/decisions.md`      |
+| What is open, not yet decided                 | `doc/decisions.md`      |
+| Why we decided something, what lost           | `doc/adr/`              |
 | How does component X work, how do I change it | `<component>/AGENTS.md` |
 
 ## Layout
@@ -45,40 +46,8 @@ they arrive. A component directory has its own `AGENTS.md`, and inside
   native runners: Linux amd64 and aarch64, Windows amd64 and aarch64, macOS
   aarch64, always on the current stable. Its five job names are the required
   status checks of the `master` ruleset, which the owner keeps by hand.
-
-## Why
-
-- Rust for the server side: the web server and the APIs are written in Rust.
-  Performance is extremely important for this project, and so is correctness.
-  A garbage-collected language such as Go is less suited to FFI-style use, and
-  Rust keeps the shared evaluator core option open. The owner's background is
-  heavily C++ and Haskell. Rust is gaining ground for this kind of project
-  with LLM providers and the wider community (Anthropic, OpenAI, Cloudflare,
-  the Linux kernel). SDK languages are a separate decision (see
-  `doc/overview.md`, Integration surface).
-- Latest stable Rust only, no minimum version (owner, 2026-10-31): code may
-  use any feature as soon as it is stable, and CI builds with the current
-  stable toolchain. Cost: anyone building TrapperKeeper needs an up-to-date
-  toolchain.
-- Monorepo: all components are developed in this one repository, if at all
-  possible. Cross-cutting changes are expected to be common and are far easier
-  to manage as a single PR, and what is released together belongs in one
-  repository; all components are released together. Exception: an SDK
-  language whose publishing requires a standalone repository, decided case by
-  case.
-- One top-level directory per component (owner, 2026-10-31). Rejected:
-  grouping the Rust crates under `crates/`, because each component keeps its
-  `AGENTS.md` beside its code and the Rust sensor SDK belongs with the other
-  SDKs.
-- Clippy pedantic, denied in the workspace lints table (owner, 2026-10-31).
-  Rejected: the default group alone, as too lenient; and warning locally while
-  denying only in CI, because a commit should fail the same way in both
-  places. rustc warnings are denied there too. Cost: nothing builds with a
-  known warning while iterating, and a new stable release that adds a warning
-  breaks the build until the warning is fixed.
-- SDK order: Rust first, then Python, then Go. Later languages (Java, Node.js
-  and others) are undecided, and Node.js comes last. They span several
-  milestones (owner, 2026-10-31).
+- The reasons behind the layout, the toolchain policy and the lint level are
+  records `0010`, `0009` and `0011` in `doc/adr/`.
 
 ## Workflow
 
@@ -104,7 +73,8 @@ not the default, and is meant to shrink as code appears.
    - **What**: one paragraph, responsibility and boundaries.
    - **Map**: table of files and subdirectories, what each is, when to read it.
    - **Invariants**: what must stay true and is not obvious from the code.
-   - **Why**: decisions that shaped this component, a few lines each.
+   - **Why**: decisions that shaped this component, a few lines each, citing
+     the record in `doc/adr/` where one exists.
    - **How to**: build, test, and the common change recipes.
 3. Hierarchy: a parent `AGENTS.md` indexes its children and states what is
    common to them; it never repeats their content. Read root-to-leaf.
