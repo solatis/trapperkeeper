@@ -1,14 +1,23 @@
-//! Settings of the server and how they are resolved. Two layers today, lowest
-//! first: the defaults in `Settings::default`, then the TOML file named on the
-//! command line. The environment and the command line flags are layered on
-//! top by the next commit.
+//! Settings of the server and how they are resolved. Four layers, lowest
+//! first: the defaults in `Settings::default`, the TOML file named on the
+//! command line, the environment variables prefixed `TRAPPERKEEPER_`, and the
+//! command line flags. The last layer merged wins.
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::Path;
 
 use figment::Figment;
-use figment::providers::{Format, Serialized, Toml};
+use figment::providers::{Env, Format, Serialized, Toml};
 use serde::{Deserialize, Serialize};
+
+/// Prefix of every environment variable the server reads, so a generic name
+/// such as `LISTEN` on a shared host cannot be mistaken for ours.
+pub const ENV_PREFIX: &str = "TRAPPERKEEPER_";
+
+/// Stands for a dot in an environment variable name: `TRAPPERKEEPER_LOG__LEVEL`
+/// sets `log.level`. Two underscores, so a single underscore stays usable
+/// inside a key name.
+pub const ENV_SEPARATOR: &str = "__";
 
 /// Every setting of the server, fully resolved. Each field has a default, so
 /// a server with no file, no environment and no flags starts.
@@ -34,15 +43,17 @@ impl Default for Settings {
 /// that carries it.
 pub type Error = Box<figment::Error>;
 
-/// Resolves the settings. `file` is the path given with `--config`, or none.
+/// Resolves the settings. `file` is the path given with `--config`, or none;
+/// `overrides` is the struct of flags, serialized as the top layer.
 ///
 /// # Errors
 ///
 /// Fails when the file is named but missing, when a layer does not parse, or
 /// when a key is unknown or has the wrong type.
-pub fn load(file: Option<&Path>) -> Result<Settings, Error> {
+pub fn load(file: Option<&Path>, overrides: impl Serialize) -> Result<Settings, Error> {
     // The layers are merged lowest first, and `merge` takes the incoming
-    // scalar, so the last layer merged wins.
+    // scalar, so the last layer merged wins: defaults, then file, then
+    // environment, then flags.
     //
     // 1. Start from the defaults, so every field has a value and a partial
     //    layer above is enough.
@@ -63,7 +74,15 @@ pub fn load(file: Option<&Path>) -> Result<Settings, Error> {
         figment = figment.merge(Toml::file_exact(path));
     }
 
-    // 3. Extract into `Settings`. `deny_unknown_fields` turns a typo in a key
+    // 3. Add the environment, prefixed and split on the separator, so nested
+    //    keys are reachable from a flat variable name.
+    figment = figment.merge(Env::prefixed(ENV_PREFIX).split(ENV_SEPARATOR));
+
+    // 4. Add the flags last. An absent flag serializes to nothing and leaves
+    //    the value below it in place.
+    figment = figment.merge(Serialized::defaults(overrides));
+
+    // 5. Extract into `Settings`. `deny_unknown_fields` turns a typo in a key
     //    into an error: the configuration is our own schema and is validated
     //    strictly.
     let settings = figment.extract()?;

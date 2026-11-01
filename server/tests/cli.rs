@@ -61,3 +61,12 @@ fn missing_config_file_fails() {
     assert!(err.contains("/nonexistent/trapperkeeper.toml"));
     assert!(!err.contains("not implemented yet"));
 }
+
+/// `--listen` is parsed as a socket address by clap, so a bad value is a
+/// usage error.
+#[test]
+fn listen_flag_is_parsed() {
+    let out = run(&["--listen", "nope", "serve"]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(stderr(&out).contains("--listen"));
+}
