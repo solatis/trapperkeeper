@@ -30,4 +30,5 @@ dropped.
 | `0013-where-secrets-may-come-from.md`                             | secrets in the file or the environment, the command line warns, credentials never           |
 | `0014-async-everywhere.md`                                        | async wherever an async form exists, on tokio                                               |
 | `0015-server-side-rendering-no-spa.md`                            | the web UI is rendered on the server, JavaScript only for small widgets                     |
+| `0016-axum-and-utoipa-for-http.md`                                | axum with tower middleware; utoipa generates the API document from the handlers             |
 | `0018-integration-tests-over-unit-tests.md`                       | one test per behavior at the highest observing level; generated data over hand-picked cases |

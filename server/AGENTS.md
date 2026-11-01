@@ -37,6 +37,9 @@ arrive with the next M1 issues. Each module directory that appears under
   `doc/adr/0014-async-everywhere.md`.
 - The web UI is rendered on the server, no single-page application (owner,
   2026-11-01): `doc/adr/0015-server-side-rendering-no-spa.md`.
+- axum with tower middleware serves HTTP, and utoipa generates the API
+  document from the handlers (owner, 2026-11-01):
+  `doc/adr/0016-axum-and-utoipa-for-http.md`.
 - Tests drive the binary as a process, one test per behavior, and generate
   their data where it varies (owner, 2026-11-01):
   `doc/adr/0018-integration-tests-over-unit-tests.md`.

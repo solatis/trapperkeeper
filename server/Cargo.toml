@@ -20,6 +20,19 @@ path = "src/main.rs"
 clap = { version = "4", features = ["derive"] }
 figment = { version = "0.10", features = ["toml", "env"] }
 serde = { version = "1", features = ["derive"] }
+# tokio runs everything (doc/adr/0014-async-everywhere.md); axum serves HTTP
+# and utoipa derives the API contract from the handlers
+# (doc/adr/0016-axum-and-utoipa-for-http.md). tokio has only the features the
+# server uses: the runtime and its macro, sockets, and signals for shutdown.
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal"] }
+axum = "0.8"
+utoipa = "6"
+utoipa-axum = "0.3"
+
+[dev-dependencies]
+# The probe tests parse the generated document; already in the tree through
+# axum's json feature, so this adds a name and no code.
+serde_json = "1"
 
 [lints]
 workspace = true
