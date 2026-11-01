@@ -88,3 +88,122 @@ pub fn load(file: Option<&Path>, overrides: impl Serialize) -> Result<Settings, 
     let settings = figment.extract()?;
     Ok(settings)
 }
+
+#[cfg(test)]
+// `Jail::expect_with` fixes the closure's error type to figment's unboxed
+// error, so the large-error lint cannot be satisfied here.
+#[expect(
+    clippy::result_large_err,
+    reason = "the closure type is figment::Jail's, not ours"
+)]
+mod tests {
+    use std::net::SocketAddr;
+
+    use figment::Jail;
+
+    use super::load;
+    use crate::cli::Overrides;
+
+    // Every test runs inside a `Jail`: it gives the test its own directory and
+    // environment, undone when the jail drops, and serializes the jails, which
+    // matters because cargo runs tests on parallel threads and the environment
+    // and the working directory are process-wide. Setting a variable directly
+    // is `unsafe` in edition 2024 for the same reason.
+
+    const FILE: &str = "trapperkeeper.toml";
+
+    fn addr(port: u16) -> SocketAddr {
+        format!("127.0.0.1:{port}")
+            .parse()
+            .expect("a socket address")
+    }
+
+    fn overrides(listen: Option<u16>) -> Overrides {
+        Overrides {
+            listen: listen.map(addr),
+        }
+    }
+
+    #[test]
+    fn defaults_alone() {
+        Jail::expect_with(|_| {
+            let settings = load(None, Overrides::default()).expect("the defaults load");
+            assert_eq!(settings.listen, addr(8080));
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn file_sets_listen() {
+        Jail::expect_with(|jail| {
+            jail.create_file(FILE, "listen = \"127.0.0.1:1\"")?;
+            let settings = load(Some(&jail.directory().join(FILE)), Overrides::default())
+                .expect("the file loads");
+            assert_eq!(settings.listen, addr(1));
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn env_beats_file() {
+        Jail::expect_with(|jail| {
+            jail.create_file(FILE, "listen = \"127.0.0.1:1\"")?;
+            jail.set_env("TRAPPERKEEPER_LISTEN", "127.0.0.1:2");
+            let settings = load(Some(&jail.directory().join(FILE)), Overrides::default())
+                .expect("the layers load");
+            assert_eq!(settings.listen, addr(2));
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn flag_beats_env() {
+        Jail::expect_with(|jail| {
+            jail.create_file(FILE, "listen = \"127.0.0.1:1\"")?;
+            jail.set_env("TRAPPERKEEPER_LISTEN", "127.0.0.1:2");
+            let settings = load(Some(&jail.directory().join(FILE)), overrides(Some(3)))
+                .expect("the layers load");
+            assert_eq!(settings.listen, addr(3));
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn absent_flag_keeps_env() {
+        Jail::expect_with(|jail| {
+            jail.set_env("TRAPPERKEEPER_LISTEN", "127.0.0.1:2");
+            let settings = load(None, overrides(None)).expect("the layers load");
+            assert_eq!(settings.listen, addr(2));
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn missing_file_fails() {
+        Jail::expect_with(|jail| {
+            let path = jail.directory().join("absent.toml");
+            let error = load(Some(&path), Overrides::default()).expect_err("a missing file fails");
+            assert!(error.to_string().contains("absent.toml"));
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn unknown_key_fails() {
+        Jail::expect_with(|jail| {
+            jail.create_file(FILE, "listne = \"127.0.0.1:1\"")?;
+            load(Some(&jail.directory().join(FILE)), Overrides::default())
+                .expect_err("an unknown key fails");
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn bad_address_fails() {
+        Jail::expect_with(|jail| {
+            jail.set_env("TRAPPERKEEPER_LISTEN", "nope");
+            load(None, Overrides::default()).expect_err("a bad address fails");
+            Ok(())
+        });
+    }
+}
