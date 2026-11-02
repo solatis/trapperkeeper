@@ -5,6 +5,7 @@ mod cli;
 mod config;
 mod http;
 mod logging;
+mod store;
 
 use std::process::ExitCode;
 
@@ -61,7 +62,7 @@ async fn main() -> ExitCode {
     // 4. Dispatch on the subcommand.
     match cli.command {
         Command::Serve => serve(&settings).await,
-        Command::Migrate => migrate(&settings),
+        Command::Migrate => migrate(&settings).await,
     }
 }
 
@@ -77,11 +78,25 @@ async fn serve(settings: &Settings) -> ExitCode {
     }
 }
 
-/// Placeholder for the migration runner: reports that it is not implemented
-/// and fails. The store issue replaces the body.
-fn migrate(_settings: &Settings) -> ExitCode {
-    // FAILURE rather than clap's 2, so a caller can tell a placeholder from a
-    // usage error.
-    eprintln!("migrate is not implemented yet");
-    ExitCode::FAILURE
+/// Creates the database when it is missing, applies the pending migrations,
+/// and returns the exit status.
+async fn migrate(settings: &Settings) -> ExitCode {
+    let store = match store::create(&settings.database.url).await {
+        Ok(store) => store,
+        Err(error) => {
+            eprintln!("{error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    match store::migrate::apply(&store).await {
+        Ok(count) => {
+            // At info, so an operator sees what migrate did.
+            tracing::info!(count, "migrations applied");
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("{error}");
+            ExitCode::FAILURE
+        }
+    }
 }

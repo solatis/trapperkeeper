@@ -81,8 +81,9 @@ contents are untrusted input to the model.
 
 ### Store
 
-- Relational state: rules, keys, users, tenants, audit trail. An embedded,
-  zero-config option for evaluation and a server database for production.
+- Relational state: rules, keys, users, tenants and the audit trail. It lives
+  in the server's store module, on SQLite, Postgres or MariaDB. See
+  `server/src/store/AGENTS.md`.
 - Event log: append-only, time-ordered, independent retention. Events embed
   rule snapshots so they are self-contained. Engine choice is open (see `decisions.md`).
 

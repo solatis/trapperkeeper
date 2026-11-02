@@ -5,7 +5,12 @@
 //! from a flag to a running server is exercised by the server tests, which
 //! start `serve` with `--listen`.
 
+mod common;
+
+use std::fs;
 use std::process::{Command, Output};
+
+use common::Scratch;
 
 /// Runs the binary with `args` and returns its output.
 fn run(args: &[&str]) -> Output {
@@ -39,15 +44,6 @@ fn no_subcommand_is_a_usage_error() {
     assert!(stderr(&out).contains("Usage:"));
 }
 
-/// `migrate` is a placeholder: it fails with a status other than clap's 2 and
-/// says so on stderr.
-#[test]
-fn migrate_is_not_implemented() {
-    let out = run(&["migrate"]);
-    assert_eq!(out.status.code(), Some(1));
-    assert!(stderr(&out).contains("not implemented yet"));
-}
-
 /// A `--config` file that does not exist fails the process before the
 /// subcommand runs, and the message names the path.
 #[test]
@@ -56,7 +52,6 @@ fn missing_config_file_fails() {
     assert_eq!(out.status.code(), Some(1));
     let err = stderr(&out);
     assert!(err.contains("/nonexistent/trapperkeeper.toml"));
-    assert!(!err.contains("not implemented yet"));
 }
 
 /// `--listen` is parsed as a socket address by clap, so a bad value is a
@@ -78,16 +73,20 @@ fn log_level_flag_is_parsed() {
 }
 
 /// An invalid `RUST_LOG` directive fails the process before the subcommand
-/// runs, and the message names the variable.
+/// runs: the message names the variable, and migrate creates no database.
 #[test]
 fn invalid_rust_log_fails() {
+    // The scratch directory is the working directory, where migrate would
+    // create the database of the default URL.
+    let scratch = Scratch::create();
     let out = Command::new(env!("CARGO_BIN_EXE_trapperkeeper"))
+        .current_dir(&scratch.path)
         .env("RUST_LOG", "not=a=directive")
         .arg("migrate")
         .output()
         .expect("the binary runs");
     assert_eq!(out.status.code(), Some(1));
-    let err = stderr(&out);
-    assert!(err.contains("RUST_LOG"));
-    assert!(!err.contains("not implemented yet"));
+    assert!(stderr(&out).contains("RUST_LOG"));
+    let entries = fs::read_dir(&scratch.path).expect("the scratch directory is read");
+    assert_eq!(entries.count(), 0);
 }

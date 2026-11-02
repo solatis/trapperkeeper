@@ -1,8 +1,14 @@
 //! Helpers for the tests that run the binary as a process.
 
+// Each test crate compiles this module and uses only part of it.
+#![allow(dead_code)]
+
+use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
-use std::process::{Child, Command, Stdio};
+use std::path::PathBuf;
+use std::process::{Child, Command, ExitStatus, Stdio};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Mutex, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -10,6 +16,42 @@ use std::time::{Duration, Instant};
 /// How long a start or a stop may take before a test gives up. Not measured;
 /// generous for a loaded CI runner.
 pub const TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Numbers the scratch directories of this process.
+static SCRATCH: AtomicU32 = AtomicU32::new(0);
+
+/// A directory of its own for one test, removed when dropped.
+pub struct Scratch {
+    pub path: PathBuf,
+}
+
+impl Scratch {
+    /// Creates an empty directory under the system temporary directory.
+    /// Panics when it cannot.
+    pub fn create() -> Self {
+        // The process id keeps test binaries apart, and the counter keeps the
+        // parallel tests of one binary apart.
+        let path = std::env::temp_dir().join(format!(
+            "trapperkeeper-test-{}-{}",
+            std::process::id(),
+            SCRATCH.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir_all(&path).expect("the scratch directory is created");
+        Self { path }
+    }
+
+    /// The URL of a SQLite database file named `name` in this directory.
+    pub fn sqlite_url(&self, name: &str) -> String {
+        format!("sqlite://{}", self.path.join(name).display())
+    }
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        // A directory left behind in the temporary directory fails no test.
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
 
 /// Held from the port pick until the server listens, so two tests of this
 /// process cannot be handed the same port. Without it two were, on the Linux
@@ -22,6 +64,9 @@ static SPAWN: Mutex<()> = Mutex::new(());
 pub struct Server {
     pub child: Child,
     pub addr: SocketAddr,
+    // Fields drop after `Drop::drop` has stopped the process, so the database
+    // file is closed by the time its directory is removed.
+    pub scratch: Option<Scratch>,
 }
 
 impl Drop for Server {
@@ -33,17 +78,25 @@ impl Drop for Server {
     }
 }
 
-/// Starts `serve` on a free loopback port and returns once the port accepts a
-/// connection. Panics when the server does not come up within `TIMEOUT` or
-/// exits first. `stdout` is wired as given: a test that reads the log lines
-/// pipes it and drains it, the others pass `Stdio::null()`, because an
-/// undrained pipe blocks the child once it is full.
-pub fn spawn_server(extra_args: &[&str], stdout: Stdio) -> Server {
+/// How a started `serve` came out.
+pub enum Launch {
+    /// It listens on its port.
+    Listening(Server),
+    /// It exited before listening, with this status and stderr.
+    Exited(ExitStatus, String),
+}
+
+/// Starts `serve` with `args` on a free loopback port and returns once the
+/// port accepts a connection or the process exits. Panics when neither
+/// happens within `TIMEOUT`. `stdout` is wired as given: a test that reads
+/// the log lines pipes it and drains it, the others pass `Stdio::null()`,
+/// because an undrained pipe blocks the child once it is full.
+pub fn launch(args: &[&str], stdout: Stdio) -> Launch {
     // Three steps under one lock, with a timeout on the last:
     //
     // 1. pick a free port;
     // 2. spawn the server on it;
-    // 3. wait until the port accepts a connection.
+    // 3. wait until the port accepts a connection or the server exits.
     //
     // The lock serializes the tests of this process from the pick to the
     // listening server, because the pick leaves a window in which the port is
@@ -53,35 +106,37 @@ pub fn spawn_server(extra_args: &[&str], stdout: Stdio) -> Server {
 
     // 1. Pick a free port by binding port 0 and dropping the listener. Between
     //    the drop and the child's bind an unrelated process could take the
-    //    port; accepted as unlikely on loopback, and the binary has no output
-    //    yet from which to read a port it chose itself.
+    //    port; accepted as unlikely on loopback.
     let addr = TcpListener::bind("127.0.0.1:0")
         .expect("a free port")
         .local_addr()
         .expect("the bound address");
 
-    // 2. Spawn `serve --listen <addr>`. Passing `--listen` is also the
-    //    end-to-end check of the flag layer that the command line tests cannot
-    //    make, because a placeholder shows no resolved setting.
+    // 2. Spawn `serve --listen <addr>`. stderr is piped and read only after
+    //    an exit, because the server writes to it only when it fails.
     let child = Command::new(env!("CARGO_BIN_EXE_trapperkeeper"))
         .arg("serve")
         .arg("--listen")
         .arg(addr.to_string())
-        .args(extra_args)
+        .args(args)
         .stdout(stdout)
+        .stderr(Stdio::piped())
         .spawn()
         .expect("the binary spawns");
-    let mut server = Server { child, addr };
+    let mut server = Server {
+        child,
+        addr,
+        scratch: None,
+    };
 
     // 3. Poll a TCP connect until it succeeds, so the test does not need the
-    //    server's output to know it is up. A server that exits early fails
-    //    the test now instead of at the timeout, and the check runs once more
-    //    after the connect, so a connection to someone else's server on the
-    //    port is not mistaken for ours.
+    //    server's output to know it is up. The exit check runs once more after
+    //    the connect, so a connection to someone else's server on the port is
+    //    not mistaken for ours.
     let deadline = Instant::now() + TIMEOUT;
     loop {
         if let Some(status) = server.child.try_wait().expect("the child can be polled") {
-            panic!("the server exited before listening: {status}");
+            return Launch::Exited(status, stderr_of(&mut server.child));
         }
         if TcpStream::connect(addr).is_ok() {
             break;
@@ -100,7 +155,40 @@ pub fn spawn_server(extra_args: &[&str], stdout: Stdio) -> Server {
             .is_none(),
         "the server exited after something else accepted on its port"
     );
-    server
+    Launch::Listening(server)
+}
+
+/// Everything an exited child wrote to its piped stderr.
+fn stderr_of(child: &mut Child) -> String {
+    let mut stderr = String::new();
+    child
+        .stderr
+        .take()
+        .expect("stderr is piped")
+        .read_to_string(&mut stderr)
+        .expect("stderr is read");
+    stderr
+}
+
+/// Starts `serve` like `launch` and returns the listening server. Panics when
+/// the server exits before listening.
+pub fn spawn_server(extra_args: &[&str], stdout: Stdio) -> Server {
+    match launch(extra_args, stdout) {
+        Launch::Listening(server) => server,
+        Launch::Exited(status, stderr) => {
+            panic!("the server exited before listening: {status}\n{stderr}")
+        }
+    }
+}
+
+/// Runs `migrate` on the database at `url` and returns its output.
+pub fn run_migrate(url: &str) -> std::process::Output {
+    Command::new(env!("CARGO_BIN_EXE_trapperkeeper"))
+        .arg("migrate")
+        .arg("--database-url")
+        .arg(url)
+        .output()
+        .expect("the binary runs")
 }
 
 /// One `GET` over a fresh connection; returns the status code and the body.

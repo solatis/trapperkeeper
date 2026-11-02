@@ -18,7 +18,9 @@ checked at run time, and each table has a struct that derives `FromRow`
 One query set serves all three backends, so every query stays in the subset
 the three share. The server generates ids in Rust, and no query uses
 `RETURNING` or an upsert. Queries use numbered placeholders, which the store
-rewrites to `?` for MariaDB.
+rewrites to `?` for MariaDB. Timestamps are stored as integer epoch
+microseconds in UTC, so the three backends bind them the same way (owner,
+2026-11-02).
 
 Each backend has its own migration directory of numbered SQL files. `migrate!`
 embeds the files in the binary, and sqlx records each applied file with its

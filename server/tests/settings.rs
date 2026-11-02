@@ -5,14 +5,17 @@
 //! must be the value of the highest layer that gave one, or the default when
 //! none did. One property over generated layers instead of a case per layer,
 //! as `doc/adr/0018` asks. The test runs `migrate`, because it resolves and
-//! logs the settings without needing a port.
+//! logs the settings without needing a port. Each run has a scratch
+//! directory as its working directory, because migrate creates the database
+//! the resolved URL names.
+
+mod common;
 
 use std::fmt::Write as _;
 use std::fs;
-use std::path::PathBuf;
 use std::process::Command;
-use std::sync::atomic::{AtomicU32, Ordering};
 
+use common::Scratch;
 use proptest::prelude::*;
 use serde_json::Value;
 
@@ -49,19 +52,12 @@ fn database_url(n: u8) -> String {
     format!("sqlite://db-{n}.db")
 }
 
-/// Gives each run its own configuration file, because the runs of one test
-/// execute on parallel threads and each writes a file.
-static RUN: AtomicU32 = AtomicU32::new(0);
-
 /// Runs `migrate` with the three layers and returns the settings it logged.
 fn resolved(file: &Layer, env: &Layer, flags: &Layer) -> Value {
     // 1. Write the file layer as TOML, even when empty, so the file path is
     //    always exercised.
-    let path: PathBuf = std::env::temp_dir().join(format!(
-        "trapperkeeper-settings-{}-{}.toml",
-        std::process::id(),
-        RUN.fetch_add(1, Ordering::Relaxed)
-    ));
+    let scratch = Scratch::create();
+    let path = scratch.path.join("trapperkeeper.toml");
     let mut toml = String::new();
     if let Some(port) = file.listen {
         writeln!(toml, "listen = \"{}\"", address(port)).expect("a string grows");
@@ -82,6 +78,7 @@ fn resolved(file: &Layer, env: &Layer, flags: &Layer) -> Value {
     //    it is.
     let mut command = Command::new(env!("CARGO_BIN_EXE_trapperkeeper"));
     command
+        .current_dir(&scratch.path)
         .env_remove("TRAPPERKEEPER_LISTEN")
         .env_remove("TRAPPERKEEPER_LOG__LEVEL")
         .env_remove("TRAPPERKEEPER_DATABASE__URL")
@@ -108,7 +105,6 @@ fn resolved(file: &Layer, env: &Layer, flags: &Layer) -> Value {
     }
     command.arg("migrate");
     let output = command.output().expect("the binary runs");
-    fs::remove_file(&path).expect("the file is removed");
 
     // 3. Find the settings line among the JSON lines on stdout and parse the
     //    settings it carries.

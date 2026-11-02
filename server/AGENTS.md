@@ -1,30 +1,32 @@
 # server/
 
 **What**: the single server binary, `trapperkeeper`, built from the package
-`trapperkeeper-server`. It parses two subcommands. `serve` binds the listen
-address and runs the HTTP server until a signal stops it; `migrate` is a
-placeholder that reports "not implemented yet" until the store issue fills it
-in. Before a subcommand runs, the binary resolves its settings: the listen
-address, the log level and the database URL. The store and the APIs arrive with the next M1
-issues. Each module directory that appears under
+`trapperkeeper-server`. It parses two subcommands. `migrate` creates the
+relational store's database when it is missing and applies the migrations
+embedded in the binary. `serve` binds the listen address and runs the HTTP
+server until a signal stops it. Before a subcommand runs, the binary resolves
+its settings: the listen address, the log level and the database URL. The APIs
+arrive with the next M1 issues. Each module directory that appears under
 `src/` gets its own `AGENTS.md`, and this file indexes them.
 
 **Map**:
 
-| File                  | What                                                       | When to read                                                            |
-| --------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `Cargo.toml`          | package and binary names; dependencies; lints              | changing a dependency or a lint                                         |
-| `build.rs`            | reruns the build when a migration file changes             | why a new migration file is picked up                                   |
-| `src/main.rs`         | the entry point: parse, dispatch, the placeholder          | how a subcommand starts and how it fails                                |
-| `src/cli.rs`          | the command line                                           | adding a flag or a subcommand                                           |
-| `src/config.rs`       | the settings and how they are resolved                     | adding a setting, precedence, environment variable names, the log level |
-| `src/http.rs`         | the router, how it is served and stopped                   | adding an endpoint, how shutdown works                                  |
-| `src/logging.rs`      | the subscriber: log format and level                       | log format, log level, RUST_LOG                                         |
-| `tests/cli.rs`        | runs the binary and checks its command line                | how the binary behaves on the command line                              |
-| `tests/common/mod.rs` | process helpers: spawn the server, GET a route             | writing a test that runs the binary                                     |
-| `tests/http.rs`       | starts the binary and probes its endpoints                 | what the probes and the document promise                                |
-| `tests/logs.rs`       | runs the binary piped and checks the log lines             | what a log line contains                                                |
-| `tests/settings.rs`   | the settings precedence as one property through the binary | how precedence is tested                                                |
+| File                  | What                                                                             | When to read                                                            |
+| --------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `Cargo.toml`          | package and binary names; dependencies; lints                                    | changing a dependency or a lint                                         |
+| `build.rs`            | reruns the build when a migration file changes                                   | why a new migration file is picked up                                   |
+| `src/main.rs`         | the entry point: parse, resolve, dispatch                                        | how a subcommand starts and how it fails                                |
+| `src/cli.rs`          | the command line                                                                 | adding a flag or a subcommand                                           |
+| `src/config.rs`       | the settings and how they are resolved                                           | adding a setting, precedence, environment variable names, the log level |
+| `src/http.rs`         | the router, how it is served and stopped                                         | adding an endpoint, how shutdown works                                  |
+| `src/logging.rs`      | the subscriber: log format and level                                             | log format, log level, RUST_LOG                                         |
+| `src/store/`          | the relational store and its migrations; see its `AGENTS.md`                     | the database, migrations, tables                                        |
+| `tests/cli.rs`        | runs the binary and checks its command line                                      | how the binary behaves on the command line                              |
+| `tests/common/mod.rs` | process helpers: scratch directories, spawn the server, run migrate, GET a route | writing a test that runs the binary                                     |
+| `tests/http.rs`       | starts the binary and probes its endpoints                                       | what the probes and the document promise                                |
+| `tests/logs.rs`       | runs the binary piped and checks the log lines                                   | what a log line contains                                                |
+| `tests/settings.rs`   | the settings precedence as one property through the binary                       | how precedence is tested                                                |
+| `tests/store.rs`      | runs migrate and serve against SQLite files                                      | what migrate builds, which databases serve accepts                      |
 
 **Invariants**:
 
@@ -66,7 +68,8 @@ issues. Each module directory that appears under
   `doc/adr/0018-integration-tests-over-unit-tests.md`.
 
 **How to**: build, lint and test with the commands in the root `AGENTS.md`,
-How to. `cargo run -- --help` shows the command line; `cargo run -- serve`
-starts the server on `127.0.0.1:8080`, and Ctrl-C stops it.
+How to. `cargo run -- --help` shows the command line. `cargo run -- migrate`
+creates `trapperkeeper.db` in the working directory, and `cargo run -- serve`
+then starts the server on `127.0.0.1:8080`; Ctrl-C stops it.
 `RUST_LOG=trapperkeeper=debug cargo run -- serve` is a debugging run; piping
 through `jq` reads the JSON lines.
