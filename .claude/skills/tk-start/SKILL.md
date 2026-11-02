@@ -57,7 +57,7 @@ Local branches other than master:
 
 Plans on this machine:
 
-!`grep -H -E -r --include='*-plan.md' '^(Issue|Branch|Base|Status):' .plans 2>/dev/null || echo none`
+!`grep -H -E -r --include='*-plan.md' '^(Issue|Branch|Base|Thread|Status):' .plans 2>/dev/null || echo none`
 
 Open pull requests:
 
@@ -82,18 +82,20 @@ For each issue in flight, read its plan's header lines, its branch
 nothing more; the plan is the next stage's whole input and is not re-read
 here.
 
-| the tree and GitHub show                                       | stage                    | next                                                 |
-| -------------------------------------------------------------- | ------------------------ | ---------------------------------------------------- |
-| plan `Status: draft`, no branch                                | plan, gate not approved  | `/tk-plan #<n>`, which resumes at the gate           |
-| plan `Status: approved`, no branch                             | build waits              | `/tk-build #<n>`                                     |
-| branch with commits, no PR                                     | build, partly landed     | owner decides: `/tk-build` stops on its entry check  |
-| PR open, its head's runs not green or no review reported       | build, checks and review | `/tk-build #<n>`, which resumes at checks and review |
-| PR open, its head green, the review approved in a past session | merge waits              | `/tk-merge #<n>`, after the owner reads the diff     |
-| PR merged, plan still present                                  | leftover                 | owner decides; `/tk-merge` would delete the plan     |
+| the tree and GitHub show                                            | stage                    | next                                                 |
+| ------------------------------------------------------------------- | ------------------------ | ---------------------------------------------------- |
+| plan `Status: draft`, no branch                                     | plan, gate not approved  | `/tk-plan #<n>`, which resumes at the gate           |
+| plan `Status: approved`, no branch                                  | build waits              | `/tk-build #<n>`                                     |
+| branch with commits, no PR                                          | build, partly landed     | owner decides: `/tk-build` stops on its entry check  |
+| PR open, its head's runs not green or no review reported            | build, checks and review | `/tk-build #<n>`, which resumes at checks and review |
+| PR open, its head green, its guide marked "Looks good" in the Inbox | merge waits              | `/tk-merge #<n>`, after the owner reads the diff     |
+| PR merged, plan still present                                       | leftover                 | owner decides; `/tk-merge` would delete the plan     |
 
-A review decision lives in the conversation that ran it, not in the tree;
-when this session cannot see it, the stage is "build, checks and review"
-and the owner says otherwise.
+A review decision lives in the unit's Inbox thread, not in the tree. Read
+it with `read_thread`: the owner's "Looks good" shows as `ack` on the guide's
+message, and it approves the head that message names. Without such a
+message for the PR's current head, the stage is "build, checks and
+review".
 
 When the argument holds only issues in flight, reply with exactly three
 sections, each a `# Name` heading:
