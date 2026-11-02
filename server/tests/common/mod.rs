@@ -170,15 +170,37 @@ fn stderr_of(child: &mut Child) -> String {
     stderr
 }
 
-/// Starts `serve` like `launch` and returns the listening server. Panics when
-/// the server exits before listening.
+/// Starts `serve` like `launch` on a freshly migrated database of its own, and
+/// returns the listening server. Panics when the server exits before
+/// listening.
 pub fn spawn_server(extra_args: &[&str], stdout: Stdio) -> Server {
-    match launch(extra_args, stdout) {
-        Launch::Listening(server) => server,
+    // serve refuses a database that migrate has not built.
+    let scratch = Scratch::create();
+    let url = migrated_database(&scratch);
+    let mut args = vec!["--database-url", url.as_str()];
+    args.extend_from_slice(extra_args);
+    match launch(&args, stdout) {
+        Launch::Listening(mut server) => {
+            server.scratch = Some(scratch);
+            server
+        }
         Launch::Exited(status, stderr) => {
             panic!("the server exited before listening: {status}\n{stderr}")
         }
     }
+}
+
+/// Runs migrate on a fresh SQLite file in `scratch` and returns its URL.
+/// Panics when migrate fails.
+pub fn migrated_database(scratch: &Scratch) -> String {
+    let url = scratch.sqlite_url("store.db");
+    let out = run_migrate(&url);
+    assert!(
+        out.status.success(),
+        "migrate failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    url
 }
 
 /// Runs `migrate` on the database at `url` and returns its output.

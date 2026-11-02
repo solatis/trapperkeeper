@@ -3,8 +3,9 @@
 **What**: the single server binary, `trapperkeeper`, built from the package
 `trapperkeeper-server`. It parses two subcommands. `migrate` creates the
 relational store's database when it is missing and applies the migrations
-embedded in the binary. `serve` binds the listen address and runs the HTTP
-server until a signal stops it. Before a subcommand runs, the binary resolves
+embedded in the binary. `serve` refuses a database that does not match those
+migrations, then binds the listen address and runs the HTTP server until a
+signal stops it. Before a subcommand runs, the binary resolves
 its settings: the listen address, the log level and the database URL. The APIs
 arrive with the next M1 issues. Each module directory that appears under
 `src/` gets its own `AGENTS.md`, and this file indexes them.

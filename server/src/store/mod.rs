@@ -13,6 +13,16 @@ pub struct Store {
     pool: SqlitePool,
 }
 
+/// Opens the store at `url` for serve.
+///
+/// # Errors
+///
+/// Fails when the URL does not parse, or when the database does not exist or
+/// cannot be opened.
+pub async fn open(url: &str) -> Result<Store, sqlx::Error> {
+    connect(url, false).await
+}
+
 /// Opens the store at `url` for migrate, creating the database when it is
 /// missing.
 ///
@@ -22,7 +32,11 @@ pub struct Store {
 pub async fn create(url: &str) -> Result<Store, sqlx::Error> {
     // Creation is turned on here instead of with `mode=rwc` in the URL, so
     // migrate and serve take the same URL.
-    let options = SqliteConnectOptions::from_str(url)?.create_if_missing(true);
+    connect(url, true).await
+}
+
+async fn connect(url: &str, create: bool) -> Result<Store, sqlx::Error> {
+    let options = SqliteConnectOptions::from_str(url)?.create_if_missing(create);
     let pool = SqlitePool::connect_with(options).await?;
     Ok(Store { pool })
 }

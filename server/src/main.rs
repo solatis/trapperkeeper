@@ -66,9 +66,40 @@ async fn main() -> ExitCode {
     }
 }
 
-/// Runs the server and turns its I/O error into an exit status, so the http
-/// module reports errors and never exits the process itself.
+/// Checks the database against the binary, serves until a signal, and
+/// returns the exit status.
 async fn serve(settings: &Settings) -> ExitCode {
+    // 1. open the database without creating it
+    // 2. check it against the binary's migrations
+    // 3. serve
+    //
+    // Both refusals come before the listener binds, so a refused server is
+    // never reachable.
+
+    // 1. Only migrate creates the database, so a mistyped path fails here
+    //    instead of serving an empty database.
+    let store = match store::open(&settings.database.url).await {
+        Ok(store) => store,
+        Err(error) => {
+            eprintln!(
+                "{error}\nthe database does not open; when it does not exist, `trapperkeeper migrate` creates it"
+            );
+            return ExitCode::FAILURE;
+        }
+    };
+
+    match store::migrate::check(&store).await {
+        Ok(None) => {}
+        Ok(Some(mismatch)) => {
+            eprintln!("{mismatch}");
+            return ExitCode::FAILURE;
+        }
+        Err(error) => {
+            eprintln!("{error}");
+            return ExitCode::FAILURE;
+        }
+    }
+
     match http::serve(settings).await {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {

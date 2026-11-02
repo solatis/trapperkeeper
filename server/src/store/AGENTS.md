@@ -6,11 +6,11 @@ The event log is a separate store, whose engine is still open (see
 
 **Map**:
 
-| File                       | What                                        | When to read                     |
-| -------------------------- | ------------------------------------------- | -------------------------------- |
-| `mod.rs`                   | opening the store                           | how migrate creates the database |
-| `migrate.rs`               | the embedded migrations and applying them   | what migrate applies and counts  |
-| `../../migrations/sqlite/` | the SQLite migration files, one per version | adding a table                   |
+| File                       | What                                        | When to read                                     |
+| -------------------------- | ------------------------------------------- | ------------------------------------------------ |
+| `mod.rs`                   | opening the store for serve or migrate      | why serve never creates the database             |
+| `migrate.rs`               | the embedded migrations: apply, check       | what makes serve refuse, what each refusal means |
+| `../../migrations/sqlite/` | the SQLite migration files, one per version | adding a table                                   |
 
 **Invariants**:
 
@@ -30,6 +30,9 @@ The event log is a separate store, whose engine is still open (see
   `doc/adr/0019-sqlx-with-hand-written-sql-over-three-backends.md`.
 - Ids are internal and names are unique (owner, 2026-11-02):
   `doc/adr/0020-internal-ids-and-unique-names.md`.
+- serve opens the database without creating it, and only migrate creates it,
+  so a mistyped path fails with "run migrate" instead of producing an empty
+  database.
 
 **How to**:
 
