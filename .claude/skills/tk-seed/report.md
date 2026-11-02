@@ -13,7 +13,7 @@ Candidates section belongs to `/tk-start-next` only; when its step did not
 run in this seed, it is omitted, not written as "none".
 
 - `# Workflow` -- one line acknowledging the workflow and naming the
-  branches you will use, not yet created.
+  branches you will use, not yet created, and the unit's Inbox thread.
 - `# Position` -- at most five lines: the active milestone and its goal,
   what is in flight (open PRs, plans), how the unit relates to them.
 - `# Candidates` (`/tk-start-next` only) -- a table, one row per

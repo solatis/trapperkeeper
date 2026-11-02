@@ -31,7 +31,7 @@ Master vs origin, commits ahead / behind (0 0 means in sync):
 
 Plans on this machine:
 
-!`grep -H -E -r --include='*-plan.md' '^(Issue|Branch|Base|Status):' .plans 2>/dev/null || echo none`
+!`grep -H -E -r --include='*-plan.md' '^(Issue|Branch|Base|Thread|Status):' .plans 2>/dev/null || echo none`
 
 Open pull requests, with the head SHA and the state of each check on it:
 

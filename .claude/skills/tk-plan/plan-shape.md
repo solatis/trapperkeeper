@@ -31,6 +31,7 @@ Issue: #14
 Branch: metrics-endpoint
 Base: server-logging
 PR title: feat(server): expose prometheus metrics
+Thread: server observability
 Status: draft
 ```
 
