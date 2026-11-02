@@ -1,13 +1,16 @@
 //! Checks the precedence of the settings layers through the binary. Three
 //! settings are covered: the listen address, the log level and the database
 //! URL. For each, the file, the environment and the flags each give a random
-//! value or stay silent. The binary logs the settings it resolved, and each
+//! value or stay silent. A database URL is a SQLite URL or a Postgres URL with
+//! a generated password. The binary logs the settings it resolved, and each
 //! must be the value of the highest layer that gave one, or the default when
-//! none did. One property over generated layers instead of a case per layer,
-//! as `doc/adr/0018` asks. The test runs `migrate`, because it resolves and
-//! logs the settings without needing a port. Each run has a scratch
-//! directory as its working directory, because migrate creates the database
-//! the resolved URL names.
+//! none did; the logged URL has its password replaced by `***`. One property
+//! over generated layers instead of a case per layer, as `doc/adr/0018` asks.
+//! The test runs `migrate`, because it resolves and logs the settings without
+//! needing a port. The Postgres URLs point at port 1, so migrate fails to
+//! connect, after it has logged the settings. Each run has a scratch directory
+//! as its working directory, because migrate creates the SQLite database the
+//! resolved URL names.
 
 mod common;
 
@@ -28,14 +31,46 @@ const LEVELS: [&str; 6] = ["trace", "debug", "info", "warn", "error", "off"];
 struct Layer {
     listen: Option<u16>,
     level: Option<&'static str>,
-    database: Option<u8>,
+    database: Option<DatabaseUrl>,
+}
+
+/// A generated database URL.
+#[derive(Debug, Clone)]
+enum DatabaseUrl {
+    Sqlite(u8),
+    Postgres(u8, String),
+}
+
+impl DatabaseUrl {
+    /// The URL as a layer gives it.
+    fn given(&self) -> String {
+        match self {
+            Self::Sqlite(n) => format!("sqlite://db-{n}.db"),
+            Self::Postgres(n, password) => format!("postgres://tk:{password}@127.0.0.1:1/db-{n}"),
+        }
+    }
+
+    /// The URL as the settings line must show it.
+    fn logged(&self) -> String {
+        match self {
+            Self::Sqlite(_) => self.given(),
+            Self::Postgres(n, _) => format!("postgres://tk:***@127.0.0.1:1/db-{n}"),
+        }
+    }
+}
+
+fn database_url() -> impl Strategy<Value = DatabaseUrl> {
+    prop_oneof![
+        any::<u8>().prop_map(DatabaseUrl::Sqlite),
+        (any::<u8>(), "[a-z0-9]{1,12}").prop_map(|(n, p)| DatabaseUrl::Postgres(n, p)),
+    ]
 }
 
 fn layer() -> impl Strategy<Value = Layer> {
     (
         proptest::option::of(any::<u16>()),
         proptest::option::of(proptest::sample::select(&LEVELS[..])),
-        proptest::option::of(any::<u8>()),
+        proptest::option::of(database_url()),
     )
         .prop_map(|(listen, level, database)| Layer {
             listen,
@@ -48,12 +83,8 @@ fn address(port: u16) -> String {
     format!("127.0.0.1:{port}")
 }
 
-fn database_url(n: u8) -> String {
-    format!("sqlite://db-{n}.db")
-}
-
-/// Runs `migrate` with the three layers and returns the settings it logged.
-fn resolved(file: &Layer, env: &Layer, flags: &Layer) -> Value {
+/// Runs `migrate` with the three layers and returns the lines it logged.
+fn logged(file: &Layer, env: &Layer, flags: &Layer) -> Vec<Value> {
     // 1. Write the file layer as TOML, even when empty, so the file path is
     //    always exercised.
     let scratch = Scratch::create();
@@ -65,8 +96,8 @@ fn resolved(file: &Layer, env: &Layer, flags: &Layer) -> Value {
     if let Some(level) = file.level {
         writeln!(toml, "[log]\nlevel = \"{level}\"").expect("a string grows");
     }
-    if let Some(n) = file.database {
-        writeln!(toml, "[database]\nurl = \"{}\"", database_url(n)).expect("a string grows");
+    if let Some(url) = &file.database {
+        writeln!(toml, "[database]\nurl = \"{}\"", url.given()).expect("a string grows");
     }
     fs::write(&path, toml).expect("the file is written");
 
@@ -91,8 +122,8 @@ fn resolved(file: &Layer, env: &Layer, flags: &Layer) -> Value {
     if let Some(level) = env.level {
         command.env("TRAPPERKEEPER_LOG__LEVEL", level);
     }
-    if let Some(n) = env.database {
-        command.env("TRAPPERKEEPER_DATABASE__URL", database_url(n));
+    if let Some(url) = &env.database {
+        command.env("TRAPPERKEEPER_DATABASE__URL", url.given());
     }
     if let Some(port) = flags.listen {
         command.arg("--listen").arg(address(port));
@@ -100,24 +131,51 @@ fn resolved(file: &Layer, env: &Layer, flags: &Layer) -> Value {
     if let Some(level) = flags.level {
         command.arg("--log-level").arg(level);
     }
-    if let Some(n) = flags.database {
-        command.arg("--database-url").arg(database_url(n));
+    if let Some(url) = &flags.database {
+        command.arg("--database-url").arg(url.given());
     }
     command.arg("migrate");
     let output = command.output().expect("the binary runs");
 
-    // 3. Find the settings line among the JSON lines on stdout and parse the
-    //    settings it carries.
+    // 3. Parse each line of stdout.
     let stdout = String::from_utf8(output.stdout).expect("UTF-8 stdout");
-    let line = stdout
+    stdout
         .lines()
         .map(|line| serde_json::from_str::<Value>(line).expect("one JSON object per line"))
+        .collect()
+}
+
+/// The settings carried by the settings line among `lines`.
+fn settings(lines: &[Value]) -> Value {
+    let line = lines
+        .iter()
         .find(|line| line["fields"]["message"] == "settings resolved")
-        .unwrap_or_else(|| panic!("no settings line in:\n{stdout}"));
+        .unwrap_or_else(|| panic!("no settings line in {lines:?}"));
     let settings = line["fields"]["settings"]
         .as_str()
         .expect("the settings are a JSON string");
     serde_json::from_str(settings).expect("the settings parse")
+}
+
+/// A database URL given as a flag is accepted with a warning that names the
+/// flag.
+#[test]
+fn a_secret_flag_warns() {
+    let silent = Layer {
+        listen: None,
+        level: None,
+        database: None,
+    };
+    let flags = Layer {
+        database: Some(DatabaseUrl::Postgres(0, "secret".to_owned())),
+        ..silent.clone()
+    };
+    let lines = logged(&silent, &silent, &flags);
+    let warning = lines
+        .iter()
+        .find(|line| line["level"] == "WARN")
+        .unwrap_or_else(|| panic!("no warning in {lines:?}"));
+    assert_eq!(warning["fields"]["flag"], "--database-url");
 }
 
 proptest! {
@@ -134,7 +192,7 @@ proptest! {
     /// over environment over file, and the default when every layer is silent.
     #[test]
     fn the_highest_layer_wins(file in layer(), env in layer(), flags in layer()) {
-        let settings = resolved(&file, &env, &flags);
+        let settings = settings(&logged(&file, &env, &flags));
 
         let listen = flags.listen.or(env.listen).or(file.listen)
             .map_or_else(|| address(8080), address);
@@ -144,7 +202,7 @@ proptest! {
         prop_assert_eq!(settings["log"]["level"].as_str(), Some(level));
 
         let database = flags.database.or(env.database).or(file.database)
-            .map_or_else(|| "sqlite://trapperkeeper.db".to_owned(), database_url);
+            .map_or_else(|| "sqlite://trapperkeeper.db".to_owned(), |url| url.logged());
         prop_assert_eq!(settings["database"]["url"].as_str(), Some(database.as_str()));
     }
 }

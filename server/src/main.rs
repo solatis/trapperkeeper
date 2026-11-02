@@ -45,18 +45,20 @@ async fn main() -> ExitCode {
         }
     };
 
-    // 3. Install logging at the level the settings resolved to. An error is
-    //    printed with eprintln and fails the process, because no subscriber
-    //    exists yet to log it. The resolved settings are then logged at debug
-    //    as one JSON string, so a support case sees what the server believed
-    //    without reading three sources, and the settings test reads them back
-    //    without parsing Debug text. A struct of plain values always
-    //    serializes.
+    // 3. Install logging at the resolved level. Its error goes to stderr,
+    //    because no subscriber exists yet to log it.
     if let Err(error) = logging::init(settings.log.level.0) {
         eprintln!("{error}");
         return ExitCode::FAILURE;
     }
-    let json = serde_json::to_string(&settings).expect("plain values serialize");
+    // A secret on the command line is accepted with a warning, because the
+    // process list shows it (doc/adr/0013).
+    for flag in cli.overrides.secrets() {
+        tracing::warn!(flag, "a secret setting was given on the command line");
+    }
+    // One JSON string, so a support case and the settings test read what the
+    // server resolved without parsing Debug text. Secrets serialize masked.
+    let json = serde_json::to_string(&settings).expect("the settings serialize");
     tracing::debug!(settings = %json, "settings resolved");
 
     // 4. Dispatch on the subcommand.
@@ -78,7 +80,7 @@ async fn serve(settings: &Settings) -> ExitCode {
 
     // 1. Only migrate creates the database, so a mistyped path fails here
     //    instead of serving an empty database.
-    let store = match store::open(&settings.database.url).await {
+    let store = match store::open(settings.database.url.expose()).await {
         Ok(store) => store,
         Err(error) => {
             eprintln!(
@@ -114,7 +116,7 @@ async fn serve(settings: &Settings) -> ExitCode {
 /// Creates the database when it is missing, applies the pending migrations,
 /// and returns the exit status.
 async fn migrate(settings: &Settings) -> ExitCode {
-    let store = match store::create(&settings.database.url).await {
+    let store = match store::create(settings.database.url.expose()).await {
         Ok(store) => store,
         Err(error) => {
             eprintln!("{error}");

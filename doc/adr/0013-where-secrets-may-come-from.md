@@ -1,6 +1,6 @@
 # 0013. Where secrets may come from
 
-Date: 2026-11-01.
+Date: 2026-11-02.
 
 ## Context
 
@@ -24,6 +24,8 @@ mounted as files.
 
 ## Consequences
 
-No secret exists in M1, so no mechanism applies these rules yet. The first
-secret, expected with M2, adds the setting type that applies them and cites
-this record. `doc/architecture.md`, Cross-cutting, Operations, states the rule.
+The database URL is the first secret, because it may carry a password. Its
+settings type, `DatabaseUrl`, serializes and prints with the password replaced
+by `***`, so the logged settings never show it. A secret given as a flag is
+accepted, and the server logs a warning that names the flag.
+`doc/architecture.md`, Cross-cutting, Operations, states the rule.

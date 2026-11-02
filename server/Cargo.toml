@@ -46,6 +46,9 @@ serde_json = "1"
 # server databases, and the mysql driver serves MariaDB. TLS goes through
 # rustls, so no platform needs a system OpenSSL.
 sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "sqlite-bundled", "postgres", "mysql", "tls-rustls-ring-webpki", "migrate", "macros"] }
+# The database URL is parsed to mask its password; already in the tree through
+# sqlx.
+url = "2"
 
 [dev-dependencies]
 # The settings precedence is one property over generated layers

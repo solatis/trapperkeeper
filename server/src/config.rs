@@ -1,18 +1,21 @@
 //! Settings of the server and how they are resolved. Four layers, lowest
 //! first: the defaults in `Settings::default`, the TOML file named on the
 //! command line, the environment variables prefixed `TRAPPERKEEPER_`, and the
-//! command line flags. The last layer merged wins. Secrets have no mechanism
-//! yet; where they may come from is doc/adr/0013-where-secrets-may-come-from.md.
+//! command line flags. The last layer merged wins. Where a secret may come
+//! from is doc/adr/0013-where-secrets-may-come-from.md, and a secret setting
+//! has a type that masks it when serialized or printed.
 
+use std::fmt;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::Path;
 use std::str::FromStr;
 
 use figment::Figment;
 use figment::providers::{Env, Format, Serialized, Toml};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer};
 use tracing::metadata::ParseLevelFilterError;
 use tracing_subscriber::filter::LevelFilter;
+use url::Url;
 
 /// Prefix of every environment variable the server reads, so a generic name
 /// such as `LISTEN` on a shared host cannot be mistaken for ours.
@@ -72,7 +75,7 @@ impl Default for LogSettings {
 pub struct DatabaseSettings {
     /// Where the store lives, as a URL sqlx accepts: `sqlite://<path>`,
     /// `postgres://...` or `mariadb://...`.
-    pub url: String,
+    pub url: DatabaseUrl,
 }
 
 impl Default for DatabaseSettings {
@@ -80,8 +83,57 @@ impl Default for DatabaseSettings {
         Self {
             // A relative path, so `migrate` and `serve` run from one directory
             // find the same file.
-            url: "sqlite://trapperkeeper.db".to_owned(),
+            url: DatabaseUrl("sqlite://trapperkeeper.db".to_owned()),
         }
+    }
+}
+
+/// A database URL, which may carry a password. It serializes and prints with
+/// the password replaced by `***`, and `expose` gives the URL as written
+/// (doc/adr/0013).
+#[derive(Deserialize, Clone)]
+#[serde(transparent)]
+pub struct DatabaseUrl(String);
+
+impl DatabaseUrl {
+    /// The URL as written, password included, for opening the store.
+    pub fn expose(&self) -> &str {
+        &self.0
+    }
+
+    /// The URL with its password replaced by `***`.
+    fn masked(&self) -> String {
+        match Url::parse(&self.0) {
+            Ok(mut url) if url.password().is_some() => {
+                // A URL with a password has a host, and only a URL without one
+                // refuses a password.
+                url.set_password(Some("***"))
+                    .expect("a URL with a host takes a password");
+                url.to_string()
+            }
+            // A URL that does not parse is masked whole when it has an `@`,
+            // because no one can tell which part is the password. Without an
+            // `@` it has no user information, so no password (RFC 3986, 3.2.1).
+            Err(_) if self.0.contains('@') => "***".to_owned(),
+            Ok(_) | Err(_) => self.0.clone(),
+        }
+    }
+}
+
+impl Serialize for DatabaseUrl {
+    // The logged settings are this serialization, so the password never
+    // reaches a log line. `load` also serializes the defaults through it, and
+    // the default URL holds no password. The flag keeps a plain `String` for
+    // the same reason: a masked flag value would replace the real URL in the
+    // merge.
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.masked())
+    }
+}
+
+impl fmt::Debug for DatabaseUrl {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.masked())
     }
 }
 

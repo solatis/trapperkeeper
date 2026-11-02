@@ -48,6 +48,17 @@ pub struct Overrides {
     pub database: DatabaseOverrides,
 }
 
+impl Overrides {
+    /// The flags given on the command line that carry a secret, by name.
+    pub fn secrets(&self) -> Vec<&'static str> {
+        let mut secrets = Vec::new();
+        if self.database.url.is_some() {
+            secrets.push("--database-url");
+        }
+        secrets
+    }
+}
+
 /// Overrides of the `log` table. With no flag set it serializes to an empty
 /// table, which the merge unions into the layer below without changing it.
 #[derive(Args, Serialize, Default)]
