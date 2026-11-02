@@ -1,5 +1,7 @@
 //! Runs migrate and serve as processes against SQLite files: what migrate
-//! builds, and which databases serve accepts.
+//! builds, and which databases serve accepts. Two tests cover the store, a
+//! migrate scenario and a property over generated databases, because
+//! `doc/adr/0018` asks for few tests over a large surface.
 
 mod common;
 
