@@ -39,7 +39,7 @@ Local branches other than master:
 
 Plans on this machine:
 
-!`grep -H -E -r --include='*-plan.md' '^(Issue|Branch|Base|Status):' .plans 2>/dev/null || echo none`
+!`grep -H -E -r --include='*-plan.md' '^(Issue|Branch|Base|Thread|Status):' .plans 2>/dev/null || echo none`
 
 Open milestones (number, title, open / closed issues), lowest number first:
 
@@ -74,8 +74,8 @@ Work through these steps in order; each one feeds the next.
 1. The milestone. The active milestone is the open milestone with the
    lowest number: GitHub numbers milestones in creation order, and they are
    created in the order they are worked. With no open milestone, ask the
-   owner through the question tool which goals to work toward, and stop
-   until answered.
+   owner through the question tool which goals to work toward, and end
+   your turn until the answer arrives.
 2. Its goals. Read the milestone's description whole (`gh api
 repos/{owner}/{repo}/milestones/<number>`). The goals are `owner` by
    provenance; any mechanism the description names beyond the goal is
@@ -116,17 +116,18 @@ over 10 is split into issues at the points where master stays green; a
 candidate under 3 is offered as is, or folded into a candidate on the same
 subject when the owner would review the two as one change anyway.
 
-Then put the issues to the owner through the question tool
-(AskUserQuestion), in one multi-select question, at most four options:
-work in flight first, then in the order of Find the gap, step 4. Mark the
-issues you recommend doing together with "(Recommended)" and put them
-first. Recommend a set that shares context, so one context load and one
+Then put the issues to the owner through the question tool, in one
+`:::question-multi` block, at most four choices: work in flight first, then
+in the order of Find the gap, step 4. After the choices, a
+`Recommended: A, B and C` line names the issues you recommend doing
+together. Recommend a set that shares context, so one context load and one
 challenge round serve all of it, and whose commits total about 15 or fewer,
-so the review is one sitting; a set that runs over says so.
+so the review is one sitting; a set that runs over says so. End your turn
+until the owner's pick arrives.
 
-Each option's label is the issue in a few words and its commit count. Each
-option's description says, in two or three sentences, what the owner will
-have to review: the directories and files touched, whether the code is new
+Each choice is `- [ ] label -- description`. The label is the issue in a
+few words and its commit count. The description says, in two or three
+sentences, what the owner will have to review: the directories and files touched, whether the code is new
 or edited, how much of it is library code, tests, fixtures or documents,
 and what it depends on: "stacks on <other option>" when it needs that
 option's code, "independent" otherwise. The owner's pick is the unit.
