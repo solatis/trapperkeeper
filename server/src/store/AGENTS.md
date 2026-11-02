@@ -6,11 +6,11 @@ The event log is a separate store, whose engine is still open (see
 
 **Map**:
 
-| File                       | What                                        | When to read                                     |
-| -------------------------- | ------------------------------------------- | ------------------------------------------------ |
-| `mod.rs`                   | opening the store for serve or migrate      | why serve never creates the database             |
-| `migrate.rs`               | the embedded migrations: apply, check       | what makes serve refuse, what each refusal means |
-| `../../migrations/sqlite/` | the SQLite migration files, one per version | adding a table                                   |
+| File                       | What                                        | When to read                                              |
+| -------------------------- | ------------------------------------------- | --------------------------------------------------------- |
+| `mod.rs`                   | opening the store for serve or migrate      | why serve never creates the database; the readiness probe |
+| `migrate.rs`               | the embedded migrations: apply, check       | what makes serve refuse, what each refusal means          |
+| `../../migrations/sqlite/` | the SQLite migration files, one per version | adding a table                                            |
 
 **Invariants**:
 

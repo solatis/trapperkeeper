@@ -12,7 +12,7 @@ fn healthz_is_ok() {
     assert_eq!(get(server.addr, "/healthz"), (200, "ok".to_owned()));
 }
 
-/// Readiness is `ok` as soon as the server listens: nothing is probed yet.
+/// Readiness is `ok` when the store answers.
 #[test]
 fn readyz_is_ok() {
     let server = spawn_server(&[], Stdio::null());

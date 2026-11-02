@@ -35,6 +35,11 @@ pub async fn create(url: &str) -> Result<Store, sqlx::Error> {
     connect(url, true).await
 }
 
+/// Whether the store answers a trivial query.
+pub async fn ping(store: &Store) -> bool {
+    sqlx::query("SELECT 1").execute(&store.pool).await.is_ok()
+}
+
 async fn connect(url: &str, create: bool) -> Result<Store, sqlx::Error> {
     let options = SqliteConnectOptions::from_str(url)?.create_if_missing(create);
     let pool = SqlitePool::connect_with(options).await?;

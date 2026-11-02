@@ -5,6 +5,8 @@
 
 use std::io;
 
+use axum::extract::State;
+use axum::http::StatusCode;
 use axum::routing::get;
 use axum::{Json, Router};
 use tokio::net::TcpListener;
@@ -15,6 +17,7 @@ use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
 use crate::config::Settings;
+use crate::store::{self, Store};
 
 /// The API document. Title, version and license come from the package
 /// manifest; the routes are added by the router as the handlers are
@@ -34,25 +37,31 @@ async fn healthz() -> &'static str {
     "ok"
 }
 
-/// Readiness: the instance may receive traffic. `ok` as soon as the listener
-/// is up; the store issue adds the store probe.
+/// Readiness: the instance may receive traffic. `ok` while the store answers,
+/// 503 while it does not.
 #[utoipa::path(
     get,
     path = "/readyz",
-    responses((status = OK, description = "the instance accepts traffic", body = String))
+    responses(
+        (status = OK, description = "the instance accepts traffic", body = String),
+        (status = SERVICE_UNAVAILABLE, description = "the store does not answer", body = String)
+    )
 )]
-async fn readyz() -> &'static str {
-    // No probe yet, by decision: there is no store in this unit to ask.
-    // TODO(store issue): probe the store here.
-    "ok"
+async fn readyz(State(store): State<Store>) -> (StatusCode, &'static str) {
+    if store::ping(&store).await {
+        (StatusCode::OK, "ok")
+    } else {
+        // A literal for the same reason as the liveness body.
+        (StatusCode::SERVICE_UNAVAILABLE, "unavailable")
+    }
 }
 
 /// Builds the router with every route, the API document that describes them,
-/// served at `/openapi.json`, and the request log.
-fn router() -> Router {
+/// served at `/openapi.json`, and the request log. The handlers share `store`.
+fn router(store: Store) -> Router {
     // The document must be split off before the route that serves it is
     // added, or it would describe itself, and the trace layer must wrap every
-    // route including that one; the order is the point.
+    // route including that one.
     //
     // 1. Register each annotated handler through `routes!`, so the handler and
     //    its description enter together and neither can be forgotten.
@@ -63,8 +72,10 @@ fn router() -> Router {
         .split_for_parts();
 
     // 3. Add the route that serves the document as JSON; it is not in the
-    //    document itself.
-    let router = router.route("/openapi.json", get(move || async move { Json(api) }));
+    //    document itself. Then give the handlers the store.
+    let router = router
+        .route("/openapi.json", get(move || async move { Json(api) }))
+        .with_state(store);
 
     // 4. Wrap the whole router with the trace layer. Its span and its response
     //    event are raised to INFO, so each request is one info line with
@@ -78,13 +89,13 @@ fn router() -> Router {
     )
 }
 
-/// Serves the router on the configured address until a shutdown signal, then
-/// finishes the in-flight requests and returns.
+/// Serves the router with `store` on the configured address until a shutdown
+/// signal, then finishes the in-flight requests and returns.
 ///
 /// # Errors
 ///
 /// An I/O error binding or serving is returned, not printed.
-pub async fn serve(settings: &Settings) -> io::Result<()> {
+pub async fn serve(settings: &Settings, store: Store) -> io::Result<()> {
     // Bind, serve, stop: a sequence with its own failure at each step and a
     // log line at each.
     //
@@ -97,7 +108,7 @@ pub async fn serve(settings: &Settings) -> io::Result<()> {
     // 2. Serve until `shutdown_signal` resolves, then finish the in-flight
     //    requests, so a SIGTERM from an orchestrator drains the connections
     //    instead of cutting them.
-    axum::serve(listener, router())
+    axum::serve(listener, router(store))
         .with_graceful_shutdown(shutdown_signal())
         .await?;
 

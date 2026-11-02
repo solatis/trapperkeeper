@@ -71,7 +71,7 @@ async fn main() -> ExitCode {
 async fn serve(settings: &Settings) -> ExitCode {
     // 1. open the database without creating it
     // 2. check it against the binary's migrations
-    // 3. serve
+    // 3. serve with the store
     //
     // Both refusals come before the listener binds, so a refused server is
     // never reachable.
@@ -100,7 +100,8 @@ async fn serve(settings: &Settings) -> ExitCode {
         }
     }
 
-    match http::serve(settings).await {
+    // 3. The router holds the store, so readiness can probe it.
+    match http::serve(settings, store).await {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("{error}");
