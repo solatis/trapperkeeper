@@ -164,6 +164,8 @@ fn list(versions: &[i64]) -> String {
 /// edited, then pending versions; or, with no database, refuse saying to run
 /// migrate.
 fn expected(state: &State) -> Outcome {
+    // With no database, serve fails to open it, and its message says that
+    // migrate creates it.
     let State::Migrated { rows, unknown } = state else {
         return Outcome::Refuses(vec!["trapperkeeper migrate".to_owned()]);
     };
@@ -175,6 +177,7 @@ fn expected(state: &State) -> Outcome {
     };
     let unknown: Vec<i64> = unknown.iter().copied().collect();
     let (edited, missing) = (with(Row::Edited), with(Row::Missing));
+    // The same precedence as `check`: unknown, then edited, then pending.
     if !unknown.is_empty() {
         Outcome::Refuses(vec![
             format!("migrations {}", list(&unknown)),
@@ -197,12 +200,14 @@ fn expected(state: &State) -> Outcome {
 
 /// Builds `state` at a URL in `scratch` and returns the URL.
 fn build(state: &State, scratch: &Scratch) -> String {
+    // An absent database is a URL with no file behind it.
     let State::Migrated { rows, unknown } = state else {
         return scratch.sqlite_url("store.db");
     };
     let url = migrated_database(scratch);
     with_pool(&url, async |pool| {
         for (version, row) in rows {
+            // `X'00'` is one byte, so it never equals a SHA-384 checksum.
             let statement = match row {
                 Row::Applied => continue,
                 Row::Missing => "DELETE FROM _sqlx_migrations WHERE version = $1",
@@ -214,6 +219,8 @@ fn build(state: &State, scratch: &Scratch) -> String {
                 .await
                 .expect("the row is changed");
         }
+        // The unknown versions lie above the last embedded one, so they never
+        // collide with a real migration.
         for version in unknown {
             sqlx::query(
                 "INSERT INTO _sqlx_migrations (version, description, success, checksum, execution_time) \
