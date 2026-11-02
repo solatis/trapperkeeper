@@ -94,6 +94,8 @@ pub async fn check(store: &Store) -> Result<Option<Mismatch>, MigrateError> {
     //
     // The checks run from the mismatch that most needs a rebuild to the one
     // migrate fixes, so the message names the first problem to solve.
+    // 1. A database without a tracking table gets an empty one, so it reads
+    //    as every migration pending.
     let mut connection = tracked(store).await?;
 
     // 2. A dirty row stays in the table, so it is checked before the others
@@ -105,6 +107,8 @@ pub async fn check(store: &Store) -> Result<Option<Mismatch>, MigrateError> {
         .list_applied_migrations(&SQLITE.table_name)
         .await?;
 
+    // 3. A version the binary lacks means a newer binary, or another build,
+    //    made this database.
     let unknown: Vec<i64> = applied
         .iter()
         .filter(|a| !SQLITE.version_exists(a.version))
@@ -114,6 +118,9 @@ pub async fn check(store: &Store) -> Result<Option<Mismatch>, MigrateError> {
         return Ok(Some(Mismatch::Unknown(unknown)));
     }
 
+    // 4. A different checksum means the file changed after the database
+    //    applied it. A down file shares its up file's version, so only the up
+    //    file is compared.
     let edited: Vec<i64> = applied
         .iter()
         .filter(|a| {
@@ -129,6 +136,7 @@ pub async fn check(store: &Store) -> Result<Option<Mismatch>, MigrateError> {
         return Ok(Some(Mismatch::Edited(edited)));
     }
 
+    // 5. Only migrations that migrate applies are left.
     let pending = pending(&applied);
     Ok((!pending.is_empty()).then_some(Mismatch::Pending(pending)))
 }
@@ -150,7 +158,8 @@ async fn tracked(store: &Store) -> Result<PoolConnection<Sqlite>, MigrateError> 
 fn pending(applied: &[AppliedMigration]) -> Vec<i64> {
     SQLITE
         .iter()
-        // `Migrator::run` skips down migrations, so one is never pending.
+        // A down file is embedded but never applied, so counting it would
+        // leave it pending forever.
         .filter(|m| m.migration_type.is_up_migration())
         .filter(|m| applied.iter().all(|a| a.version != m.version))
         .map(|m| m.version)

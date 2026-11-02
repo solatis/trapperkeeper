@@ -88,6 +88,7 @@ async fn serve(settings: &Settings) -> ExitCode {
         }
     };
 
+    // 2. A database that does not match the binary is refused before the bind.
     match store::migrate::check(&store).await {
         Ok(None) => {}
         Ok(Some(mismatch)) => {
