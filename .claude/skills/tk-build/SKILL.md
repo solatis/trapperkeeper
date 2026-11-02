@@ -90,10 +90,15 @@ session. Then, issue by issue in landing order:
    and every claim the specification lists is present once, in the same
    commit as the code. A claim is written as a claim, without the plan's
    evidence brackets. A claim the code contradicts is not written; it is
-   reported in the build-stage message with both versions.
+   reported in the build-stage message with both versions. Where a commit
+   changes code that already has comments, the blocks it touches are
+   rewritten whole from the new code, as the root `AGENTS.md`, "Code
+   comments", rule 5, prescribes. They are never patched with another
+   clause.
 
-   A reason that arises while building (a rejected alternative, a
-   threshold, an ordering constraint) and is not in the plan is written
+   A reason that arises while building (a threshold, an ordering
+   constraint, or a rejected alternative a reader of that line would
+   propose) and is not in the plan is written
    where it is decided, with its evidence. One you would have to invent is
    asked through the question tool before the commit that needs it, never
    written as a guess and never left out silently.
@@ -105,7 +110,8 @@ touched>`, and one small commit per finding.
    reports every reason the plan promised that the code and documents do
    not state. Its "Unlanded from the plan" findings are fixed with a
    further small commit each, or reported with the reason each was
-   dropped. Keep its report for the build-stage message.
+   dropped. Its "Dropped on purpose" findings are listed in the build-stage
+   message and get no commit. Keep its report for the build-stage message.
 
    The reports of steps 3 and 4 are read in this repository's terms: a
    "Rationale unknown" finding is a question to the owner through the
@@ -135,10 +141,11 @@ Correct: a step comment needs to say why the server refuses an empty
 batch; you do not know; you ask, and the answer becomes the comment.
 
 Incorrect: the comment says "the server refuses an empty batch for safety",
-because that sounded right. Or: the plan's Rationale says the per-request
-signature was rejected for a session token, no comment or `AGENTS.md` Why
-says so, and the PR is opened with that reason only in the plan, which the
-merge stage deletes.
+because that sounded right. Or: the plan lands the rejection of the
+per-request signature in an ADR, the PR is opened without that ADR, and the
+reason dies with the plan, which the merge stage deletes. Or: every step
+comment names an alternative the plan rejected, and the code reads like the
+planning session.
 
 ## The runs and the reviews
 
