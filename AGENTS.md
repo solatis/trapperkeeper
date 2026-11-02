@@ -54,7 +54,10 @@ they arrive. A component directory has its own `AGENTS.md`, and inside
 ## Workflow
 
 The owner is the repository's maintainer, the only person who opens a stage
-or answers a question. "The question tool" is AskUserQuestion.
+or answers a question. "The question tool" is a `:::question` block sent
+to the Plannotator Inbox in the unit's thread. After sending it, you end
+your turn until the reply arrives. `.claude/skills/tk-workflow/SKILL.md`,
+"The Inbox", says how.
 
 Work moves issue by issue through four stages, each opened by the owner:
 `/tk-start` or `/tk-start-next` (seed), `/tk-plan`, `/tk-build`,
