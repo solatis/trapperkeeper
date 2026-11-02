@@ -28,8 +28,8 @@ settled once, for the unit, and both issues carry it.
 
 The plans are written after this report, and they carry the approach the
 owner wants, not the approach the documents happen to record. So before
-the report, put the choices to the owner through the question tool
-(AskUserQuestion), while the context is loaded and nothing is written.
+the report, put the choices to the owner through the question tool, while
+the context is loaded and nothing is written.
 
 What gets a question. A choice an issue's code rests on that is:
 
@@ -46,10 +46,11 @@ What gets no question: a choice marked `owner`; a choice the tree settles;
 a choice that belongs to a later issue; a choice between wordings. A
 question whose answer would not change a commit of this unit is not asked.
 
-How to ask. One question per choice, at most four per call, at most two
-calls for the whole unit; what remains goes under Open questions in the
-report, and the owner answers it in the conversation before opening the
-plan stage.
+How to ask. One `:::question` block per choice, at most four per message,
+at most two messages for the whole unit, in the unit's Inbox thread as
+`/tk-workflow`, The Inbox, says. End your turn after each message; the
+report waits for the answers. What remains goes under Open questions in the
+report, and the owner answers it before opening the plan stage.
 
 The owner reads the question cold: the context you loaded is not in front
 of them, and a name from the code means nothing until the question says
@@ -64,15 +65,16 @@ in parentheses, so the owner can find it in the code. The question runs
 three to six sentences; a one-line question is a sign the context was left
 out.
 
-The options follow the same rule. The label says the choice in plain
-words, not in identifiers ("a hash of the active rule set", not
-"sha256(rules)"). The description says what the option does, then what it
-costs and what it keeps open, and names an identifier only after saying
-what it is. The options are: the approach the sources record, named by its
-path; the simplest alternative; a third where a real one exists. Put the
-option you would take first, marked "(Recommended)", and say in one clause
-why. The owner can always answer "Other" with text. An answer is the
-decision; it is not argued with.
+The choices follow the same rule. Each choice is one line, `- [ ] label
+-- what it does, what it costs and what it keeps open`. The label says the
+choice in plain words, not in identifiers ("a hash of the active rule set",
+not "sha256(rules)"), and the rest names an identifier only after saying
+what it is. The choices are: the approach the sources record, named by its
+path; the simplest alternative; a third where a real one exists. Keep them
+in that order. After them, a `Recommended: <label>` line names the choice
+you would take, and a `Why:` line says why in one clause. The owner can
+always answer "Other" with text. An answer is the decision; it is not
+argued with.
 
 Where the answers go. Each answer is the owner's decision as of today's
 date: in the report's Decisions entry as `settled by owner, <date>`, and in
@@ -97,4 +99,6 @@ Incorrect: the hash is chosen because it sounded right, and the owner
 learns the tag's form from the diff. Or: the question is "Should
 `sync_tag()` return `u64` or `[u8; 32]`?", so the owner has to open the
 code to learn what the tag is. Or: eight questions go out in one call,
-three of them about an issue the owner did not choose.
+three of them about an issue the owner did not choose. Or: the hash is
+listed first with "(Recommended)" in its label, so the order says which
+one you want before the owner has read the alternatives.
