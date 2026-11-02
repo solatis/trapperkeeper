@@ -35,3 +35,4 @@ dropped.
 | `0018-integration-tests-over-unit-tests.md`                       | one test per behavior at the highest observing level; generated data over hand-picked cases     |
 | `0019-sqlx-with-hand-written-sql-over-three-backends.md`          | sqlx, hand-written SQL in one subset, checksummed migrations per backend                        |
 | `0020-internal-ids-and-unique-names.md`                           | `_id` is an internal time-ordered UUID; `_name` is unique and what people use                   |
+| `0021-every-test-suite-runs-on-every-platform.md`                 | every test on every CI platform; latest stable or LTS dependencies; skip only without a build   |

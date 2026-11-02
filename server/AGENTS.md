@@ -68,6 +68,10 @@ arrive with the next M1 issues. Each module directory that appears under
 - An entity's `_id` is an internal time-ordered UUID, and its `_name` is
   unique, lowercase and what people use (owner, 2026-11-02):
   `doc/adr/0020-internal-ids-and-unique-names.md`.
+- Every test runs on every CI platform, against the latest stable or LTS
+  release of each database, and a platform skips only what has no build for
+  it (owner, 2026-11-02):
+  `doc/adr/0021-every-test-suite-runs-on-every-platform.md`.
 - Tests drive the binary as a process, one test per behavior, and generate
   their data where it varies (owner, 2026-11-01):
   `doc/adr/0018-integration-tests-over-unit-tests.md`.
