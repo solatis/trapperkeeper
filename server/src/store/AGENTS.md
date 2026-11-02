@@ -52,3 +52,8 @@ event log is a separate store, whose engine is still open (see
   name.
 - Start over after editing a migration: delete the database and run
   `migrate`.
+- Run the tests against Postgres or MariaDB: set `TK_TEST_POSTGRES_URL` or
+  `TK_TEST_MARIADB_URL` to the URL of a user allowed to create databases, such
+  as `postgres://postgres:pw@127.0.0.1:5432/postgres`. Each test creates and
+  drops databases named `tk_test_*`. `TK_TEST_EXPECT=postgres,mariadb` fails
+  the run when either URL is missing, as CI sets it.

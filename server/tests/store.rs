@@ -1,7 +1,7 @@
-//! Runs migrate and serve as processes against SQLite files: what migrate
-//! builds, and which databases serve accepts. Two tests cover the store, a
-//! migrate scenario and a property over generated databases, because
-//! `doc/adr/0018` asks for few tests over a large surface.
+//! Runs migrate and serve as processes against each backend the environment
+//! names: what migrate builds, and which databases serve accepts. Two tests
+//! cover the store, a migrate scenario and a property over generated
+//! databases, because `doc/adr/0018` asks for few tests over a large surface.
 
 mod common;
 
@@ -9,24 +9,57 @@ use std::collections::BTreeSet;
 use std::process::{ExitStatus, Output, Stdio};
 use std::sync::OnceLock;
 
-use common::{Launch, Scratch, get, launch, migrated_database, run_migrate};
+use common::{
+    Backend, Launch, TestDatabase, backends, block_on, get, launch, migrate_database,
+    on_each_backend, run_migrate,
+};
 use proptest::prelude::*;
 use serde_json::Value;
+use sqlx::AssertSqlSafe;
+use sqlx::mysql::MySqlPool;
+use sqlx::postgres::PgPool;
 use sqlx::sqlite::SqlitePool;
 
-/// Runs `query` on a pool for the SQLite database at `url`, on a runtime of its
-/// own, because the tests are synchronous and sqlx is not.
-fn with_pool<T>(url: &str, query: impl AsyncFnOnce(&SqlitePool) -> T) -> T {
-    tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .expect("a runtime")
-        .block_on(async {
-            let pool = SqlitePool::connect(url).await.expect("the database opens");
-            let result = query(&pool).await;
-            pool.close().await;
-            result
+/// Evaluates `$body` with `$pool` bound to a pool on `$database`, whichever
+/// backend it is on. A macro, because each backend's pool is its own type and
+/// `$body` is checked once per type.
+macro_rules! on_pool {
+    ($database:expr, |$pool:ident| $body:expr) => {{
+        let url = $database.url.as_str();
+        block_on(async {
+            match $database.backend {
+                Backend::Sqlite => {
+                    let $pool = SqlitePool::connect(url).await.expect("the database opens");
+                    let result = $body;
+                    $pool.close().await;
+                    result
+                }
+                Backend::Postgres => {
+                    let $pool = PgPool::connect(url).await.expect("the database opens");
+                    let result = $body;
+                    $pool.close().await;
+                    result
+                }
+                Backend::MariaDb => {
+                    let $pool = MySqlPool::connect(url).await.expect("the database opens");
+                    let result = $body;
+                    $pool.close().await;
+                    result
+                }
+            }
         })
+    }};
+}
+
+/// `statement` with its numbered placeholders as `backend` spells them:
+/// MariaDB takes `?`, in the same order.
+fn placeholders(backend: Backend, statement: &'static str) -> String {
+    match backend {
+        Backend::MariaDb => (1..=9).fold(statement.to_owned(), |s, n| {
+            s.replace(&format!("${n}"), "?")
+        }),
+        Backend::Sqlite | Backend::Postgres => statement.to_owned(),
+    }
 }
 
 /// The `count` of the line migrate logged after applying. Panics when migrate
@@ -45,11 +78,11 @@ fn applied_count(out: &Output) -> u64 {
         .expect("a migrations applied line with a count")
 }
 
-/// The versions in the tracking table of the database at `url`, in order.
-fn tracked_versions(url: &str) -> Vec<i64> {
-    with_pool(url, async |pool| {
+/// The versions in the tracking table of `database`, in order.
+fn tracked_versions(database: &TestDatabase) -> Vec<i64> {
+    on_pool!(database, |pool| {
         sqlx::query_scalar("SELECT version FROM _sqlx_migrations ORDER BY version")
-            .fetch_all(pool)
+            .fetch_all(&pool)
             .await
             .expect("the tracking table is read")
     })
@@ -59,37 +92,39 @@ fn tracked_versions(url: &str) -> Vec<i64> {
 /// migrate applies nothing; serve accepts the result.
 #[test]
 fn migrate_builds_a_database_that_serve_accepts() {
-    let scratch = Scratch::create();
-    let url = scratch.sqlite_url("store.db");
+    on_each_backend(|backend| {
+        let database = TestDatabase::fresh(backend);
 
-    let first = applied_count(&run_migrate(&url));
-    // Read through sqlx on the file, because no endpoint shows tenants or
-    // the tracking table.
-    let tenants: Vec<(String, String)> = with_pool(&url, async |pool| {
-        sqlx::query_as("SELECT tenant_id, tenant_name FROM tenants")
-            .fetch_all(pool)
-            .await
-            .expect("the tenants are read")
+        let first = applied_count(&run_migrate(&database.url));
+        // Read through sqlx, because no endpoint shows tenants or the
+        // tracking table.
+        let tenants: Vec<(String, String)> = on_pool!(database, |pool| {
+            sqlx::query_as("SELECT tenant_id, tenant_name FROM tenants")
+                .fetch_all(&pool)
+                .await
+                .expect("the tenants are read")
+        });
+        assert!(first > 0);
+        assert_eq!(
+            usize::try_from(first).expect("a small count"),
+            tracked_versions(&database).len()
+        );
+        assert_eq!(
+            tenants,
+            [(
+                "00000000-0000-7000-8000-000000000000".to_owned(),
+                "default".to_owned()
+            )]
+        );
+
+        assert_eq!(applied_count(&run_migrate(&database.url)), 0);
+
+        let Launch::Listening(server) = launch(&["--database-url", &database.url], Stdio::null())
+        else {
+            panic!("serve refused the database migrate built");
+        };
+        assert_eq!(get(server.addr, "/healthz").0, 200);
     });
-    assert!(first > 0);
-    assert_eq!(
-        usize::try_from(first).expect("a small count"),
-        tracked_versions(&url).len()
-    );
-    assert_eq!(
-        tenants,
-        [(
-            "00000000-0000-7000-8000-000000000000".to_owned(),
-            "default".to_owned()
-        )]
-    );
-
-    assert_eq!(applied_count(&run_migrate(&url)), 0);
-
-    let Launch::Listening(server) = launch(&["--database-url", &url], Stdio::null()) else {
-        panic!("serve refused the database migrate built");
-    };
-    assert_eq!(get(server.addr, "/healthz").0, 200);
 }
 
 /// What the tracking table says about one of the binary's migrations.
@@ -103,7 +138,7 @@ enum Row {
 /// One generated database.
 #[derive(Debug, Clone)]
 enum State {
-    /// No file at the URL.
+    /// Nothing at the URL.
     Absent,
     /// A migrated database whose tracking table was then changed: one row
     /// state per embedded version, and versions the binary lacks.
@@ -122,12 +157,13 @@ enum Outcome {
 }
 
 /// The versions migrate applies, read once from the tracking table of a
-/// freshly migrated database.
+/// freshly migrated SQLite database. Every backend has the same versions.
 fn embedded_versions() -> &'static [i64] {
     static VERSIONS: OnceLock<Vec<i64>> = OnceLock::new();
     VERSIONS.get_or_init(|| {
-        let scratch = Scratch::create();
-        tracked_versions(&migrated_database(&scratch))
+        let database = TestDatabase::fresh(Backend::Sqlite);
+        migrate_database(&database);
+        tracked_versions(&database)
     })
 }
 
@@ -198,41 +234,61 @@ fn expected(state: &State) -> Outcome {
     }
 }
 
-/// Builds `state` at a URL in `scratch` and returns the URL.
-fn build(state: &State, scratch: &Scratch) -> String {
-    // An absent database is a URL with no file behind it.
+/// Builds `state` in `database`.
+fn build(state: &State, database: &TestDatabase) {
+    // An absent database is a URL at which nothing has been created.
     let State::Migrated { rows, unknown } = state else {
-        return scratch.sqlite_url("store.db");
+        return;
     };
-    let url = migrated_database(scratch);
-    with_pool(&url, async |pool| {
+    migrate_database(database);
+    let delete = placeholders(
+        database.backend,
+        "DELETE FROM _sqlx_migrations WHERE version = $1",
+    );
+    let edit = placeholders(
+        database.backend,
+        "UPDATE _sqlx_migrations SET checksum = $1 WHERE version = $2",
+    );
+    let insert = placeholders(
+        database.backend,
+        "INSERT INTO _sqlx_migrations (version, description, success, checksum, execution_time) \
+         VALUES ($1, 'unknown', $2, $3, 0)",
+    );
+    // The statements are literals with rewritten placeholders, so no outside
+    // text reaches the SQL that `AssertSqlSafe` lets through.
+    on_pool!(database, |pool| {
         for (version, row) in rows {
-            // `X'00'` is one byte, so it never equals a SHA-384 checksum.
-            let statement = match row {
+            match row {
                 Row::Applied => continue,
-                Row::Missing => "DELETE FROM _sqlx_migrations WHERE version = $1",
-                Row::Edited => "UPDATE _sqlx_migrations SET checksum = X'00' WHERE version = $1",
-            };
-            sqlx::query(statement)
-                .bind(version)
-                .execute(pool)
-                .await
-                .expect("the row is changed");
+                Row::Missing => {
+                    sqlx::query(AssertSqlSafe(delete.clone()))
+                        .bind(version)
+                        .execute(&pool)
+                        .await
+                }
+                // One byte never equals a SHA-384 checksum.
+                Row::Edited => {
+                    sqlx::query(AssertSqlSafe(edit.clone()))
+                        .bind(vec![0_u8])
+                        .bind(version)
+                        .execute(&pool)
+                        .await
+                }
+            }
+            .expect("the row is changed");
         }
         // The unknown versions lie above the last embedded one, so they never
         // collide with a real migration.
         for version in unknown {
-            sqlx::query(
-                "INSERT INTO _sqlx_migrations (version, description, success, checksum, execution_time) \
-                 VALUES ($1, 'unknown', true, X'00', 0)",
-            )
-            .bind(version)
-            .execute(pool)
-            .await
-            .expect("the row is inserted");
+            sqlx::query(AssertSqlSafe(insert.clone()))
+                .bind(version)
+                .bind(true)
+                .bind(vec![0_u8])
+                .execute(&pool)
+                .await
+                .expect("the row is inserted");
         }
     });
-    url
 }
 
 /// Starts serve on the database at `url` and says what it did. A started
@@ -245,7 +301,8 @@ fn outcome(url: &str) -> (Option<ExitStatus>, String) {
 }
 
 proptest! {
-    // 32 cases rather than proptest's 256: each case starts two processes. No
+    // 32 cases rather than proptest's 256: each case starts two processes per
+    // backend. No
     // regression file, so a failure leaves nothing untracked in the tree; the
     // failing seed is in the output.
     #![proptest_config(ProptestConfig {
@@ -254,25 +311,35 @@ proptest! {
         .. ProptestConfig::default()
     })]
 
-    /// serve starts on a database when its tracking table matches the
-    /// binary's migrations. Otherwise it exits 1, names the differing
-    /// versions and says what to do, and it creates no missing database.
+    /// On every backend, serve starts on a database when its tracking table
+    /// matches the binary's migrations. Otherwise it exits 1, names the
+    /// differing versions and says what to do, and it creates no missing
+    /// database.
     #[test]
     fn serve_accepts_only_a_matching_database(state in database_state()) {
-        let scratch = Scratch::create();
-        let url = build(&state, &scratch);
-        let (status, stderr) = outcome(&url);
-        match expected(&state) {
-            Outcome::Starts => prop_assert!(status.is_none(), "serve refused: {stderr}"),
-            Outcome::Refuses(fragments) => {
-                prop_assert_eq!(status.and_then(|s| s.code()), Some(1), "serve started");
-                for fragment in fragments {
-                    prop_assert!(stderr.contains(&fragment), "{fragment:?} not in {stderr:?}");
+        for backend in backends() {
+            let database = TestDatabase::fresh(backend);
+            build(&state, &database);
+            let (status, stderr) = outcome(&database.url);
+            match expected(&state) {
+                Outcome::Starts => {
+                    prop_assert!(status.is_none(), "serve refused on {backend}: {stderr}");
+                }
+                Outcome::Refuses(fragments) => {
+                    prop_assert_eq!(
+                        status.and_then(|s| s.code()), Some(1), "serve started on {}", backend
+                    );
+                    for fragment in fragments {
+                        prop_assert!(
+                            stderr.contains(&fragment),
+                            "{fragment:?} not in {stderr:?} on {backend}"
+                        );
+                    }
                 }
             }
-        }
-        if matches!(state, State::Absent) {
-            prop_assert!(!scratch.path.join("store.db").exists(), "serve created the database");
+            if matches!(state, State::Absent) {
+                prop_assert!(!database.exists(), "serve created the database on {backend}");
+            }
         }
     }
 }

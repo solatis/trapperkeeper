@@ -3,6 +3,8 @@
 // Each test crate compiles this module and uses only part of it.
 #![allow(dead_code)]
 
+use std::env;
+use std::fmt;
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
@@ -12,6 +14,12 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Mutex, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
+
+use sqlx::migrate::MigrateDatabase;
+use sqlx::mysql::MySql;
+use sqlx::postgres::Postgres;
+use sqlx::sqlite::Sqlite;
+use url::Url;
 
 /// How long a start or a stop may take before a test gives up. Not measured;
 /// generous for a loaded CI runner.
@@ -53,6 +61,149 @@ impl Drop for Scratch {
     }
 }
 
+/// A database backend a test runs against.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Backend {
+    Sqlite,
+    Postgres,
+    MariaDb,
+}
+
+impl fmt::Display for Backend {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Sqlite => "sqlite",
+            Self::Postgres => "postgres",
+            Self::MariaDb => "mariadb",
+        })
+    }
+}
+
+/// The variable that holds the admin URL of a server backend. The names do
+/// not start with `TRAPPERKEEPER_`, which the binary rejects as unknown
+/// settings.
+fn admin_url_var(backend: Backend) -> Option<&'static str> {
+    match backend {
+        Backend::Sqlite => None,
+        Backend::Postgres => Some("TK_TEST_POSTGRES_URL"),
+        Backend::MariaDb => Some("TK_TEST_MARIADB_URL"),
+    }
+}
+
+/// The backends this run tests: SQLite always, Postgres and MariaDB when
+/// their admin URL is set. Panics when `TK_TEST_EXPECT` names a backend whose
+/// URL is absent.
+pub fn backends() -> Vec<Backend> {
+    let all = [Backend::Sqlite, Backend::Postgres, Backend::MariaDb];
+    let reachable: Vec<Backend> = all
+        .into_iter()
+        .filter(|b| admin_url_var(*b).is_none_or(|var| env::var_os(var).is_some()))
+        .collect();
+    // A missing backend fails the run instead of being skipped, because a
+    // skipped test passes (doc/adr/0021).
+    let expected = env::var("TK_TEST_EXPECT").unwrap_or_default();
+    for name in expected.split(',').map(str::trim).filter(|n| !n.is_empty()) {
+        assert!(
+            reachable.iter().any(|b| b.to_string() == name),
+            "TK_TEST_EXPECT names {name}, and its admin URL is not set"
+        );
+    }
+    reachable
+}
+
+/// Runs `body` once per backend from `backends`. Each run first prints the
+/// backend, so the captured output of a failing test names it.
+pub fn on_each_backend(body: impl Fn(Backend)) {
+    for backend in backends() {
+        eprintln!("backend: {backend}");
+        body(backend);
+    }
+}
+
+/// Numbers the server databases of this process.
+static DATABASE: AtomicU32 = AtomicU32::new(0);
+
+/// A database URL of its own for one test, on one backend. Nothing exists at
+/// the URL until migrate creates it, and whatever exists is dropped with the
+/// value.
+pub struct TestDatabase {
+    pub backend: Backend,
+    pub url: String,
+    // Holds the SQLite file, and is `None` on a server backend.
+    scratch: Option<Scratch>,
+}
+
+impl TestDatabase {
+    /// Reserves a database on `backend`: a file in a scratch directory for
+    /// SQLite, a database named after the process and a counter on a server.
+    pub fn fresh(backend: Backend) -> Self {
+        let Some(var) = admin_url_var(backend) else {
+            let scratch = Scratch::create();
+            let url = scratch.sqlite_url("store.db");
+            return Self {
+                backend,
+                url,
+                scratch: Some(scratch),
+            };
+        };
+        let admin = env::var(var).expect("the admin URL is set");
+        let mut url = Url::parse(&admin).expect("the admin URL parses");
+        url.set_path(&format!(
+            "tk_test_{}_{}",
+            std::process::id(),
+            DATABASE.fetch_add(1, Ordering::Relaxed)
+        ));
+        Self {
+            backend,
+            url: url.to_string(),
+            scratch: None,
+        }
+    }
+
+    /// Whether a database exists at the URL.
+    pub fn exists(&self) -> bool {
+        let url = self.url.as_str();
+        block_on(async {
+            match self.backend {
+                Backend::Sqlite => Sqlite::database_exists(url).await,
+                Backend::Postgres => Postgres::database_exists(url).await,
+                Backend::MariaDb => MySql::database_exists(url).await,
+            }
+        })
+        .expect("the database server answers")
+    }
+}
+
+impl Drop for TestDatabase {
+    fn drop(&mut self) {
+        // The scratch directory takes a SQLite file with it.
+        if self.scratch.is_some() {
+            return;
+        }
+        // A server database left behind, or one that was never created, fails
+        // no test, so the result is ignored. Postgres drops by force, because
+        // a killed server's connections may not have closed yet.
+        let url = self.url.as_str();
+        let _ = block_on(async {
+            match self.backend {
+                Backend::Sqlite => Ok(()),
+                Backend::Postgres => Postgres::force_drop_database(url).await,
+                Backend::MariaDb => MySql::drop_database(url).await,
+            }
+        });
+    }
+}
+
+/// Runs `future` to completion on a runtime of its own, because the tests are
+/// synchronous and sqlx is not.
+pub fn block_on<T>(future: impl Future<Output = T>) -> T {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("a runtime")
+        .block_on(future)
+}
+
 /// Held from the port pick until the server listens, so two tests of this
 /// process cannot be handed the same port. Without it two were, on the Linux
 /// CI runner: the loser's server failed to bind, and its test talked to the
@@ -64,9 +215,9 @@ static SPAWN: Mutex<()> = Mutex::new(());
 pub struct Server {
     pub child: Child,
     pub addr: SocketAddr,
-    // Fields drop after `Drop::drop` has stopped the process, so the database
-    // file is closed by the time its directory is removed.
-    pub scratch: Option<Scratch>,
+    // Fields drop after `Drop::drop` has stopped the process, so the server
+    // no longer holds the database when it is dropped.
+    pub database: Option<TestDatabase>,
 }
 
 impl Drop for Server {
@@ -126,7 +277,7 @@ pub fn launch(args: &[&str], stdout: Stdio) -> Launch {
     let mut server = Server {
         child,
         addr,
-        scratch: None,
+        database: None,
     };
 
     // 3. Poll a TCP connect until it succeeds, so the test does not need the
@@ -170,18 +321,18 @@ fn stderr_of(child: &mut Child) -> String {
     stderr
 }
 
-/// Starts `serve` like `launch` on a freshly migrated database of its own, and
-/// returns the listening server. Panics when the server exits before
-/// listening.
-pub fn spawn_server(extra_args: &[&str], stdout: Stdio) -> Server {
+/// Starts `serve` like `launch` on a freshly migrated database of its own on
+/// `backend`, and returns the listening server. Panics when the server exits
+/// before listening.
+pub fn spawn_server(backend: Backend, extra_args: &[&str], stdout: Stdio) -> Server {
     // serve refuses a database that migrate has not built.
-    let scratch = Scratch::create();
-    let url = migrated_database(&scratch);
-    let mut args = vec!["--database-url", url.as_str()];
+    let database = TestDatabase::fresh(backend);
+    migrate_database(&database);
+    let mut args = vec!["--database-url", database.url.as_str()];
     args.extend_from_slice(extra_args);
     match launch(&args, stdout) {
         Launch::Listening(mut server) => {
-            server.scratch = Some(scratch);
+            server.database = Some(database);
             server
         }
         Launch::Exited(status, stderr) => {
@@ -190,17 +341,14 @@ pub fn spawn_server(extra_args: &[&str], stdout: Stdio) -> Server {
     }
 }
 
-/// Runs migrate on a fresh SQLite file in `scratch` and returns its URL.
-/// Panics when migrate fails.
-pub fn migrated_database(scratch: &Scratch) -> String {
-    let url = scratch.sqlite_url("store.db");
-    let out = run_migrate(&url);
+/// Runs migrate on `database`. Panics when migrate fails.
+pub fn migrate_database(database: &TestDatabase) {
+    let out = run_migrate(&database.url);
     assert!(
         out.status.success(),
         "migrate failed: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    url
 }
 
 /// Runs `migrate` on the database at `url` and returns its output.
