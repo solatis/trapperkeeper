@@ -33,3 +33,5 @@ dropped.
 | `0016-axum-and-utoipa-for-http.md`                                | axum with tower middleware; utoipa generates the API document from the handlers                 |
 | `0017-tracing-for-structured-logs.md`                             | tracing; JSON under a pipe, readable in a terminal; a log level setting that RUST_LOG overrides |
 | `0018-integration-tests-over-unit-tests.md`                       | one test per behavior at the highest observing level; generated data over hand-picked cases     |
+| `0019-sqlx-with-hand-written-sql-over-three-backends.md`          | sqlx, hand-written SQL in one subset, checksummed migrations per backend                        |
+| `0020-internal-ids-and-unique-names.md`                           | `_id` is an internal time-ordered UUID; `_name` is unique and what people use                   |

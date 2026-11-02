@@ -14,6 +14,7 @@ issues. Each module directory that appears under
 | File                  | What                                                       | When to read                                                            |
 | --------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------- |
 | `Cargo.toml`          | package and binary names; dependencies; lints              | changing a dependency or a lint                                         |
+| `build.rs`            | reruns the build when a migration file changes             | why a new migration file is picked up                                   |
 | `src/main.rs`         | the entry point: parse, dispatch, the placeholder          | how a subcommand starts and how it fails                                |
 | `src/cli.rs`          | the command line                                           | adding a flag or a subcommand                                           |
 | `src/config.rs`       | the settings and how they are resolved                     | adding a setting, precedence, environment variable names, the log level |
@@ -54,6 +55,12 @@ issues. Each module directory that appears under
 - tracing writes the logs, JSON under a pipe and readable in a terminal, at a
   level setting that `RUST_LOG` overrides (owner, 2026-11-01):
   `doc/adr/0017-tracing-for-structured-logs.md`.
+- sqlx runs hand-written SQL over SQLite, Postgres and MariaDB, with
+  checksummed migrations per backend (owner, 2026-11-02):
+  `doc/adr/0019-sqlx-with-hand-written-sql-over-three-backends.md`.
+- An entity's `_id` is an internal time-ordered UUID, and its `_name` is
+  unique, lowercase and what people use (owner, 2026-11-02):
+  `doc/adr/0020-internal-ids-and-unique-names.md`.
 - Tests drive the binary as a process, one test per behavior, and generate
   their data where it varies (owner, 2026-11-01):
   `doc/adr/0018-integration-tests-over-unit-tests.md`.

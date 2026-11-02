@@ -1,0 +1,3 @@
+# sqlx checksums the bytes of each migration, and a CRLF checkout on Windows
+# would change every checksum.
+*.sql text eol=lf

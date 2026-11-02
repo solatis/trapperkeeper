@@ -37,6 +37,12 @@ tower-http = { version = "0.7", features = ["trace"] }
 # The resolved settings are logged as one JSON string, so a reader parses them
 # instead of Rust's Debug text; already in the tree through axum's json feature.
 serde_json = "1"
+# sqlx runs the store's SQL and its migrations; why sqlx is
+# doc/adr/0019-sqlx-with-hand-written-sql-over-three-backends.md. The default
+# features are off, because they bring the Any driver, the compile-time macros
+# and json, which the store does not use. sqlite-bundled compiles SQLite into
+# the binary, so no platform needs a system library.
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "sqlite-bundled", "migrate", "derive"] }
 
 [dev-dependencies]
 # The settings precedence is one property over generated layers

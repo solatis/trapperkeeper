@@ -35,21 +35,24 @@ evaluation.
 
 ## Vocabulary
 
-| Term       | Meaning                                                                                                                                                     |
-| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Sensor     | In-process SDK instance, lives as long as the job. No registration, no identity, no server-side inventory.                                                  |
-| Record     | One unit of user data passed to the sensor: any nested structure, or a dataframe row.                                                                       |
-| Rule       | Immutable, versioned predicate over records plus an action, a sample rate and scope tags.                                                                   |
-| Condition  | Field path, declared field type, operator, value, and two policies: what to do on a missing field, what to do on a type coercion failure.                   |
-| Rule shape | OR of groups, each group an AND of conditions. Maps directly to a visual rule builder.                                                                      |
-| Field path | List of segments (key, index, wildcard) resolved at evaluation time. A wildcard matches if any element matches.                                             |
-| Action     | `observe` (report only), `drop` (remove the record from the pipeline), `fail` (raise into the pipeline).                                                    |
-| Scope tags | Key-value tags on a rule; a sensor syncs only rules matching its own tags.                                                                                  |
-| Event      | Report of a match: the record or the matching subset, metadata, and a snapshot of each matched rule as it was evaluated.                                    |
-| Metadata   | Key-value context on events. A reserved prefix carries system context (SDK type and version, scheduler and orchestrator identifiers); rest is user-defined. |
-| Operator   | Human managing rules. Roles: admin, operator, observer.                                                                                                     |
-| Principal  | Anything that authenticates to the management API: a human, a CLI credential, the AI agent.                                                                 |
-| Tenant     | Owner of rules, keys, users and events. See `adr/0003`.                                                                                                     |
+| Term       | Meaning                                                                                                                                                                |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sensor     | In-process SDK instance, lives as long as the job. No registration, no identity, no server-side inventory.                                                             |
+| Record     | One unit of user data passed to the sensor: any nested structure, or a dataframe row.                                                                                  |
+| Rule       | Immutable, versioned predicate over records plus an action, a sample rate and scope tags.                                                                              |
+| Condition  | Field path, declared field type, operator, value, and two policies: what to do on a missing field, what to do on a type coercion failure.                              |
+| Rule shape | OR of groups, each group an AND of conditions. Maps directly to a visual rule builder.                                                                                 |
+| Field path | List of segments (key, index, wildcard) resolved at evaluation time. A wildcard matches if any element matches.                                                        |
+| Action     | `observe` (report only), `drop` (remove the record from the pipeline), `fail` (raise into the pipeline).                                                               |
+| Scope tags | Key-value tags on a rule; a sensor syncs only rules matching its own tags.                                                                                             |
+| Event      | Report of a match: the record or the matching subset, metadata, and a snapshot of each matched rule as it was evaluated.                                               |
+| Metadata   | Key-value context on events. A reserved prefix carries system context (SDK type and version, scheduler and orchestrator identifiers); rest is user-defined.            |
+| Operator   | Human managing rules. Roles: admin, operator, observer.                                                                                                                |
+| Principal  | Anything that authenticates to the management API: a human, a CLI credential, the AI agent.                                                                            |
+| Tenant     | Owner of rules, keys, users and events. See `adr/0003`.                                                                                                                |
+| Id         | An entity's internal identifier, `<entity>_id`: a time-ordered UUID the server generates. Used in logs and references, never typed or shown to people. See `adr/0020`. |
+| Name       | What people type and address an entity by, `<entity>_name`: lowercase, unique in its scope (a tenant's name globally, a user's within its tenant). See `adr/0020`.     |
+| Title      | A user-friendly display name, `<entity>_title`, such as `role_title`. Keeps its case; not an identifier. See `adr/0020`.                                               |
 
 ## Integration surface
 
