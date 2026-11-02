@@ -57,3 +57,12 @@ event log is a separate store, whose engine is still open (see
   as `postgres://postgres:pw@127.0.0.1:5432/postgres`. Each test creates and
   drops databases named `tk_test_*`. `TK_TEST_EXPECT=postgres,mariadb` fails
   the run when either URL is missing, as CI sets it.
+- Start local servers with the images CI uses, and remove them afterwards:
+
+  ```sh
+  docker run -d --rm --name tk-pg -e POSTGRES_PASSWORD=tk -p 55432:5432 postgres:latest
+  docker run -d --rm --name tk-maria -e MARIADB_ROOT_PASSWORD=tk -p 53306:3306 mariadb:lts
+  export TK_TEST_POSTGRES_URL=postgres://postgres:tk@127.0.0.1:55432/postgres
+  export TK_TEST_MARIADB_URL=mariadb://root:tk@127.0.0.1:53306/mysql
+  docker rm -f tk-pg tk-maria
+  ```
