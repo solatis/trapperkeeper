@@ -77,6 +77,8 @@ pub struct DatabaseOverrides {
     /// `mariadb://...`.
     #[arg(long = "database-url", global = true, value_name = "URL")]
     #[serde(skip_serializing_if = "Option::is_none")]
+    // A plain `String` and not `DatabaseUrl`, because the flags layer is
+    // serialized into the merge and a masked value would replace the URL.
     pub url: Option<String>,
 }
 
