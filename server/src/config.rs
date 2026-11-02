@@ -70,7 +70,8 @@ impl Default for LogSettings {
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(deny_unknown_fields)]
 pub struct DatabaseSettings {
-    /// Where the store lives, as a URL sqlx accepts: `sqlite://<path>`.
+    /// Where the store lives, as a URL sqlx accepts: `sqlite://<path>`,
+    /// `postgres://...` or `mariadb://...`.
     pub url: String,
 }
 

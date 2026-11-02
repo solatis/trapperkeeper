@@ -62,7 +62,8 @@ pub struct LogOverrides {
 /// empty table, as `LogOverrides` does.
 #[derive(Args, Serialize, Default)]
 pub struct DatabaseOverrides {
-    /// Where the store lives, as a URL: `sqlite://<path>`.
+    /// Where the store lives, as a URL: `sqlite://<path>`, `postgres://...` or
+    /// `mariadb://...`.
     #[arg(long = "database-url", global = true, value_name = "URL")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,

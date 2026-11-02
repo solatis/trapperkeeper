@@ -2,7 +2,7 @@
 
 **What**: the single server binary, `trapperkeeper`, built from the package
 `trapperkeeper-server`. It parses two subcommands. `migrate` creates the
-relational store's database when it is missing and applies the migrations
+relational store's database on SQLite, Postgres or MariaDB when it is missing and applies the migrations
 embedded in the binary. `serve` refuses a database that does not match those
 migrations, then binds the listen address and runs the HTTP server until a
 signal stops it. Before a subcommand runs, the binary resolves

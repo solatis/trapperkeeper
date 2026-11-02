@@ -5,12 +5,14 @@ use std::fmt;
 
 use sqlx::migrate::{AppliedMigration, Migrate, MigrateError, Migrator};
 use sqlx::pool::PoolConnection;
-use sqlx::sqlite::Sqlite;
+use sqlx::{Database, Pool};
 
 use super::Store;
 
-/// The SQLite migrations, embedded at compile time.
+/// The migrations of each backend, embedded at compile time.
 static SQLITE: Migrator = sqlx::migrate!("migrations/sqlite");
+static POSTGRES: Migrator = sqlx::migrate!("migrations/postgres");
+static MARIADB: Migrator = sqlx::migrate!("migrations/mariadb");
 
 /// How a database differs from the binary's migrations, with the versions
 /// concerned.
@@ -71,12 +73,11 @@ fn list(versions: &[i64]) -> String {
 /// Fails on a database that does not match the binary, or when a migration
 /// fails.
 pub async fn apply(store: &Store) -> Result<usize, MigrateError> {
-    let applied = tracked(store)
-        .await?
-        .list_applied_migrations(&SQLITE.table_name)
-        .await?;
-    SQLITE.run(&store.pool).await?;
-    Ok(pending(&applied).len())
+    match store {
+        Store::Sqlite(pool) => apply_with(&SQLITE, pool).await,
+        Store::Postgres(pool) => apply_with(&POSTGRES, pool).await,
+        Store::MariaDb(pool) => apply_with(&MARIADB, pool).await,
+    }
 }
 
 /// Compares the database with the binary's migrations without applying any.
@@ -86,6 +87,32 @@ pub async fn apply(store: &Store) -> Result<usize, MigrateError> {
 ///
 /// Fails when the database cannot be read.
 pub async fn check(store: &Store) -> Result<Option<Mismatch>, MigrateError> {
+    match store {
+        Store::Sqlite(pool) => check_with(&SQLITE, pool).await,
+        Store::Postgres(pool) => check_with(&POSTGRES, pool).await,
+        Store::MariaDb(pool) => check_with(&MARIADB, pool).await,
+    }
+}
+
+async fn apply_with<D: Database>(migrator: &Migrator, pool: &Pool<D>) -> Result<usize, MigrateError>
+where
+    D::Connection: Migrate,
+{
+    let applied = tracked(migrator, pool)
+        .await?
+        .list_applied_migrations(&migrator.table_name)
+        .await?;
+    migrator.run(pool).await?;
+    Ok(pending(migrator, &applied).len())
+}
+
+async fn check_with<D: Database>(
+    migrator: &Migrator,
+    pool: &Pool<D>,
+) -> Result<Option<Mismatch>, MigrateError>
+where
+    D::Connection: Migrate,
+{
     // 1. open a connection with the tracking table in place
     // 2. a dirty version
     // 3. unknown versions
@@ -96,22 +123,22 @@ pub async fn check(store: &Store) -> Result<Option<Mismatch>, MigrateError> {
     // migrate fixes, so the message names the first problem to solve.
     // 1. A database without a tracking table gets an empty one, so it reads
     //    as every migration pending.
-    let mut connection = tracked(store).await?;
+    let mut connection = tracked(migrator, pool).await?;
 
     // 2. A dirty row stays in the table, so it is checked before the others
     //    read it as applied.
-    if let Some(version) = connection.dirty_version(&SQLITE.table_name).await? {
+    if let Some(version) = connection.dirty_version(&migrator.table_name).await? {
         return Ok(Some(Mismatch::Dirty(version)));
     }
     let applied = connection
-        .list_applied_migrations(&SQLITE.table_name)
+        .list_applied_migrations(&migrator.table_name)
         .await?;
 
     // 3. A version the binary lacks means a newer binary, or another build,
     //    made this database.
     let unknown: Vec<i64> = applied
         .iter()
-        .filter(|a| !SQLITE.version_exists(a.version))
+        .filter(|a| !migrator.version_exists(a.version))
         .map(|a| a.version)
         .collect();
     if !unknown.is_empty() {
@@ -124,7 +151,7 @@ pub async fn check(store: &Store) -> Result<Option<Mismatch>, MigrateError> {
     let edited: Vec<i64> = applied
         .iter()
         .filter(|a| {
-            SQLITE.iter().any(|m| {
+            migrator.iter().any(|m| {
                 m.version == a.version
                     && m.migration_type.is_up_migration()
                     && m.checksum != a.checksum
@@ -137,26 +164,32 @@ pub async fn check(store: &Store) -> Result<Option<Mismatch>, MigrateError> {
     }
 
     // 5. Only migrations that migrate applies are left.
-    let pending = pending(&applied);
+    let pending = pending(migrator, &applied);
     Ok((!pending.is_empty()).then_some(Mismatch::Pending(pending)))
 }
 
 /// A connection to the database, with the empty tracking table created when
 /// it is missing.
-async fn tracked(store: &Store) -> Result<PoolConnection<Sqlite>, MigrateError> {
-    let mut connection = store.pool.acquire().await?;
+async fn tracked<D: Database>(
+    migrator: &Migrator,
+    pool: &Pool<D>,
+) -> Result<PoolConnection<D>, MigrateError>
+where
+    D::Connection: Migrate,
+{
+    let mut connection = pool.acquire().await?;
     // Reading the table fails when it is absent. Creating it is the same call
     // on every backend, and asking whether it exists is not.
     connection
-        .ensure_migrations_table(&SQLITE.table_name)
+        .ensure_migrations_table(&migrator.table_name)
         .await?;
     Ok(connection)
 }
 
-/// The versions of the binary's migrations that `applied` lacks, in version
+/// The versions of `migrator`'s migrations that `applied` lacks, in version
 /// order.
-fn pending(applied: &[AppliedMigration]) -> Vec<i64> {
-    SQLITE
+fn pending(migrator: &Migrator, applied: &[AppliedMigration]) -> Vec<i64> {
+    migrator
         .iter()
         // A down file is embedded but never applied, so counting it would
         // leave it pending forever.
