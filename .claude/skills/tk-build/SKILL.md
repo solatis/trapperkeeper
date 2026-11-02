@@ -1,6 +1,6 @@
 ---
 name: tk-build
-description: Open the build stage of a unit -- per issue, in dependency order, cut the branch, land the commits its approved plan lists with their comments and document rows, run the doc-discipline checks, push and open the PR; then watch every PR's Actions runs while the owner reviews each PR in plannotator, bottom of a stack first, and post the build-stage message. Invoked by the owner after the plan-stage message; the invocation is the gate.
+description: Open the build stage of a unit -- per issue, in dependency order, cut the branch, land the commits its approved plan lists with their comments and document rows, run the doc-discipline checks, push and open the PR; then watch every PR's Actions runs while the owner reviews each PR in the Inbox, bottom of a stack first, and post the build-stage message. Invoked by the owner after the plan-stage message; the invocation is the gate.
 disable-model-invocation: true
 argument-hint: "[#n ... , only when the session does not already name the unit's issues]"
 ---
@@ -23,7 +23,7 @@ The issues are the argument's, else the unit's issues named in this
 session's plan-stage message. Each issue's plan is the `.plans/*-plan.md`
 whose `Issue:` line names it:
 
-!`grep -H -E -r --include='*-plan.md' '^(Issue|Branch|Base|Status):' .plans 2>/dev/null || echo none`
+!`grep -H -E -r --include='*-plan.md' '^(Issue|Branch|Base|Thread|Status):' .plans 2>/dev/null || echo none`
 
 No plan for an issue, or two plans naming the same issue, is a stop: say
 which, and the owner decides. With no argument and no plan-stage message in
@@ -58,7 +58,7 @@ CI workflows in the tree (empty means no CI):
 
 The tree is clean, master is in sync with origin, and each plan says
 `Status: approved`. Anything else is the owner's decision before anything
-else; a plan still at `draft` means the gate has not approved it.
+else; a plan still at `draft` means the owner has not approved it.
 
 Per issue, the branch decides where the build starts:
 
@@ -171,47 +171,50 @@ A watcher's exit says what comes next:
 | 3    | `STATUS ...`               | The checkpoint passed with runs still going. Relaunch the watcher with the same SHA and keep waiting.                                                                                                                                                                                                                              |
 | 4    | `no repo ...`              | Stop and report.                                                                                                                                                                                                                                                                                                                   |
 
-plannotator runs one session at a time, and a review diffs the checked-out
-branch, so the reviews run one after another, in landing order, bottom of a
-stack first. For each PR:
+The owner can mark only the latest message of the unit's thread, so one
+review waits at a time. The reviews run one after another, in landing
+order, bottom of a stack first. For each PR:
 
-1. `git checkout <slug>`, then open the review in the background, with the
-   timeout `/tk-workflow`, Tools, fixes:
+1. Write a guided review of the PR's pushed head and send it, as
+   `/tk-workflow`, The Inbox, says:
+   - `get_guide_brief`, then the patch `git diff <base>...<slug>`, which
+     shows only what this PR adds over its base.
+   - `submit_guide` with that exact patch, in the unit's thread. The body
+     names the PR's URL and the head's SHA, because the owner's "Looks good" approves
+     that head and no other.
 
-   ```
-   plannotator review --base <base> --json
-   ```
-
-   It blocks until the owner decides in the browser. Do nothing else while
-   it runs except handle a watcher that exits, as the table above says. Its
-   stdout is one JSON record; classify it by `decision` alone:
-   - `approved`: the owner's yes on this PR's code. Notes in `message` are
-     guidance, quoted in the build-stage message, not a change request.
-     Go on to the next PR.
-   - `annotated`: the owner's change requests. Address every annotation
-     with further small commits on this branch, push, start a watcher for
-     the new head, restack, and open this PR's review again. The watcher
-     of the superseded head is reported as superseded, not waited for.
-   - `dismissed`, or a non-zero exit without a decision: stop and report;
-     the owner decides in the conversation.
+   Then end your turn. A watcher that exits wakes the session too: handle
+   it as the table above says, report it in the conversation, and end your
+   turn again. The owner's answer is one of three, by The Inbox's table:
+   - "Looks good" on the guide's message: the owner's yes on this PR's head. Go on
+     to the next PR.
+   - A reply: the owner's change requests, also when its words sound like
+     a yes. Address every annotation and every point of the reply with
+     further small commits on this branch, push, start a watcher for the
+     new head, restack, and send a new guide for the new head from step 1,
+     with `reply_to` set to the reply's id. The watcher of the superseded
+     head is reported as superseded, not waited for.
+   - The thread resolved without a "Looks good": stop and report. The owner decides
+     in the conversation.
 
 An issue's build is over only when its reviewed head is its pushed head,
-its review is `approved`, and that head is green, or, without CI, its local
+the owner marked its guide "Looks good", and that head is green, or, without CI, its local
 checks passed on that head. Local tests passing is not the end of the stage
 when CI exists, however small the change.
 
 Correct: logging and metrics are built and pushed, metrics stacked on
-logging, two watchers running. The logging review returns two annotations;
-you fix them in two commits, push, start a watcher, rebase metrics onto the
-new logging head, force-push it, start its watcher, and review logging
-again; it returns `approved`. Then the metrics review returns `approved`.
-Both new heads go green; the message names their runs and the two
-superseded heads.
+logging, two watchers running. You send the logging guide; the owner
+replies with two annotations. You fix them in two commits, push, start a
+watcher, rebase metrics onto the new logging head, force-push it, start its
+watcher, and send a new logging guide; the owner marks it "Looks good". Then you send
+the metrics guide, and the owner marks it "Looks good". Both new heads go green; the
+message names their runs and the two superseded heads.
 
-Incorrect: the review returns `approved` and the build-stage message is
+Incorrect: the owner marks a guide "Looks good" and the build-stage message is
 posted while the runs are still going. Or: the logging fix is pushed and
-the metrics review opens on the old stack, so the owner reviews code that
-will never merge. Or: a run goes red, you fix it and wait for green without
+the metrics guide is sent on the old stack, so the owner reviews code that
+will never merge. Or: both guides go out at once, and the owner can mark
+only the metrics guide, because it is the latest message. Or: a run goes red, you fix it and wait for green without
 reopening the review, so the owner merges a commit they never saw.
 
 ## The build-stage message
@@ -220,7 +223,7 @@ Exactly, per issue in landing order: the issue number and the branch; the
 PR's URL and base; a summary of the change in plain words; each deviation
 from the plan with the reason the code forced it; the doc-discipline
 check's report, or "clean", with its "Needs a human" findings; the review's
-decision with its notes quoted, if any; the run ids and their state for the
+outcome, with the Inbox message id the owner marked; the run ids and their state for the
 reviewed head, and any superseded heads, or the local checks that ran when
 there is no CI; the command `git diff <base>...<slug>`. Then one line
 saying the merge waits for `/tk-merge`.
