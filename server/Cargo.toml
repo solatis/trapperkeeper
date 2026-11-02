@@ -42,8 +42,10 @@ serde_json = "1"
 # features are off, because they bring the Any driver and json, which the store
 # does not use. macros is on because it provides migrate!, and the store calls
 # none of its compile-time query macros. sqlite-bundled compiles SQLite into
-# the binary, so no platform needs a system library.
-sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "sqlite-bundled", "migrate", "macros"] }
+# the binary, so no platform needs a system library. postgres and mysql are the
+# server databases, and the mysql driver serves MariaDB. TLS goes through
+# rustls, so no platform needs a system OpenSSL.
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "sqlite-bundled", "postgres", "mysql", "tls-rustls-ring-webpki", "migrate", "macros"] }
 
 [dev-dependencies]
 # The settings precedence is one property over generated layers
