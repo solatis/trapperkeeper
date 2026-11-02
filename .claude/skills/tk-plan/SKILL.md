@@ -1,6 +1,6 @@
 ---
 name: tk-plan
-description: Open the plan stage of the current unit -- create the GitHub issues that do not exist yet, write one uncommitted plan per issue in .plans/, and yield all of them through one plannotator gate. Invoked by the owner after the seed report; the invocation is the gate.
+description: Open the plan stage of the current unit -- create the GitHub issues that do not exist yet, write one uncommitted plan per issue in .plans/, and put all of them to the owner in one Inbox review. Invoked by the owner after the seed report; the invocation is the gate.
 disable-model-invocation: true
 argument-hint: "[#n ... , only when resuming plans written in another session]"
 ---
@@ -25,7 +25,7 @@ Working tree (empty means clean):
 
 Plans on this machine:
 
-!`grep -H -E -r --include='*-plan.md' '^(Issue|Branch|Base|Status):' .plans 2>/dev/null || echo none`
+!`grep -H -E -r --include='*-plan.md' '^(Issue|Branch|Base|Thread|Status):' .plans 2>/dev/null || echo none`
 
 Issues named in the argument (empty means the seed report's):
 
@@ -37,7 +37,7 @@ A seed report for this unit is in the conversation; its Brief, Issues,
 Decisions, Open questions and Proposed commits are the inputs here. Without
 one, stop and say so, unless the argument names issues whose plans exist
 with `Status: draft`: then the plans are the input, and the stage resumes
-at the gate (step 5). A plan with `Status: approved` for an issue in the
+at the review (step 5). A plan with `Status: approved` for an issue in the
 unit is already through this stage: say so and leave it out.
 
 ## Step by step
@@ -73,42 +73,42 @@ unit is already through this stage: say so and leave it out.
    other plan's slug, and its commits assume only what the other plan's
    commits deliver.
 
-5. Yield all of the unit's draft plans through one review session, never
-   through a typed question:
+5. Put all of the unit's draft plans to the owner in one Inbox message,
+   with `send_message` in the unit's thread, as `/tk-workflow`, The Inbox,
+   says. `attachments` lists the plans in landing order, and the body says
+   in one line per plan what its issue delivers. The message carries no
+   question block, so the owner can mark it "Looks good". Then end your turn.
 
-   ```
-   plannotator annotate .plans/<slug-1>-plan.md .plans/<slug-2>-plan.md --gate --json
-   ```
-
-   One session, the plans in landing order, one decision for all of them.
-   Run it in the background, with the timeout `/tk-workflow`, Tools, fixes;
-   do nothing while it runs.
-   Its stdout is one JSON decision:
-   - `approved` (with optional `feedback`): the owner's yes on these plans,
-     and on the plans alone. Change each plan's `Status:` line from `draft`
-     to `approved`, so a session seeded fresh reads them as approved. Then
-     post the plan-stage message and wait; the build stage opens when the
-     owner invokes `/tk-build`.
-   - `annotated`: the owner's redirect. Fold every annotation into the plan
-     it points at, and gate all of the unit's plans again from step 5.
-     Never start code on an annotated plan.
-   - `dismissed`, or a non-zero exit without a decision: stop and report;
-     the owner decides in the conversation.
+   The owner's answer is one of three, by The Inbox's table:
+   - "Looks good" on this message: the owner's yes on these plans, and on the plans
+     alone. Change each plan's `Status:` line from `draft` to `approved`,
+     so a session seeded fresh reads them as approved. Then post the
+     plan-stage message and wait. The build stage opens when the owner
+     invokes `/tk-build`.
+   - A reply: the owner's redirect, also when its words sound like a yes.
+     Fold every annotation and every point of the reply into the plan it
+     concerns, and send all of the unit's plans again from step 5, with
+     `reply_to` set to the reply's id. Never start code on a plan the
+     owner redirected.
+   - The thread resolved without a "Looks good": stop and report. The owner decides
+     in the conversation.
 
 The plan-stage message, posted on approval, is exactly: one line per issue
 with its number, URL, slug and plan path, in landing order; the owner's
 `feedback` quoted, if any, with how the build will honor it; the open
 questions the plans recorded, each with the recommendation the approval has
-now settled; one line saying the build waits for `/tk-build`.
+now settled; one line saying the build waits for `/tk-build`. The message
+goes to the conversation, not to the Inbox thread.
 
 Correct: you create issue #14 for the one new issue, read doc-discipline,
 write `.plans/server-logging-plan.md` and `.plans/metrics-endpoint-plan.md`,
-check them, run the gate on both, wait; the decision is `approved`; you set
-both statuses, post the message and wait; the owner invokes `/tk-build`.
+check them, send both to the Inbox in one message and end your turn. The
+owner marks it "Looks good"; you set both statuses, post the message and wait; the
+owner invokes `/tk-build`.
 
-Incorrect: the gate returns `approved` and you create the first branch
-because the plans are approved. Or: you gate each plan in its own session,
+Incorrect: the owner marks the plans "Looks good" and you create the first branch
+because the plans are approved. Or: you send each plan in its own message,
 so the owner approves the metrics plan before seeing the logging plan it
-stacks on. Or: you ask "Approve the plans?" in the conversation instead of
-running the gate. Or: the gate returns annotations and you start code while
-addressing them.
+stacks on. Or: you add an "Approve the plans?" question to the message, so
+the owner cannot mark it "Looks good". Or: the owner replies with annotations and you
+start code while addressing them.
