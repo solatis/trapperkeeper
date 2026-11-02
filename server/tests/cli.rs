@@ -1,9 +1,7 @@
-//! Runs the binary and checks how it behaves on the command line. The
-//! precedence of the settings layers has no test here: the placeholders show
-//! no resolved setting, so it is tested through the binary once the server
-//! logs its resolved settings (issue #5), as `doc/adr/0018` asks. The wiring
-//! from a flag to a running server is exercised by the server tests, which
-//! start `serve` with `--listen`.
+//! Runs the binary and checks how it behaves on the command line: the
+//! version, usage errors from bad flags, and the failures that stop the
+//! process before a subcommand runs. The settings precedence is checked in
+//! `settings.rs`.
 
 mod common;
 
