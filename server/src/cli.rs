@@ -43,6 +43,9 @@ pub struct Overrides {
 
     #[command(flatten)]
     pub log: LogOverrides,
+
+    #[command(flatten)]
+    pub database: DatabaseOverrides,
 }
 
 /// Overrides of the `log` table. With no flag set it serializes to an empty
@@ -53,6 +56,16 @@ pub struct LogOverrides {
     #[arg(long = "log-level", global = true, value_name = "LEVEL")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub level: Option<LogLevel>,
+}
+
+/// Overrides of the `database` table. With no flag set it serializes to an
+/// empty table, as `LogOverrides` does.
+#[derive(Args, Serialize, Default)]
+pub struct DatabaseOverrides {
+    /// Where the store lives, as a URL: `sqlite://<path>`.
+    #[arg(long = "database-url", global = true, value_name = "URL")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
 }
 
 /// The subcommands. Each one resolves the settings first and then runs.

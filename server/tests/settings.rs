@@ -1,10 +1,11 @@
-//! Checks the precedence of the settings layers through the binary. For every
-//! setting, each of the file, the environment and the flags gets a random
-//! value or stays silent; the binary logs the settings it resolved, and each
-//! must be the value of the highest layer that spoke, or the default when none
-//! did. One property over generated layers instead of a case per layer, as
-//! `doc/adr/0018` asks. The `migrate` placeholder is run because it resolves
-//! and logs the settings and exits at once, so no port is needed.
+//! Checks the precedence of the settings layers through the binary. Three
+//! settings are covered: the listen address, the log level and the database
+//! URL. For each, the file, the environment and the flags each give a random
+//! value or stay silent. The binary logs the settings it resolved, and each
+//! must be the value of the highest layer that gave one, or the default when
+//! none did. One property over generated layers instead of a case per layer,
+//! as `doc/adr/0018` asks. The test runs `migrate`, because it resolves and
+//! logs the settings without needing a port.
 
 use std::fmt::Write as _;
 use std::fs;
@@ -24,18 +25,28 @@ const LEVELS: [&str; 6] = ["trace", "debug", "info", "warn", "error", "off"];
 struct Layer {
     listen: Option<u16>,
     level: Option<&'static str>,
+    database: Option<u8>,
 }
 
 fn layer() -> impl Strategy<Value = Layer> {
     (
         proptest::option::of(any::<u16>()),
         proptest::option::of(proptest::sample::select(&LEVELS[..])),
+        proptest::option::of(any::<u8>()),
     )
-        .prop_map(|(listen, level)| Layer { listen, level })
+        .prop_map(|(listen, level, database)| Layer {
+            listen,
+            level,
+            database,
+        })
 }
 
 fn address(port: u16) -> String {
     format!("127.0.0.1:{port}")
+}
+
+fn database_url(n: u8) -> String {
+    format!("sqlite://db-{n}.db")
 }
 
 /// Gives each run its own configuration file, because the runs of one test
@@ -58,6 +69,9 @@ fn resolved(file: &Layer, env: &Layer, flags: &Layer) -> Value {
     if let Some(level) = file.level {
         writeln!(toml, "[log]\nlevel = \"{level}\"").expect("a string grows");
     }
+    if let Some(n) = file.database {
+        writeln!(toml, "[database]\nurl = \"{}\"", database_url(n)).expect("a string grows");
+    }
     fs::write(&path, toml).expect("the file is written");
 
     // 2. Run the binary with the environment and flag layers. The outer
@@ -70,6 +84,7 @@ fn resolved(file: &Layer, env: &Layer, flags: &Layer) -> Value {
     command
         .env_remove("TRAPPERKEEPER_LISTEN")
         .env_remove("TRAPPERKEEPER_LOG__LEVEL")
+        .env_remove("TRAPPERKEEPER_DATABASE__URL")
         .env("RUST_LOG", "debug")
         .arg("--config")
         .arg(&path);
@@ -79,11 +94,17 @@ fn resolved(file: &Layer, env: &Layer, flags: &Layer) -> Value {
     if let Some(level) = env.level {
         command.env("TRAPPERKEEPER_LOG__LEVEL", level);
     }
+    if let Some(n) = env.database {
+        command.env("TRAPPERKEEPER_DATABASE__URL", database_url(n));
+    }
     if let Some(port) = flags.listen {
         command.arg("--listen").arg(address(port));
     }
     if let Some(level) = flags.level {
         command.arg("--log-level").arg(level);
+    }
+    if let Some(n) = flags.database {
+        command.arg("--database-url").arg(database_url(n));
     }
     command.arg("migrate");
     let output = command.output().expect("the binary runs");
@@ -125,5 +146,9 @@ proptest! {
 
         let level = flags.level.or(env.level).or(file.level).unwrap_or("info");
         prop_assert_eq!(settings["log"]["level"].as_str(), Some(level));
+
+        let database = flags.database.or(env.database).or(file.database)
+            .map_or_else(|| "sqlite://trapperkeeper.db".to_owned(), database_url);
+        prop_assert_eq!(settings["database"]["url"].as_str(), Some(database.as_str()));
     }
 }

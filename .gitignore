@@ -3,3 +3,7 @@
 
 # Cargo build output
 /target/
+
+# The database a local migrate creates with the default URL, and the side files
+# SQLite writes next to it
+trapperkeeper.db*

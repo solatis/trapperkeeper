@@ -32,6 +32,8 @@ pub struct Settings {
     pub listen: SocketAddr,
     /// The log output.
     pub log: LogSettings,
+    /// The relational store.
+    pub database: DatabaseSettings,
 }
 
 impl Default for Settings {
@@ -41,6 +43,7 @@ impl Default for Settings {
             // an operator says so.
             listen: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8080),
             log: LogSettings::default(),
+            database: DatabaseSettings::default(),
         }
     }
 }
@@ -59,6 +62,24 @@ impl Default for LogSettings {
             // Info, because the request lines are info and an operator should
             // see them without configuring anything.
             level: LogLevel(LevelFilter::INFO),
+        }
+    }
+}
+
+/// Settings of the relational store.
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(deny_unknown_fields)]
+pub struct DatabaseSettings {
+    /// Where the store lives, as a URL sqlx accepts: `sqlite://<path>`.
+    pub url: String,
+}
+
+impl Default for DatabaseSettings {
+    fn default() -> Self {
+        Self {
+            // A relative path, so `migrate` and `serve` run from one directory
+            // find the same file.
+            url: "sqlite://trapperkeeper.db".to_owned(),
         }
     }
 }

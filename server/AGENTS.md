@@ -4,8 +4,8 @@
 `trapperkeeper-server`. It parses two subcommands. `serve` binds the listen
 address and runs the HTTP server until a signal stops it; `migrate` is a
 placeholder that reports "not implemented yet" until the store issue fills it
-in. Before a subcommand runs, the binary resolves its settings; one setting
-exists, the listen address. The store and the APIs arrive with the next M1
+in. Before a subcommand runs, the binary resolves its settings: the listen
+address, the log level and the database URL. The store and the APIs arrive with the next M1
 issues. Each module directory that appears under
 `src/` gets its own `AGENTS.md`, and this file indexes them.
 
