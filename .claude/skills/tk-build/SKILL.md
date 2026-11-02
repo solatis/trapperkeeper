@@ -202,6 +202,11 @@ the owner marked its guide "Looks good", and that head is green, or, without CI,
 checks passed on that head. Local tests passing is not the end of the stage
 when CI exists, however small the change.
 
+A service the build starts for local tests, such as a database container,
+is named `tk-<what>`. The build removes it (`docker rm -f <name>`) once every
+issue's build is over. A build that stops early leaves its services running
+and names them in its report.
+
 Correct: logging and metrics are built and pushed, metrics stacked on
 logging, two watchers running. You send the logging guide; the owner
 replies with two annotations. You fix them in two commits, push, start a
@@ -225,7 +230,9 @@ from the plan with the reason the code forced it; the doc-discipline
 check's report, or "clean", with its "Needs a human" findings; the review's
 outcome, with the Inbox message id the owner marked; the run ids and their state for the
 reviewed head, and any superseded heads, or the local checks that ran when
-there is no CI; the command `git diff <base>...<slug>`. Then one line
+there is no CI; the command `git diff <base>...<slug>`. After the issues,
+one line naming the local services the build started and removed, or
+"none". Then one line
 saying the merge waits for `/tk-merge`.
 
 Then wait. Do not ask whether to merge; the owner invokes `/tk-merge` when
