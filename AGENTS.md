@@ -45,7 +45,9 @@ they arrive. A component directory has its own `AGENTS.md`, and inside
 - CI (`.github/workflows/ci.yml`) runs those four on every push, on five
   native runners: Linux amd64 and aarch64, Windows amd64 and aarch64, macOS
   aarch64, always on the current stable. Its five job names are the required
-  status checks of the `master` ruleset, which the owner keeps by hand.
+  status checks of the `master` ruleset, which the owner keeps by hand. Each
+  runner except Windows aarch64 also starts Postgres and MariaDB, so the tests
+  run against all three backends; why is `doc/adr/0021`.
 - The reasons behind the layout, the toolchain policy and the lint level are
   records `0010`, `0009` and `0011` in `doc/adr/`.
 
