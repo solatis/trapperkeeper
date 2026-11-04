@@ -136,7 +136,12 @@ thread with `reply_to` set to that id.
 
 A question is a `:::question` block, or `:::question-multi` for a pick of
 several, with its choices in natural order and your pick on a
-`Recommended:` line after them, never in a label.
+`Recommended:` line after them, never in a label. A choice is
+`- [ ] label - description`. Plannotator ends the label at the first
+hyphen that has a space on each side, and a double hyphen does not end it.
+So the label contains no such hyphen, and the `Recommended:` line repeats
+the label word for word. A `Recommended:` line that matches no label adds
+one more choice instead of marking one.
 
 A review message carries the plans or the guide and no question block,
 because the owner can mark a message "Looks good" only when it has no open

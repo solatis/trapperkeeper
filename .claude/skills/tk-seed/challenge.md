@@ -65,9 +65,9 @@ in parentheses, so the owner can find it in the code. The question runs
 three to six sentences; a one-line question is a sign the context was left
 out.
 
-The choices follow the same rule. Each choice is one line, `- [ ] label
--- what it does, what it costs and what it keeps open`. The label says the
-choice in plain words, not in identifiers ("a hash of the active rule set",
+The choices follow the same rule. Each choice is one line,
+`- [ ] label - what it does, what it costs and what it keeps open`. The
+label says the choice in plain words, not in identifiers ("a hash of the active rule set",
 not "sha256(rules)"), and the rest names an identifier only after saying
 what it is. The choices are: the approach the sources record, named by its
 path; the simplest alternative; a third where a real one exists. Keep them

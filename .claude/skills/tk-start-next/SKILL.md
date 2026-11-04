@@ -125,7 +125,7 @@ challenge round serve all of it, and whose commits total about 15 or fewer,
 so the review is one sitting; a set that runs over says so. End your turn
 until the owner's pick arrives.
 
-Each choice is `- [ ] label -- description`. The label is the issue in a
+Each choice is `- [ ] label - description`. The label is the issue in a
 few words and its commit count. The description says, in two or three
 sentences, what the owner will have to review: the directories and files touched, whether the code is new
 or edited, how much of it is library code, tests, fixtures or documents,
