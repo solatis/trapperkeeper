@@ -1,4 +1,5 @@
-//! Helpers for the tests that run the binary as a process.
+//! Helpers for the server tests: test databases on each backend, the router
+//! served in this process, the binary started as a process, and a GET.
 
 // Each test crate compiles this module and uses only part of it.
 #![allow(dead_code)]
@@ -19,6 +20,7 @@ use sqlx::migrate::MigrateDatabase;
 use sqlx::mysql::MySql;
 use sqlx::postgres::Postgres;
 use sqlx::sqlite::Sqlite;
+use trapperkeeper_server::{apply_migrations, create_store, router};
 use url::Url;
 
 /// How long a start or a stop may take before a test gives up. Not measured;
@@ -202,6 +204,66 @@ pub fn block_on<T>(future: impl Future<Output = T>) -> T {
         .build()
         .expect("a runtime")
         .block_on(future)
+}
+
+/// The production router on a freshly migrated database of its own on one
+/// backend, served in this process on `addr`. Dropping it stops the server
+/// and then drops the database.
+pub struct InProcess {
+    pub addr: SocketAddr,
+    // Declared before `database`, so the server and its pool stop before the
+    // database is dropped.
+    runtime: tokio::runtime::Runtime,
+    database: TestDatabase,
+}
+
+/// Serves the router on `backend` in this process and returns once the
+/// address accepts connections. Starts no process. Panics when the database
+/// cannot be created or migrated.
+pub fn serve_in_process(backend: Backend) -> InProcess {
+    // 1. create and migrate a database of its own through the library
+    // 2. bind a listener on port 0 and keep it
+    // 3. serve the router on that listener, on a runtime the value owns
+
+    // 1. A multi-thread runtime, so the server runs on its own threads while
+    //    the test blocks in `get`.
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .expect("a runtime");
+    let database = TestDatabase::fresh(backend);
+    let store = runtime.block_on(async {
+        let store = create_store(&database.url)
+            .await
+            .expect("the database is created");
+        apply_migrations(&store)
+            .await
+            .expect("the migrations apply");
+        store
+    });
+
+    // 2. The listener stays open from the bind to the drop, so a fork on
+    //    another test thread shares it instead of holding the last copy.
+    //    Connections queue in its backlog from the bind on, so no wait is needed.
+    let listener = TcpListener::bind("127.0.0.1:0").expect("a loopback listener");
+    let addr = listener.local_addr().expect("the bound address");
+
+    // 3. tokio adopts the listener only in non-blocking mode and inside a
+    //    runtime.
+    listener
+        .set_nonblocking(true)
+        .expect("the listener turns non-blocking");
+    let listener = {
+        let _context = runtime.enter();
+        tokio::net::TcpListener::from_std(listener).expect("tokio adopts the listener")
+    };
+    runtime.spawn(axum::serve(listener, router(store)).into_future());
+
+    InProcess {
+        addr,
+        runtime,
+        database,
+    }
 }
 
 /// Held from the port pick until the server listens, so two tests of this

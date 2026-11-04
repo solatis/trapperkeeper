@@ -13,8 +13,8 @@ publish.workspace = true
 name = "trapperkeeper"
 path = "src/main.rs"
 
-# The binary is a thin entry point over this library, which keeps the
-# package's name.
+# The tests reach the router through this library, and the binary is a thin
+# entry point over it. It keeps the package's name.
 [lib]
 path = "src/lib.rs"
 

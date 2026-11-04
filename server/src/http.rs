@@ -58,7 +58,7 @@ async fn readyz(State(store): State<Store>) -> (StatusCode, &'static str) {
 
 /// Builds the router with every route, the API document that describes them,
 /// served at `/openapi.json`, and the request log. The handlers share `store`.
-fn router(store: Store) -> Router {
+pub fn router(store: Store) -> Router {
     // The document must be split off before the route that serves it is
     // added, or it would describe itself, and the trace layer must wrap every
     // route including that one.

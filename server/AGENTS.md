@@ -13,23 +13,24 @@ arrive with the next M1 issues. Each module directory that appears under
 
 **Map**:
 
-| File                  | What                                                                                                  | When to read                                                            |
-| --------------------- | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `Cargo.toml`          | package and binary names; dependencies; lints                                                         | changing a dependency or a lint                                         |
-| `build.rs`            | reruns the build when a migration file changes                                                        | why a new migration file is picked up                                   |
-| `src/lib.rs`          | the entry point: parse, resolve, dispatch; what the library exports                                   | how a subcommand starts and how it fails; what tests can reach          |
-| `src/main.rs`         | starts the tokio runtime and calls the library                                                        | why the binary is so small                                              |
-| `src/cli.rs`          | the command line                                                                                      | adding a flag or a subcommand                                           |
-| `src/config.rs`       | the settings and how they are resolved                                                                | adding a setting, precedence, environment variable names, the log level |
-| `src/http.rs`         | the router, how it is served and stopped                                                              | adding an endpoint, how shutdown works                                  |
-| `src/logging.rs`      | the subscriber: log format and level                                                                  | log format, log level, RUST_LOG                                         |
-| `src/store/`          | the relational store and its migrations; see its `AGENTS.md`                                          | the database, migrations, tables                                        |
-| `tests/cli.rs`        | runs the binary and checks its command line                                                           | how the binary behaves on the command line                              |
-| `tests/common/mod.rs` | process helpers: the backends a run tests, test databases, spawn the server, run migrate, GET a route | writing a test that runs the binary; testing on every backend           |
-| `tests/http.rs`       | starts the binary and probes its endpoints                                                            | what the probes and the document promise                                |
-| `tests/logs.rs`       | runs the binary piped and checks the log lines                                                        | what a log line contains                                                |
-| `tests/settings.rs`   | the settings precedence as one property through the binary                                            | how precedence is tested                                                |
-| `tests/store.rs`      | runs migrate and serve against SQLite files                                                           | what migrate builds, which databases serve accepts                      |
+| File                  | What                                                                                                                                                                                       | When to read                                                                       |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| `Cargo.toml`          | package and binary names; dependencies; lints                                                                                                                                              | changing a dependency or a lint                                                    |
+| `build.rs`            | reruns the build when a migration file changes                                                                                                                                             | why a new migration file is picked up                                              |
+| `src/lib.rs`          | the entry point: parse, resolve, dispatch; what the library exports                                                                                                                        | how a subcommand starts and how it fails; what tests can reach                     |
+| `src/main.rs`         | starts the tokio runtime and calls the library                                                                                                                                             | why the binary is so small                                                         |
+| `src/cli.rs`          | the command line                                                                                                                                                                           | adding a flag or a subcommand                                                      |
+| `src/config.rs`       | the settings and how they are resolved                                                                                                                                                     | adding a setting, precedence, environment variable names, the log level            |
+| `src/http.rs`         | the router, how it is served and stopped                                                                                                                                                   | adding an endpoint, how shutdown works                                             |
+| `src/logging.rs`      | the subscriber: log format and level                                                                                                                                                       | log format, log level, RUST_LOG                                                    |
+| `src/store/`          | the relational store and its migrations; see its `AGENTS.md`                                                                                                                               | the database, migrations, tables                                                   |
+| `tests/cli.rs`        | end-to-end: runs the binary and checks its command line                                                                                                                                    | how the binary behaves on the command line                                         |
+| `tests/common/mod.rs` | test helpers: the backends a run tests, test databases, the router served in-process for integration tests, the binary started as a process for end-to-end tests, run migrate, GET a route | writing a server test; testing on every backend; which kind of server a test needs |
+| `tests/http.rs`       | integration tests of the endpoints on the router served in-process                                                                                                                         | what the probes and the document promise                                           |
+| `tests/logs.rs`       | end-to-end: runs the binary piped and checks the log lines                                                                                                                                 | what a log line contains                                                           |
+| `tests/settings.rs`   | end-to-end: the settings precedence as one property through the binary                                                                                                                     | how precedence is tested                                                           |
+| `tests/shutdown.rs`   | end-to-end test that SIGTERM stops the binary                                                                                                                                              | how the server stops                                                               |
+| `tests/store.rs`      | end-to-end: runs migrate and serve against SQLite files                                                                                                                                    | what migrate builds, which databases serve accepts                                 |
 
 **Invariants**:
 
@@ -43,6 +44,11 @@ arrive with the next M1 issues. Each module directory that appears under
   through `routes!`; a handler added with `.route` is missing from the API
   document. A handler's doc comment is its operation summary in that document,
   so it is written for the API's readers.
+- An integration test builds the server in the test process through the
+  library and never starts a process. Starting the binary is reserved for
+  end-to-end tests, which check what only a process shows: the exit status,
+  the command line, the log output on stdout and signals (owner, 2026-11-04).
+- A test never picks a free port, releases it and passes it on to a server.
 
 **Why**:
 

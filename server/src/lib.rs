@@ -1,10 +1,17 @@
-//! The server behind the `trapperkeeper` binary, which calls `run`.
+//! The server behind the `trapperkeeper` binary. The binary calls `run`, and
+//! tests reach the router and the store through the items exported here.
 
 mod cli;
 mod config;
 mod http;
 mod logging;
 mod store;
+
+// The integration tests build a migrated store and serve the router on a
+// listener they bound. Nothing else in the crate is part of its interface.
+pub use http::router;
+pub use store::migrate::apply as apply_migrations;
+pub use store::{Store, create as create_store};
 
 use std::process::ExitCode;
 
