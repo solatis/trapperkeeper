@@ -27,7 +27,7 @@ arrive with the next M1 issues. Each module directory that appears under
 | `tests/cli.rs`        | end-to-end: runs the binary and checks its command line                                                                                                                                    | how the binary behaves on the command line                                         |
 | `tests/common/mod.rs` | test helpers: the backends a run tests, test databases, the router served in-process for integration tests, the binary started as a process for end-to-end tests, run migrate, GET a route | writing a server test; testing on every backend; which kind of server a test needs |
 | `tests/http.rs`       | integration tests of the endpoints on the router served in-process                                                                                                                         | what the probes and the document promise                                           |
-| `tests/logs.rs`       | end-to-end: runs the binary piped and checks the log lines                                                                                                                                 | what a log line contains                                                           |
+| `tests/logs.rs`       | end-to-end: checks the log lines the binary writes under a pipe                                                                                                                            | what a log line contains                                                           |
 | `tests/settings.rs`   | end-to-end: the settings precedence as one property through the binary                                                                                                                     | how precedence is tested                                                           |
 | `tests/shutdown.rs`   | end-to-end test that SIGTERM stops the binary                                                                                                                                              | how the server stops                                                               |
 | `tests/store.rs`      | end-to-end: runs migrate and serve against SQLite files                                                                                                                                    | what migrate builds, which databases serve accepts                                 |
@@ -49,6 +49,8 @@ arrive with the next M1 issues. Each module directory that appears under
   end-to-end tests, which check what only a process shows: the exit status,
   the command line, the log output on stdout and signals (owner, 2026-11-04).
 - A test never picks a free port, releases it and passes it on to a server.
+  An in-process test keeps the listener it bound, and a process test starts
+  serve on port 0 and reads the bound address from the "listening" line.
 
 **Why**:
 

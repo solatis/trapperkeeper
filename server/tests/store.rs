@@ -6,7 +6,7 @@
 mod common;
 
 use std::collections::BTreeSet;
-use std::process::{ExitStatus, Output, Stdio};
+use std::process::{ExitStatus, Output};
 use std::sync::OnceLock;
 
 use common::{
@@ -119,8 +119,7 @@ fn migrate_builds_a_database_that_serve_accepts() {
 
         assert_eq!(applied_count(&run_migrate(&database.url)), 0);
 
-        let Launch::Listening(server) = launch(&["--database-url", &database.url], Stdio::null())
-        else {
+        let Launch::Listening(server) = launch(&["--database-url", &database.url]) else {
             panic!("serve refused the database migrate built");
         };
         assert_eq!(get(server.addr, "/healthz").0, 200);
@@ -294,7 +293,7 @@ fn build(state: &State, database: &TestDatabase) {
 /// Starts serve on the database at `url` and says what it did. A started
 /// server is killed.
 fn outcome(url: &str) -> (Option<ExitStatus>, String) {
-    match launch(&["--database-url", url], Stdio::null()) {
+    match launch(&["--database-url", url]) {
         Launch::Listening(_) => (None, String::new()),
         Launch::Exited(status, stderr) => (Some(status), stderr),
     }

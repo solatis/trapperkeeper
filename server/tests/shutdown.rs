@@ -5,8 +5,6 @@
 
 mod common;
 
-use std::process::Stdio;
-
 use common::{on_each_backend, spawn_server};
 
 /// SIGTERM stops the server and it exits zero. `kill` as a child process
@@ -20,7 +18,7 @@ fn sigterm_stops_the_server() {
 
         use common::TIMEOUT;
 
-        let mut server = spawn_server(backend, &[], Stdio::null());
+        let mut server = spawn_server(backend, &[]);
         let sent = Command::new("kill")
             .arg("-TERM")
             .arg(server.child.id().to_string())

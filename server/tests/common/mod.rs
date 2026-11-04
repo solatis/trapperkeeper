@@ -10,12 +10,13 @@ use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::path::PathBuf;
-use std::process::{Child, Command, ExitStatus, Stdio};
+use std::process::{Child, ChildStdout, Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Mutex, PoisonError};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use serde_json::Value;
 use sqlx::migrate::MigrateDatabase;
 use sqlx::mysql::MySql;
 use sqlx::postgres::Postgres;
@@ -266,17 +267,15 @@ pub fn serve_in_process(backend: Backend) -> InProcess {
     }
 }
 
-/// Held from the port pick until the server listens, so two tests of this
-/// process cannot be handed the same port. Without it two were, on the Linux
-/// CI runner: the loser's server failed to bind, and its test talked to the
-/// winner's server until that one was killed (run 41285437744).
-static SPAWN: Mutex<()> = Mutex::new(());
-
 /// A running `trapperkeeper serve`, killed when dropped so a failing assertion
 /// leaves no process behind.
 pub struct Server {
     pub child: Child,
     pub addr: SocketAddr,
+    /// The log lines up to and including "listening", parsed.
+    pub startup: Vec<Value>,
+    /// The log lines after "listening", forwarded by a drain thread.
+    pub lines: Receiver<String>,
     // Fields drop after `Drop::drop` has stopped the process, so the server
     // no longer holds the database when it is dropped.
     pub database: Option<TestDatabase>,
@@ -299,76 +298,98 @@ pub enum Launch {
     Exited(ExitStatus, String),
 }
 
-/// Starts `serve` with `args` on a free loopback port and returns once the
-/// port accepts a connection or the process exits. Panics when neither
-/// happens within `TIMEOUT`. `stdout` is wired as given: a test that reads
-/// the log lines pipes it and drains it, the others pass `Stdio::null()`,
-/// because an undrained pipe blocks the child once it is full.
-pub fn launch(args: &[&str], stdout: Stdio) -> Launch {
-    // Three steps under one lock, with a timeout on the last:
-    //
-    // 1. pick a free port;
-    // 2. spawn the server on it;
-    // 3. wait until the port accepts a connection or the server exits.
-    //
-    // The lock serializes the tests of this process from the pick to the
-    // listening server, because the pick leaves a window in which the port is
-    // free and another test would be handed the same one. A poisoned lock is
-    // taken anyway: the test that panicked holding it left nothing to protect.
-    let _spawning = SPAWN.lock().unwrap_or_else(PoisonError::into_inner);
+/// Starts `serve` with `args` on port 0, with stdout piped and drained, and
+/// returns once the "listening" line names the address or the process exits.
+/// Panics when neither happens within `TIMEOUT`.
+pub fn launch(args: &[&str]) -> Launch {
+    // 1. spawn `serve --listen 127.0.0.1:0` with stdout and stderr piped
+    // 2. forward stdout line by line on a thread
+    // 3. read lines until "listening" or the end of stdout
 
-    // 1. Pick a free port by binding port 0 and dropping the listener. Between
-    //    the drop and the child's bind an unrelated process could take the
-    //    port; accepted as unlikely on loopback.
-    let addr = TcpListener::bind("127.0.0.1:0")
-        .expect("a free port")
-        .local_addr()
-        .expect("the bound address");
-
-    // 2. Spawn `serve --listen <addr>`. stderr is piped and read only after
-    //    an exit, because the server writes to it only when it fails.
-    let child = Command::new(env!("CARGO_BIN_EXE_trapperkeeper"))
+    // 1. The server binds port 0 itself and keeps the socket, so no other
+    //    process ever holds the port first. stderr is read only after an
+    //    exit, because the server writes to it only when it fails.
+    let mut child = Command::new(env!("CARGO_BIN_EXE_trapperkeeper"))
         .arg("serve")
         .arg("--listen")
-        .arg(addr.to_string())
+        .arg("127.0.0.1:0")
         .args(args)
-        .stdout(stdout)
+        .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .expect("the binary spawns");
-    let mut server = Server {
+
+    // 2. An undrained pipe blocks the server once it is full.
+    let lines = drain(child.stdout.take().expect("stdout is piped"));
+
+    // 3. The end of stdout means the process exited, and its status and
+    //    stderr are returned.
+    let Some(startup) = read_until(&lines, "listening") else {
+        let status = child.wait().expect("the child is waited for");
+        return Launch::Exited(status, stderr_of(&mut child));
+    };
+    // The line's `address` holds the port the server bound, not 0.
+    let addr = startup.last().expect("the listening line")["fields"]["address"]
+        .as_str()
+        .expect("an address field")
+        .parse()
+        .expect("a socket address");
+    Launch::Listening(Server {
         child,
         addr,
+        startup,
+        lines,
         database: None,
-    };
+    })
+}
 
-    // 3. Poll a TCP connect until it succeeds, so the test does not need the
-    //    server's output to know it is up. The exit check runs once more after
-    //    the connect, so a connection to someone else's server on the port is
-    //    not mistaken for ours.
+/// Forwards each line of `stdout` on a thread of its own, so a test can wait
+/// for a line with a deadline instead of blocking on a read that may never
+/// return.
+fn drain(stdout: ChildStdout) -> Receiver<String> {
+    let (sender, receiver) = mpsc::channel();
+    thread::spawn(move || {
+        for line in BufReader::new(stdout).lines() {
+            // The receiver is gone once the test ends; the pipe closes when
+            // the server is killed, which ends the loop.
+            if sender.send(line.expect("a line of stdout")).is_err() {
+                break;
+            }
+        }
+    });
+    receiver
+}
+
+/// Reads lines until one whose message is `message`, each parsed as JSON, and
+/// returns all of them, or `None` when stdout ends first. Panics when
+/// `TIMEOUT` passes first.
+fn read_until(lines: &Receiver<String>, message: &str) -> Option<Vec<Value>> {
     let deadline = Instant::now() + TIMEOUT;
+    let mut read = Vec::new();
     loop {
-        if let Some(status) = server.child.try_wait().expect("the child can be polled") {
-            return Launch::Exited(status, stderr_of(&mut server.child));
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        let line = match lines.recv_timeout(remaining) {
+            Ok(line) => line,
+            Err(RecvTimeoutError::Disconnected) => return None,
+            Err(RecvTimeoutError::Timeout) => {
+                panic!("no line with message {message:?} within {TIMEOUT:?}")
+            }
+        };
+        let value: Value = serde_json::from_str(&line).expect("one JSON object per line");
+        let found = value["fields"]["message"] == message;
+        read.push(value);
+        if found {
+            return Some(read);
         }
-        if TcpStream::connect(addr).is_ok() {
-            break;
-        }
-        assert!(
-            Instant::now() < deadline,
-            "the server did not listen within {TIMEOUT:?}"
-        );
-        thread::sleep(Duration::from_millis(20));
     }
-    assert!(
-        server
-            .child
-            .try_wait()
-            .expect("the child can be polled")
-            .is_none(),
-        "the server exited after something else accepted on its port"
-    );
-    Launch::Listening(server)
+}
+
+/// Reads lines until one whose message is `message`, each parsed as JSON, and
+/// returns all of them. Panics when `TIMEOUT` or the end of stdout comes
+/// first.
+pub fn lines_until(lines: &Receiver<String>, message: &str) -> Vec<Value> {
+    read_until(lines, message)
+        .unwrap_or_else(|| panic!("stdout ended before a line with message {message:?}"))
 }
 
 /// Everything an exited child wrote to its piped stderr.
@@ -386,13 +407,13 @@ fn stderr_of(child: &mut Child) -> String {
 /// Starts `serve` like `launch` on a freshly migrated database of its own on
 /// `backend`, and returns the listening server. Panics when the server exits
 /// before listening.
-pub fn spawn_server(backend: Backend, extra_args: &[&str], stdout: Stdio) -> Server {
+pub fn spawn_server(backend: Backend, extra_args: &[&str]) -> Server {
     // serve refuses a database that migrate has not built.
     let database = TestDatabase::fresh(backend);
     migrate_database(&database);
     let mut args = vec!["--database-url", database.url.as_str()];
     args.extend_from_slice(extra_args);
-    match launch(&args, stdout) {
+    match launch(&args) {
         Launch::Listening(mut server) => {
             server.database = Some(database);
             server
