@@ -245,8 +245,8 @@ pub fn serve_in_process(backend: Backend) -> InProcess {
 
     // 2. The listener stays open from the bind to the drop, so a fork on
     //    another test thread shares it instead of holding the last copy.
-    //    Connections queue in its backlog from the bind on, so no wait is needed.
     let listener = TcpListener::bind("127.0.0.1:0").expect("a loopback listener");
+    // Connections queue in the backlog from the bind on, so no wait is needed.
     let addr = listener.local_addr().expect("the bound address");
 
     // 3. tokio adopts the listener only in non-blocking mode and inside a
