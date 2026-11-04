@@ -96,54 +96,67 @@ pub fn router(store: Store) -> Router {
 ///
 /// An I/O error binding or serving is returned, not printed.
 pub async fn serve(settings: &Settings, store: Store) -> io::Result<()> {
-    // Bind, serve, stop: a sequence with its own failure at each step and a
-    // log line at each.
+    // Listen for signals, bind, serve, stop: a sequence with its own failure
+    // at each step and a log line at the bind and the stop.
     //
-    // 1. Bind the listen address and say so at info; it is the line a test or
+    // 1. Install the signal handlers before the bind, so a signal sent once
+    //    the "listening" line appears stops the server through the drain
+    //    instead of killing it.
+    let shutdown = shutdown_signal()?;
+
+    // 2. Bind the listen address and say so at info; it is the line a test or
     //    an operator waits for. Failure here is the common operator error, a
     //    port in use or an address that is not local, and is returned as is.
     let listener = TcpListener::bind(settings.listen).await?;
     tracing::info!(address = %listener.local_addr()?, "listening");
 
-    // 2. Serve until `shutdown_signal` resolves, then finish the in-flight
-    //    requests, so a SIGTERM from an orchestrator drains the connections
-    //    instead of cutting them.
+    // 3. Serve until a signal arrives, then finish the in-flight requests, so
+    //    a SIGTERM from an orchestrator drains the connections instead of
+    //    cutting them.
     axum::serve(listener, router(store))
-        .with_graceful_shutdown(shutdown_signal())
+        .with_graceful_shutdown(shutdown)
         .await?;
 
-    // 3. Say that the drain completed, so the log can tell a clean stop from a
+    // 4. Say that the drain completed, so the log can tell a clean stop from a
     //    crash.
     tracing::info!("stopped");
     Ok(())
 }
 
-/// Resolves when the process is asked to stop: SIGINT or SIGTERM on Unix,
-/// Ctrl-C on Windows.
-async fn shutdown_signal() {
+/// Installs the handlers for the signals that stop the server, SIGINT or
+/// SIGTERM on Unix and Ctrl-C on Windows, and returns a future that resolves
+/// when one arrives. Fails when a handler cannot be installed.
+fn shutdown_signal() -> io::Result<impl Future<Output = ()>> {
     // SIGTERM is what an orchestrator sends and SIGINT what a terminal sends;
     // either one stops the server.
     #[cfg(unix)]
-    {
+    let received = {
         use tokio::signal::unix::{SignalKind, signal};
 
-        let mut terminate = signal(SignalKind::terminate()).expect("the SIGTERM handler installs");
-        tokio::select! {
-            _ = tokio::signal::ctrl_c() => {}
-            _ = terminate.recv() => {}
+        let mut terminate = signal(SignalKind::terminate())?;
+        let mut interrupt = signal(SignalKind::interrupt())?;
+        async move {
+            tokio::select! {
+                _ = terminate.recv() => {}
+                _ = interrupt.recv() => {}
+            }
         }
-    }
+    };
 
-    // Windows has no SIGTERM; Ctrl-C is the console signal tokio exposes on
-    // every platform.
+    // Windows has no SIGTERM, so Ctrl-C is the console signal that stops the
+    // server.
     #[cfg(not(unix))]
-    {
-        tokio::signal::ctrl_c()
-            .await
-            .expect("the Ctrl-C handler installs");
-    }
+    let received = {
+        let mut ctrl_c = tokio::signal::windows::ctrl_c()?;
+        async move {
+            ctrl_c.recv().await;
+        }
+    };
 
-    // Said at info, so the stop that follows is attributable to the signal
-    // rather than to a crash.
-    tracing::info!("shutdown signal received");
+    Ok(async move {
+        received.await;
+        // Said at info, so the stop that follows is attributable to the
+        // signal rather than to a crash.
+        tracing::info!("shutdown signal received");
+    })
 }
