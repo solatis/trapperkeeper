@@ -1,7 +1,8 @@
 # server/
 
 **What**: the single server binary, `trapperkeeper`, built from the package
-`trapperkeeper-server`. It parses two subcommands. `migrate` creates the
+`trapperkeeper-server`. The binary is a thin `main` over the library
+`trapperkeeper_server`, which parses two subcommands. `migrate` creates the
 relational store's database on SQLite, Postgres or MariaDB when it is missing and applies the migrations
 embedded in the binary. `serve` refuses a database that does not match those
 migrations, then binds the listen address and runs the HTTP server until a
@@ -16,7 +17,8 @@ arrive with the next M1 issues. Each module directory that appears under
 | --------------------- | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
 | `Cargo.toml`          | package and binary names; dependencies; lints                                                         | changing a dependency or a lint                                         |
 | `build.rs`            | reruns the build when a migration file changes                                                        | why a new migration file is picked up                                   |
-| `src/main.rs`         | the entry point: parse, resolve, dispatch                                                             | how a subcommand starts and how it fails                                |
+| `src/lib.rs`          | the entry point: parse, resolve, dispatch; what the library exports                                   | how a subcommand starts and how it fails; what tests can reach          |
+| `src/main.rs`         | starts the tokio runtime and calls the library                                                        | why the binary is so small                                              |
 | `src/cli.rs`          | the command line                                                                                      | adding a flag or a subcommand                                           |
 | `src/config.rs`       | the settings and how they are resolved                                                                | adding a setting, precedence, environment variable names, the log level |
 | `src/http.rs`         | the router, how it is served and stopped                                                              | adding an endpoint, how shutdown works                                  |
@@ -82,5 +84,5 @@ creates `trapperkeeper.db` in the working directory, and `cargo run -- serve`
 then starts the server on `127.0.0.1:8080`; Ctrl-C stops it.
 The tests run against SQLite, and also against Postgres and MariaDB when
 `TK_TEST_POSTGRES_URL` and `TK_TEST_MARIADB_URL` are set; see
-`src/store/AGENTS.md`, How to. `RUST_LOG=trapperkeeper=debug cargo run -- serve` is a debugging run; piping
+`src/store/AGENTS.md`, How to. `RUST_LOG=trapperkeeper_server=debug cargo run -- serve` is a debugging run; piping
 through `jq` reads the JSON lines.

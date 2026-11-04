@@ -13,6 +13,11 @@ publish.workspace = true
 name = "trapperkeeper"
 path = "src/main.rs"
 
+# The binary is a thin entry point over this library, which keeps the
+# package's name.
+[lib]
+path = "src/lib.rs"
+
 # clap parses the command line and figment merges the settings layers; why
 # these two is doc/adr/0012-clap-and-figment-for-the-command-line-and-configuration.md.
 # figment has only the two providers the layers need; the file format is TOML.
