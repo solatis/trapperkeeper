@@ -82,8 +82,10 @@ arrive with the next M1 issues. Each module directory that appears under
   release of each database, and a platform skips only what has no build for
   it (owner, 2026-11-02):
   `doc/adr/0021-every-test-suite-runs-on-every-platform.md`.
-- Tests drive the binary as a process, one test per behavior, and generate
-  their data where it varies (owner, 2026-11-01):
+- Tests run at the highest level that observes a behavior, by default.
+  Integration tests build the server in the test process and start no
+  process, and only end-to-end tests start the binary. Tests generate their
+  data where it varies (owner, 2026-11-01, 2026-11-03, 2026-11-04):
   `doc/adr/0018-integration-tests-over-unit-tests.md`.
 
 **How to**: build, lint and test with the commands in the root `AGENTS.md`,
