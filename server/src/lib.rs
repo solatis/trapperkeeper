@@ -100,8 +100,8 @@ async fn serve(settings: &Settings) -> ExitCode {
         return ExitCode::FAILURE;
     };
 
-    // 2. The signing key is the one setting without a default, because a
-    //    default key would sign for every installation.
+    // 2. The signing key has no default, because a default holds no secret
+    //    (doc/adr/0013).
     let Some(signing) = &settings.auth.signing_key else {
         eprintln!(
             "auth.signing_key is not set; serve needs a passphrase of at least 32 characters, \

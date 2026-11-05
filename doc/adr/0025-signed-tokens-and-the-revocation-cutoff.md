@@ -31,7 +31,9 @@ compares exactly in both directions.
 The signing keys are two passphrases typed by hand into the configuration,
 each at least 32 characters: `auth.signing_key`, which is required and
 signs, and `auth.previous_signing_key`, which is optional and only checks.
-Neither has a command line flag (owner, 2026-11-05). The server stretches
+The names say what each key does, and a rotation reads as moving one to the
+other. Neither has a command line flag, because `doc/adr/0013` warns on any
+secret given as a flag (owner, 2026-11-05). The server stretches
 each passphrase with Argon2id, at the parameters of `doc/adr/0022`, under a
 random salt that `migrate` writes once into the `installation` table. The
 salt gives every installation its own keys, and the stretching makes each
