@@ -19,6 +19,11 @@ event log is a separate store, whose engine is still open (see
 
 - Every table other than `tenants` has a `tenant_id` column, and every query
   filters on it (`doc/adr/0003`).
+- Every entity table has a `deleted_at` column, and a deleted row stays in the
+  table. Every read filters on `deleted_at IS NULL` as it filters on
+  `tenant_id`. A name is unique among live rows: a partial unique index on
+  SQLite and Postgres, and a unique key over a generated `live` column on
+  MariaDB, which has no partial index (`doc/adr/0024`).
 - An entity's `_id` is a time-ordered UUID that Rust generates, stored as
   36-character text. Its `_name` is unique in its scope and lowercase, and
   constraints in the table enforce both. A display name is a `_title` column,
@@ -38,6 +43,9 @@ event log is a separate store, whose engine is still open (see
   `doc/adr/0019-sqlx-with-hand-written-sql-over-three-backends.md`.
 - Ids are internal and names are unique (owner, 2026-11-02):
   `doc/adr/0020-internal-ids-and-unique-names.md`.
+- Entities are deleted softly, with a `deleted_at` column, so reports and
+  references keep working after a delete (owner, 2026-11-05):
+  `doc/adr/0024-soft-deletes.md`.
 - serve opens the database without creating it, and only migrate creates it,
   so a mistyped path fails with "run migrate" instead of producing an empty
   database.
@@ -48,8 +56,8 @@ event log is a separate store, whose engine is still open (see
 **How to**:
 
 - Add a table: add the next numbered file to each of the three migration
-  directories, with a `tenant_id` column and the unique constraint on the
-  name.
+  directories, with a `tenant_id` column, a `deleted_at` column, and the
+  live-only unique index on the name as `0001_tenants.sql` has it.
 - Start over after editing a migration: delete the database and run
   `migrate`.
 - Run the tests against Postgres or MariaDB: set `TK_TEST_POSTGRES_URL` or

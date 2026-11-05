@@ -82,8 +82,8 @@ contents are untrusted input to the model.
 ### Store
 
 - Relational state: rules, keys, users, tenants and the audit trail. It lives
-  in the server's store module, on SQLite, Postgres or MariaDB. See
-  `server/src/store/AGENTS.md`.
+  in the server's store module, on SQLite, Postgres or MariaDB, and entities
+  are deleted softly (`adr/0024`). See `server/src/store/AGENTS.md`.
 - Event log: append-only, time-ordered, independent retention. Events embed
   rule snapshots so they are self-contained. Engine choice is open (see `decisions.md`).
 
