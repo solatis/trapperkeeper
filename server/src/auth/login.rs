@@ -263,9 +263,16 @@ pub async fn logout(caller: Caller, State(state): State<AppState>, jar: CookieJa
 /// `jar` with both token cookies set again with `Max-Age=0`, which removes
 /// them (RFC 6265, 5.3).
 fn clear_cookies(jar: CookieJar) -> CookieJar {
-    // A removal cookie matches the original by name and path.
-    jar.remove(Cookie::build(ACCESS_COOKIE).path("/"))
-        .remove(Cookie::build(REFRESH_COOKIE).path(REFRESH_PATH))
+    // Added as removal cookies rather than removed from the jar, because the
+    // jar removes only a cookie the request carried, and a logout over the
+    // bearer header carries none.
+    let removal = |name: &'static str, path: &'static str| {
+        let mut cookie = Cookie::build((name, "")).path(path).build();
+        cookie.make_removal();
+        cookie
+    };
+    jar.add(removal(ACCESS_COOKIE, "/"))
+        .add(removal(REFRESH_COOKIE, REFRESH_PATH))
 }
 
 /// What a caller can read about itself.
