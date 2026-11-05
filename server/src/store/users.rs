@@ -159,3 +159,31 @@ pub async fn find_by_id(
             .await
     })
 }
+
+/// Sets the user's `tokens_valid_after` to `now`, which revokes every token
+/// issued before it.
+///
+/// # Errors
+///
+/// Fails when the database cannot be written.
+pub async fn revoke_tokens(
+    tx: &mut Tx,
+    tenant_id: &str,
+    user_id: &str,
+    now: i64,
+) -> Result<(), sqlx::Error> {
+    let update = sql(
+        tx,
+        "UPDATE users SET tokens_valid_after = $1 \
+         WHERE tenant_id = $2 AND user_id = $3 AND deleted_at IS NULL",
+    );
+    on_tx!(tx, |conn| {
+        sqlx::query(AssertSqlSafe(update))
+            .bind(now)
+            .bind(tenant_id)
+            .bind(user_id)
+            .execute(conn)
+            .await
+            .map(|_| ())
+    })
+}

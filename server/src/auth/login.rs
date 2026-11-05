@@ -1,5 +1,5 @@
-//! The login and refresh routes, and what a logged-in caller can read about
-//! itself.
+//! The login, refresh and logout routes, and what a logged-in caller can
+//! read about itself.
 
 use std::time::SystemTime;
 
@@ -16,8 +16,8 @@ use crate::auth::caller::{Caller, authenticate};
 use crate::auth::password;
 use crate::auth::token::Kind;
 use crate::http::AppState;
-use crate::store::DEFAULT_TENANT_ID;
 use crate::store::users;
+use crate::store::{DEFAULT_TENANT_ID, now_micros};
 
 /// A name and a password.
 #[derive(Deserialize, ToSchema)]
@@ -226,6 +226,46 @@ pub async fn refresh(
         }),
     )
         .into_response()
+}
+
+/// Logs the caller out everywhere: revokes every token of the caller and
+/// clears both cookies.
+#[utoipa::path(
+    post,
+    path = "/logout",
+    security(("bearer" = [])),
+    responses(
+        (status = OK, description = "logged out", body = String),
+        (status = UNAUTHORIZED, description = "no valid access token", body = String)
+    )
+)]
+pub async fn logout(caller: Caller, State(state): State<AppState>, jar: CookieJar) -> Response {
+    // The cutoff is per user, so every session of the user ends, including
+    // the caller's.
+    let revoked = async {
+        let mut tx = state.store.begin().await?;
+        users::revoke_tokens(
+            &mut tx,
+            &caller.user.tenant_id,
+            &caller.user.id,
+            now_micros(),
+        )
+        .await?;
+        tx.commit().await
+    }
+    .await;
+    if let Err(error) = revoked {
+        return database_error(&error);
+    }
+    (StatusCode::OK, clear_cookies(jar), "logged out").into_response()
+}
+
+/// `jar` with both token cookies set again with `Max-Age=0`, which removes
+/// them (RFC 6265, 5.3).
+fn clear_cookies(jar: CookieJar) -> CookieJar {
+    // A removal cookie matches the original by name and path.
+    jar.remove(Cookie::build(ACCESS_COOKIE).path("/"))
+        .remove(Cookie::build(REFRESH_COOKIE).path(REFRESH_PATH))
 }
 
 /// What a caller can read about itself.

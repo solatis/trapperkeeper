@@ -115,6 +115,7 @@ pub fn router(state: AppState) -> Router {
     let management = OpenApiRouter::new()
         .routes(routes!(login::login))
         .routes(routes!(login::refresh))
+        .routes(routes!(login::logout))
         .routes(routes!(login::me));
 
     // 2. The probes and the document stay at the root, where orchestrators

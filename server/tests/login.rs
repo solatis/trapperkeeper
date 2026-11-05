@@ -293,6 +293,8 @@ enum Op {
     Me { token: usize },
     /// Trade a held token for a new access token.
     Refresh { token: usize },
+    /// Log out with a held token.
+    Logout { token: usize },
     /// Mint a token of a kind that expired long ago, as if a week had passed.
     Expired { refresh: bool },
 }
@@ -302,6 +304,7 @@ fn op() -> impl Strategy<Value = Op> {
         3 => any::<bool>().prop_map(|right_password| Op::Login { right_password }),
         3 => any::<usize>().prop_map(|token| Op::Me { token }),
         2 => any::<usize>().prop_map(|token| Op::Refresh { token }),
+        1 => any::<usize>().prop_map(|token| Op::Logout { token }),
         1 => any::<bool>().prop_map(|refresh| Op::Expired { refresh }),
     ]
 }
@@ -341,10 +344,12 @@ proptest! {
         .. ProptestConfig::default()
     })]
 
-    /// For any sequence of logins, refreshes and reads of me, each token is
-    /// accepted exactly when the model says it is live: of the kind the
-    /// route asks for, issued in the current revocation epoch, and not
-    /// expired. A refresh hands out an access token of the current epoch.
+    /// For any sequence of logins, refreshes, logouts and reads of me, each
+    /// token is accepted exactly when the model says it is live: of the kind
+    /// the route asks for, issued in the current revocation epoch, and not
+    /// expired. A refresh hands out an access token of the current epoch. A
+    /// logout starts the next epoch, so every token held before it dies, and
+    /// clears both cookies.
     #[test]
     fn tokens_follow_the_model(ops in proptest::collection::vec(op(), 0..=8)) {
         for backend in backends() {
@@ -398,6 +403,21 @@ proptest! {
                                 epoch: model.epoch,
                                 expired: false,
                             });
+                        }
+                    }
+                    Op::Logout { token } => {
+                        let held = model.token(*token);
+                        let bearer = format!("Bearer {}", held.value);
+                        let response = request(server.addr, "POST", "/api/v1/logout", &[("Authorization", &bearer)], None);
+                        let expected = if model.live(&held, Kind::Access) { 200 } else { 401 };
+                        prop_assert_eq!(response.status, expected, "{:?} {:?} on {}: {}", op, held, backend, response.body);
+                        if response.status == 200 {
+                            let set_cookie = response.header_values("set-cookie");
+                            prop_assert_eq!(set_cookie.len(), 2, "{:?}", set_cookie);
+                            for header in &set_cookie {
+                                prop_assert!(header.contains("Max-Age=0"), "{header:?}");
+                            }
+                            model.epoch += 1;
                         }
                     }
                     Op::Expired { refresh } => {
