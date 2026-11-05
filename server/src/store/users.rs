@@ -24,12 +24,15 @@ pub struct NewUser<'a> {
 /// Why a user could not be created.
 #[derive(Debug)]
 pub enum CreateError {
+    /// A live user of the tenant has the name.
+    NameTaken,
     Database(sqlx::Error),
 }
 
 impl fmt::Display for CreateError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::NameTaken => f.write_str("a live user of the tenant has the name"),
             Self::Database(error) => write!(f, "{error}"),
         }
     }
@@ -39,7 +42,13 @@ impl std::error::Error for CreateError {}
 
 impl From<sqlx::Error> for CreateError {
     fn from(error: sqlx::Error) -> Self {
-        Self::Database(error)
+        // The live-only unique index on the name is the only unique
+        // constraint an insert can break: the id is fresh, and the role is
+        // looked up.
+        match error {
+            sqlx::Error::Database(database) if database.is_unique_violation() => Self::NameTaken,
+            error => Self::Database(error),
+        }
     }
 }
 
@@ -48,7 +57,8 @@ impl From<sqlx::Error> for CreateError {
 ///
 /// # Errors
 ///
-/// `Database` when the database refuses the row or cannot be reached.
+/// `NameTaken` when a live user of the tenant has the name; `Database`
+/// otherwise.
 pub async fn create(tx: &mut Tx, new: NewUser<'_>) -> Result<(), CreateError> {
     let user_id = Uuid::now_v7().to_string();
     // tokens_valid_after starts at created_at, so no token can predate the

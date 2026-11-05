@@ -4,7 +4,9 @@
 
 mod common;
 
+use std::collections::BTreeSet;
 use std::process::{Command, Output};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use argon2::Argon2;
 use argon2::password_hash::PasswordVerifier;
@@ -39,6 +41,21 @@ fn name() -> impl Strategy<Value = String> {
     })
 }
 
+/// One step of a generated sequence: a create-admin run, or a user deleted
+/// through sqlx, because nothing deletes users yet.
+#[derive(Debug, Clone)]
+enum Step {
+    Create(String),
+    Delete(String),
+}
+
+fn step() -> impl Strategy<Value = Step> {
+    prop_oneof![
+        3 => name().prop_map(Step::Create),
+        1 => name().prop_map(Step::Delete),
+    ]
+}
+
 /// Runs `create-admin name` on the database at `url` and returns its output.
 fn create_admin(url: &str, name: &str) -> Output {
     Command::new(env!("CARGO_BIN_EXE_trapperkeeper"))
@@ -66,6 +83,32 @@ fn stored(database: &TestDatabase, name: &str) -> Option<(String, bool, String)>
     })
 }
 
+/// Marks the live user named `name` in the default tenant deleted, as a
+/// delete will once one exists. A name without a live user changes nothing.
+fn delete(database: &TestDatabase, name: &str) {
+    let update = placeholders(
+        database.backend,
+        "UPDATE users SET deleted_at = $1 \
+         WHERE tenant_id = $2 AND user_name = $3 AND deleted_at IS NULL",
+    );
+    let now = i64::try_from(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("the clock is past 1970")
+            .as_micros(),
+    )
+    .expect("a small number");
+    on_pool!(database, |pool| {
+        sqlx::query(AssertSqlSafe(update))
+            .bind(now)
+            .bind(DEFAULT_TENANT)
+            .bind(name)
+            .execute(&pool)
+            .await
+            .expect("the user is marked deleted");
+    });
+}
+
 /// The last line of stdout, which is the printed password.
 fn last_line(out: &Output) -> String {
     String::from_utf8_lossy(&out.stdout)
@@ -86,18 +129,13 @@ proptest! {
     })]
 
     /// On every backend, create-admin before migrate exits 1 and says to run
-    /// migrate. After migrate, each run with a new name exits 0, prints one
-    /// 16-character alphanumeric password that matches the stored Argon2id
-    /// hash, and stores a lowercase admin whose password must change.
+    /// migrate. After migrate, a run whose name no live user has exits 0,
+    /// prints one 16-character alphanumeric password that matches the stored
+    /// Argon2id hash, and stores a lowercase admin whose password must
+    /// change. A run whose name a live user has exits 1 and says so. A
+    /// deleted user frees its name.
     #[test]
-    fn create_admin_follows_the_model(
-        names in proptest::collection::vec(name(), 0..=POOL.len())
-            .prop_filter("distinct names", |names| {
-                let lower: std::collections::BTreeSet<String> =
-                    names.iter().map(|n| n.to_lowercase()).collect();
-                lower.len() == names.len()
-            })
-    ) {
+    fn create_admin_follows_the_model(steps in proptest::collection::vec(step(), 0..=6)) {
         for backend in backends() {
             let database = TestDatabase::fresh(backend);
 
@@ -107,26 +145,46 @@ proptest! {
             prop_assert!(stderr.contains("trapperkeeper migrate"), "{stderr:?} on {backend}");
 
             migrate_database(&database);
-            for name in &names {
-                let out = create_admin(&database.url, name);
-                let stderr = String::from_utf8_lossy(&out.stderr);
-                prop_assert_eq!(out.status.code(), Some(0), "{} on {}: {}", name, backend, stderr);
-                let password = last_line(&out);
-                prop_assert!(
-                    password.len() == 16 && password.chars().all(|c| c.is_ascii_alphanumeric()),
-                    "{password:?} is not a 16-character alphanumeric password on {backend}"
-                );
-                let (role, must_change, hash) = stored(&database, &name.to_lowercase())
-                    .unwrap_or_else(|| panic!("{name} is not stored on {backend}"));
-                prop_assert_eq!(role, "admin");
-                prop_assert!(must_change);
-                prop_assert!(hash.starts_with(HASH_PREFIX), "{hash:?} on {backend}");
-                // The parameters come from the PHC string, so the default
-                // hasher checks a hash made with ours.
-                prop_assert!(
-                    Argon2::default().verify_password(password.as_bytes(), hash.as_str()).is_ok(),
-                    "the printed password does not match the stored hash on {backend}"
-                );
+            // The model: the names of the live users.
+            let mut live = BTreeSet::new();
+            for step in &steps {
+                match step {
+                    Step::Delete(name) => {
+                        let lower = name.to_lowercase();
+                        delete(&database, &lower);
+                        live.remove(&lower);
+                        prop_assert!(stored(&database, &lower).is_none(), "{lower} is live on {backend}");
+                    }
+                    Step::Create(name) if live.contains(&name.to_lowercase()) => {
+                        let out = create_admin(&database.url, name);
+                        let stderr = String::from_utf8_lossy(&out.stderr);
+                        prop_assert_eq!(out.status.code(), Some(1), "{} created twice on {}", name, backend);
+                        prop_assert!(stderr.contains("already exists"), "{stderr:?} on {backend}");
+                    }
+                    Step::Create(name) => {
+                        let lower = name.to_lowercase();
+                        let out = create_admin(&database.url, name);
+                        let stderr = String::from_utf8_lossy(&out.stderr);
+                        prop_assert_eq!(out.status.code(), Some(0), "{} on {}: {}", name, backend, stderr);
+                        let password = last_line(&out);
+                        prop_assert!(
+                            password.len() == 16 && password.chars().all(|c| c.is_ascii_alphanumeric()),
+                            "{password:?} is not a 16-character alphanumeric password on {backend}"
+                        );
+                        let (role, must_change, hash) = stored(&database, &lower)
+                            .unwrap_or_else(|| panic!("{name} is not stored on {backend}"));
+                        prop_assert_eq!(role, "admin");
+                        prop_assert!(must_change);
+                        prop_assert!(hash.starts_with(HASH_PREFIX), "{hash:?} on {backend}");
+                        // The parameters come from the PHC string, so the
+                        // default hasher checks a hash made with ours.
+                        prop_assert!(
+                            Argon2::default().verify_password(password.as_bytes(), hash.as_str()).is_ok(),
+                            "the printed password does not match the stored hash on {backend}"
+                        );
+                        live.insert(lower);
+                    }
+                }
             }
         }
     }

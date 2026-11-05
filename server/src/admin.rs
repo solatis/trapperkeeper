@@ -9,12 +9,15 @@ use crate::store::{DEFAULT_TENANT_ID, Store};
 /// Why an admin could not be created.
 #[derive(Debug)]
 pub enum AdminError {
+    /// A live user of the default tenant has the name.
+    NameTaken(String),
     Database(sqlx::Error),
 }
 
 impl fmt::Display for AdminError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::NameTaken(name) => write!(f, "a user named {name} already exists"),
             Self::Database(error) => write!(f, "{error}"),
         }
     }
@@ -28,20 +31,13 @@ impl From<sqlx::Error> for AdminError {
     }
 }
 
-impl From<CreateError> for AdminError {
-    fn from(error: CreateError) -> Self {
-        match error {
-            CreateError::Database(error) => Self::Database(error),
-        }
-    }
-}
-
 /// Creates an admin named `name` in the default tenant, with a generated
 /// password that must be changed, commits, and returns the password.
 ///
 /// # Errors
 ///
-/// `Database` when the store refuses the user or cannot be reached.
+/// `NameTaken` when a live user of the default tenant has the name;
+/// `Database` otherwise.
 pub async fn create(store: &Store, name: &str) -> Result<String, AdminError> {
     // Names are stored lowercase, so "Leon" and "leon" are one user
     // (doc/adr/0020).
@@ -49,6 +45,8 @@ pub async fn create(store: &Store, name: &str) -> Result<String, AdminError> {
     let password = password::generate();
     let password_hash = password::hash(password.clone()).await;
     let mut tx = store.begin().await?;
+    // create-admin may run again: a second admin is how a lost admin password
+    // is recovered. Only a taken name is refused.
     users::create(
         &mut tx,
         NewUser {
@@ -60,7 +58,11 @@ pub async fn create(store: &Store, name: &str) -> Result<String, AdminError> {
             password_must_change: true,
         },
     )
-    .await?;
+    .await
+    .map_err(|error| match error {
+        CreateError::NameTaken => AdminError::NameTaken(name.clone()),
+        CreateError::Database(error) => AdminError::Database(error),
+    })?;
     tx.commit().await?;
     Ok(password)
 }
