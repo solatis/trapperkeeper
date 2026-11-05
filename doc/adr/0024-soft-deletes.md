@@ -29,6 +29,5 @@ names (owner, 2026-11-05).
 ## Consequences
 
 A forgotten filter is a silent bug, so tests include deleted rows. MariaDB
-tables carry the generated `live` column. Tenants got the column in their
-first migration, edited in place, as `doc/principles.md` 8 allows. The store
-component cites this record.
+tables carry the generated `live` column. The store component cites this
+record.
