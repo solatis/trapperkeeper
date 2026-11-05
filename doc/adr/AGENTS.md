@@ -38,3 +38,4 @@ dropped.
 | `0021-every-test-suite-runs-on-every-platform.md`                 | every test on every CI platform; latest stable or LTS dependencies; skip only without a build   |
 | `0022-argon2id-for-passwords.md`                                  | Argon2id at 64 MiB, 3 passes, 4 lanes, as PHC strings; hashes limited to the CPU count          |
 | `0023-roles-are-rows-per-tenant.md`                               | roles are seeded rows per tenant; a user references its role with its tenant                    |
+| `0024-soft-deletes.md`                                            | every entity has `deleted_at`; reads filter it; names are unique among live rows                |
