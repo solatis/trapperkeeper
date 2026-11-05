@@ -109,6 +109,9 @@ gets its own `AGENTS.md`, and this file indexes them.
   by a cutoff, with two hand-typed signing keys (owner, 2026-11-05):
   `doc/adr/0025-signed-tokens-and-the-revocation-cutoff.md`.
 
+- Management routes live under `/api/v1` (owner, 2026-11-05):
+  `doc/adr/0026-versioned-api-route-prefix.md`.
+
 **How to**: build, lint and test with the commands in the root `AGENTS.md`,
 How to. `cargo run -- --help` shows the command line. `cargo run -- migrate`
 creates `trapperkeeper.db` in the working directory, and `cargo run -- serve`
