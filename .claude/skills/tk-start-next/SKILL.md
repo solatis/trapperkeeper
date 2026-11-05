@@ -1,6 +1,6 @@
 ---
 name: tk-start-next
-description: Seed a session with the next unit of work -- read the active milestone's goals against the tree and the open issues, cut what is still missing into right-sized issues, ask the owner which to tackle together, then load their context and put their design choices to the owner without starting them
+description: Seed a session with the next unit of work -- read the active milestone's goals against the tree and the open issues, closing it and moving on when the tree meets them, cut what is still missing into right-sized issues, ask the owner which to tackle together, then load their context and put their design choices to the owner without starting them
 disable-model-invocation: true
 ---
 
@@ -15,7 +15,8 @@ exactly as `/tk-start` would have, had the owner named those issues.
 ## This turn
 
 Read and report only. You do not write code, edit documents or plans,
-create issues or branches, or make commits.
+create issues or branches, or make commits. The one write is closing an
+active milestone that the tree already meets, in Find the gap, step 1.
 
 ## Repository state
 
@@ -72,10 +73,14 @@ questions.
 Work through these steps in order; each one feeds the next.
 
 1. The milestone. The active milestone is the open milestone with the
-   lowest number: GitHub numbers milestones in creation order, and they are
-   created in the order they are worked. With no open milestone, ask the
-   owner through the question tool which goals to work toward, and end
-   your turn until the answer arrives.
+   lowest number. GitHub numbers milestones in creation order, and they
+   are created in the order they are worked. When the active milestone has
+   no open issue, run steps 2 and 3 on it first. When the tree meets every
+   goal, close the milestone as `/tk-workflow`, Units and issues, says, and
+   record it with its evidence for the report's Position. Then take the
+   next open milestone as the active one and start again from this step.
+   With no open milestone left, ask the owner through the question tool
+   which goals to work toward, and end your turn until the answer arrives.
 2. Its goals. Read the milestone's description whole (`gh api
 repos/{owner}/{repo}/milestones/<number>`). The goals are `owner` by
    provenance; any mechanism the description names beyond the goal is
@@ -101,8 +106,8 @@ repos/{owner}/{repo}/milestones/<number>`). The goals are `owner` by
    than commits? A candidate the tree shows as landed is stale: report it,
    do not offer it.
 
-When every goal is met and no issue of the milestone is open, say so with
-the evidence and stop: closing the milestone is the owner's decision.
+A milestone that has no issues yet, such as one just reached, is cut from
+its goals alone. Every candidate is then a new issue, from step 4.3.
 
 ## Cut the candidates and ask
 
@@ -146,4 +151,6 @@ those two; the report lists the other two as candidates.
 Incorrect: the whole goal offered as one option of 23 commits; or four
 options that differ in commit granularity rather than in subject; or
 descriptions that give a commit count and nothing about the code; or the
-four candidates created as issues before the owner chose.
+four candidates created as issues before the owner chose. Or: M1's goals
+are all met and none of its issues is open, and you report that and stop
+instead of closing M1 and cutting M2.

@@ -1,6 +1,6 @@
 ---
 name: tk-merge
-description: Open the merge stage -- per PR in dependency order, fast-forward master onto the reviewed green head, push it, retarget stacked children, delete the branch, close the issue and delete its plan. Invoked by the owner after reviewing the diffs; the invocation is the owner's yes on the code.
+description: Open the merge stage -- per PR in dependency order, fast-forward master onto the reviewed green head, push it, retarget stacked children, delete the branch, close the issue, delete its plan, and close the milestone it completes. Invoked by the owner after reviewing the diffs; the invocation is the owner's yes on the code.
 disable-model-invocation: true
 argument-hint: "[#n ... , issues or PRs to merge; empty means every PR of this session's unit]"
 ---
@@ -87,18 +87,32 @@ push origin --delete <slug>`.
 6. Close the issue: `gh issue close <issue> -c "Landed in #<n>"`.
 7. Delete the plan: `rm .plans/<slug>-plan.md`. Every reason it carried is
    in the code or the documents; the build stage's check made sure of that.
+8. Close the milestone this PR completed. Read the issue's milestone with
+   `gh issue view <issue> --json milestone -q .milestone.number`, and skip
+   this step when it has none. When `gh api
+repos/{owner}/{repo}/milestones/<m> -q .open_issues` is 0, read the
+   milestone's description and check each line of its "done when" list
+   against master as it is now. When every line is met, close the
+   milestone as `/tk-workflow`, Units and issues, says. When a line is
+   unmet, leave the milestone open, because `/tk-start-next` cuts the next
+   issue from that line.
 
 Close with one line per PR: `<slug>: #<pr> merged, <n> commits, <first
 sha>..<last sha>, issue #<issue> closed`, plus "rebased first" when step 1
-rebased, and one line per PR that stopped, with the reason.
+rebased, ", milestone <title> closed" or ", milestone <title> open: <unmet
+line>" when step 8 read a milestone, and one line per PR that stopped, with
+the reason.
 
 Correct: logging (#20) and metrics (#21, stacked on logging) are green and
 approved. You fast-forward master to logging's head, push, see #20 MERGED,
 retarget #21 to master, delete `server-logging`, close #12, delete its
 plan; metrics is now a fast-forward of master, so you merge it the same
-way.
+way. #21 closed the last open issue of M1, and master meets every line of
+its list, so you close M1.
 
 Incorrect: you delete `server-logging` before retargeting #21, and GitHub
 closes #21. Or: the build-stage message said green, the list shows a check
 `IN_PROGRESS`, and the merge runs on the message. Or: the push is rejected
-and you retry with `--force`.
+and you retry with `--force`. Or: the seed report said the unit
+finishes M1, and you close M1 on that claim without checking the list
+against master.

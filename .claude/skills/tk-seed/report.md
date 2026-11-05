@@ -14,8 +14,10 @@ run in this seed, it is omitted, not written as "none".
 
 - `# Workflow` -- one line acknowledging the workflow and naming the
   branches you will use, not yet created, and the unit's Inbox thread.
-- `# Position` -- at most five lines: the active milestone and its goal,
-  what is in flight (open PRs, plans), how the unit relates to them.
+- `# Position` -- at most five lines: the milestone this seed closed, if
+  any, with its evidence; the active milestone and its goal, and whether
+  the unit's issues finish it; what is in flight (open PRs, plans), how
+  the unit relates to them.
 - `# Candidates` (`/tk-start-next` only) -- a table, one row per
   candidate, in the order they were offered:
   `| candidate | source (path or #n) | tree check (landed / blocked / ready) | verdict |`

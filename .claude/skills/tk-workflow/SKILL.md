@@ -21,6 +21,15 @@ user-invocable: false
   GitHub number, which is creation order, and the active milestone is the
   open one with the lowest number. A milestone's description is its goal
   and a "done when" list; it is edited in place as the work teaches more.
+- A milestone closes when no issue of it is open and the tree meets every
+  line of its "done when" list. Two stages close it, and neither asks the
+  owner. `/tk-merge` closes it after the PR that completes it lands.
+  `/tk-start-next` closes it when it finds the active milestone already
+  met, which happens when a merge left a goal for the tree to show later.
+  The command is `gh api -X PATCH repos/{owner}/{repo}/milestones/<n> -f
+state=closed`. A milestone whose issues are all closed but whose goals
+  the tree does not meet stays open, and its unmet lines become candidates
+  for the next unit.
 
 Every stage skill takes a set of issues: the ones named in its argument, or
 else the issues of the unit in this session.
@@ -178,12 +187,12 @@ wording: it answers a question inside the current stage, or it is a review
 comment on what the current stage produced. A "Looks good" on an Inbox review message
 approves that review, as "The Inbox" says, and opens no stage either.
 
-| Stage    | Opened by                                    | You produce                                                                                                                        | You never                                                                                                   | Ends with                                            |
-| -------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| 1. Seed  | `/tk-start <task or #n>` or `/tk-start-next` | the seed report                                                                                                                    | write, create issues, branch, commit                                                                        | a wait for `/tk-plan`                                |
-| 2. Plan  | `/tk-plan`                                   | the GitHub issues that do not exist yet, one plan per issue, the review of all of them, and on approval `Status: approved` in each | touch code, tests, config or any tracked file; branch; commit                                               | the plan-stage message, then a wait for `/tk-build`  |
-| 3. Build | `/tk-build`                                  | per issue: the branch, the plan's commits, the doc-discipline runs, the push, the PR, its CI run and its Inbox review              | merge; deviate from a plan without saying so; invent a reason for a comment; ask about merging before green | the build-stage message, then a wait for `/tk-merge` |
-| 4. Merge | `/tk-merge`                                  | per PR in dependency order: the fast-forward, the push of `master`, the branch deletion, the issue closed, the plan deleted        | merge a head that is not the reviewed, green head; merge without the owner having invoked `/tk-merge`       | one line per merged PR                               |
+| Stage    | Opened by                                    | You produce                                                                                                                                                                    | You never                                                                                                   | Ends with                                            |
+| -------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| 1. Seed  | `/tk-start <task or #n>` or `/tk-start-next` | the seed report, and in `/tk-start-next` the close of a met active milestone                                                                                                   | write, create issues, branch, commit                                                                        | a wait for `/tk-plan`                                |
+| 2. Plan  | `/tk-plan`                                   | the GitHub issues that do not exist yet, one plan per issue, the review of all of them, and on approval `Status: approved` in each                                             | touch code, tests, config or any tracked file; branch; commit                                               | the plan-stage message, then a wait for `/tk-build`  |
+| 3. Build | `/tk-build`                                  | per issue: the branch, the plan's commits, the doc-discipline runs, the push, the PR, its CI run and its Inbox review                                                          | merge; deviate from a plan without saying so; invent a reason for a comment; ask about merging before green | the build-stage message, then a wait for `/tk-merge` |
+| 4. Merge | `/tk-merge`                                  | per PR in dependency order: the fast-forward, the push of `master`, the branch deletion, the issue closed, the plan deleted, and the milestone closed when the PR completed it | merge a head that is not the reviewed, green head; merge without the owner having invoked `/tk-merge`       | one line per merged PR                               |
 
 A session may begin at any stage from the tree, the plans and GitHub.
 `/tk-start #<n>` reads where an issue stands and names the next gate; it
