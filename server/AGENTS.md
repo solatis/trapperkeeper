@@ -92,6 +92,10 @@ gets its own `AGENTS.md`, and this file indexes them.
   data where it varies (owner, 2026-11-01, 2026-11-03, 2026-11-04):
   `doc/adr/0018-integration-tests-over-unit-tests.md`.
 
+- Passwords are hashed with Argon2id at RFC 9106's second recommended
+  option, limited to the CPU count (owner, 2026-11-05):
+  `doc/adr/0022-argon2id-for-passwords.md`.
+
 **How to**: build, lint and test with the commands in the root `AGENTS.md`,
 How to. `cargo run -- --help` shows the command line. `cargo run -- migrate`
 creates `trapperkeeper.db` in the working directory, and `cargo run -- serve`

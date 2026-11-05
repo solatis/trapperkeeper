@@ -36,3 +36,4 @@ dropped.
 | `0019-sqlx-with-hand-written-sql-over-three-backends.md`          | sqlx, hand-written SQL in one subset, checksummed migrations per backend                        |
 | `0020-internal-ids-and-unique-names.md`                           | `_id` is an internal time-ordered UUID; `_name` is unique and what people use                   |
 | `0021-every-test-suite-runs-on-every-platform.md`                 | every test on every CI platform; latest stable or LTS dependencies; skip only without a build   |
+| `0022-argon2id-for-passwords.md`                                  | Argon2id at 64 MiB, 3 passes, 4 lanes, as PHC strings; hashes limited to the CPU count          |
