@@ -15,10 +15,13 @@ use crate::auth::password;
 use crate::store::{Store, installation};
 
 /// The kinds of token the server signs. Each kind has its own `typ` and
-/// lifetime.
+/// lifetime, and a token of one kind never passes as the other.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
+    /// Proves who the caller is on a management route.
     Access,
+    /// Trades for a new access token at the refresh route.
+    Refresh,
 }
 
 impl Kind {
@@ -27,6 +30,9 @@ impl Kind {
         match self {
             // The media type RFC 9068, 2.1 gives access token JWTs.
             Self::Access => "at+jwt",
+            // A type of our own, because RFC 9068 defines only the access
+            // token's, and the two kinds must differ (RFC 8725, 3.11).
+            Self::Refresh => "tk-refresh+jwt",
         }
     }
 
@@ -35,6 +41,7 @@ impl Kind {
     pub fn lifetime(self) -> Duration {
         match self {
             Self::Access => Duration::from_hours(1),
+            Self::Refresh => Duration::from_hours(7 * 24),
         }
     }
 }

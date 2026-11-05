@@ -28,8 +28,14 @@ pub struct Credentials {
 /// The cookie that carries the access token for the browser.
 pub const ACCESS_COOKIE: &str = "tk_access";
 
-/// What a login hands out. The access token also comes back in the
-/// `tk_access` cookie.
+/// The cookie that carries the refresh token for the browser.
+pub const REFRESH_COOKIE: &str = "tk_refresh";
+
+/// The path the refresh cookie is sent to.
+pub const REFRESH_PATH: &str = "/api/v1/refresh";
+
+/// What a login hands out. The tokens also come back in the `tk_access` and
+/// `tk_refresh` cookies.
 #[derive(Serialize, ToSchema)]
 pub struct Login {
     /// The access token, sent back as `Authorization: Bearer`.
@@ -38,6 +44,10 @@ pub struct Login {
     token_type: &'static str,
     /// How many seconds the access token lives.
     expires_in: u64,
+    /// The refresh token, sent to the refresh route for a new access token.
+    refresh_token: String,
+    /// How many seconds the refresh token lives.
+    refresh_expires_in: u64,
     /// Whether the UI should ask for a new password now.
     password_must_change: bool,
 }
@@ -47,7 +57,8 @@ pub struct Login {
 static DUMMY_HASH: OnceCell<String> = OnceCell::const_new();
 
 /// Logs a user of the default tenant in with a name and a password. Returns
-/// an access token, in the body and in the `tk_access` cookie.
+/// an access token and a refresh token, in the body and in the `tk_access`
+/// and `tk_refresh` cookies.
 #[utoipa::path(
     post,
     path = "/login",
@@ -87,33 +98,62 @@ pub async fn login(
     let Some(user) = user.filter(|_| matches) else {
         return unauthorized();
     };
-    let access_token =
-        state
-            .keyring
-            .issue(Kind::Access, &user.id, &user.tenant_id, SystemTime::now());
-    // HttpOnly so page scripts cannot read it, SameSite=Strict so cross-site
-    // requests do not carry it, Secure because TLS is terminated directly or
-    // by a proxy and browsers treat localhost as secure, and Max-Age the
-    // token's lifetime.
-    let cookie = Cookie::build((ACCESS_COOKIE, access_token.clone()))
-        .http_only(true)
-        .same_site(SameSite::Strict)
-        .secure(true)
-        .path("/")
-        .max_age(cookie::time::Duration::seconds(
-            i64::try_from(Kind::Access.lifetime().as_secs()).expect("an hour fits"),
+    let now = SystemTime::now();
+    let access_token = state
+        .keyring
+        .issue(Kind::Access, &user.id, &user.tenant_id, now);
+    let refresh_token = state
+        .keyring
+        .issue(Kind::Refresh, &user.id, &user.tenant_id, now);
+    // The refresh cookie goes to the refresh route alone, so no other request
+    // carries it.
+    let jar = jar
+        .add(token_cookie(
+            ACCESS_COOKIE,
+            &access_token,
+            Kind::Access,
+            "/",
         ))
-        .build();
+        .add(token_cookie(
+            REFRESH_COOKIE,
+            &refresh_token,
+            Kind::Refresh,
+            REFRESH_PATH,
+        ));
     (
-        jar.add(cookie),
+        jar,
         Json(Login {
             access_token,
             token_type: "Bearer",
             expires_in: Kind::Access.lifetime().as_secs(),
+            refresh_token,
+            refresh_expires_in: Kind::Refresh.lifetime().as_secs(),
             password_must_change: user.password_must_change,
         }),
     )
         .into_response()
+}
+
+/// The cookie `name` carrying `token` of `kind`, sent to `path` alone.
+fn token_cookie(
+    name: &'static str,
+    token: &str,
+    kind: Kind,
+    path: &'static str,
+) -> Cookie<'static> {
+    // HttpOnly so page scripts cannot read it, SameSite=Strict so cross-site
+    // requests do not carry it, Secure because TLS is terminated directly or
+    // by a proxy and browsers treat localhost as secure, and Max-Age the
+    // token's lifetime.
+    Cookie::build((name, token.to_owned()))
+        .http_only(true)
+        .same_site(SameSite::Strict)
+        .secure(true)
+        .path(path)
+        .max_age(cookie::time::Duration::seconds(
+            i64::try_from(kind.lifetime().as_secs()).expect("a week fits"),
+        ))
+        .build()
 }
 
 /// What a caller can read about itself.
