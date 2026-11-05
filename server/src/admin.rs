@@ -9,6 +9,8 @@ use crate::store::{DEFAULT_TENANT_ID, Store};
 /// Why an admin could not be created.
 #[derive(Debug)]
 pub enum AdminError {
+    /// The name breaks the name rule.
+    InvalidName(String),
     /// A live user of the default tenant has the name.
     NameTaken(String),
     Database(sqlx::Error),
@@ -17,6 +19,10 @@ pub enum AdminError {
 impl fmt::Display for AdminError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::InvalidName(name) => write!(
+                f,
+                "the name {name:?} is not 1 to 64 characters of a-z, 0-9, '.', '_' and '-'"
+            ),
             Self::NameTaken(name) => write!(f, "a user named {name} already exists"),
             Self::Database(error) => write!(f, "{error}"),
         }
@@ -36,12 +42,15 @@ impl From<sqlx::Error> for AdminError {
 ///
 /// # Errors
 ///
-/// `NameTaken` when a live user of the default tenant has the name;
-/// `Database` otherwise.
+/// `InvalidName` when the name breaks the name rule; `NameTaken` when a live
+/// user of the default tenant has it; `Database` otherwise.
 pub async fn create(store: &Store, name: &str) -> Result<String, AdminError> {
     // Names are stored lowercase, so "Leon" and "leon" are one user
     // (doc/adr/0020).
     let name = name.to_lowercase();
+    if !valid_name(&name) {
+        return Err(AdminError::InvalidName(name));
+    }
     let password = password::generate();
     let password_hash = password::hash(password.clone()).await;
     let mut tx = store.begin().await?;
@@ -65,4 +74,14 @@ pub async fn create(store: &Store, name: &str) -> Result<String, AdminError> {
     })?;
     tx.commit().await?;
     Ok(password)
+}
+
+/// Whether `name` is 1 to 64 characters of a-z, 0-9, '.', '_' and '-'.
+fn valid_name(name: &str) -> bool {
+    // Letters, digits and this punctuation can be typed anywhere and fit in a
+    // URL path as they are.
+    (1..=64).contains(&name.len())
+        && name
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || ".-_".contains(c))
 }

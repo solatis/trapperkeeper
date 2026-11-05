@@ -25,9 +25,10 @@ const DEFAULT_TENANT: &str = "00000000-0000-7000-8000-000000000000";
 const HASH_PREFIX: &str = "$argon2id$v=19$m=65536,t=3,p=4$";
 
 /// A name from the pool, written in random case, so the stored lowercase form
-/// is checked.
+/// is checked. One in five has something the name rule refuses: a character
+/// outside it, no characters, or too many.
 fn name() -> impl Strategy<Value = String> {
-    (proptest::sample::select(&POOL[..]), any::<u32>()).prop_map(|(name, mask)| {
+    let valid = (proptest::sample::select(&POOL[..]), any::<u32>()).prop_map(|(name, mask)| {
         name.chars()
             .enumerate()
             .map(|(i, c)| {
@@ -38,7 +39,22 @@ fn name() -> impl Strategy<Value = String> {
                 }
             })
             .collect()
-    })
+    });
+    // No leading hyphen, which clap would read as a flag.
+    let invalid = prop_oneof![
+        "[a-z]{1,3}[ !@/#:\u{e9}][a-z]{0,3}",
+        Just(String::new()),
+        Just("a".repeat(65)),
+    ];
+    prop_oneof![4 => valid, 1 => invalid]
+}
+
+/// Whether `name` passes the name rule.
+fn valid(name: &str) -> bool {
+    (1..=64).contains(&name.len())
+        && name
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || ".-_".contains(c))
 }
 
 /// One step of a generated sequence: a create-admin run, or a user deleted
@@ -132,7 +148,8 @@ proptest! {
     /// migrate. After migrate, a run whose name no live user has exits 0,
     /// prints one 16-character alphanumeric password that matches the stored
     /// Argon2id hash, and stores a lowercase admin whose password must
-    /// change. A run whose name a live user has exits 1 and says so. A
+    /// change. A run whose name a live user has exits 1 and says so, and a
+    /// run whose name breaks the name rule exits 1 and states the rule. A
     /// deleted user frees its name.
     #[test]
     fn create_admin_follows_the_model(steps in proptest::collection::vec(step(), 0..=6)) {
@@ -154,6 +171,12 @@ proptest! {
                         delete(&database, &lower);
                         live.remove(&lower);
                         prop_assert!(stored(&database, &lower).is_none(), "{lower} is live on {backend}");
+                    }
+                    Step::Create(name) if !valid(&name.to_lowercase()) => {
+                        let out = create_admin(&database.url, name);
+                        let stderr = String::from_utf8_lossy(&out.stderr);
+                        prop_assert_eq!(out.status.code(), Some(1), "{:?} accepted on {}", name, backend);
+                        prop_assert!(stderr.contains("1 to 64 characters"), "{stderr:?} on {backend}");
                     }
                     Step::Create(name) if live.contains(&name.to_lowercase()) => {
                         let out = create_admin(&database.url, name);
