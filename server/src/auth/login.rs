@@ -6,6 +6,7 @@ use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
 use serde::{Deserialize, Serialize};
 use tokio::sync::OnceCell;
 use utoipa::ToSchema;
@@ -24,7 +25,11 @@ pub struct Credentials {
     password: String,
 }
 
-/// What a login hands out.
+/// The cookie that carries the access token for the browser.
+pub const ACCESS_COOKIE: &str = "tk_access";
+
+/// What a login hands out. The access token also comes back in the
+/// `tk_access` cookie.
 #[derive(Serialize, ToSchema)]
 pub struct Login {
     /// The access token, sent back as `Authorization: Bearer`.
@@ -42,7 +47,7 @@ pub struct Login {
 static DUMMY_HASH: OnceCell<String> = OnceCell::const_new();
 
 /// Logs a user of the default tenant in with a name and a password. Returns
-/// an access token.
+/// an access token, in the body and in the `tk_access` cookie.
 #[utoipa::path(
     post,
     path = "/login",
@@ -54,6 +59,7 @@ static DUMMY_HASH: OnceCell<String> = OnceCell::const_new();
 )]
 pub async fn login(
     State(state): State<AppState>,
+    jar: CookieJar,
     Json(credentials): Json<Credentials>,
 ) -> Response {
     // Names are stored lowercase (doc/adr/0020).
@@ -85,13 +91,29 @@ pub async fn login(
         state
             .keyring
             .issue(Kind::Access, &user.id, &user.tenant_id, SystemTime::now());
-    Json(Login {
-        access_token,
-        token_type: "Bearer",
-        expires_in: Kind::Access.lifetime().as_secs(),
-        password_must_change: user.password_must_change,
-    })
-    .into_response()
+    // HttpOnly so page scripts cannot read it, SameSite=Strict so cross-site
+    // requests do not carry it, Secure because TLS is terminated directly or
+    // by a proxy and browsers treat localhost as secure, and Max-Age the
+    // token's lifetime.
+    let cookie = Cookie::build((ACCESS_COOKIE, access_token.clone()))
+        .http_only(true)
+        .same_site(SameSite::Strict)
+        .secure(true)
+        .path("/")
+        .max_age(cookie::time::Duration::seconds(
+            i64::try_from(Kind::Access.lifetime().as_secs()).expect("an hour fits"),
+        ))
+        .build();
+    (
+        jar.add(cookie),
+        Json(Login {
+            access_token,
+            token_type: "Bearer",
+            expires_in: Kind::Access.lifetime().as_secs(),
+            password_must_change: user.password_must_change,
+        }),
+    )
+        .into_response()
 }
 
 /// What a caller can read about itself.

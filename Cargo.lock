@@ -2625,6 +2625,7 @@ dependencies = [
  "axum",
  "axum-extra",
  "clap",
+ "cookie",
  "figment",
  "jsonwebtoken",
  "proptest",

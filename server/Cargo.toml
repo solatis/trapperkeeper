@@ -72,8 +72,10 @@ jsonwebtoken = { version = "11", default-features = false, features = ["rust_cry
 # and sqlx use.
 sha2 = "0.10"
 # The cookie jar extractor for the token cookie; default features off, because
-# the rest of axum-extra is unused.
+# the rest of axum-extra is unused. cookie itself gives the cookie's duration
+# type, which axum-extra does not re-export.
 axum-extra = { version = "0.12", default-features = false, features = ["cookie"] }
+cookie = { version = "0.18", default-features = false }
 
 [dev-dependencies]
 # The settings precedence is one property over generated layers

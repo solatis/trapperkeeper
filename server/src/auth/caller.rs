@@ -5,8 +5,9 @@ use axum::http::StatusCode;
 use axum::http::header::{AUTHORIZATION, WWW_AUTHENTICATE};
 use axum::http::request::Parts;
 use axum::response::{IntoResponse, Response};
+use axum_extra::extract::cookie::CookieJar;
 
-use crate::auth::login::database_error;
+use crate::auth::login::{ACCESS_COOKIE, database_error};
 use crate::auth::token::Kind;
 use crate::http::AppState;
 use crate::store::users::{self, User};
@@ -25,30 +26,34 @@ where
     type Rejection = Response;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Response> {
-        // 1. take the token from the bearer header
+        // 1. take the token from the bearer header, else the tk_access cookie
         // 2. check it as an access token
         // 3. read the user in a transaction of its own
         // 4. refuse a deleted user or a token issued before tokens_valid_after
         //
         // The checks run in an order where each refusal comes as early as it
         // can.
-        let state = AppState::from_ref(state);
+        let app = AppState::from_ref(state);
 
-        // 1.
-        let Some(token) = bearer(parts) else {
-            return Err(refuse("no bearer token"));
+        // 1. The header comes first, for the CLI and the agent; the cookie
+        //    second, for the browser.
+        let token = match bearer(parts) {
+            Some(token) => token.to_owned(),
+            None => cookie(parts, state)
+                .await
+                .ok_or_else(|| refuse("no token"))?,
         };
 
         // 2.
-        let claims = state
+        let claims = app
             .keyring
-            .check(Kind::Access, token)
+            .check(Kind::Access, &token)
             .map_err(|refused| refuse(&refused.to_string()))?;
 
         // 3. Every request reads the user, because every token is checked
         //    against the cutoff.
         let found = async {
-            let mut tx = state.store.begin().await?;
+            let mut tx = app.store.begin().await?;
             users::find_by_id(&mut tx, &claims.tid, &claims.sub).await
         }
         .await
@@ -76,6 +81,16 @@ fn bearer(parts: &Parts) -> Option<&str> {
         .split_once(' ')
         .filter(|(scheme, _)| scheme.eq_ignore_ascii_case("bearer"))
         .map(|(_, token)| token.trim())
+}
+
+/// The value of the `tk_access` cookie, or `None`.
+async fn cookie<S: Send + Sync>(parts: &mut Parts, state: &S) -> Option<String> {
+    // The jar's extraction cannot fail; its rejection type is `Infallible`.
+    let jar = CookieJar::from_request_parts(parts, state)
+        .await
+        .unwrap_or_default();
+    jar.get(ACCESS_COOKIE)
+        .map(|cookie| cookie.value().to_owned())
 }
 
 /// The one refusal every failed check gets: 401 with `WWW-Authenticate:

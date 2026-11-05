@@ -20,8 +20,9 @@ const DEFAULT_TENANT: &str = "00000000-0000-7000-8000-000000000000";
 
 /// A login with the admin's name, in any case, and its password returns a
 /// bearer access token that lives an hour and says the password must change,
-/// and the token on the bearer header reads the admin back. A wrong password
-/// and an unknown name get the same refusal.
+/// in the body and in a cookie page scripts and other sites cannot use. The
+/// token reads the admin back on the bearer header and on the cookie alone.
+/// A wrong password and an unknown name get the same refusal.
 #[test]
 fn login_then_me() {
     on_each_backend(|backend| {
@@ -43,6 +44,22 @@ fn login_then_me() {
         let token = login["access_token"].as_str().expect("an access token");
         // Three base64url parts, as a JWT is.
         assert_eq!(token.split('.').count(), 3);
+        let set_cookie = response.header_values("set-cookie");
+        assert_eq!(set_cookie.len(), 1, "{set_cookie:?}");
+        let attributes: Vec<&str> = set_cookie[0].split("; ").collect();
+        assert_eq!(attributes[0], format!("tk_access={token}"));
+        for attribute in [
+            "HttpOnly",
+            "SameSite=Strict",
+            "Secure",
+            "Path=/",
+            "Max-Age=3600",
+        ] {
+            assert!(
+                attributes.contains(&attribute),
+                "{attribute} not in {set_cookie:?}"
+            );
+        }
 
         let bearer = format!("Bearer {token}");
         let response = request(
@@ -58,6 +75,16 @@ fn login_then_me() {
             me,
             json!({ "name": ADMIN, "role": "admin", "password_must_change": true })
         );
+
+        let cookie = format!("tk_access={token}");
+        let response = request(
+            server.addr,
+            "GET",
+            "/api/v1/me",
+            &[("Cookie", &cookie)],
+            None,
+        );
+        assert_eq!(response.status, 200, "{}", response.body);
 
         let response = request(server.addr, "GET", "/api/v1/me", &[], None);
         assert_eq!(response.status, 401);
