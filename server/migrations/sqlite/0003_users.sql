@@ -11,7 +11,7 @@ CREATE TABLE users (
     -- The UI reads it and asks for a new password. It restricts nothing.
     password_must_change BOOLEAN NOT NULL,
     -- Tokens issued before this time are refused, so setting it to now
-    -- revokes every token of the user.
+    -- revokes every token of the user (doc/adr/0025).
     tokens_valid_after   BIGINT NOT NULL,
     -- Epoch microseconds in UTC, as every time column (doc/adr/0019).
     created_at           BIGINT NOT NULL,

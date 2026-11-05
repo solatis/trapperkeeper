@@ -52,7 +52,8 @@ The single write path for everything that is not an event: rules, API keys,
 users and roles, emergency pause. Also the read path for events (filter and
 aggregate by time, rule, tag, metadata). Owns validation, authorization and the
 audit trail. Web UI, CLI and AI agent are equal clients; none of them touches
-the store. Also exposed as an agent tool surface.
+the store. Also exposed as an agent tool surface. Its code is in the server;
+see `server/AGENTS.md`.
 
 ### Rule engine core
 
@@ -113,9 +114,9 @@ retries sync at a fixed interval. Unreported events beyond the buffer are lost.
 
 ## Cross-cutting
 
-- **Identity.** Sensors: API keys, per-request signatures. Principals:
-  authenticated identities with roles. Every entity and credential carries a
-  tenant id.
+- **Identity.** Sensors: opaque API keys stored hashed (`adr/0027`).
+  People: signed tokens from login, revoked per user by a cutoff
+  (`adr/0025`). Every entity and credential carries a tenant id.
 - **Identifiers and time.** Time-ordered unique ids for all entities. UTC in
   storage and on the wire; local time only at presentation. Both sensor and
   server timestamps are kept.

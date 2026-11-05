@@ -105,6 +105,10 @@ gets its own `AGENTS.md`, and this file indexes them.
 - Entities are deleted softly (owner, 2026-11-05):
   `doc/adr/0024-soft-deletes.md`.
 
+- People log in for signed tokens the server does not store, revoked per user
+  by a cutoff, with two hand-typed signing keys (owner, 2026-11-05):
+  `doc/adr/0025-signed-tokens-and-the-revocation-cutoff.md`.
+
 **How to**: build, lint and test with the commands in the root `AGENTS.md`,
 How to. `cargo run -- --help` shows the command line. `cargo run -- migrate`
 creates `trapperkeeper.db` in the working directory, and `cargo run -- serve`
