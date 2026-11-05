@@ -41,3 +41,4 @@ dropped.
 | `0024-soft-deletes.md`                                            | every entity has `deleted_at`; reads filter it; names are unique among live rows                    |
 | `0025-signed-tokens-and-the-revocation-cutoff.md`                 | HS256 JWTs the server does not store; two hand-typed keys stretched under a salt; a per-user cutoff |
 | `0026-versioned-api-route-prefix.md`                              | management routes live under `/api/v1`; probes and the document stay at the root                    |
+| `0027-opaque-hashed-sensor-api-keys.md`                           | a sensor key is opaque random text, stored as a hash, revoked by deletion                           |

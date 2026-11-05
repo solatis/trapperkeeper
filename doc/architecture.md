@@ -43,8 +43,8 @@ Stateless endpoint for sensors. Two operations:
 - **report events**: batched, with per-event results so a batch can partially
   succeed.
 
-Every request is signed with an API key; there are no sessions, so instances
-scale horizontally with no coordination.
+Every request carries an API key (`adr/0027`); there are no sessions, so
+instances scale horizontally with no coordination.
 
 ### Management API
 
