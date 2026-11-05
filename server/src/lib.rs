@@ -1,5 +1,6 @@
 //! The server behind the `trapperkeeper` binary. The binary calls `run`, and
-//! tests reach the router and the store through the items exported here.
+//! tests reach the router, the store, the keyring and the admin creator
+//! through the items exported here.
 
 mod admin;
 mod auth;
@@ -9,13 +10,17 @@ mod http;
 mod logging;
 mod store;
 
-// The integration tests build a migrated store and serve the router on a
-// listener they bound. Nothing else in the crate is part of its interface.
-pub use http::router;
+// The integration tests build a migrated store with an admin, derive a
+// keyring from it, serve the router on a listener they bound, and mint tokens
+// of their own. Nothing else in the crate is part of its interface.
+pub use admin::create as create_admin;
+pub use auth::token::{Claims, Keyring, Kind};
+pub use http::{AppState, router};
 pub use store::migrate::apply as apply_migrations;
 pub use store::{Store, create as create_store};
 
 use std::process::ExitCode;
+use std::sync::Arc;
 
 use clap::Parser;
 
@@ -76,18 +81,55 @@ pub async fn run() -> ExitCode {
     match cli.command {
         Command::Serve => serve(&settings).await,
         Command::Migrate => migrate(&settings).await,
-        Command::CreateAdmin { name } => create_admin(&settings, &name).await,
+        Command::CreateAdmin { name } => create_admin_command(&settings, &name).await,
     }
 }
 
-/// Checks the database against the binary, serves until a signal, and
-/// returns the exit status.
+/// Checks the database against the binary, derives the signing keys, serves
+/// until a signal, and returns the exit status.
 async fn serve(settings: &Settings) -> ExitCode {
+    // 1. open the database without creating it and check it
+    // 2. derive the keys from the passphrases and the database's salt
+    // 3. serve with the store and the keys
+    //
+    // Every refusal comes before the listener binds, so a refused server is
+    // never reachable.
+
+    // 1.
     let Some(store) = open_checked(settings).await else {
         return ExitCode::FAILURE;
     };
-    // The router holds the store, so readiness can probe it.
-    match http::serve(settings, store).await {
+
+    // 2. The signing key is the one setting without a default, because a
+    //    default key would sign for every installation.
+    let Some(signing) = &settings.auth.signing_key else {
+        eprintln!(
+            "auth.signing_key is not set; serve needs a passphrase of at least 32 characters, \
+             in the configuration file or as TRAPPERKEEPER_AUTH__SIGNING_KEY"
+        );
+        return ExitCode::FAILURE;
+    };
+    let previous = settings.auth.previous_signing_key.as_ref();
+    let keyring = match Keyring::from_store(
+        &store,
+        signing.expose(),
+        previous.map(config::SigningKey::expose),
+    )
+    .await
+    {
+        Ok(keyring) => keyring,
+        Err(error) => {
+            eprintln!("{error}");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    // 3.
+    let state = AppState {
+        store,
+        keyring: Arc::new(keyring),
+    };
+    match http::serve(settings, state).await {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("{error}");
@@ -149,7 +191,7 @@ async fn migrate(settings: &Settings) -> ExitCode {
 
 /// Creates an admin named `name` in the default tenant, prints its generated
 /// password, and returns the exit status.
-async fn create_admin(settings: &Settings, name: &str) -> ExitCode {
+async fn create_admin_command(settings: &Settings, name: &str) -> ExitCode {
     let Some(store) = open_checked(settings).await else {
         return ExitCode::FAILURE;
     };

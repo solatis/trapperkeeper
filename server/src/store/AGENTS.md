@@ -18,8 +18,9 @@ event log is a separate store, whose engine is still open (see
 
 **Invariants**:
 
-- Every table other than `tenants` has a `tenant_id` column, and every query
-  filters on it (`doc/adr/0003`).
+- Every table other than `tenants` and `installation` has a `tenant_id`
+  column, and every query filters on it (`doc/adr/0003`). `installation` is
+  one row of facts that belong to no tenant.
 - Every entity table has a `deleted_at` column, and a deleted row stays in the
   table. Every read filters on `deleted_at IS NULL` as it filters on
   `tenant_id`. A name is unique among live rows: a partial unique index on

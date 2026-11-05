@@ -3,7 +3,8 @@
 //! command line, the environment variables prefixed `TRAPPERKEEPER_`, and the
 //! command line flags. The last layer merged wins. Where a secret may come
 //! from is doc/adr/0013-where-secrets-may-come-from.md, and a secret setting
-//! has a type that masks it when serialized or printed.
+//! has a type that masks it when serialized or printed. The database URL and
+//! the signing keys are the secret settings.
 
 use std::fmt;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -37,6 +38,8 @@ pub struct Settings {
     pub log: LogSettings,
     /// The relational store.
     pub database: DatabaseSettings,
+    /// Authentication of people.
+    pub auth: AuthSettings,
 }
 
 impl Default for Settings {
@@ -47,6 +50,7 @@ impl Default for Settings {
             listen: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8080),
             log: LogSettings::default(),
             database: DatabaseSettings::default(),
+            auth: AuthSettings::default(),
         }
     }
 }
@@ -133,6 +137,58 @@ impl Serialize for DatabaseUrl {
 impl fmt::Debug for DatabaseUrl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.masked())
+    }
+}
+
+/// Settings of authentication. The default holds neither key: serve refuses to
+/// start without `signing_key`, and migrate and create-admin need none.
+#[derive(Serialize, Deserialize, Debug, Default)]
+#[serde(deny_unknown_fields)]
+pub struct AuthSettings {
+    /// The passphrase that signs new tokens and checks them.
+    pub signing_key: Option<SigningKey>,
+    /// The passphrase that signed before the last rotation. It only checks
+    /// tokens, until the tokens it signed have expired.
+    pub previous_signing_key: Option<SigningKey>,
+}
+
+/// A signing passphrase as typed in the configuration: any text of at least
+/// 32 characters. Serializes and prints as `***` (doc/adr/0013).
+#[derive(Deserialize, Clone)]
+#[serde(try_from = "String")]
+pub struct SigningKey(String);
+
+impl SigningKey {
+    /// The passphrase as typed, for deriving the key.
+    pub fn expose(&self) -> &str {
+        &self.0
+    }
+}
+
+impl TryFrom<String> for SigningKey {
+    type Error = String;
+
+    fn try_from(passphrase: String) -> Result<Self, Self::Error> {
+        // 32 characters is about six words, so a passphrase typed by hand
+        // still resists offline guessing once stretched.
+        if passphrase.chars().count() < 32 {
+            return Err("a signing key needs at least 32 characters".to_owned());
+        }
+        Ok(Self(passphrase))
+    }
+}
+
+impl Serialize for SigningKey {
+    // The logged settings are this serialization, so no key reaches a log
+    // line.
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str("***")
+    }
+}
+
+impl fmt::Debug for SigningKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("***")
     }
 }
 

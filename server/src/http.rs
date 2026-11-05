@@ -1,11 +1,12 @@
-//! The HTTP server: the router, the operational endpoints, the API document
-//! generated from the handlers, and how the server is served and stopped. The
-//! probe paths follow the Kubernetes convention, and the document sits at the
-//! conventional file name.
+//! The HTTP server: the router, the operational endpoints, the management
+//! routes under `/api/v1`, the API document generated from the handlers, and
+//! how the server is served and stopped. The probe paths follow the Kubernetes
+//! convention, and the document sits at the conventional file name.
 
 use std::io;
+use std::sync::Arc;
 
-use axum::extract::State;
+use axum::extract::{FromRef, State};
 use axum::http::StatusCode;
 use axum::routing::get;
 use axum::{Json, Router};
@@ -16,8 +17,24 @@ use utoipa::OpenApi;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
+use crate::auth::login;
+use crate::auth::token::Keyring;
 use crate::config::Settings;
 use crate::store::{self, Store};
+
+/// What every handler can reach: the store and the keyring.
+#[derive(Clone)]
+pub struct AppState {
+    pub store: Store,
+    pub keyring: Arc<Keyring>,
+}
+
+// Written by hand, so axum's macros feature stays off.
+impl FromRef<AppState> for Store {
+    fn from_ref(state: &AppState) -> Self {
+        state.store.clone()
+    }
+}
 
 /// The API document. Title, version and license come from the package
 /// manifest; the routes are added by the router as the handlers are
@@ -56,32 +73,44 @@ async fn readyz(State(store): State<Store>) -> (StatusCode, &'static str) {
     }
 }
 
-/// Builds the router with every route, the API document that describes them,
-/// served at `/openapi.json`, and the request log. The handlers share `store`.
-pub fn router(store: Store) -> Router {
+/// Builds the router with the management routes under `/api/v1` and the
+/// probes at the root, the API document that describes them, served at
+/// `/openapi.json`, and the request log. The handlers share `state`.
+pub fn router(state: AppState) -> Router {
+    // 1. register the management routes, nested under /api/v1
+    // 2. register the probes at the root
+    // 3. split the router from the finished document
+    // 4. add the route that serves the document, and give the handlers the state
+    // 5. wrap the whole router with the trace layer
+    //
     // The document must be split off before the route that serves it is
     // added, or it would describe itself, and the trace layer must wrap every
     // route including that one.
-    //
-    // 1. Register each annotated handler through `routes!`, so the handler and
-    //    its description enter together and neither can be forgotten.
+
+    // 1. Each annotated handler enters through `routes!`, so the handler and
+    //    its description enter together and neither can be forgotten. The
+    //    prefix is the versioned namespace of doc/adr/0026.
+    let management = OpenApiRouter::new().routes(routes!(login::login));
+
+    // 2. The probes and the document stay at the root, where orchestrators
+    //    and tools look for them.
     let (router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
+        .nest("/api/v1", management)
         .routes(routes!(healthz))
         .routes(routes!(readyz))
-        // 2. Split the router from the finished document.
+        // 3.
         .split_for_parts();
 
-    // 3. Add the route that serves the document as JSON; it is not in the
-    //    document itself. Then give the handlers the store.
+    // 4. The document route is not in the document itself.
     let router = router
         .route("/openapi.json", get(move || async move { Json(api) }))
-        .with_state(store);
+        .with_state(state);
 
-    // 4. Wrap the whole router with the trace layer. Its span and its response
-    //    event are raised to INFO, so each request is one info line with
-    //    method, URI, status and latency at the default level. tower-http
-    //    emits both at DEBUG, where its "started processing request" and "end
-    //    of stream" events stay, because one line per request is the point.
+    // 5. The trace layer's span and response event are raised to INFO, so
+    //    each request is one info line with method, URI, status and latency
+    //    at the default level. tower-http emits both at DEBUG, where its
+    //    "started processing request" and "end of stream" events stay,
+    //    because one line per request is the point.
     router.layer(
         TraceLayer::new_for_http()
             .make_span_with(DefaultMakeSpan::new().level(Level::INFO))
@@ -89,13 +118,13 @@ pub fn router(store: Store) -> Router {
     )
 }
 
-/// Serves the router with `store` on the configured address until a shutdown
+/// Serves the router with `state` on the configured address until a shutdown
 /// signal, then finishes the in-flight requests and returns.
 ///
 /// # Errors
 ///
 /// An I/O error binding or serving is returned, not printed.
-pub async fn serve(settings: &Settings, store: Store) -> io::Result<()> {
+pub async fn serve(settings: &Settings, state: AppState) -> io::Result<()> {
     // Listen for signals, bind, serve, stop: a sequence with its own failure
     // at each step and a log line at the bind and the stop.
     //
@@ -113,7 +142,7 @@ pub async fn serve(settings: &Settings, store: Store) -> io::Result<()> {
     // 3. Serve until a signal arrives, then finish the in-flight requests, so
     //    a SIGTERM from an orchestrator drains the connections instead of
     //    cutting them.
-    axum::serve(listener, router(store))
+    axum::serve(listener, router(state))
         .with_graceful_shutdown(shutdown)
         .await?;
 

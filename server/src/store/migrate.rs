@@ -7,7 +7,7 @@ use sqlx::migrate::{AppliedMigration, Migrate, MigrateError, Migrator};
 use sqlx::pool::PoolConnection;
 use sqlx::{Database, Pool};
 
-use super::Store;
+use super::{Store, installation};
 
 /// The migrations of each backend, embedded at compile time.
 static SQLITE: Migrator = sqlx::migrate!("migrations/sqlite");
@@ -66,18 +66,25 @@ fn list(versions: &[i64]) -> String {
         .join(", ")
 }
 
-/// Applies the pending migrations in version order and returns how many ran.
+/// Applies the pending migrations in version order, writes the installation's
+/// signing salt when it has none, and returns how many migrations ran.
 ///
 /// # Errors
 ///
 /// Fails on a database that does not match the binary, or when a migration
-/// fails.
+/// or the salt fails.
 pub async fn apply(store: &Store) -> Result<usize, MigrateError> {
-    match store {
-        Store::Sqlite(pool) => apply_with(&SQLITE, pool).await,
-        Store::Postgres(pool) => apply_with(&POSTGRES, pool).await,
-        Store::MariaDb(pool) => apply_with(&MARIADB, pool).await,
-    }
+    let count = match store {
+        Store::Sqlite(pool) => apply_with(&SQLITE, pool).await?,
+        Store::Postgres(pool) => apply_with(&POSTGRES, pool).await?,
+        Store::MariaDb(pool) => apply_with(&MARIADB, pool).await?,
+    };
+    // Written here and not by a migration, so every database that applied
+    // the migrations has a salt of its own, however it was migrated.
+    let mut tx = store.begin().await?;
+    installation::ensure_salt(&mut tx).await?;
+    tx.commit().await?;
+    Ok(count)
 }
 
 /// Compares the database with the binary's migrations without applying any.

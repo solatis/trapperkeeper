@@ -88,3 +88,33 @@ fn invalid_rust_log_fails() {
     let entries = fs::read_dir(&scratch.path).expect("the scratch directory is read");
     assert_eq!(entries.count(), 0);
 }
+
+/// serve without `auth.signing_key` fails before it binds, and the message
+/// names the setting. The binary runs directly, with no key in its
+/// environment.
+#[test]
+fn serve_refuses_without_a_signing_key() {
+    let scratch = Scratch::create();
+    let url = scratch.sqlite_url("store.db");
+    assert!(common::run_migrate(&url).status.success());
+    let out = Command::new(env!("CARGO_BIN_EXE_trapperkeeper"))
+        .env_remove("TRAPPERKEEPER_AUTH__SIGNING_KEY")
+        .args(["serve", "--listen", "127.0.0.1:0", "--database-url", &url])
+        .output()
+        .expect("the binary runs");
+    assert_eq!(out.status.code(), Some(1));
+    assert!(stderr(&out).contains("auth.signing_key"));
+}
+
+/// A signing key shorter than 32 characters is refused with the settings,
+/// before any subcommand runs.
+#[test]
+fn a_short_signing_key_fails() {
+    let out = Command::new(env!("CARGO_BIN_EXE_trapperkeeper"))
+        .env("TRAPPERKEEPER_AUTH__SIGNING_KEY", "too short")
+        .args(["serve", "--listen", "127.0.0.1:0"])
+        .output()
+        .expect("the binary runs");
+    assert_eq!(out.status.code(), Some(1));
+    assert!(stderr(&out).contains("32 characters"));
+}

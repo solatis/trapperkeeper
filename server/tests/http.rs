@@ -22,8 +22,8 @@ fn readyz_is_ok() {
     });
 }
 
-/// The generated document describes the two probes and not the route that
-/// serves the document.
+/// The generated document describes the two probes and the management routes
+/// under `/api/v1`, and not the route that serves the document.
 #[test]
 fn openapi_describes_the_routes() {
     on_each_backend(|backend| {
@@ -35,6 +35,7 @@ fn openapi_describes_the_routes() {
         let paths = document["paths"].as_object().expect("a paths object");
         assert!(paths.contains_key("/healthz"));
         assert!(paths.contains_key("/readyz"));
+        assert!(paths.contains_key("/api/v1/login"));
         assert!(!paths.contains_key("/openapi.json"));
     });
 }

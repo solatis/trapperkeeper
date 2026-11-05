@@ -1,12 +1,13 @@
 //! Helpers for the server tests: test databases on each backend, a pool on
-//! one of them, the router served in this process, the binary started as a
-//! process, and a GET.
+//! one of them, the router served in this process with an admin and a
+//! keyring, the binary started as a process, and HTTP requests.
 
 // Each test crate compiles this module and uses only part of it.
 #![allow(dead_code, unused_imports, unused_macros)]
 
 use std::env;
 use std::fmt;
+use std::fmt::Write as _;
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
@@ -22,12 +23,24 @@ use sqlx::migrate::MigrateDatabase;
 use sqlx::mysql::MySql;
 use sqlx::postgres::Postgres;
 use sqlx::sqlite::Sqlite;
-use trapperkeeper_server::{apply_migrations, create_store, router};
+use trapperkeeper_server::{
+    AppState, Keyring, apply_migrations, create_admin, create_store, router,
+};
 use url::Url;
 
 /// How long a start or a stop may take before a test gives up. Not measured;
 /// generous for a loaded CI runner.
 pub const TIMEOUT: Duration = Duration::from_secs(5);
+
+/// The signing passphrase of every test server, fixed so a failing run
+/// reproduces. 32 characters or more, as the setting requires.
+pub const TEST_KEY: &str = "the test signing passphrase of trapperkeeper";
+
+/// A second passphrase, for the rotation cases.
+pub const TEST_PREVIOUS_KEY: &str = "the previous test signing passphrase of trapperkeeper";
+
+/// The name of the admin every in-process server seeds.
+pub const ADMIN: &str = "admin";
 
 /// Numbers the scratch directories of this process.
 static SCRATCH: AtomicU32 = AtomicU32::new(0);
@@ -259,40 +272,63 @@ pub fn placeholders(backend: Backend, statement: &'static str) -> String {
 }
 
 /// The production router on a freshly migrated database of its own on one
-/// backend, served in this process on `addr`. Dropping it stops the server
+/// backend, with the admin `ADMIN` seeded and the keys derived from
+/// `TEST_KEY`, served in this process on `addr`. Dropping it stops the server
 /// and then drops the database.
 pub struct InProcess {
     pub addr: SocketAddr,
+    /// The generated password of `ADMIN`.
+    pub admin_password: String,
+    /// The store the server runs on, for a test that derives keys of its own.
+    pub store: trapperkeeper_server::Store,
     // Declared before `database`, so the server and its pool stop before the
     // database is dropped.
     runtime: tokio::runtime::Runtime,
     database: TestDatabase,
 }
 
+impl InProcess {
+    /// The database the server runs on, for reads and writes beside it.
+    pub fn database(&self) -> &TestDatabase {
+        &self.database
+    }
+}
+
 /// Serves the router on `backend` in this process and returns once the
 /// address accepts connections. Starts no process. Panics when the database
-/// cannot be created or migrated.
+/// cannot be created, migrated or seeded.
 pub fn serve_in_process(backend: Backend) -> InProcess {
-    // 1. create and migrate a database of its own through the library
+    // 1. create and migrate a database of its own through the library, seed
+    //    the admin, and derive the keys
     // 2. bind a listener on port 0 and keep it
     // 3. serve the router on that listener, on a runtime the value owns
 
     // 1. A multi-thread runtime, so the server runs on its own threads while
-    //    the test blocks in `get`.
+    //    the test blocks in a request.
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .expect("a runtime");
     let database = TestDatabase::fresh(backend);
-    let store = runtime.block_on(async {
+    let (store, admin_password, keyring) = runtime.block_on(async {
         let store = create_store(&database.url)
             .await
             .expect("the database is created");
         apply_migrations(&store)
             .await
             .expect("the migrations apply");
-        store
+        let password = create_admin(&store, ADMIN)
+            .await
+            .expect("the admin is created");
+        let keyring = Keyring::from_store(&store, TEST_KEY, None)
+            .await
+            .expect("the keys derive");
+        (store, password, keyring)
     });
+    let state = AppState {
+        store: store.clone(),
+        keyring: std::sync::Arc::new(keyring),
+    };
 
     // 2. The listener stays open from the bind to the drop, so a fork on
     //    another test thread shares it instead of holding the last copy.
@@ -309,10 +345,12 @@ pub fn serve_in_process(backend: Backend) -> InProcess {
         let _context = runtime.enter();
         tokio::net::TcpListener::from_std(listener).expect("tokio adopts the listener")
     };
-    runtime.spawn(axum::serve(listener, router(store)).into_future());
+    runtime.spawn(axum::serve(listener, router(state)).into_future());
 
     InProcess {
         addr,
+        admin_password,
+        store,
         runtime,
         database,
     }
@@ -359,8 +397,10 @@ pub fn launch(args: &[&str]) -> Launch {
 
     // 1. The server binds port 0 itself and keeps the socket, so no other
     //    process ever holds the port first. stderr is read only after an
-    //    exit, because the server writes to it only when it fails.
+    //    exit, because the server writes to it only when it fails. Every
+    //    serve needs a signing key, given through the environment.
     let mut child = Command::new(env!("CARGO_BIN_EXE_trapperkeeper"))
+        .env("TRAPPERKEEPER_AUTH__SIGNING_KEY", TEST_KEY)
         .arg("serve")
         .arg("--listen")
         .arg("127.0.0.1:0")
@@ -495,19 +535,58 @@ pub fn run_migrate(url: &str) -> std::process::Output {
         .expect("the binary runs")
 }
 
+/// One response: the status code, the headers as sent, and the body.
+pub struct Response {
+    pub status: u16,
+    pub headers: Vec<(String, String)>,
+    pub body: String,
+}
+
+impl Response {
+    /// The values of every header named `name`, case-insensitively.
+    pub fn header_values(&self, name: &str) -> Vec<&str> {
+        self.headers
+            .iter()
+            .filter(|(key, _)| key.eq_ignore_ascii_case(name))
+            .map(|(_, value)| value.as_str())
+            .collect()
+    }
+}
+
 /// One `GET` over a fresh connection; returns the status code and the body.
 pub fn get(addr: SocketAddr, path: &str) -> (u16, String) {
-    // Hand-rolled HTTP/1.1, because two literal bodies and one small document
-    // do not justify an HTTP client dependency.
+    let response = request(addr, "GET", path, &[], None);
+    (response.status, response.body)
+}
+
+/// One request over a fresh connection, with `headers` as given and `body`
+/// sent as JSON when there is one. Returns the response.
+pub fn request(
+    addr: SocketAddr,
+    method: &str,
+    path: &str,
+    headers: &[(&str, &str)],
+    body: Option<&str>,
+) -> Response {
+    // Hand-rolled HTTP/1.1, because a few small requests do not justify an
+    // HTTP client dependency.
     //
     // 1. One request with `Connection: close`, so the server closes once it
     //    has answered and nothing else is ever sent on the connection.
     let mut stream = TcpStream::connect(addr).expect("the server accepts");
-    write!(
-        stream,
-        "GET {path} HTTP/1.1\r\nHost: {addr}\r\nConnection: close\r\n\r\n"
-    )
-    .expect("the request is written");
+    let mut head = format!("{method} {path} HTTP/1.1\r\nHost: {addr}\r\nConnection: close\r\n");
+    for (name, value) in headers {
+        let _ = write!(head, "{name}: {value}\r\n");
+    }
+    let body = body.unwrap_or_default();
+    if !body.is_empty() {
+        let _ = write!(
+            head,
+            "Content-Type: application/json\r\nContent-Length: {}\r\n",
+            body.len()
+        );
+    }
+    write!(stream, "{head}\r\n{body}").expect("the request is written");
 
     // 2. Read the head up to the blank line, then exactly the announced body
     //    length, and stop. Reading to the end of the stream instead failed on
@@ -531,13 +610,23 @@ pub fn get(addr: SocketAddr, path: &str) -> (u16, String) {
         .expect("a status code")
         .parse()
         .expect("a numeric status code");
+    let headers: Vec<(String, String)> = head
+        .lines()
+        .skip(1)
+        .filter_map(|line| line.split_once(':'))
+        .map(|(name, value)| (name.to_owned(), value.trim().to_owned()))
+        .collect();
     let length = header(&head, "content-length")
         .expect("an announced content length")
         .parse()
         .expect("a numeric content length");
     let mut body = vec![0; length];
     reader.read_exact(&mut body).expect("the body is read");
-    (status, String::from_utf8(body).expect("a UTF-8 body"))
+    Response {
+        status,
+        headers,
+        body: String::from_utf8(body).expect("a UTF-8 body"),
+    }
 }
 
 /// The value of the first header named `name`, case-insensitively, trimmed.

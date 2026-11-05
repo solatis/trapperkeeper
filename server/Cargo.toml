@@ -61,8 +61,19 @@ url = "2"
 argon2 = "0.6"
 # Entity ids are version 7 UUIDs, generated in Rust (doc/adr/0020).
 uuid = { version = "1", features = ["v7"] }
-# Generated passwords draw their characters from the system's random source.
+# Generated passwords and the installation's signing salt draw from the
+# system's random source.
 rand = "0.10"
+# Access tokens are HS256 JWTs (doc/adr/0025-signed-tokens-and-the-revocation-cutoff.md).
+# Default features off, because PEM parsing is for asymmetric keys; rust_crypto
+# is the HMAC provider and pulls the sha2 already in the tree.
+jsonwebtoken = { version = "11", default-features = false, features = ["rust_crypto"] }
+# The key ids are fingerprints of the derived keys; the same sha2 jsonwebtoken
+# and sqlx use.
+sha2 = "0.10"
+# The cookie jar extractor for the token cookie; default features off, because
+# the rest of axum-extra is unused.
+axum-extra = { version = "0.12", default-features = false, features = ["cookie"] }
 
 [dev-dependencies]
 # The settings precedence is one property over generated layers

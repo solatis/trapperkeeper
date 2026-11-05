@@ -43,8 +43,9 @@ fn tracked_versions(database: &TestDatabase) -> Vec<i64> {
     })
 }
 
-/// migrate builds a missing database with the default tenant and its three
-/// roles; a second migrate applies nothing; serve accepts the result.
+/// migrate builds a missing database with the default tenant, its three roles
+/// and a signing salt; a second migrate applies nothing and keeps the salt;
+/// serve accepts the result.
 #[test]
 fn migrate_builds_a_database_that_serve_accepts() {
     on_each_backend(|backend| {
@@ -91,7 +92,19 @@ fn migrate_builds_a_database_that_serve_accepts() {
             ]
         );
 
+        let salt = || -> String {
+            on_pool!(database, |pool| {
+                sqlx::query_scalar("SELECT signing_salt FROM installation")
+                    .fetch_one(&pool)
+                    .await
+                    .expect("the salt is read")
+            })
+        };
+        let first_salt = salt();
+        assert_eq!(first_salt.len(), 32);
+
         assert_eq!(applied_count(&run_migrate(&database.url)), 0);
+        assert_eq!(salt(), first_salt);
 
         let Launch::Listening(server) = launch(&["--database-url", &database.url]) else {
             panic!("serve refused the database migrate built");

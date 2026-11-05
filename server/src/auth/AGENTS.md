@@ -20,3 +20,7 @@
 - Argon2id at the second recommended option of RFC 9106, with hashes limited
   to the CPU count (owner, 2026-11-05):
   `doc/adr/0022-argon2id-for-passwords.md`.
+- Signed tokens the server does not store, two hand-typed signing keys
+  stretched under a per-installation salt, and a per-user revocation cutoff
+  (owner, 2026-11-05):
+  `doc/adr/0025-signed-tokens-and-the-revocation-cutoff.md`.

@@ -3,13 +3,23 @@
 
 use std::fmt;
 
-use sqlx::AssertSqlSafe;
+use sqlx::{AssertSqlSafe, FromRow};
 use uuid::Uuid;
 
 use super::{Tx, now_micros, on_tx, sql};
 
 /// The `role_name` of the admin role the migration seeds for every tenant.
 pub const ADMIN_ROLE: &str = "admin";
+
+/// A live user.
+#[derive(FromRow, Debug, Clone)]
+pub struct User {
+    #[sqlx(rename = "user_id")]
+    pub id: String,
+    pub tenant_id: String,
+    pub password_hash: String,
+    pub password_must_change: bool,
+}
 
 /// What a new user is made of. `role_name` names one of the tenant's live
 /// roles.
@@ -92,4 +102,28 @@ pub async fn create(tx: &mut Tx, new: NewUser<'_>) -> Result<(), CreateError> {
             .map(|_| ())
     })?;
     Ok(())
+}
+
+/// The live user named `user_name` in `tenant_id`, or `None`.
+///
+/// # Errors
+///
+/// Fails when the database cannot be read.
+pub async fn find(
+    tx: &mut Tx,
+    tenant_id: &str,
+    user_name: &str,
+) -> Result<Option<User>, sqlx::Error> {
+    let select = sql(
+        tx,
+        "SELECT user_id, tenant_id, password_hash, password_must_change \
+         FROM users WHERE tenant_id = $1 AND user_name = $2 AND deleted_at IS NULL",
+    );
+    on_tx!(tx, |conn| {
+        sqlx::query_as(AssertSqlSafe(select))
+            .bind(tenant_id)
+            .bind(user_name)
+            .fetch_optional(conn)
+            .await
+    })
 }

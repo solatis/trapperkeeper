@@ -31,6 +31,7 @@ gets its own `AGENTS.md`, and this file indexes them.
 | `tests/cli.rs`        | end-to-end: runs the binary and checks its command line                                                                                                                                                                                       | how the binary behaves on the command line                                         |
 | `tests/common/mod.rs` | test helpers: the backends a run tests, test databases, a pool on one of them with placeholders rewritten, the router served in-process for integration tests, the binary started as a process for end-to-end tests, run migrate, GET a route | writing a server test; testing on every backend; which kind of server a test needs |
 | `tests/http.rs`       | integration tests of the endpoints on the router served in-process                                                                                                                                                                            | what the probes and the document promise                                           |
+| `tests/login.rs`      | integration tests of login on the router served in-process                                                                                                                                                                                    | what login hands out and refuses                                                   |
 | `tests/logs.rs`       | end-to-end: checks the log lines the binary writes under a pipe                                                                                                                                                                               | what a log line contains                                                           |
 | `tests/settings.rs`   | end-to-end: the settings precedence as one property through the binary                                                                                                                                                                        | how precedence is tested                                                           |
 | `tests/shutdown.rs`   | end-to-end test that SIGTERM stops the binary                                                                                                                                                                                                 | how the server stops                                                               |
@@ -40,10 +41,15 @@ gets its own `AGENTS.md`, and this file indexes them.
 
 - A setting is added in `config::Settings` with a default, and its flag in
   `cli::Overrides` with `skip_serializing_if`, nested the same way, so the two
-  trees stay the same shape and an absent flag changes nothing.
+  trees stay the same shape and an absent flag changes nothing. The signing
+  keys are the exception: they are secrets with no flag, and serve refuses
+  to start without `auth.signing_key`.
 - A secret setting has a type that masks it when serialized or printed, as
-  `config::DatabaseUrl` does. Its flag stays a plain value, because the flags
-  layer is serialized into the merge, and its default holds no secret.
+  `config::DatabaseUrl` and `config::SigningKey` do. Its flag, where it has
+  one, stays a plain value, because the flags layer is serialized into the
+  merge, and its default holds no secret.
+- Every management route sits under `/api/v1`. The probes and the API
+  document stay at the root.
 - Every handler carries a `utoipa::path` annotation and enters the router
   through `routes!`; a handler added with `.route` is missing from the API
   document. A handler's doc comment is its operation summary in that document,
@@ -102,7 +108,10 @@ gets its own `AGENTS.md`, and this file indexes them.
 **How to**: build, lint and test with the commands in the root `AGENTS.md`,
 How to. `cargo run -- --help` shows the command line. `cargo run -- migrate`
 creates `trapperkeeper.db` in the working directory, and `cargo run -- serve`
-then starts the server on `127.0.0.1:8080`; Ctrl-C stops it. `cargo run --
+then starts the server on `127.0.0.1:8080`; Ctrl-C stops it. A local serve
+needs a signing key: `signing_key = "<any passphrase of 32 or more
+characters>"` under `[auth]` in the file, or
+`TRAPPERKEEPER_AUTH__SIGNING_KEY` in the environment. `cargo run --
 create-admin leon` after migrate prints the admin's generated password once.
 The tests run against SQLite, and also against Postgres and MariaDB when
 `TK_TEST_POSTGRES_URL` and `TK_TEST_MARIADB_URL` are set; see
