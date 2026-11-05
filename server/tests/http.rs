@@ -22,8 +22,9 @@ fn readyz_is_ok() {
     });
 }
 
-/// The generated document describes the two probes and the management routes
-/// under `/api/v1`, and not the route that serves the document.
+/// The generated document describes the two probes, the management routes
+/// under `/api/v1` with their bearer scheme, and not the route that serves
+/// the document.
 #[test]
 fn openapi_describes_the_routes() {
     on_each_backend(|backend| {
@@ -36,7 +37,16 @@ fn openapi_describes_the_routes() {
         assert!(paths.contains_key("/healthz"));
         assert!(paths.contains_key("/readyz"));
         assert!(paths.contains_key("/api/v1/login"));
+        assert!(paths.contains_key("/api/v1/me"));
         assert!(!paths.contains_key("/openapi.json"));
+        assert_eq!(
+            document["components"]["securitySchemes"]["bearer"]["scheme"],
+            "bearer"
+        );
+        assert_eq!(
+            document["paths"]["/api/v1/me"]["get"]["security"][0]["bearer"],
+            serde_json::json!([])
+        );
     });
 }
 

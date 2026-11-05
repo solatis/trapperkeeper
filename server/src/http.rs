@@ -13,7 +13,8 @@ use axum::{Json, Router};
 use tokio::net::TcpListener;
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
 use tracing::Level;
-use utoipa::OpenApi;
+use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
+use utoipa::{Modify, OpenApi};
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
@@ -40,7 +41,28 @@ impl FromRef<AppState> for Store {
 /// manifest; the routes are added by the router as the handlers are
 /// registered, and each handler's doc comment becomes its operation summary.
 #[derive(OpenApi)]
+#[openapi(modifiers(&BearerScheme))]
 struct ApiDoc;
+
+/// Adds the bearer scheme the management routes name in `security`.
+struct BearerScheme;
+
+impl Modify for BearerScheme {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        openapi
+            .components
+            .get_or_insert_with(Default::default)
+            .add_security_scheme(
+                "bearer",
+                SecurityScheme::Http(
+                    HttpBuilder::new()
+                        .scheme(HttpAuthScheme::Bearer)
+                        .bearer_format("JWT")
+                        .build(),
+                ),
+            );
+    }
+}
 
 /// Liveness: the process is running and can answer. Always `ok`.
 #[utoipa::path(
@@ -90,7 +112,9 @@ pub fn router(state: AppState) -> Router {
     // 1. Each annotated handler enters through `routes!`, so the handler and
     //    its description enter together and neither can be forgotten. The
     //    prefix is the versioned namespace of doc/adr/0026.
-    let management = OpenApiRouter::new().routes(routes!(login::login));
+    let management = OpenApiRouter::new()
+        .routes(routes!(login::login))
+        .routes(routes!(login::me));
 
     // 2. The probes and the document stay at the root, where orchestrators
     //    and tools look for them.

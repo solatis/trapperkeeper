@@ -1,4 +1,4 @@
-//! The login route.
+//! The login route, and what a logged-in caller can read about itself.
 
 use std::time::SystemTime;
 
@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::OnceCell;
 use utoipa::ToSchema;
 
+use crate::auth::caller::Caller;
 use crate::auth::password;
 use crate::auth::token::Kind;
 use crate::http::AppState;
@@ -91,6 +92,32 @@ pub async fn login(
         password_must_change: user.password_must_change,
     })
     .into_response()
+}
+
+/// What a caller can read about itself.
+#[derive(Serialize, ToSchema)]
+pub struct Me {
+    name: String,
+    role: String,
+    password_must_change: bool,
+}
+
+/// The caller's name, role, and whether the password must be changed.
+#[utoipa::path(
+    get,
+    path = "/me",
+    security(("bearer" = [])),
+    responses(
+        (status = OK, description = "the caller", body = Me),
+        (status = UNAUTHORIZED, description = "no valid access token", body = String)
+    )
+)]
+pub async fn me(caller: Caller) -> Json<Me> {
+    Json(Me {
+        name: caller.user.name,
+        role: caller.user.role_name,
+        password_must_change: caller.user.password_must_change,
+    })
 }
 
 /// The one refusal every authentication failure gets, so a response does not

@@ -11,14 +11,30 @@ use super::{Tx, now_micros, on_tx, sql};
 /// The `role_name` of the admin role the migration seeds for every tenant.
 pub const ADMIN_ROLE: &str = "admin";
 
-/// A live user.
+/// A live user, as read with its role's name.
 #[derive(FromRow, Debug, Clone)]
 pub struct User {
     #[sqlx(rename = "user_id")]
     pub id: String,
     pub tenant_id: String,
+    #[sqlx(rename = "user_name")]
+    pub name: String,
+    pub role_name: String,
     pub password_hash: String,
     pub password_must_change: bool,
+    pub tokens_valid_after: i64,
+}
+
+/// The columns of `User`, joined with the user's live role and filtered to
+/// the tenant, for each `find` to narrow. A macro, because `concat!` takes
+/// only literals.
+macro_rules! SELECT_USER {
+    () => {
+        "SELECT u.user_id, u.tenant_id, u.user_name, r.role_name, u.password_hash, \
+         u.password_must_change, u.tokens_valid_after \
+         FROM users u JOIN roles r ON r.tenant_id = u.tenant_id AND r.role_id = u.role_id \
+         WHERE u.deleted_at IS NULL AND r.deleted_at IS NULL AND u.tenant_id = $1"
+    };
 }
 
 /// What a new user is made of. `role_name` names one of the tenant's live
@@ -114,15 +130,31 @@ pub async fn find(
     tenant_id: &str,
     user_name: &str,
 ) -> Result<Option<User>, sqlx::Error> {
-    let select = sql(
-        tx,
-        "SELECT user_id, tenant_id, password_hash, password_must_change \
-         FROM users WHERE tenant_id = $1 AND user_name = $2 AND deleted_at IS NULL",
-    );
+    let select = sql(tx, concat!(SELECT_USER!(), " AND u.user_name = $2"));
     on_tx!(tx, |conn| {
         sqlx::query_as(AssertSqlSafe(select))
             .bind(tenant_id)
             .bind(user_name)
+            .fetch_optional(conn)
+            .await
+    })
+}
+
+/// The live user with id `user_id` in `tenant_id`, or `None`.
+///
+/// # Errors
+///
+/// Fails when the database cannot be read.
+pub async fn find_by_id(
+    tx: &mut Tx,
+    tenant_id: &str,
+    user_id: &str,
+) -> Result<Option<User>, sqlx::Error> {
+    let select = sql(tx, concat!(SELECT_USER!(), " AND u.user_id = $2"));
+    on_tx!(tx, |conn| {
+        sqlx::query_as(AssertSqlSafe(select))
+            .bind(tenant_id)
+            .bind(user_id)
             .fetch_optional(conn)
             .await
     })
