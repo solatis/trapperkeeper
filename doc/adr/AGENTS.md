@@ -13,32 +13,32 @@ made, then **Context**, **Decision**, **Rejected alternatives** and
 **Consequences**. A part with nothing recorded says so rather than being
 dropped.
 
-| Record                                                            | Decision                                                                                            |
-| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `0001-management-api-is-the-single-write-path.md`                 | every write that is not an event goes through one API                                               |
-| `0002-ai-agent-is-an-external-client.md`                          | the agent is a client with its own principal and manages rules only                                 |
-| `0003-tenant-aware-model-single-tenant-operation.md`              | everything carries a tenant id, one default tenant ships                                            |
-| `0004-events-embed-rule-snapshots.md`                             | an event carries the rule as it was evaluated                                                       |
-| `0005-one-vocabulary-for-failure-behavior.md`                     | pass-through, halt, cached per sensor; skip, match, fail per condition                              |
-| `0006-conformance-fixtures-are-the-evaluation-spec.md`            | fixtures, not prose, define evaluation                                                              |
-| `0007-rust-for-the-server-side.md`                                | the server and its APIs are written in Rust                                                         |
-| `0008-monorepo.md`                                                | all components live in this repository                                                              |
-| `0009-latest-stable-rust-only.md`                                 | no minimum Rust version below the current stable                                                    |
-| `0010-one-top-level-directory-per-component.md`                   | `server/`, `engine/`, `sdk/<lang>/`, `web/`, `conformance/`                                         |
-| `0011-clippy-pedantic-denied-everywhere.md`                       | clippy pedantic and rustc warnings fail every build, local or CI                                    |
-| `0012-clap-and-figment-for-the-command-line-and-configuration.md` | clap parses the command line, figment merges the settings layers                                    |
-| `0013-where-secrets-may-come-from.md`                             | secrets in the file or the environment, the command line warns, credentials never                   |
-| `0014-async-everywhere.md`                                        | async wherever an async form exists, on tokio                                                       |
-| `0015-server-side-rendering-no-spa.md`                            | the web UI is rendered on the server, JavaScript only for small widgets                             |
-| `0016-axum-and-utoipa-for-http.md`                                | axum with tower middleware; utoipa generates the API document from the handlers                     |
-| `0017-tracing-for-structured-logs.md`                             | tracing; JSON under a pipe, readable in a terminal; a log level setting that RUST_LOG overrides     |
-| `0018-integration-tests-over-unit-tests.md`                       | one test per behavior at the highest observing level; generated data over hand-picked cases         |
-| `0019-sqlx-with-hand-written-sql-over-three-backends.md`          | sqlx, hand-written SQL in one subset, checksummed migrations per backend                            |
-| `0020-internal-ids-and-unique-names.md`                           | `_id` is an internal time-ordered UUID; `_name` is unique and what people use                       |
-| `0021-every-test-suite-runs-on-every-platform.md`                 | every test on every CI platform; latest stable or LTS dependencies; skip only without a build       |
-| `0022-argon2id-for-passwords.md`                                  | Argon2id at 64 MiB, 3 passes, 4 lanes, as PHC strings; hashes limited to the CPU count              |
-| `0023-roles-are-rows-per-tenant.md`                               | roles are seeded rows per tenant; a user references its role with its tenant                        |
-| `0024-soft-deletes.md`                                            | every entity has `deleted_at`; reads filter it; names are unique among live rows                    |
-| `0025-signed-tokens-and-the-revocation-cutoff.md`                 | HS256 JWTs the server does not store; two hand-typed keys stretched under a salt; a per-user cutoff |
-| `0026-versioned-api-route-prefix.md`                              | management routes live under `/api/v1`; probes and the document stay at the root                    |
-| `0027-opaque-hashed-sensor-api-keys.md`                           | a sensor key is opaque random text, stored as a hash, revoked by deletion                           |
+| Record                                                            | Decision                                                                                                     |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `0001-management-api-is-the-single-write-path.md`                 | every write that is not an event goes through one API                                                        |
+| `0002-ai-agent-is-an-external-client.md`                          | the agent is a client with its own principal and manages rules only                                          |
+| `0003-tenant-aware-model-single-tenant-operation.md`              | everything carries a tenant id, one default tenant ships                                                     |
+| `0004-events-embed-rule-snapshots.md`                             | an event carries the rule as it was evaluated                                                                |
+| `0005-one-vocabulary-for-failure-behavior.md`                     | pass-through, halt, cached per sensor; skip, match, fail per condition                                       |
+| `0006-conformance-fixtures-are-the-evaluation-spec.md`            | fixtures, not prose, define evaluation                                                                       |
+| `0007-rust-for-the-server-side.md`                                | the server and its APIs are written in Rust                                                                  |
+| `0008-monorepo.md`                                                | all components live in this repository                                                                       |
+| `0009-latest-stable-rust-only.md`                                 | no minimum Rust version below the current stable                                                             |
+| `0010-one-top-level-directory-per-component.md`                   | `server/`, `engine/`, `sdk/<lang>/`, `web/`, `conformance/`                                                  |
+| `0011-clippy-pedantic-denied-everywhere.md`                       | clippy pedantic and rustc warnings fail every build, local or CI                                             |
+| `0012-clap-and-figment-for-the-command-line-and-configuration.md` | clap parses the command line, figment merges the settings layers                                             |
+| `0013-where-secrets-may-come-from.md`                             | secrets in the file or the environment, the command line warns, credentials never                            |
+| `0014-async-everywhere.md`                                        | async wherever an async form exists, on tokio                                                                |
+| `0015-server-side-rendering-no-spa.md`                            | the web UI is rendered on the server, JavaScript only for small widgets                                      |
+| `0016-axum-and-utoipa-for-http.md`                                | axum with tower middleware; utoipa generates the API document from the handlers                              |
+| `0017-tracing-for-structured-logs.md`                             | tracing; JSON under a pipe, readable in a terminal; a log level setting that RUST_LOG overrides              |
+| `0018-integration-tests-over-unit-tests.md`                       | one test per behavior at the highest observing level; generated data over hand-picked cases                  |
+| `0019-sqlx-with-hand-written-sql-over-three-backends.md`          | sqlx, hand-written SQL in one subset, checksummed migrations per backend                                     |
+| `0020-internal-ids-and-unique-names.md`                           | `_id` is an internal time-ordered UUID; `_name` is unique and what people use                                |
+| `0021-every-test-suite-runs-on-every-platform.md`                 | every test on every CI platform; latest stable or LTS dependencies; skip only without a build                |
+| `0022-argon2id-for-passwords.md`                                  | Argon2id at 64 MiB, 3 passes, 4 lanes, as PHC strings; hashes limited to the CPU count                       |
+| `0023-roles-are-rows-per-tenant.md`                               | roles are seeded rows per tenant; a user references its role with its tenant                                 |
+| `0024-soft-deletes.md`                                            | every entity has `deleted_at`; reads filter it; names are unique among live rows                             |
+| `0025-signed-tokens-and-the-revocation-cutoff.md`                 | HS256 access and refresh JWTs the server does not store; two hand-typed keys under a salt; a per-user cutoff |
+| `0026-versioned-api-route-prefix.md`                              | management routes live under `/api/v1`; probes and the document stay at the root                             |
+| `0027-opaque-hashed-sensor-api-keys.md`                           | a sensor key is opaque random text, stored as a hash, revoked by deletion                                    |

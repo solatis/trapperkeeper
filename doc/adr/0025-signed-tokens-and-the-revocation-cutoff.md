@@ -14,19 +14,28 @@ unit was planned (owner, 2026-11-05).
 
 A logged-in caller proves who they are with an HS256 JWT the server signs
 and does not store. The header carries `kid`, the id of the key that signed
-it, and `typ`, the kind of token, which is `at+jwt` for an access token (RFC
-9068). The claims are `sub`, the user id, `tid`, the tenant id, `iat` with a
-microsecond fraction, and `exp`. An access token lives one hour. It is sent
-as `Authorization: Bearer`, or in the `tk_access` cookie, which is
-`HttpOnly`, `SameSite=Strict` and `Secure`. The header is read first, for
-the CLI and the agent, and the cookie second, for the browser (owner,
-2026-11-05).
+it, and `typ`, the kind of token: `at+jwt` for an access token (RFC 9068)
+and `tk-refresh+jwt`, a type of our own, for a refresh token, so one kind
+never passes as the other. The claims are `sub`, the user id, `tid`, the
+tenant id, `iat` with a microsecond fraction, and `exp`. An access token
+lives one hour and is sent as `Authorization: Bearer`, or in the `tk_access`
+cookie. A refresh token lives 7 days from login, is signed with the same
+keys, and is sent in the body of the refresh route or in the `tk_refresh`
+cookie, which goes to that route alone. Both cookies are `HttpOnly`,
+`SameSite=Strict` and `Secure`. A header or body is read first, for the CLI
+and the agent, and the cookie second, for the browser (owner, 2026-11-05).
 
-Every user row has `tokens_valid_after`. Every token is checked against it on
-every request, so the server reads the user for each request, and setting it
-to now revokes every token of the user (owner, 2026-11-05). `iat` carries a
-microsecond fraction so that a token issued in the same second as the cutoff
-compares exactly in both directions.
+A refresh returns a new access token and keeps the refresh token, so a login
+ends 7 days after it began, however often it refreshes.
+
+Every user row has `tokens_valid_after`. Every token of either kind is
+checked against it on every request, so the server reads the user for each
+request, and setting it to now revokes every token of the user. Logout sets
+it, which ends every session of the user. A password change needs the
+current password, sets it, clears the must-change flag, and hands the caller
+fresh tokens, so the caller stays logged in while every other session ends
+(owner, 2026-11-05). `iat` carries a microsecond fraction so that a token
+issued in the same second as the cutoff compares exactly in both directions.
 
 The signing keys are two passphrases typed by hand into the configuration,
 each at least 32 characters: `auth.signing_key`, which is required and
@@ -67,12 +76,17 @@ against every installation, and a salt setting, because it is one more thing
 to keep the same on every instance (owner, 2026-11-05).
 
 Checking only refresh tokens against the cutoff, because revocation must take
-effect at once (owner, 2026-11-05).
+effect at once. Stored opaque refresh tokens with rotation and reuse
+detection, because they need a table and a second token style, and recorded
+refresh JWTs, because they need both machineries. A new refresh token on
+each refresh, because a login could then extend itself without limit (owner,
+2026-11-05).
 
 ## Consequences
 
 Every request with a token reads one user row. Revocation is per user, not
-per session, so a logout ends every session of the user. Every instance
-needs the same two passphrases, and one rotation is in flight at a time.
-Rebuilding the database changes the salt and logs everyone out. The `auth`
-module and the server component cite this record.
+per session, so a logout ends every session of the user. There is no theft
+detection: a stolen refresh token works until it expires or the user is
+revoked. Every instance needs the same two passphrases, and one rotation is
+in flight at a time. Rebuilding the database changes the salt and logs
+everyone out. The `auth` module and the server component cite this record.
