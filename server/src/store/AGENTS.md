@@ -7,13 +7,14 @@ event log is a separate store, whose engine is still open (see
 
 **Map**:
 
-| File                         | What                                                         | When to read                                                                      |
-| ---------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------- |
-| `mod.rs`                     | choosing the backend, opening the store for serve or migrate | which URL schemes work; why serve never creates the database; the readiness probe |
-| `migrate.rs`                 | the embedded migrations: apply, check                        | what makes serve refuse, what each refusal means                                  |
-| `../../migrations/sqlite/`   | the SQLite migration files, one per version                  | adding a table                                                                    |
-| `../../migrations/postgres/` | the Postgres migration files                                 | adding a table                                                                    |
-| `../../migrations/mariadb/`  | the MariaDB migration files                                  | adding a table                                                                    |
+| File                         | What                                                  | When to read                                                                     |
+| ---------------------------- | ----------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `mod.rs`                     | choosing the backend, opening the store, transactions | which URL schemes work; why serve never creates the database; `Tx`; placeholders |
+| `migrate.rs`                 | the embedded migrations: apply, check                 | what makes serve refuse, what each refusal means                                 |
+| `users.rs`                   | creating a user with one of its tenant's roles        | the users table, the role subselect                                              |
+| `../../migrations/sqlite/`   | the SQLite migration files, one per version           | adding a table                                                                   |
+| `../../migrations/postgres/` | the Postgres migration files                          | adding a table                                                                   |
+| `../../migrations/mariadb/`  | the MariaDB migration files                           | adding a table                                                                   |
 
 **Invariants**:
 
@@ -34,8 +35,11 @@ event log is a separate store, whose engine is still open (see
 - Timestamps are integer epoch microseconds in UTC (`doc/adr/0019`).
 - No query uses `RETURNING` or an upsert (`doc/adr/0019`).
 - Every migration version exists in all three migration directories.
-- Queries use `$1` placeholders. MariaDB's `?` comes from a rewrite in the
-  store, which arrives with the first parameterized query (`doc/adr/0019`).
+- Store functions take a `Tx` and never commit. The caller opens the
+  transaction, composes the functions it needs, and commits (owner,
+  2026-11-05).
+- Queries use `$1` placeholders, each number once and in ascending order.
+  `sql` in `mod.rs` rewrites them to `?` for MariaDB (`doc/adr/0019`).
 - MariaDB tables declare `utf8mb4_bin`, so they compare text by bytes as the
   other two backends do.
 

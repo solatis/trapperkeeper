@@ -1,8 +1,9 @@
-//! Helpers for the server tests: test databases on each backend, the router
-//! served in this process, the binary started as a process, and a GET.
+//! Helpers for the server tests: test databases on each backend, a pool on
+//! one of them, the router served in this process, the binary started as a
+//! process, and a GET.
 
 // Each test crate compiles this module and uses only part of it.
-#![allow(dead_code)]
+#![allow(dead_code, unused_imports, unused_macros)]
 
 use std::env;
 use std::fmt;
@@ -205,6 +206,56 @@ pub fn block_on<T>(future: impl Future<Output = T>) -> T {
         .build()
         .expect("a runtime")
         .block_on(future)
+}
+
+/// Evaluates `$body` with `$pool` bound to a pool on `$database`, whichever
+/// backend it is on. A macro, because each backend's pool is its own type and
+/// `$body` is checked once per type.
+macro_rules! on_pool {
+    ($database:expr, |$pool:ident| $body:expr) => {{
+        let url = $database.url.as_str();
+        $crate::common::block_on(async {
+            match $database.backend {
+                $crate::common::Backend::Sqlite => {
+                    let $pool = ::sqlx::sqlite::SqlitePool::connect(url)
+                        .await
+                        .expect("the database opens");
+                    let result = $body;
+                    $pool.close().await;
+                    result
+                }
+                $crate::common::Backend::Postgres => {
+                    let $pool = ::sqlx::postgres::PgPool::connect(url)
+                        .await
+                        .expect("the database opens");
+                    let result = $body;
+                    $pool.close().await;
+                    result
+                }
+                $crate::common::Backend::MariaDb => {
+                    let $pool = ::sqlx::mysql::MySqlPool::connect(url)
+                        .await
+                        .expect("the database opens");
+                    let result = $body;
+                    $pool.close().await;
+                    result
+                }
+            }
+        })
+    }};
+}
+
+pub(crate) use on_pool;
+
+/// `statement` with its numbered placeholders as `backend` spells them:
+/// MariaDB takes `?`, in the same order.
+pub fn placeholders(backend: Backend, statement: &'static str) -> String {
+    match backend {
+        Backend::MariaDb => (1..=9).fold(statement.to_owned(), |s, n| {
+            s.replace(&format!("${n}"), "?")
+        }),
+        Backend::Sqlite | Backend::Postgres => statement.to_owned(),
+    }
 }
 
 /// The production router on a freshly migrated database of its own on one

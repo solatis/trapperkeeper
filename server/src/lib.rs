@@ -1,6 +1,8 @@
 //! The server behind the `trapperkeeper` binary. The binary calls `run`, and
 //! tests reach the router and the store through the items exported here.
 
+mod admin;
+mod auth;
 mod cli;
 mod config;
 mod http;
@@ -74,6 +76,7 @@ pub async fn run() -> ExitCode {
     match cli.command {
         Command::Serve => serve(&settings).await,
         Command::Migrate => migrate(&settings).await,
+        Command::CreateAdmin { name } => create_admin(&settings, &name).await,
     }
 }
 
@@ -135,6 +138,26 @@ async fn migrate(settings: &Settings) -> ExitCode {
         Ok(count) => {
             // At info, so an operator sees what migrate did.
             tracing::info!(count, "migrations applied");
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("{error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// Creates an admin named `name` in the default tenant, prints its generated
+/// password, and returns the exit status.
+async fn create_admin(settings: &Settings, name: &str) -> ExitCode {
+    let Some(store) = open_checked(settings).await else {
+        return ExitCode::FAILURE;
+    };
+    match admin::create(&store, name).await {
+        Ok(password) => {
+            // println and not tracing, so the password is never a log event
+            // with a level and fields.
+            println!("{password}");
             ExitCode::SUCCESS
         }
         Err(error) => {

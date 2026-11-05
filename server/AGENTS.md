@@ -2,14 +2,15 @@
 
 **What**: the single server binary, `trapperkeeper`, built from the package
 `trapperkeeper-server`. The binary is a thin `main` over the library
-`trapperkeeper_server`, which parses two subcommands. `migrate` creates the
-relational store's database on SQLite, Postgres or MariaDB when it is missing and applies the migrations
-embedded in the binary. `serve` refuses a database that does not match those
-migrations, then binds the listen address and runs the HTTP server until a
-signal stops it. Before a subcommand runs, the binary resolves
-its settings: the listen address, the log level and the database URL. The APIs
-arrive with the next M1 issues. Each module directory that appears under
-`src/` gets its own `AGENTS.md`, and this file indexes them.
+`trapperkeeper_server`, which parses three subcommands. `migrate` creates the
+relational store's database on SQLite, Postgres or MariaDB when it is missing
+and applies the migrations embedded in the binary. `serve` refuses a database
+that does not match those migrations, then binds the listen address and runs
+the HTTP server until a signal stops it. `create-admin` creates an admin user
+in the default tenant and prints its generated password once. Before a
+subcommand runs, the binary resolves its settings: the listen address, the log
+level and the database URL. Each module directory that appears under `src/`
+gets its own `AGENTS.md`, and this file indexes them.
 
 **Map**:
 
@@ -19,11 +20,14 @@ arrive with the next M1 issues. Each module directory that appears under
 | `build.rs`            | reruns the build when a migration file changes                                                                                                                                             | why a new migration file is picked up                                              |
 | `src/lib.rs`          | the entry point: parse, resolve, dispatch; what the library exports                                                                                                                        | how a subcommand starts and how it fails; what tests can reach                     |
 | `src/main.rs`         | starts the tokio runtime and calls the library                                                                                                                                             | why the binary is so small                                                         |
+| `src/admin.rs`        | creating an admin: the generated password, the must-change flag                                                                                                                            | what create-admin stores and prints                                                |
+| `src/auth/`           | authentication of people: password hashing; see its `AGENTS.md`                                                                                                                            | passwords                                                                          |
 | `src/cli.rs`          | the command line                                                                                                                                                                           | adding a flag or a subcommand                                                      |
 | `src/config.rs`       | the settings and how they are resolved                                                                                                                                                     | adding a setting, precedence, environment variable names, the log level            |
 | `src/http.rs`         | the router, how it is served and stopped                                                                                                                                                   | adding an endpoint, how shutdown works                                             |
 | `src/logging.rs`      | the subscriber: log format and level                                                                                                                                                       | log format, log level, RUST_LOG                                                    |
 | `src/store/`          | the relational store and its migrations; see its `AGENTS.md`                                                                                                                               | the database, migrations, tables                                                   |
+| `tests/admin.rs`      | end-to-end: a property over sequences of create-admin runs against a model                                                                                                                 | what create-admin does with a new, a taken or an invalid name                      |
 | `tests/cli.rs`        | end-to-end: runs the binary and checks its command line                                                                                                                                    | how the binary behaves on the command line                                         |
 | `tests/common/mod.rs` | test helpers: the backends a run tests, test databases, the router served in-process for integration tests, the binary started as a process for end-to-end tests, run migrate, GET a route | writing a server test; testing on every backend; which kind of server a test needs |
 | `tests/http.rs`       | integration tests of the endpoints on the router served in-process                                                                                                                         | what the probes and the document promise                                           |
@@ -91,7 +95,8 @@ arrive with the next M1 issues. Each module directory that appears under
 **How to**: build, lint and test with the commands in the root `AGENTS.md`,
 How to. `cargo run -- --help` shows the command line. `cargo run -- migrate`
 creates `trapperkeeper.db` in the working directory, and `cargo run -- serve`
-then starts the server on `127.0.0.1:8080`; Ctrl-C stops it.
+then starts the server on `127.0.0.1:8080`; Ctrl-C stops it. `cargo run --
+create-admin leon` after migrate prints the admin's generated password once.
 The tests run against SQLite, and also against Postgres and MariaDB when
 `TK_TEST_POSTGRES_URL` and `TK_TEST_MARIADB_URL` are set; see
 `src/store/AGENTS.md`, How to. `RUST_LOG=trapperkeeper_server=debug cargo run -- serve` is a debugging run; piping

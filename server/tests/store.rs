@@ -10,57 +10,12 @@ use std::process::{ExitStatus, Output};
 use std::sync::OnceLock;
 
 use common::{
-    Backend, Launch, TestDatabase, backends, block_on, get, launch, migrate_database,
-    on_each_backend, run_migrate,
+    Backend, Launch, TestDatabase, backends, get, launch, migrate_database, on_each_backend,
+    on_pool, placeholders, run_migrate,
 };
 use proptest::prelude::*;
 use serde_json::Value;
 use sqlx::AssertSqlSafe;
-use sqlx::mysql::MySqlPool;
-use sqlx::postgres::PgPool;
-use sqlx::sqlite::SqlitePool;
-
-/// Evaluates `$body` with `$pool` bound to a pool on `$database`, whichever
-/// backend it is on. A macro, because each backend's pool is its own type and
-/// `$body` is checked once per type.
-macro_rules! on_pool {
-    ($database:expr, |$pool:ident| $body:expr) => {{
-        let url = $database.url.as_str();
-        block_on(async {
-            match $database.backend {
-                Backend::Sqlite => {
-                    let $pool = SqlitePool::connect(url).await.expect("the database opens");
-                    let result = $body;
-                    $pool.close().await;
-                    result
-                }
-                Backend::Postgres => {
-                    let $pool = PgPool::connect(url).await.expect("the database opens");
-                    let result = $body;
-                    $pool.close().await;
-                    result
-                }
-                Backend::MariaDb => {
-                    let $pool = MySqlPool::connect(url).await.expect("the database opens");
-                    let result = $body;
-                    $pool.close().await;
-                    result
-                }
-            }
-        })
-    }};
-}
-
-/// `statement` with its numbered placeholders as `backend` spells them:
-/// MariaDB takes `?`, in the same order.
-fn placeholders(backend: Backend, statement: &'static str) -> String {
-    match backend {
-        Backend::MariaDb => (1..=9).fold(statement.to_owned(), |s, n| {
-            s.replace(&format!("${n}"), "?")
-        }),
-        Backend::Sqlite | Backend::Postgres => statement.to_owned(),
-    }
-}
 
 /// The `count` of the line migrate logged after applying. Panics when migrate
 /// failed or logged no such line.

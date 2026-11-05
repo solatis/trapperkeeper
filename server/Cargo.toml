@@ -28,8 +28,9 @@ serde = { version = "1", features = ["derive"] }
 # tokio runs everything (doc/adr/0014-async-everywhere.md); axum serves HTTP
 # and utoipa derives the API contract from the handlers
 # (doc/adr/0016-axum-and-utoipa-for-http.md). tokio has only the features the
-# server uses: the runtime and its macro, sockets, and signals for shutdown.
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal"] }
+# server uses: the runtime and its macro, sockets, signals for shutdown, and
+# sync for the semaphore that limits concurrent password hashes.
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "sync"] }
 axum = "0.8"
 utoipa = "6"
 utoipa-axum = "0.3"
@@ -54,6 +55,14 @@ sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio",
 # The database URL is parsed to mask its password; already in the tree through
 # sqlx.
 url = "2"
+# Passwords are hashed with Argon2id, stored as PHC strings
+# (doc/adr/0022-argon2id-for-passwords.md). The default features bring the
+# PHC string format and the random salt.
+argon2 = "0.6"
+# Entity ids are version 7 UUIDs, generated in Rust (doc/adr/0020).
+uuid = { version = "1", features = ["v7"] }
+# Generated passwords draw their characters from the system's random source.
+rand = "0.10"
 
 [dev-dependencies]
 # The settings precedence is one property over generated layers
