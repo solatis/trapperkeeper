@@ -1,5 +1,5 @@
-//! The login, refresh and logout routes, and what a logged-in caller can
-//! read about itself.
+//! The login, refresh, logout and password routes, and what a logged-in
+//! caller can read about itself.
 
 use std::time::SystemTime;
 
@@ -16,7 +16,7 @@ use crate::auth::caller::{Caller, authenticate};
 use crate::auth::password;
 use crate::auth::token::Kind;
 use crate::http::AppState;
-use crate::store::users;
+use crate::store::users::{self, PasswordSet, User};
 use crate::store::{DEFAULT_TENANT_ID, now_micros};
 
 /// A name and a password.
@@ -99,6 +99,17 @@ pub async fn login(
     let Some(user) = user.filter(|_| matches) else {
         return unauthorized();
     };
+    logged_in(&state, jar, &user, user.password_must_change)
+}
+
+/// The response of a login for `user`: a fresh access token and refresh
+/// token, in the body and in the cookies.
+fn logged_in(
+    state: &AppState,
+    jar: CookieJar,
+    user: &User,
+    password_must_change: bool,
+) -> Response {
     let now = SystemTime::now();
     let access_token = state
         .keyring
@@ -129,7 +140,7 @@ pub async fn login(
             expires_in: Kind::Access.lifetime().as_secs(),
             refresh_token,
             refresh_expires_in: Kind::Refresh.lifetime().as_secs(),
-            password_must_change: user.password_must_change,
+            password_must_change,
         }),
     )
         .into_response()
@@ -273,6 +284,80 @@ fn clear_cookies(jar: CookieJar) -> CookieJar {
     };
     jar.add(removal(ACCESS_COOKIE, "/"))
         .add(removal(REFRESH_COOKIE, REFRESH_PATH))
+}
+
+/// The current password and the new one.
+#[derive(Deserialize, ToSchema)]
+pub struct PasswordChange {
+    current_password: String,
+    new_password: String,
+}
+
+/// Changes the caller's password. Needs the current one; clears the
+/// must-change flag; ends every other session and returns new tokens.
+#[utoipa::path(
+    post,
+    path = "/password",
+    security(("bearer" = [])),
+    request_body = PasswordChange,
+    responses(
+        (status = OK, description = "the new tokens", body = Login),
+        (status = BAD_REQUEST, description = "the new password is too short or too long", body = String),
+        (status = UNAUTHORIZED, description = "no valid access token, or the current password is wrong", body = String)
+    )
+)]
+pub async fn change_password(
+    caller: Caller,
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Json(change): Json<PasswordChange>,
+) -> Response {
+    // 1. check the current password
+    // 2. check the new password's length
+    // 3. hash the new password and write it with the cutoff, in one transaction
+    // 4. issue new tokens after the commit
+
+    // 1. An access token alone cannot change the password, so a stolen token
+    //    cannot take the account.
+    let user = caller.user;
+    if !password::verify(change.current_password, user.password_hash.clone()).await {
+        return unauthorized();
+    }
+
+    // 2. A lower bound against trivial passwords; the upper bound caps the
+    //    hash's input.
+    if !(12..=1024).contains(&change.new_password.chars().count()) {
+        return (
+            StatusCode::BAD_REQUEST,
+            "the new password must be 12 to 1024 characters",
+        )
+            .into_response();
+    }
+
+    // 3.
+    let password_hash = password::hash(change.new_password).await;
+    let written = async {
+        let mut tx = state.store.begin().await?;
+        users::set_password(
+            &mut tx,
+            PasswordSet {
+                tenant_id: &user.tenant_id,
+                user_id: &user.id,
+                password_hash: &password_hash,
+                now: now_micros(),
+            },
+        )
+        .await?;
+        tx.commit().await
+    }
+    .await;
+    if let Err(error) = written {
+        return database_error(&error);
+    }
+
+    // 4. Issued after the commit, so their issue time is past the new cutoff
+    //    and the caller stays logged in while every other session ends.
+    logged_in(&state, jar, &user, false)
 }
 
 /// What a caller can read about itself.

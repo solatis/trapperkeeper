@@ -295,6 +295,13 @@ enum Op {
     Refresh { token: usize },
     /// Log out with a held token.
     Logout { token: usize },
+    /// Change the password with a held token, the right or a wrong current
+    /// password, and a new one of the given length.
+    ChangePassword {
+        token: usize,
+        right_current: bool,
+        new_len: usize,
+    },
     /// Mint a token of a kind that expired long ago, as if a week had passed.
     Expired { refresh: bool },
 }
@@ -305,14 +312,18 @@ fn op() -> impl Strategy<Value = Op> {
         3 => any::<usize>().prop_map(|token| Op::Me { token }),
         2 => any::<usize>().prop_map(|token| Op::Refresh { token }),
         1 => any::<usize>().prop_map(|token| Op::Logout { token }),
+        1 => (any::<usize>(), any::<bool>(), 8_usize..=20).prop_map(|(token, right_current, new_len)| {
+            Op::ChangePassword { token, right_current, new_len }
+        }),
         1 => any::<bool>().prop_map(|refresh| Op::Expired { refresh }),
     ]
 }
 
-/// The model: the admin's password, the current revocation epoch, and every
-/// token held.
+/// The model: the admin's password, whether it must still be changed, the
+/// current revocation epoch, and every token held.
 struct Model {
     password: String,
+    must_change: bool,
     epoch: u32,
     held: Vec<Held>,
 }
@@ -344,12 +355,15 @@ proptest! {
         .. ProptestConfig::default()
     })]
 
-    /// For any sequence of logins, refreshes, logouts and reads of me, each
-    /// token is accepted exactly when the model says it is live: of the kind
-    /// the route asks for, issued in the current revocation epoch, and not
-    /// expired. A refresh hands out an access token of the current epoch. A
-    /// logout starts the next epoch, so every token held before it dies, and
-    /// clears both cookies.
+    /// For any sequence of logins, refreshes, logouts, password changes and
+    /// reads of me, each token is accepted exactly when the model says it is
+    /// live: of the kind the route asks for, issued in the current revocation
+    /// epoch, and not expired. A refresh hands out an access token of the
+    /// current epoch. A logout starts the next epoch, so every token held
+    /// before it dies, and clears both cookies. A password change needs the
+    /// current password and a new one of 12 to 1024 characters; it starts the
+    /// next epoch, clears the must-change flag, and hands out tokens of the
+    /// new epoch.
     #[test]
     fn tokens_follow_the_model(ops in proptest::collection::vec(op(), 0..=8)) {
         for backend in backends() {
@@ -359,6 +373,7 @@ proptest! {
                 .expect("the keys derive");
             let mut model = Model {
                 password: server.admin_password.clone(),
+                must_change: true,
                 epoch: 0,
                 held: Vec::new(),
             };
@@ -388,6 +403,41 @@ proptest! {
                         let response = request(server.addr, "GET", "/api/v1/me", &[("Authorization", &bearer)], None);
                         let expected = if model.live(&held, Kind::Access) { 200 } else { 401 };
                         prop_assert_eq!(response.status, expected, "{:?} {:?} on {}: {}", op, held, backend, response.body);
+                        if response.status == 200 {
+                            let body: Value = serde_json::from_str(&response.body).expect("a JSON body");
+                            prop_assert_eq!(body["password_must_change"].as_bool(), Some(model.must_change));
+                        }
+                    }
+                    Op::ChangePassword { token, right_current, new_len } => {
+                        let held = model.token(*token);
+                        let current = if *right_current { model.password.clone() } else { "wrong".to_owned() };
+                        let new_password = "n".repeat(*new_len);
+                        let bearer = format!("Bearer {}", held.value);
+                        let body = json!({ "current_password": current, "new_password": new_password }).to_string();
+                        let response = request(server.addr, "POST", "/api/v1/password", &[("Authorization", &bearer)], Some(&body));
+                        let expected = if !model.live(&held, Kind::Access) || !*right_current {
+                            401
+                        } else if *new_len < 12 {
+                            400
+                        } else {
+                            200
+                        };
+                        prop_assert_eq!(response.status, expected, "{:?} {:?} on {}: {}", op, held, backend, response.body);
+                        if response.status == 200 {
+                            model.epoch += 1;
+                            model.password = new_password;
+                            model.must_change = false;
+                            let login: Value = serde_json::from_str(&response.body).expect("a JSON body");
+                            prop_assert_eq!(login["password_must_change"].as_bool(), Some(false));
+                            for (field, kind) in [("access_token", Kind::Access), ("refresh_token", Kind::Refresh)] {
+                                model.held.push(Held {
+                                    value: login[field].as_str().expect("a token").to_owned(),
+                                    kind,
+                                    epoch: model.epoch,
+                                    expired: false,
+                                });
+                            }
+                        }
                     }
                     Op::Refresh { token } => {
                         let held = model.token(*token);

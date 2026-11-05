@@ -116,6 +116,7 @@ pub fn router(state: AppState) -> Router {
         .routes(routes!(login::login))
         .routes(routes!(login::refresh))
         .routes(routes!(login::logout))
+        .routes(routes!(login::change_password))
         .routes(routes!(login::me));
 
     // 2. The probes and the document stay at the root, where orchestrators

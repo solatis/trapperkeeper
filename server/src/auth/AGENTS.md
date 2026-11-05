@@ -6,12 +6,12 @@ and the caller of a management route.
 
 **Map**:
 
-| File          | What                                                               | When to read                                              |
-| ------------- | ------------------------------------------------------------------ | --------------------------------------------------------- |
-| `password.rs` | Argon2id hashing as PHC strings, generated passwords               | the hash parameters, the concurrency limit                |
-| `token.rs`    | the token kinds, their claims, the keyring: derive, issue, check   | how a token is signed and checked, key rotation           |
-| `login.rs`    | the login and me routes, the token cookie, the uniform refusal     | what login hands out and refuses, the cookie's attributes |
-| `caller.rs`   | the `Caller` extractor: bearer header or cookie, user read, cutoff | what a management route checks before it runs             |
+| File          | What                                                                                       | When to read                                                 |
+| ------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------ |
+| `password.rs` | Argon2id hashing as PHC strings, generated passwords                                       | the hash parameters, the concurrency limit                   |
+| `token.rs`    | the token kinds, their claims, the keyring: derive, issue, check                           | how a token is signed and checked, key rotation              |
+| `login.rs`    | the login, refresh, logout, password and me routes, the token cookies, the uniform refusal | what the routes hand out and refuse, the cookies' attributes |
+| `caller.rs`   | the `Caller` extractor and the token check behind it: key, kind, user read, cutoff         | what a management route checks before it runs                |
 
 **Invariants**:
 
@@ -21,9 +21,11 @@ and the caller of a management route.
   as the host has CPUs.
 - HS256 is fixed by the server. A token is checked with the key its `kid`
   names and against the `typ` of its kind.
-- Every request with a token reads the user and checks the token's issue
-  time against the user's `tokens_valid_after`, so a revocation takes effect
-  at the next request.
+- Every request with a token, of either kind, reads the user and checks the
+  token's issue time against the user's `tokens_valid_after`, so a logout or
+  a password change takes effect at the next request.
+- A refresh hands out an access token and keeps the refresh token, so a
+  login never extends past the refresh token's 7 days.
 
 **Why**:
 

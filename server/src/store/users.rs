@@ -187,3 +187,37 @@ pub async fn revoke_tokens(
             .map(|_| ())
     })
 }
+
+/// What a password change writes.
+pub struct PasswordSet<'a> {
+    pub tenant_id: &'a str,
+    pub user_id: &'a str,
+    pub password_hash: &'a str,
+    /// The new `tokens_valid_after`.
+    pub now: i64,
+}
+
+/// Replaces the user's password hash, clears the must-change flag, and sets
+/// `tokens_valid_after` to `now`.
+///
+/// # Errors
+///
+/// Fails when the database cannot be written.
+pub async fn set_password(tx: &mut Tx, change: PasswordSet<'_>) -> Result<(), sqlx::Error> {
+    let update = sql(
+        tx,
+        "UPDATE users SET password_hash = $1, password_must_change = $2, tokens_valid_after = $3 \
+         WHERE tenant_id = $4 AND user_id = $5 AND deleted_at IS NULL",
+    );
+    on_tx!(tx, |conn| {
+        sqlx::query(AssertSqlSafe(update))
+            .bind(change.password_hash)
+            .bind(false)
+            .bind(change.now)
+            .bind(change.tenant_id)
+            .bind(change.user_id)
+            .execute(conn)
+            .await
+            .map(|_| ())
+    })
+}
