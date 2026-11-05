@@ -49,7 +49,8 @@ gets its own `AGENTS.md`, and this file indexes them.
   one, stays a plain value, because the flags layer is serialized into the
   merge, and its default holds no secret.
 - Every management route sits under `/api/v1` and takes `Caller`, except
-  login. The probes and the API document stay at the root.
+  login and refresh, which take the credentials themselves. The probes and
+  the API document stay at the root.
 - Every handler carries a `utoipa::path` annotation and enters the router
   through `routes!`; a handler added with `.route` is missing from the API
   document. A handler's doc comment is its operation summary in that document,

@@ -1,4 +1,5 @@
-//! The login route, and what a logged-in caller can read about itself.
+//! The login and refresh routes, and what a logged-in caller can read about
+//! itself.
 
 use std::time::SystemTime;
 
@@ -11,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::OnceCell;
 use utoipa::ToSchema;
 
-use crate::auth::caller::Caller;
+use crate::auth::caller::{Caller, authenticate};
 use crate::auth::password;
 use crate::auth::token::Kind;
 use crate::http::AppState;
@@ -154,6 +155,77 @@ fn token_cookie(
             i64::try_from(kind.lifetime().as_secs()).expect("a week fits"),
         ))
         .build()
+}
+
+/// A refresh token, as the CLI sends it.
+#[derive(Deserialize, ToSchema)]
+pub struct RefreshRequest {
+    refresh_token: String,
+}
+
+/// What a refresh hands out: a new access token. The refresh token stays as
+/// it was.
+#[derive(Serialize, ToSchema)]
+pub struct Refreshed {
+    /// The access token, sent back as `Authorization: Bearer`.
+    access_token: String,
+    /// Always `Bearer`.
+    token_type: &'static str,
+    /// How many seconds the access token lives.
+    expires_in: u64,
+}
+
+/// Trades a refresh token, from the body or the `tk_refresh` cookie, for a
+/// new access token, in the body and in the `tk_access` cookie. The refresh
+/// token stays valid until it expires or is revoked.
+#[utoipa::path(
+    post,
+    path = "/refresh",
+    request_body(content = Option<RefreshRequest>, description = "the refresh token, when it is not in the cookie"),
+    responses(
+        (status = OK, description = "the new access token", body = Refreshed),
+        (status = UNAUTHORIZED, description = "no valid refresh token", body = String)
+    )
+)]
+pub async fn refresh(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    body: Option<Json<RefreshRequest>>,
+) -> Response {
+    // The body comes first, for the CLI; the cookie second, for the browser.
+    let token = match body {
+        Some(Json(request)) => request.refresh_token,
+        None => match jar.get(REFRESH_COOKIE) {
+            Some(cookie) => cookie.value().to_owned(),
+            None => return unauthorized(),
+        },
+    };
+    // The same check as a management route, so logout and a password change
+    // revoke refresh tokens too.
+    let user = match authenticate(&state, Kind::Refresh, &token).await {
+        Ok(user) => user,
+        Err(refusal) => return refusal.into_response(),
+    };
+    // No new refresh token, so a login ends 7 days after it began, however
+    // often it refreshes.
+    let access_token =
+        state
+            .keyring
+            .issue(Kind::Access, &user.id, &user.tenant_id, SystemTime::now());
+    (
+        jar.add(token_cookie(
+            ACCESS_COOKIE,
+            &access_token,
+            Kind::Access,
+            "/",
+        )),
+        Json(Refreshed {
+            access_token,
+            token_type: "Bearer",
+            expires_in: Kind::Access.lifetime().as_secs(),
+        }),
+    )
+        .into_response()
 }
 
 /// What a caller can read about itself.

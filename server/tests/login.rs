@@ -31,94 +31,106 @@ const DEFAULT_TENANT: &str = "00000000-0000-7000-8000-000000000000";
 fn login_then_me() {
     on_each_backend(|backend| {
         let server = serve_in_process(backend);
-        let credentials =
-            json!({ "name": ADMIN.to_uppercase(), "password": server.admin_password });
-        let response = request(
-            server.addr,
-            "POST",
-            "/api/v1/login",
-            &[],
-            Some(&credentials.to_string()),
-        );
+        let response = log_in(&server, &ADMIN.to_uppercase(), &server.admin_password);
         assert_eq!(response.status, 200, "{}", response.body);
         let login: Value = serde_json::from_str(&response.body).expect("a JSON body");
         assert_eq!(login["token_type"], "Bearer");
         assert_eq!(login["expires_in"], 3600);
+        assert_eq!(login["refresh_expires_in"], 7 * 24 * 3600);
         assert_eq!(login["password_must_change"], true);
         let token = login["access_token"].as_str().expect("an access token");
+        let refresh = login["refresh_token"].as_str().expect("a refresh token");
         // Three base64url parts, as a JWT is.
         assert_eq!(token.split('.').count(), 3);
-        assert_eq!(login["refresh_expires_in"], 7 * 24 * 3600);
-        let refresh = login["refresh_token"].as_str().expect("a refresh token");
         assert_eq!(refresh.split('.').count(), 3);
         let set_cookie = response.header_values("set-cookie");
         assert_eq!(set_cookie.len(), 2, "{set_cookie:?}");
-        for (value, path, max_age) in [
-            (format!("tk_access={token}"), "Path=/", "Max-Age=3600"),
-            (
-                format!("tk_refresh={refresh}"),
-                "Path=/api/v1/refresh",
-                "Max-Age=604800",
-            ),
-        ] {
-            // The two cookies come in no fixed order.
-            let header = set_cookie
-                .iter()
-                .find(|header| header.starts_with(&value))
-                .unwrap_or_else(|| panic!("{value} not in {set_cookie:?}"));
-            let attributes: Vec<&str> = header.split("; ").collect();
-            for attribute in ["HttpOnly", "SameSite=Strict", "Secure", path, max_age] {
-                assert!(
-                    attributes.contains(&attribute),
-                    "{attribute} not in {header:?}"
-                );
-            }
-        }
+        assert_token_cookie(
+            &set_cookie,
+            &format!("tk_access={token}"),
+            "Path=/",
+            "Max-Age=3600",
+        );
+        assert_token_cookie(
+            &set_cookie,
+            &format!("tk_refresh={refresh}"),
+            "Path=/api/v1/refresh",
+            "Max-Age=604800",
+        );
 
         let bearer = format!("Bearer {token}");
-        let response = request(
-            server.addr,
-            "GET",
-            "/api/v1/me",
-            &[("Authorization", &bearer)],
-            None,
-        );
+        let response = me(&server, &[("Authorization", &bearer)]);
         assert_eq!(response.status, 200, "{}", response.body);
-        let me: Value = serde_json::from_str(&response.body).expect("a JSON body");
+        let body: Value = serde_json::from_str(&response.body).expect("a JSON body");
         assert_eq!(
-            me,
+            body,
             json!({ "name": ADMIN, "role": "admin", "password_must_change": true })
         );
-
         let cookie = format!("tk_access={token}");
+        assert_eq!(me(&server, &[("Cookie", &cookie)]).status, 200);
+
+        // The refresh cookie alone yields a new access token that works.
+        let cookie = format!("tk_refresh={refresh}");
         let response = request(
             server.addr,
-            "GET",
-            "/api/v1/me",
+            "POST",
+            "/api/v1/refresh",
             &[("Cookie", &cookie)],
             None,
         );
         assert_eq!(response.status, 200, "{}", response.body);
+        let refreshed: Value = serde_json::from_str(&response.body).expect("a JSON body");
+        let fresh = refreshed["access_token"].as_str().expect("an access token");
+        let bearer = format!("Bearer {fresh}");
+        assert_eq!(me(&server, &[("Authorization", &bearer)]).status, 200);
 
-        let response = request(server.addr, "GET", "/api/v1/me", &[], None);
+        let response = me(&server, &[]);
         assert_eq!(response.status, 401);
         assert_eq!(response.header_values("www-authenticate"), ["Bearer"]);
 
-        for wrong in [
-            json!({ "name": ADMIN, "password": "not the password" }),
-            json!({ "name": "nobody", "password": server.admin_password }),
+        for (name, password) in [
+            (ADMIN, "not the password"),
+            ("nobody", server.admin_password.as_str()),
         ] {
-            let response = request(
-                server.addr,
-                "POST",
-                "/api/v1/login",
-                &[],
-                Some(&wrong.to_string()),
-            );
+            let response = log_in(&server, name, password);
             assert_eq!(response.status, 401);
             assert_eq!(response.body, "unauthorized");
         }
     });
+}
+
+/// Logs in as `name` with `password` and returns the response.
+fn log_in(server: &common::InProcess, name: &str, password: &str) -> common::Response {
+    let credentials = json!({ "name": name, "password": password });
+    request(
+        server.addr,
+        "POST",
+        "/api/v1/login",
+        &[],
+        Some(&credentials.to_string()),
+    )
+}
+
+/// Reads me with `headers` and returns the response.
+fn me(server: &common::InProcess, headers: &[(&str, &str)]) -> common::Response {
+    request(server.addr, "GET", "/api/v1/me", headers, None)
+}
+
+/// The `Set-Cookie` header among `set_cookie` that starts with `value` has
+/// the attributes every token cookie has, plus `path` and `max_age`.
+fn assert_token_cookie(set_cookie: &[&str], value: &str, path: &str, max_age: &str) {
+    // The cookies come in no fixed order.
+    let header = set_cookie
+        .iter()
+        .find(|header| header.starts_with(value))
+        .unwrap_or_else(|| panic!("{value} not in {set_cookie:?}"));
+    let attributes: Vec<&str> = header.split("; ").collect();
+    for attribute in ["HttpOnly", "SameSite=Strict", "Secure", path, max_age] {
+        assert!(
+            attributes.contains(&attribute),
+            "{attribute} not in {header:?}"
+        );
+    }
 }
 
 /// The defects a generated token can have. Each one alone makes the server
@@ -279,6 +291,8 @@ enum Op {
     Login { right_password: bool },
     /// Read me with a held token.
     Me { token: usize },
+    /// Trade a held token for a new access token.
+    Refresh { token: usize },
     /// Mint a token of a kind that expired long ago, as if a week had passed.
     Expired { refresh: bool },
 }
@@ -287,6 +301,7 @@ fn op() -> impl Strategy<Value = Op> {
     prop_oneof![
         3 => any::<bool>().prop_map(|right_password| Op::Login { right_password }),
         3 => any::<usize>().prop_map(|token| Op::Me { token }),
+        2 => any::<usize>().prop_map(|token| Op::Refresh { token }),
         1 => any::<bool>().prop_map(|refresh| Op::Expired { refresh }),
     ]
 }
@@ -319,18 +334,6 @@ impl Model {
     }
 }
 
-/// Logs in with `password` and returns the response.
-fn log_in(server: &common::InProcess, password: &str) -> common::Response {
-    let credentials = json!({ "name": ADMIN, "password": password });
-    request(
-        server.addr,
-        "POST",
-        "/api/v1/login",
-        &[],
-        Some(&credentials.to_string()),
-    )
-}
-
 proptest! {
     #![proptest_config(ProptestConfig {
         cases: 12,
@@ -338,9 +341,10 @@ proptest! {
         .. ProptestConfig::default()
     })]
 
-    /// For any sequence of logins and reads of me, each token is accepted
-    /// exactly when the model says it is live: of the kind the route asks
-    /// for, issued in the current revocation epoch, and not expired.
+    /// For any sequence of logins, refreshes and reads of me, each token is
+    /// accepted exactly when the model says it is live: of the kind the
+    /// route asks for, issued in the current revocation epoch, and not
+    /// expired. A refresh hands out an access token of the current epoch.
     #[test]
     fn tokens_follow_the_model(ops in proptest::collection::vec(op(), 0..=8)) {
         for backend in backends() {
@@ -357,7 +361,7 @@ proptest! {
                 match op {
                     Op::Login { right_password } => {
                         let password = if *right_password { model.password.clone() } else { "wrong".to_owned() };
-                        let response = log_in(&server, &password);
+                        let response = log_in(&server, ADMIN, &password);
                         if !*right_password {
                             prop_assert_eq!(response.status, 401, "{:?} on {}", op, backend);
                             continue;
@@ -379,6 +383,22 @@ proptest! {
                         let response = request(server.addr, "GET", "/api/v1/me", &[("Authorization", &bearer)], None);
                         let expected = if model.live(&held, Kind::Access) { 200 } else { 401 };
                         prop_assert_eq!(response.status, expected, "{:?} {:?} on {}: {}", op, held, backend, response.body);
+                    }
+                    Op::Refresh { token } => {
+                        let held = model.token(*token);
+                        let body = json!({ "refresh_token": held.value }).to_string();
+                        let response = request(server.addr, "POST", "/api/v1/refresh", &[], Some(&body));
+                        let expected = if model.live(&held, Kind::Refresh) { 200 } else { 401 };
+                        prop_assert_eq!(response.status, expected, "{:?} {:?} on {}: {}", op, held, backend, response.body);
+                        if response.status == 200 {
+                            let refreshed: Value = serde_json::from_str(&response.body).expect("a JSON body");
+                            model.held.push(Held {
+                                value: refreshed["access_token"].as_str().expect("a token").to_owned(),
+                                kind: Kind::Access,
+                                epoch: model.epoch,
+                                expired: false,
+                            });
+                        }
                     }
                     Op::Expired { refresh } => {
                         let kind = if *refresh { Kind::Refresh } else { Kind::Access };

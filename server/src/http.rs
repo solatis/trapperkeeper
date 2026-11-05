@@ -114,6 +114,7 @@ pub fn router(state: AppState) -> Router {
     //    prefix is the versioned namespace of doc/adr/0026.
     let management = OpenApiRouter::new()
         .routes(routes!(login::login))
+        .routes(routes!(login::refresh))
         .routes(routes!(login::me));
 
     // 2. The probes and the document stay at the root, where orchestrators

@@ -37,6 +37,7 @@ fn openapi_describes_the_routes() {
         assert!(paths.contains_key("/healthz"));
         assert!(paths.contains_key("/readyz"));
         assert!(paths.contains_key("/api/v1/login"));
+        assert!(paths.contains_key("/api/v1/refresh"));
         assert!(paths.contains_key("/api/v1/me"));
         assert!(!paths.contains_key("/openapi.json"));
         assert_eq!(
