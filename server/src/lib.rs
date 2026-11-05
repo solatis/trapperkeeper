@@ -80,44 +80,43 @@ pub async fn run() -> ExitCode {
 /// Checks the database against the binary, serves until a signal, and
 /// returns the exit status.
 async fn serve(settings: &Settings) -> ExitCode {
-    // 1. open the database without creating it
-    // 2. check it against the binary's migrations
-    // 3. serve with the store
-    //
-    // Both refusals come before the listener binds, so a refused server is
-    // never reachable.
+    let Some(store) = open_checked(settings).await else {
+        return ExitCode::FAILURE;
+    };
+    // The router holds the store, so readiness can probe it.
+    match http::serve(settings, store).await {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("{error}");
+            ExitCode::FAILURE
+        }
+    }
+}
 
-    // 1. Only migrate creates the database, so a mistyped path fails here
-    //    instead of serving an empty database.
+/// Opens the database without creating it and checks it against the binary's
+/// migrations. Returns `None` after printing the refusal, so the subcommands
+/// that need a migrated database fail the same way before they do anything.
+async fn open_checked(settings: &Settings) -> Option<Store> {
+    // Only migrate creates the database, so a mistyped path fails here
+    // instead of serving an empty database.
     let store = match store::open(settings.database.url.expose()).await {
         Ok(store) => store,
         Err(error) => {
             eprintln!(
                 "{error}\nthe database does not open; when it does not exist, `trapperkeeper migrate` creates it"
             );
-            return ExitCode::FAILURE;
+            return None;
         }
     };
-
-    // 2. A database that does not match the binary is refused before the bind.
     match store::migrate::check(&store).await {
-        Ok(None) => {}
+        Ok(None) => Some(store),
         Ok(Some(mismatch)) => {
             eprintln!("{mismatch}");
-            return ExitCode::FAILURE;
+            None
         }
         Err(error) => {
             eprintln!("{error}");
-            return ExitCode::FAILURE;
-        }
-    }
-
-    // 3. The router holds the store, so readiness can probe it.
-    match http::serve(settings, store).await {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(error) => {
-            eprintln!("{error}");
-            ExitCode::FAILURE
+            None
         }
     }
 }
