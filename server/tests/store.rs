@@ -88,21 +88,31 @@ fn tracked_versions(database: &TestDatabase) -> Vec<i64> {
     })
 }
 
-/// migrate builds a missing database with the default tenant; a second
-/// migrate applies nothing; serve accepts the result.
+/// migrate builds a missing database with the default tenant and its three
+/// roles; a second migrate applies nothing; serve accepts the result.
 #[test]
 fn migrate_builds_a_database_that_serve_accepts() {
     on_each_backend(|backend| {
         let database = TestDatabase::fresh(backend);
 
         let first = applied_count(&run_migrate(&database.url));
-        // Read through sqlx, because no endpoint shows tenants or the
+        // Read through sqlx, because no endpoint shows tenants, roles or the
         // tracking table.
         let tenants: Vec<(String, String)> = on_pool!(database, |pool| {
             sqlx::query_as("SELECT tenant_id, tenant_name FROM tenants")
                 .fetch_all(&pool)
                 .await
                 .expect("the tenants are read")
+        });
+        let roles: Vec<(String, String)> = on_pool!(database, |pool| {
+            sqlx::query_as(
+                "SELECT role_name, role_title FROM roles \
+                 WHERE tenant_id = '00000000-0000-7000-8000-000000000000' \
+                 ORDER BY role_id",
+            )
+            .fetch_all(&pool)
+            .await
+            .expect("the roles are read")
         });
         assert!(first > 0);
         assert_eq!(
@@ -115,6 +125,15 @@ fn migrate_builds_a_database_that_serve_accepts() {
                 "00000000-0000-7000-8000-000000000000".to_owned(),
                 "default".to_owned()
             )]
+        );
+
+        assert_eq!(
+            roles,
+            [
+                ("admin".to_owned(), "Admin".to_owned()),
+                ("operator".to_owned(), "Operator".to_owned()),
+                ("observer".to_owned(), "Observer".to_owned()),
+            ]
         );
 
         assert_eq!(applied_count(&run_migrate(&database.url)), 0);

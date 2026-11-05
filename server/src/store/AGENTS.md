@@ -24,6 +24,9 @@ event log is a separate store, whose engine is still open (see
   `tenant_id`. A name is unique among live rows: a partial unique index on
   SQLite and Postgres, and a unique key over a generated `live` column on
   MariaDB, which has no partial index (`doc/adr/0024`).
+- A reference to a tenant-scoped row carries the `tenant_id` too, as the
+  composite key from `users` to `roles` does, so a row cannot reference
+  another tenant's row.
 - An entity's `_id` is a time-ordered UUID that Rust generates, stored as
   36-character text. Its `_name` is unique in its scope and lowercase, and
   constraints in the table enforce both. A display name is a `_title` column,
@@ -43,6 +46,9 @@ event log is a separate store, whose engine is still open (see
   `doc/adr/0019-sqlx-with-hand-written-sql-over-three-backends.md`.
 - Ids are internal and names are unique (owner, 2026-11-02):
   `doc/adr/0020-internal-ids-and-unique-names.md`.
+- Roles are rows, seeded per tenant, because nearly every table carries a
+  tenant id and a tenant may hold roles of its own (owner, 2026-11-05):
+  `doc/adr/0023-roles-are-rows-per-tenant.md`.
 - Entities are deleted softly, with a `deleted_at` column, so reports and
   references keep working after a delete (owner, 2026-11-05):
   `doc/adr/0024-soft-deletes.md`.
