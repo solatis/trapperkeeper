@@ -96,6 +96,9 @@ gets its own `AGENTS.md`, and this file indexes them.
   option, limited to the CPU count (owner, 2026-11-05):
   `doc/adr/0022-argon2id-for-passwords.md`.
 
+- Roles are rows seeded per tenant (owner, 2026-11-05):
+  `doc/adr/0023-roles-are-rows-per-tenant.md`.
+
 **How to**: build, lint and test with the commands in the root `AGENTS.md`,
 How to. `cargo run -- --help` shows the command line. `cargo run -- migrate`
 creates `trapperkeeper.db` in the working directory, and `cargo run -- serve`
