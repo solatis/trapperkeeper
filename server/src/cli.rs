@@ -86,7 +86,7 @@ pub struct DatabaseOverrides {
 /// The subcommands. Each one resolves the settings first and then runs.
 #[derive(Subcommand)]
 pub enum Command {
-    /// Run the server.
+    /// Run the server. On an empty database, set it up first.
     Serve,
     /// Apply pending database migrations.
     Migrate,

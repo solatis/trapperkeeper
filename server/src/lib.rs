@@ -27,6 +27,7 @@ use clap::Parser;
 
 use cli::{Cli, Command};
 use config::Settings;
+use store::migrate::Mismatch;
 
 /// Runs the subcommand named on the command line and returns its exit status.
 /// Everything below is async wherever an async form exists.
@@ -86,23 +87,21 @@ pub async fn run() -> ExitCode {
     }
 }
 
-/// Checks the database against the binary, derives the signing keys, serves
-/// until a signal, and returns the exit status.
+/// Checks the signing key, opens the database or sets it up when it is
+/// empty, derives the signing keys, serves until a signal, and returns the
+/// exit status.
 async fn serve(settings: &Settings) -> ExitCode {
-    // 1. open the database without creating it and check it
-    // 2. derive the keys from the passphrases and the database's salt
-    // 3. serve with the store and the keys
+    // 1. check that the signing key is set
+    // 2. open the database, setting it up when it is empty
+    // 3. derive the keys from the passphrases and the database's salt
+    // 4. serve with the store and the keys
     //
     // Every refusal comes before the listener binds, so a refused server is
     // never reachable.
 
-    // 1.
-    let Some(store) = open_checked(settings).await else {
-        return ExitCode::FAILURE;
-    };
-
-    // 2. The signing key has no default, because a default holds no secret
-    //    (doc/adr/0013).
+    // 1. Checked before the database is touched, so a refused first start
+    //    does not create a superadmin whose password nobody sees. The key has
+    //    no default, because a default holds no secret (doc/adr/0013).
     let Some(signing) = &settings.auth.signing_key else {
         eprintln!(
             "auth.signing_key is not set; serve needs a passphrase of at least 32 characters, \
@@ -110,6 +109,13 @@ async fn serve(settings: &Settings) -> ExitCode {
         );
         return ExitCode::FAILURE;
     };
+
+    // 2.
+    let Some(store) = open_for_serve(settings).await else {
+        return ExitCode::FAILURE;
+    };
+
+    // 3.
     let previous = settings.auth.previous_signing_key.as_ref();
     let keyring = match Keyring::from_store(
         &store,
@@ -125,7 +131,7 @@ async fn serve(settings: &Settings) -> ExitCode {
         }
     };
 
-    // 3.
+    // 4.
     let state = AppState {
         store,
         keyring: Arc::new(keyring),
@@ -139,17 +145,59 @@ async fn serve(settings: &Settings) -> ExitCode {
     }
 }
 
+/// Opens the database for serve and checks it against the binary's
+/// migrations. Sets up an empty database first. Returns `None` after printing
+/// the refusal.
+async fn open_for_serve(settings: &Settings) -> Option<Store> {
+    // 1. open the database, and create it only when it does not exist
+    // 2. check it against the migrations
+    // 3. set up an empty database
+
+    // 1. Open is tried first, so a serve whose user may not create databases
+    //    still opens an existing one.
+    let url = settings.database.url.expose();
+    let store = match store::open(url).await {
+        Ok(store) => store,
+        // A database that exists and does not open is refused with the
+        // open's error.
+        Err(error) if !matches!(store::exists(url).await, Ok(false)) => {
+            eprintln!("{error}");
+            return None;
+        }
+        Err(_) => match store::create(url).await {
+            Ok(store) => store,
+            Err(error) => {
+                eprintln!("{error}");
+                return None;
+            }
+        },
+    };
+
+    // 2. and 3. An empty database is migrated and given its superadmin, and
+    //    every other mismatch refuses.
+    match store::migrate::check(&store).await {
+        Ok(None) => Some(store),
+        Ok(Some(Mismatch::Empty)) => set_up(&store).await.then_some(store),
+        Ok(Some(mismatch)) => {
+            eprintln!("{mismatch}");
+            None
+        }
+        Err(error) => {
+            eprintln!("{error}");
+            None
+        }
+    }
+}
+
 /// Opens the database without creating it and checks it against the binary's
-/// migrations. Returns `None` after printing the refusal, so the subcommands
-/// that need a migrated database fail the same way before they do anything.
+/// migrations. Returns `None` after printing the refusal.
 async fn open_checked(settings: &Settings) -> Option<Store> {
-    // Only migrate creates the database, so a mistyped path fails here
-    // instead of serving an empty database.
     let store = match store::open(settings.database.url.expose()).await {
         Ok(store) => store,
         Err(error) => {
             eprintln!(
-                "{error}\nthe database does not open; when it does not exist, `trapperkeeper migrate` creates it"
+                "{error}\nthe database does not open; when it does not exist, \
+                 `trapperkeeper serve` or `trapperkeeper migrate` sets it up"
             );
             return None;
         }
@@ -167,8 +215,41 @@ async fn open_checked(settings: &Settings) -> Option<Store> {
     }
 }
 
-/// Creates the database when it is missing, applies the pending migrations,
-/// and returns the exit status.
+/// Applies the migrations, creates the superadmin when the database was
+/// empty, and logs the superadmin's one-time password. Returns whether both
+/// succeeded, after printing any error.
+async fn set_up(store: &Store) -> bool {
+    match store::migrate::apply(store).await {
+        // At info, so an operator sees what the command did.
+        Ok(count) => tracing::info!(count, "migrations applied"),
+        Err(error) => {
+            eprintln!("{error}");
+            return false;
+        }
+    }
+    // After the migrations, because they seed `$tk` and its role.
+    match superadmin::ensure(store).await {
+        // One INFO event with the password as a field, so a piped log stream
+        // stays JSON lines.
+        Ok(Some(password)) => {
+            tracing::info!(
+                tenant = "$tk",
+                name = superadmin::NAME,
+                password,
+                "superadmin created"
+            );
+            true
+        }
+        Ok(None) => true,
+        Err(error) => {
+            eprintln!("{error}");
+            false
+        }
+    }
+}
+
+/// Creates the database when it is missing, sets it up, and returns the exit
+/// status.
 async fn migrate(settings: &Settings) -> ExitCode {
     let store = match store::create(settings.database.url.expose()).await {
         Ok(store) => store,
@@ -177,16 +258,10 @@ async fn migrate(settings: &Settings) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    match store::migrate::apply(&store).await {
-        Ok(count) => {
-            // At info, so an operator sees what migrate did.
-            tracing::info!(count, "migrations applied");
-            ExitCode::SUCCESS
-        }
-        Err(error) => {
-            eprintln!("{error}");
-            ExitCode::FAILURE
-        }
+    if set_up(&store).await {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
     }
 }
 

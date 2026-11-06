@@ -87,11 +87,11 @@ fn reset_and_check(database: &TestDatabase) -> (String, i64) {
 }
 
 /// On every backend, reset-superadmin on a missing database exits 1 and says
-/// how to set it up. After migrate, a run creates the superadmin and prints a
-/// 16-character alphanumeric password that matches the stored Argon2id hash
-/// and must change. A second run prints a new password and moves
-/// `tokens_valid_after` forward. With the superadmin deleted through sqlx, a
-/// run creates it again.
+/// how to set it up. After migrate, which creates the superadmin, a run
+/// prints a 16-character alphanumeric password that matches the stored
+/// Argon2id hash, sets the must-change flag and moves `tokens_valid_after`
+/// forward. A second run prints another password. With the superadmin
+/// deleted through sqlx, a run creates it again.
 #[test]
 fn reset_superadmin_sets_a_new_one_time_password() {
     // A scenario, because no input varies (doc/adr/0018).
@@ -110,11 +110,15 @@ fn reset_superadmin_sets_a_new_one_time_password() {
         );
 
         migrate_database(&database);
-        assert!(
-            stored(&database).is_none(),
-            "a superadmin before the first run on {backend}"
-        );
+        let (_, _, created_hash, created_valid_after) =
+            stored(&database).expect("migrate created the superadmin");
         let (first, first_valid_after) = reset_and_check(&database);
+        assert!(
+            first_valid_after > created_valid_after,
+            "the cutoff stayed on {backend}"
+        );
+        let (_, _, first_hash, _) = stored(&database).expect("a live superadmin");
+        assert_ne!(first_hash, created_hash);
         let (second, second_valid_after) = reset_and_check(&database);
         assert_ne!(first, second);
         assert!(

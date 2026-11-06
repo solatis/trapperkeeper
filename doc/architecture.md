@@ -122,8 +122,9 @@ retries sync at a fixed interval. Unreported events beyond the buffer are lost.
   server timestamps are kept.
 - **Validation.** Strict for our own schemas (rules, config, API requests);
   best-effort for user data, governed by per-condition policies.
-- **Operations.** One distributable with subcommands per role; explicit
-  migration step, services refuse to start on pending migrations; config
+- **Operations.** One distributable with subcommands per role; the first
+  serve on an empty database migrates it, and services refuse to start on
+  pending migrations, which an explicit migration step applies; config
   precedence CLI over environment over file; secrets may come from the file
   or the environment, the command line warns (`adr/0013`); TLS terminated
   directly or by a proxy.

@@ -4,9 +4,11 @@
 `trapperkeeper-server`. The binary is a thin `main` over the library
 `trapperkeeper_server`, which parses three subcommands. `migrate` creates the
 relational store's database on SQLite, Postgres or MariaDB when it is missing
-and applies the migrations embedded in the binary. `serve` refuses a database
-that does not match those migrations, then binds the listen address and runs
-the HTTP server until a signal stops it. `reset-superadmin` gives the
+and applies the migrations embedded in the binary. `serve` sets up an empty
+database on its first start, refuses a database that does not match those
+migrations, then binds the listen address and runs the HTTP server until a
+signal stops it. Setting up a database, by serve or by migrate, creates the
+superadmin and logs its one-time password. `reset-superadmin` gives the
 superadmin, the user `admin` of the system tenant `$tk`, a new one-time
 password, creating the superadmin when it is missing, and prints the
 password. Before a
@@ -37,7 +39,7 @@ gets its own `AGENTS.md`, and this file indexes them.
 | `tests/logs.rs`       | end-to-end: checks the log lines the binary writes under a pipe                                                                                                                                                                               | what a log line contains                                                           |
 | `tests/settings.rs`   | end-to-end: the settings precedence as one property through the binary                                                                                                                                                                        | how precedence is tested                                                           |
 | `tests/shutdown.rs`   | end-to-end test that SIGTERM stops the binary                                                                                                                                                                                                 | how the server stops                                                               |
-| `tests/store.rs`      | end-to-end: runs migrate and serve against SQLite files                                                                                                                                                                                       | what migrate builds, which databases serve accepts                                 |
+| `tests/store.rs`      | end-to-end: runs migrate and serve against SQLite files                                                                                                                                                                                       | what migrate builds, which databases serve accepts, what the first serve sets up   |
 | `tests/superadmin.rs` | end-to-end runs of reset-superadmin                                                                                                                                                                                                           | what reset-superadmin prints and stores                                            |
 
 **Invariants**:
@@ -60,6 +62,9 @@ gets its own `AGENTS.md`, and this file indexes them.
   so it is written for the API's readers.
 - A user is created only through `accounts::create`, so every user gets a
   generated password that must be changed at the first login.
+- A password reaches the console through `println` when the command's
+  output is the password, and as one INFO event when the command sets up a
+  database, so a piped log stream stays JSON lines.
 - An integration test builds the server in the test process through the
   library and never starts a process. Starting the binary is reserved for
   end-to-end tests, which check what only a process shows: the exit status,
@@ -117,13 +122,14 @@ gets its own `AGENTS.md`, and this file indexes them.
   `doc/adr/0026-versioned-api-route-prefix.md`.
 
 **How to**: build, lint and test with the commands in the root `AGENTS.md`,
-How to. `cargo run -- --help` shows the command line. `cargo run -- migrate`
-creates `trapperkeeper.db` in the working directory, and `cargo run -- serve`
-then starts the server on `127.0.0.1:8080`; Ctrl-C stops it. A local serve
+How to. `cargo run -- --help` shows the command line. `cargo run -- serve` on
+a missing database creates `trapperkeeper.db` in the working directory, sets
+it up, logs the superadmin's one-time password, and starts the server on
+`127.0.0.1:8080`; Ctrl-C stops it. A local serve
 needs a signing key: `signing_key = "<any passphrase of 32 or more
 characters>"` under `[auth]` in the file, or
 `TRAPPERKEEPER_AUTH__SIGNING_KEY` in the environment. `cargo run --
-reset-superadmin` after migrate prints the superadmin's one-time password.
+reset-superadmin` prints a new one-time password for the superadmin.
 The tests run against SQLite, and also against Postgres and MariaDB when
 `TK_TEST_POSTGRES_URL` and `TK_TEST_MARIADB_URL` are set; see
 `src/store/AGENTS.md`, How to. `RUST_LOG=trapperkeeper_server=debug cargo run -- serve` is a debugging run; piping

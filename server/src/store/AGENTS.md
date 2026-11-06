@@ -7,14 +7,14 @@ event log is a separate store, whose engine is still open (see
 
 **Map**:
 
-| File                         | What                                                  | When to read                                                                     |
-| ---------------------------- | ----------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `mod.rs`                     | choosing the backend, opening the store, transactions | which URL schemes work; why serve never creates the database; `Tx`; placeholders |
-| `migrate.rs`                 | the embedded migrations: apply, check                 | what makes serve refuse, what each refusal means                                 |
-| `users.rs`                   | creating a user with one of its tenant's roles        | the users table, the role subselect                                              |
-| `../../migrations/sqlite/`   | the SQLite migration files, one per version           | adding a table                                                                   |
-| `../../migrations/postgres/` | the Postgres migration files                          | adding a table                                                                   |
-| `../../migrations/mariadb/`  | the MariaDB migration files                           | adding a table                                                                   |
+| File                         | What                                                  | When to read                                                                |
+| ---------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------- |
+| `mod.rs`                     | choosing the backend, opening the store, transactions | which URL schemes work; whether a database exists; `Tx`; placeholders       |
+| `migrate.rs`                 | the embedded migrations: apply, check                 | what makes serve refuse, what each refusal means, what an empty database is |
+| `users.rs`                   | creating a user with one of its tenant's roles        | the users table, the role subselect                                         |
+| `../../migrations/sqlite/`   | the SQLite migration files, one per version           | adding a table                                                              |
+| `../../migrations/postgres/` | the Postgres migration files                          | adding a table                                                              |
+| `../../migrations/mariadb/`  | the MariaDB migration files                           | adding a table                                                              |
 
 **Invariants**:
 
@@ -59,12 +59,15 @@ event log is a separate store, whose engine is still open (see
 - Entities are deleted softly, with a `deleted_at` column, so reports and
   references keep working after a delete (owner, 2026-11-05):
   `doc/adr/0024-soft-deletes.md`.
-- serve opens the database without creating it, and only migrate creates it,
-  so a mistyped path fails with "run migrate" instead of producing an empty
-  database.
-- migrate creates a missing database on every backend, so the first run is
-  the same everywhere. On Postgres and MariaDB the migrate user therefore
-  needs the right to create databases.
+- serve opens an existing database without creating it, and creates one
+  only when it does not exist, so a serve whose user may not create
+  databases still runs. A mistyped SQLite path therefore starts a new
+  install (owner, 2026-11-06).
+- An empty database is one whose tracking table holds no row, and the first
+  serve migrates it (owner, 2026-11-06).
+- serve and migrate create a missing database on every backend, so the
+  first run is the same everywhere. On Postgres and MariaDB the user of the
+  first run therefore needs the right to create databases.
 
 **How to**:
 

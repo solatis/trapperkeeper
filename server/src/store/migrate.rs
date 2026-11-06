@@ -18,6 +18,8 @@ static MARIADB: Migrator = sqlx::migrate!("migrations/mariadb");
 /// concerned.
 #[derive(Debug)]
 pub enum Mismatch {
+    /// The database has applied no migration.
+    Empty,
     /// Migrations the binary has and the database has not applied.
     Pending(Vec<i64>),
     /// Versions the database applied and the binary does not know.
@@ -30,10 +32,14 @@ pub enum Mismatch {
 
 impl fmt::Display for Mismatch {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Only a pending migration is fixed by migrate. The other mismatches
-        // say to rebuild, because nothing is migrated backwards or repaired in
-        // place (doc/principles.md 8).
+        // Only an empty or a pending database is fixed by a command. The
+        // others say to rebuild, because nothing is migrated backwards or
+        // repaired in place (doc/principles.md 8).
         match self {
+            Self::Empty => f.write_str(
+                "the database is empty; `trapperkeeper serve` sets it up on its first start, \
+                 and `trapperkeeper migrate` applies the migrations",
+            ),
             Self::Pending(versions) => write!(
                 f,
                 "the database has not applied migrations {} of this binary; run `trapperkeeper migrate`",
@@ -122,14 +128,16 @@ where
 {
     // 1. open a connection with the tracking table in place
     // 2. a dirty version
-    // 3. unknown versions
-    // 4. edited versions
-    // 5. pending migrations
+    // 3. no applied migration
+    // 4. unknown versions
+    // 5. edited versions
+    // 6. pending migrations
     //
-    // The checks run from the mismatch that most needs a rebuild to the one
-    // migrate fixes, so the message names the first problem to solve.
+    // The checks run from the mismatch that most needs a rebuild to the ones
+    // a command fixes, so the message names the first problem to solve.
+
     // 1. A database without a tracking table gets an empty one, so it reads
-    //    as every migration pending.
+    //    as empty.
     let mut connection = tracked(migrator, pool).await?;
 
     // 2. A dirty row stays in the table, so it is checked before the others
@@ -141,7 +149,13 @@ where
         .list_applied_migrations(&migrator.table_name)
         .await?;
 
-    // 3. A version the binary lacks means a newer binary, or another build,
+    // 3. An empty tracking table means a new database, which the first serve
+    //    sets up.
+    if applied.is_empty() {
+        return Ok(Some(Mismatch::Empty));
+    }
+
+    // 4. A version the binary lacks means a newer binary, or another build,
     //    made this database.
     let unknown: Vec<i64> = applied
         .iter()
@@ -152,7 +166,7 @@ where
         return Ok(Some(Mismatch::Unknown(unknown)));
     }
 
-    // 4. A different checksum means the file changed after the database
+    // 5. A different checksum means the file changed after the database
     //    applied it. A down file shares its up file's version, so only the up
     //    file is compared.
     let edited: Vec<i64> = applied
@@ -170,7 +184,7 @@ where
         return Ok(Some(Mismatch::Edited(edited)));
     }
 
-    // 5. Only migrations that migrate applies are left.
+    // 6. Only migrations that migrate applies are left.
     let pending = pending(migrator, &applied);
     Ok((!pending.is_empty()).then_some(Mismatch::Pending(pending)))
 }

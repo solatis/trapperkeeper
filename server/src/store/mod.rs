@@ -166,7 +166,7 @@ fn backend(url: &str) -> Result<Backend, sqlx::Error> {
         })
 }
 
-/// Opens the store at `url` for serve.
+/// Opens the store at `url` without creating the database.
 ///
 /// # Errors
 ///
@@ -180,8 +180,7 @@ pub async fn open(url: &str) -> Result<Store, sqlx::Error> {
     }
 }
 
-/// Opens the store at `url` for migrate, creating the database when it is
-/// missing.
+/// Opens the store at `url`, creating the database when it is missing.
 ///
 /// # Errors
 ///
@@ -202,6 +201,19 @@ pub async fn create(url: &str) -> Result<Store, sqlx::Error> {
             create_missing::<MySql>(url).await?;
             open(url).await
         }
+    }
+}
+
+/// Whether the database `url` names exists.
+///
+/// # Errors
+///
+/// Fails when the URL does not parse or the server cannot be asked.
+pub async fn exists(url: &str) -> Result<bool, sqlx::Error> {
+    match backend(url)? {
+        Backend::Sqlite => Sqlite::database_exists(url).await,
+        Backend::Postgres => Postgres::database_exists(url).await,
+        Backend::MariaDb => MySql::database_exists(url).await,
     }
 }
 

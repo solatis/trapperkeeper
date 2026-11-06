@@ -27,13 +27,19 @@ pub async fn ensure_salt(tx: &mut Tx) -> Result<(), sqlx::Error> {
         tx,
         "INSERT INTO installation (singleton, signing_salt) VALUES (1, $1)",
     );
-    on_tx!(tx, |conn| {
+    let inserted = on_tx!(tx, |conn| {
         sqlx::query(AssertSqlSafe(insert))
             .bind(&salt)
             .execute(conn)
             .await
             .map(|_| ())
-    })
+    });
+    match inserted {
+        // Another instance wrote its salt between the read and the insert,
+        // and that salt is the installation's.
+        Err(sqlx::Error::Database(database)) if database.is_unique_violation() => Ok(()),
+        inserted => inserted,
+    }
 }
 
 /// The installation's signing salt, or `None` before migrate has written it.
