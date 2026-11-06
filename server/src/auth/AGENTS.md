@@ -2,7 +2,8 @@
 
 **What**: authentication of people: password hashing and generated
 passwords, the signed tokens and the keys that sign them, the login route,
-and the caller of a management route.
+the caller of a management route, and the role ladder that holds a route to
+a minimum role.
 
 **Map**:
 
@@ -12,6 +13,7 @@ and the caller of a management route.
 | `token.rs`    | the token kinds, their claims, the keyring: derive, issue, check                                                                                       | how a token is signed and checked, key rotation                                            |
 | `login.rs`    | the login route, which takes a tenant name, a name and a password; the refresh, logout, password and me routes; the token cookies; the uniform refusal | what the routes hand out and refuse, the cookies' attributes, how a login names its tenant |
 | `caller.rs`   | the `Caller` extractor and the token check behind it: key, kind, user read, cutoff                                                                     | what a management route checks before it runs                                              |
+| `role.rs`     | the ladder and `AtLeast<R>`                                                                                                                            | which role a route needs, how a 403 comes about                                            |
 
 **Invariants**:
 
@@ -24,6 +26,10 @@ and the caller of a management route.
 - Every request with a token, of either kind, reads the user and checks the
   token's issue time against the user's `tokens_valid_after`, so a logout or
   a password change takes effect at the next request.
+- A route that needs a role takes `AtLeast<R>`. A route that serves the
+  caller's own account takes `Caller`.
+- A role that is not on the ladder ranks below every `AtLeast` route, so a
+  role a tenant defines later opens no route until it gets a rung.
 - A refresh hands out an access token and keeps the refresh token, so a
   login never extends past the refresh token's 7 days.
 

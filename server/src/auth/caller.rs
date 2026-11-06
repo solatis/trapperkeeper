@@ -41,12 +41,15 @@ where
     }
 }
 
-/// Why a token did not authenticate a user. It converts into the response
+/// Why a request did not reach its handler. It converts into the response
 /// the caller gets.
 #[derive(Debug)]
 pub enum Refusal {
     /// The uniform 401.
     Unauthorized,
+    /// The caller is authenticated, and the route needs a higher role: 403
+    /// with the body `forbidden`.
+    Forbidden,
     /// The store failed, which is a 500.
     Store(Box<sqlx::Error>),
 }
@@ -63,6 +66,9 @@ impl IntoResponse for Refusal {
                 "unauthorized",
             )
                 .into_response(),
+            // No `WWW-Authenticate`, because a new token would not change the
+            // answer (RFC 9110, 15.5.4).
+            Self::Forbidden => (StatusCode::FORBIDDEN, "forbidden").into_response(),
             Self::Store(error) => database_error(&error),
         }
     }

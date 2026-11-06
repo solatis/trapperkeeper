@@ -22,6 +22,7 @@ use crate::auth::login;
 use crate::auth::token::Keyring;
 use crate::config::Settings;
 use crate::store::{self, Store};
+use crate::tenants;
 
 /// What every handler can reach: the store and the keyring.
 #[derive(Clone)]
@@ -117,7 +118,8 @@ pub fn router(state: AppState) -> Router {
         .routes(routes!(login::refresh))
         .routes(routes!(login::logout))
         .routes(routes!(login::change_password))
-        .routes(routes!(login::me));
+        .routes(routes!(login::me))
+        .routes(routes!(tenants::list));
 
     // 2. The probes and the document stay at the root, where orchestrators
     //    and tools look for them.

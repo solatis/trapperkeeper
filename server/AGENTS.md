@@ -32,6 +32,7 @@ gets its own `AGENTS.md`, and this file indexes them.
 | `src/logging.rs`      | the subscriber: log format and level                                                                                                                                                                                                          | log format, log level, RUST_LOG                                                    |
 | `src/store/`          | the relational store and its migrations; see its `AGENTS.md`                                                                                                                                                                                  | the database, migrations, tables                                                   |
 | `src/superadmin.rs`   | the superadmin of `$tk`, reset from the console                                                                                                                                                                                               | the superadmin, recovering its password                                            |
+| `src/tenants.rs`      | the superadmin's tenant routes                                                                                                                                                                                                                | creating and listing tenants                                                       |
 | `tests/cli.rs`        | end-to-end: runs the binary and checks its command line                                                                                                                                                                                       | how the binary behaves on the command line                                         |
 | `tests/common/mod.rs` | test helpers: the backends a run tests, test databases, a pool on one of them with placeholders rewritten, the router served in-process for integration tests, the binary started as a process for end-to-end tests, run migrate, GET a route | writing a server test; testing on every backend; which kind of server a test needs |
 | `tests/http.rs`       | integration tests of the endpoints on the router served in-process                                                                                                                                                                            | what the probes and the document promise                                           |
@@ -53,8 +54,9 @@ gets its own `AGENTS.md`, and this file indexes them.
   `config::DatabaseUrl` and `config::SigningKey` do. Its flag, where it has
   one, stays a plain value, because the flags layer is serialized into the
   merge, and its default holds no secret.
-- Every management route sits under `/api/v1` and takes `Caller`, except
-  login and refresh, which take the credentials themselves. The probes and
+- Every management route sits under `/api/v1` and takes `Caller` or
+  `AtLeast<R>`, except login and refresh, which take the credentials
+  themselves. The probes and
   the API document stay at the root.
 - Every handler carries a `utoipa::path` annotation and enters the router
   through `routes!`; a handler added with `.route` is missing from the API

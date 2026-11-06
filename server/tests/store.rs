@@ -92,8 +92,8 @@ fn migrate_builds_a_database_that_serve_accepts() {
         assert!(generated(&passwords[0]), "{passwords:?} on {backend}");
         // Read through sqlx, because no endpoint shows tenants, roles or the
         // tracking table.
-        let tenants: Vec<(String, String)> = on_pool!(database, |pool| {
-            sqlx::query_as("SELECT tenant_id, tenant_name FROM tenants")
+        let tenants: Vec<(String, String, String)> = on_pool!(database, |pool| {
+            sqlx::query_as("SELECT tenant_id, tenant_name, tenant_title FROM tenants")
                 .fetch_all(&pool)
                 .await
                 .expect("the tenants are read")
@@ -118,7 +118,8 @@ fn migrate_builds_a_database_that_serve_accepts() {
             tenants,
             [(
                 "00000000-0000-7000-8000-000000000000".to_owned(),
-                "$tk".to_owned()
+                "$tk".to_owned(),
+                "TrapperKeeper".to_owned()
             )]
         );
         assert_eq!(roles, [("superadmin".to_owned(), "Superadmin".to_owned())]);

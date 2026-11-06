@@ -5,6 +5,7 @@
 
 pub mod installation;
 pub mod migrate;
+pub mod tenants;
 pub mod users;
 
 use std::borrow::Cow;

@@ -10,6 +10,7 @@ mod http;
 mod logging;
 mod store;
 mod superadmin;
+mod tenants;
 
 // The integration tests build a migrated store with its superadmin, derive a
 // keyring from it, serve the router on a listener they bound, and mint tokens

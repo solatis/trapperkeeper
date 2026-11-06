@@ -113,8 +113,8 @@ fn login_then_me() {
         //    name.
         on_pool!(server.database(), |pool| {
             sqlx::query(
-                "INSERT INTO tenants (tenant_id, tenant_name) \
-                 VALUES ('00000000-0000-7000-8000-0000000000ff', 'other')",
+                "INSERT INTO tenants (tenant_id, tenant_name, tenant_title) \
+                 VALUES ('00000000-0000-7000-8000-0000000000ff', 'other', 'Other')",
             )
             .execute(&pool)
             .await

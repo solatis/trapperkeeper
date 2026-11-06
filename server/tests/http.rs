@@ -41,6 +41,7 @@ fn openapi_describes_the_routes() {
         assert!(paths.contains_key("/api/v1/logout"));
         assert!(paths.contains_key("/api/v1/password"));
         assert!(paths.contains_key("/api/v1/me"));
+        assert!(paths.contains_key("/api/v1/tenants"));
         assert!(!paths.contains_key("/openapi.json"));
         assert_eq!(
             document["components"]["securitySchemes"]["bearer"]["scheme"],
