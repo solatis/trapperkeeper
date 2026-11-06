@@ -64,9 +64,16 @@ fn call(
 /// name again gets 409.
 #[test]
 fn superadmin_creates_a_tenant_whose_admin_logs_in() {
+    // 1. create a tenant as the superadmin
+    // 2. list the tenants
+    // 3. log in as the new admin and read me
+    // 4. create the same tenant again
     on_each_backend(|backend| {
         let server = serve_in_process(backend);
         let token = superadmin_token(&server);
+
+        // 1. Mixed case and a padded title, so the response shows the names
+        //    lowercased and the title trimmed as they are stored.
         let new = json!({ "name": "Acme", "title": " Acme Corp ", "admin": "Ada@Example.com" });
 
         let response = call(&server, &token, "POST", "/api/v1/tenants", Some(&new));
@@ -77,17 +84,21 @@ fn superadmin_creates_a_tenant_whose_admin_logs_in() {
         assert_eq!(created["admin"], "ada@example.com");
         let password = created["admin_password"].as_str().expect("a password");
 
+        // 2. The list leaves `$tk` out, so the new tenant is the only entry.
         let response = call(&server, &token, "GET", "/api/v1/tenants", None);
         assert_eq!(response.status, 200, "{} on {backend}", response.body);
         let listed: Value = serde_json::from_str(&response.body).expect("a JSON body");
         assert_eq!(listed, json!([{ "name": "acme", "title": "Acme Corp" }]));
 
+        // 3. The returned password logs the admin in and must be changed, and
+        //    the admin holds the admin role the create seeded.
         let (admin_token, must_change) = log_in(&server, "acme", "ada@example.com", password);
         assert!(must_change);
         let response = call(&server, &admin_token, "GET", "/api/v1/me", None);
         let me: Value = serde_json::from_str(&response.body).expect("a JSON body");
         assert_eq!(me["role"], "admin");
 
+        // 4. The name is unique among live tenants.
         let response = call(&server, &token, "POST", "/api/v1/tenants", Some(&new));
         assert_eq!(response.status, 409, "{} on {backend}", response.body);
     });
@@ -156,6 +167,8 @@ proptest! {
     /// start with `$` are refused with 400.
     #[test]
     fn tenant_creation_follows_the_name_rules(tenant in tenant_name(), admin in admin_name()) {
+        // The model: the rules apply to the lowercased names, and a request
+        // passes only when both names pass.
         let (lower_tenant, lower_admin) = (tenant.to_lowercase(), admin.to_lowercase());
         let valid = valid_tenant(&lower_tenant) && valid_user(&lower_admin);
         for backend in common::backends() {
@@ -163,11 +176,14 @@ proptest! {
             let token = superadmin_token(&server);
             let new = json!({ "name": tenant, "title": "T", "admin": admin });
             let response = call(&server, &token, "POST", "/api/v1/tenants", Some(&new));
+            // A refused request writes nothing, so only the status is
+            // checked.
             if !valid {
                 prop_assert_eq!(response.status, 400, "{:?} {:?} on {}: {}", tenant, admin, backend, response.body);
                 continue;
             }
             prop_assert_eq!(response.status, 201, "{:?} {:?} on {}: {}", tenant, admin, backend, response.body);
+            // The response echoes the stored names.
             let created: Value = serde_json::from_str(&response.body).expect("a JSON body");
             prop_assert_eq!(created["name"].as_str(), Some(lower_tenant.as_str()));
             prop_assert_eq!(created["admin"].as_str(), Some(lower_admin.as_str()));
@@ -201,9 +217,16 @@ const ROUTES: [(&str, &str, Option<&str>); 4] = [
 fn every_role_meets_each_route_minimum() {
     // The roles and routes are a small fixed set, so the test covers every
     // pair instead of sampling them (doc/adr/0018).
+    //
+    // 1. create a tenant, which seeds admin, operator and observer
+    // 2. add a role that is not on the ladder
+    // 3. create and log in one user per role
+    // 4. call every route as every caller
     on_each_backend(|backend| {
         let server = serve_in_process(backend);
         let token = superadmin_token(&server);
+
+        // 1.
         let new = json!({ "name": "acme", "title": "Acme", "admin": "ada@example.com" });
         let response = call(&server, &token, "POST", "/api/v1/tenants", Some(&new));
         assert_eq!(response.status, 201, "{} on {backend}", response.body);
@@ -213,7 +236,7 @@ fn every_role_meets_each_route_minimum() {
                 .await
                 .expect("the tenant is read")
         });
-        // Inserted through sqlx, because no route creates roles.
+        // 2. Inserted through sqlx, because no route creates roles.
         on_pool!(server.database(), |pool| {
             let insert = common::placeholders(
                 backend,
@@ -227,6 +250,8 @@ fn every_role_meets_each_route_minimum() {
                 .expect("the role is inserted");
         });
 
+        // 3. Through the library, because no route creates a user of a
+        //    given role yet.
         let mut callers = vec![("superadmin", token)];
         for role in ["admin", "operator", "observer", "auditor"] {
             let name = format!("{role}@example.com");
@@ -248,6 +273,8 @@ fn every_role_meets_each_route_minimum() {
             callers.push((role, log_in(&server, "acme", &name, &password).0));
         }
 
+        // 4. A permitted call answers 2xx, and a refused one answers 403
+        //    with the body `forbidden`.
         for (role, token) in &callers {
             for (n, (method, path, minimum)) in ROUTES.iter().enumerate() {
                 // Each create names a tenant of its own, so a permitted one
@@ -256,6 +283,8 @@ fn every_role_meets_each_route_minimum() {
                     json!({ "name": format!("t{n}-{role}"), "title": "T", "admin": "a@b.io" });
                 let body = (*method == "POST" && path.ends_with("tenants")).then_some(&body);
                 let response = call(&server, token, method, path, body);
+                // The off-ladder role has no rank, so it counts as below
+                // every minimum.
                 let below = minimum.is_some_and(|m| rank(role).is_none_or(|r| Some(r) < rank(m)));
                 let context = format!("{role} on {method} {path} on {backend}: {}", response.body);
                 if below {
