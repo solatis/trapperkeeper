@@ -9,8 +9,8 @@ mod common;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use common::{
-    ADMIN, TEST_KEY, TEST_PREVIOUS_KEY, backends, block_on, on_each_backend, on_pool, placeholders,
-    request, serve_in_process,
+    ADMIN, TENANT, TEST_KEY, TEST_PREVIOUS_KEY, backends, block_on, on_each_backend, on_pool,
+    placeholders, request, serve_in_process,
 };
 use proptest::prelude::*;
 use serde_json::{Value, json};
@@ -20,18 +20,24 @@ use trapperkeeper_server::{Keyring, Kind};
 /// The id of the default tenant, as the first migration seeds it.
 const DEFAULT_TENANT: &str = "00000000-0000-7000-8000-000000000000";
 
-/// A login with the admin's name, in any case, and its password returns a
-/// bearer access token that lives an hour and a refresh token that lives a
-/// week, and says the password must change. Both tokens come in the body and
-/// in cookies page scripts and other sites cannot use, and the refresh cookie
-/// goes to the refresh route alone. The access token reads the admin back on
-/// the bearer header and on the cookie alone. A wrong password and an unknown
-/// name get the same refusal.
+/// A login with the admin's tenant and name, in any case, and its password
+/// returns a bearer access token that lives an hour and a refresh token that
+/// lives a week, and says the password must change. Both tokens come in the
+/// body and in cookies page scripts and other sites cannot use, and the
+/// refresh cookie goes to the refresh route alone. The access token reads the
+/// admin back on the bearer header and on the cookie alone. An unknown
+/// tenant, the admin's name and password under another tenant, a wrong
+/// password and an unknown name get the same refusal.
 #[test]
 fn login_then_me() {
     on_each_backend(|backend| {
         let server = serve_in_process(backend);
-        let response = log_in(&server, &ADMIN.to_uppercase(), &server.admin_password);
+        let response = log_in(
+            &server,
+            &TENANT.to_uppercase(),
+            &ADMIN.to_uppercase(),
+            &server.admin_password,
+        );
         assert_eq!(response.status, 200, "{}", response.body);
         let login: Value = serde_json::from_str(&response.body).expect("a JSON body");
         assert_eq!(login["token_type"], "Bearer");
@@ -88,20 +94,39 @@ fn login_then_me() {
         assert_eq!(response.status, 401);
         assert_eq!(response.header_values("www-authenticate"), ["Bearer"]);
 
-        for (name, password) in [
-            (ADMIN, "not the password"),
-            ("nobody", server.admin_password.as_str()),
+        // A second tenant, inserted through sqlx because no route creates
+        // tenants, so the admin's credentials are refused under its name.
+        on_pool!(server.database(), |pool| {
+            sqlx::query(
+                "INSERT INTO tenants (tenant_id, tenant_name) \
+                 VALUES ('00000000-0000-7000-8000-0000000000ff', 'other')",
+            )
+            .execute(&pool)
+            .await
+            .expect("the tenant is inserted");
+        });
+        let password = server.admin_password.as_str();
+        for (tenant, name, password) in [
+            ("nowhere", ADMIN, password),
+            ("other", ADMIN, password),
+            (TENANT, ADMIN, "not the password"),
+            (TENANT, "nobody", password),
         ] {
-            let response = log_in(&server, name, password);
+            let response = log_in(&server, tenant, name, password);
             assert_eq!(response.status, 401);
             assert_eq!(response.body, "unauthorized");
         }
     });
 }
 
-/// Logs in as `name` with `password` and returns the response.
-fn log_in(server: &common::InProcess, name: &str, password: &str) -> common::Response {
-    let credentials = json!({ "name": name, "password": password });
+/// Logs in to `tenant` as `name` with `password` and returns the response.
+fn log_in(
+    server: &common::InProcess,
+    tenant: &str,
+    name: &str,
+    password: &str,
+) -> common::Response {
+    let credentials = json!({ "tenant": tenant, "name": name, "password": password });
     request(
         server.addr,
         "POST",
@@ -381,7 +406,7 @@ proptest! {
                 match op {
                     Op::Login { right_password } => {
                         let password = if *right_password { model.password.clone() } else { "wrong".to_owned() };
-                        let response = log_in(&server, ADMIN, &password);
+                        let response = log_in(&server, TENANT, ADMIN, &password);
                         if !*right_password {
                             prop_assert_eq!(response.status, 401, "{:?} on {}", op, backend);
                             continue;

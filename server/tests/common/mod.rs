@@ -42,6 +42,10 @@ pub const TEST_PREVIOUS_KEY: &str = "the previous test signing passphrase of tra
 /// The name of the admin every in-process server seeds.
 pub const ADMIN: &str = "admin";
 
+/// The name of the tenant the in-process admin belongs to, which every
+/// in-process login names.
+pub const TENANT: &str = "default";
+
 /// Numbers the scratch directories of this process.
 static SCRATCH: AtomicU32 = AtomicU32::new(0);
 

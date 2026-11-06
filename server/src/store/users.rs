@@ -120,20 +120,32 @@ pub async fn create(tx: &mut Tx, new: NewUser<'_>) -> Result<(), CreateError> {
     Ok(())
 }
 
-/// The live user named `user_name` in `tenant_id`, or `None`.
+/// The live user named `user_name` in the live tenant named `tenant_name`, or
+/// `None`.
 ///
 /// # Errors
 ///
 /// Fails when the database cannot be read.
-pub async fn find(
+pub async fn find_in(
     tx: &mut Tx,
-    tenant_id: &str,
+    tenant_name: &str,
     user_name: &str,
 ) -> Result<Option<User>, sqlx::Error> {
-    let select = sql(tx, concat!(SELECT_USER!(), " AND u.user_name = $2"));
+    // The join on tenants filters its deleted_at too, so the users of a
+    // deleted tenant are not found (doc/adr/0024).
+    let select = sql(
+        tx,
+        "SELECT u.user_id, u.tenant_id, u.user_name, r.role_name, u.password_hash, \
+         u.password_must_change, u.tokens_valid_after \
+         FROM users u \
+         JOIN tenants t ON t.tenant_id = u.tenant_id \
+         JOIN roles r ON r.tenant_id = u.tenant_id AND r.role_id = u.role_id \
+         WHERE u.deleted_at IS NULL AND r.deleted_at IS NULL AND t.deleted_at IS NULL \
+         AND t.tenant_name = $1 AND u.user_name = $2",
+    );
     on_tx!(tx, |conn| {
         sqlx::query_as(AssertSqlSafe(select))
-            .bind(tenant_id)
+            .bind(tenant_name)
             .bind(user_name)
             .fetch_optional(conn)
             .await

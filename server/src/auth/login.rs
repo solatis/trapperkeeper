@@ -16,12 +16,13 @@ use crate::auth::caller::{Caller, authenticate};
 use crate::auth::password;
 use crate::auth::token::Kind;
 use crate::http::AppState;
+use crate::store::now_micros;
 use crate::store::users::{self, PasswordSet, User};
-use crate::store::{DEFAULT_TENANT_ID, now_micros};
 
-/// A name and a password.
+/// A tenant name, a name and a password.
 #[derive(Deserialize, ToSchema)]
 pub struct Credentials {
+    tenant: String,
     name: String,
     password: String,
 }
@@ -57,16 +58,16 @@ pub struct Login {
 /// too.
 static DUMMY_HASH: OnceCell<String> = OnceCell::const_new();
 
-/// Logs a user of the default tenant in with a name and a password. Returns
-/// an access token and a refresh token, in the body and in the `tk_access`
-/// and `tk_refresh` cookies.
+/// Logs a user in with a tenant name, a name and a password. Returns an
+/// access token and a refresh token, in the body and in the `tk_access` and
+/// `tk_refresh` cookies.
 #[utoipa::path(
     post,
     path = "/login",
     request_body = Credentials,
     responses(
         (status = OK, description = "the access token", body = Login),
-        (status = UNAUTHORIZED, description = "the name or the password is wrong", body = String)
+        (status = UNAUTHORIZED, description = "the tenant, the name or the password is wrong", body = String)
     )
 )]
 pub async fn login(
@@ -74,20 +75,20 @@ pub async fn login(
     jar: CookieJar,
     Json(credentials): Json<Credentials>,
 ) -> Response {
-    // Names are stored lowercase (doc/adr/0020).
+    // Tenant names and user names are stored lowercase (doc/adr/0020).
+    let tenant = credentials.tenant.to_lowercase();
     let name = credentials.name.to_lowercase();
-    // The product runs one tenant, so login takes none (doc/adr/0003).
     let found = async {
         let mut tx = state.store.begin().await?;
-        users::find(&mut tx, DEFAULT_TENANT_ID, &name).await
+        users::find_in(&mut tx, &tenant, &name).await
     }
     .await;
     let user = match found {
         Ok(user) => user,
         Err(error) => return database_error(&error),
     };
-    // An unknown name is checked against the dummy hash, so the response time
-    // does not tell whether the name exists.
+    // An unknown tenant and an unknown name are both checked against the
+    // dummy hash, so the response time does not tell whether either exists.
     let hash = match &user {
         Some(user) => user.password_hash.clone(),
         None => DUMMY_HASH
