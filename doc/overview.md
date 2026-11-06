@@ -50,6 +50,7 @@ evaluation.
 | Operator   | Human managing rules. Roles: admin, operator, observer.                                                                                                                |
 | Principal  | Anything that authenticates to the management API: a human, a CLI credential, the AI agent.                                                                            |
 | Tenant     | Owner of rules, keys, users and events. A hosted install holds many tenants, a self-hosted install usually one. See `adr/0003`.                                        |
+| Superadmin | The user `admin` of the system tenant `$tk`, who creates tenants. See `adr/0028`.                                                                                      |
 | Id         | An entity's internal identifier, `<entity>_id`: a time-ordered UUID the server generates. Used in logs and references, never typed or shown to people. See `adr/0020`. |
 | Name       | What people type and address an entity by, `<entity>_name`: lowercase, unique in its scope (a tenant's name globally, a user's within its tenant). See `adr/0020`.     |
 | Title      | A user-friendly display name, `<entity>_title`, such as `role_title`. Keeps its case; not an identifier. See `adr/0020`.                                               |

@@ -116,7 +116,8 @@ retries sync at a fixed interval. Unreported events beyond the buffer are lost.
 
 - **Identity.** Sensors: opaque API keys stored hashed (`adr/0027`).
   People: signed tokens from login, revoked per user by a cutoff
-  (`adr/0025`). Every entity and credential carries a tenant id.
+  (`adr/0025`). Every entity and credential carries a tenant id. The
+  superadmin is a user of the system tenant `$tk` (`adr/0028`).
 - **Identifiers and time.** Time-ordered unique ids for all entities. UTC in
   storage and on the wire; local time only at presentation. Both sensor and
   server timestamps are kept.

@@ -78,6 +78,9 @@ gets its own `AGENTS.md`, and this file indexes them.
 - Tenants of a hosted and of a self-hosted install share one database, and
   a login names its tenant (owner, 2026-11-06):
   `doc/adr/0003-tenants-share-one-database.md`.
+- The superadmin is the user `admin` of the system tenant `$tk`, created by
+  the first migration of an empty database and reset from the console
+  (owner, 2026-11-06): `doc/adr/0028-system-tenant-and-first-run.md`.
 - The package and the binary have different names; the reason sits at
   `[[bin]]` in `Cargo.toml`.
 - clap parses the command line and figment merges the settings layers:
