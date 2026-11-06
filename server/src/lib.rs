@@ -2,6 +2,7 @@
 //! tests reach the router, the store, the keyring and the admin creator
 //! through the items exported here.
 
+mod accounts;
 mod admin;
 mod auth;
 mod cli;

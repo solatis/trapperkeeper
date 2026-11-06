@@ -20,6 +20,7 @@ gets its own `AGENTS.md`, and this file indexes them.
 | `build.rs`            | reruns the build when a migration file changes                                                                                                                                                                                                | why a new migration file is picked up                                              |
 | `src/lib.rs`          | the entry point: parse, resolve, dispatch; what the library exports                                                                                                                                                                           | how a subcommand starts and how it fails; what tests can reach                     |
 | `src/main.rs`         | starts the tokio runtime and calls the library                                                                                                                                                                                                | why the binary is so small                                                         |
+| `src/accounts.rs`     | creating users with a generated password that must be changed                                                                                                                                                                                 | creating a user, what a new user must do first                                     |
 | `src/admin.rs`        | creating an admin: the generated password, the must-change flag                                                                                                                                                                               | what create-admin stores and prints                                                |
 | `src/auth/`           | authentication of people: passwords, signed tokens, login, the caller of a route; see its `AGENTS.md`                                                                                                                                         | passwords, tokens, the signing keys, logging in                                    |
 | `src/cli.rs`          | the command line                                                                                                                                                                                                                              | adding a flag or a subcommand                                                      |
@@ -55,6 +56,8 @@ gets its own `AGENTS.md`, and this file indexes them.
   through `routes!`; a handler added with `.route` is missing from the API
   document. A handler's doc comment is its operation summary in that document,
   so it is written for the API's readers.
+- A user is created only through `accounts::create`, so every user gets a
+  generated password that must be changed at the first login.
 - An integration test builds the server in the test process through the
   library and never starts a process. Starting the binary is reserved for
   end-to-end tests, which check what only a process shows: the exit status,

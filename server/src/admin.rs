@@ -2,8 +2,8 @@
 
 use std::fmt;
 
-use crate::auth::password;
-use crate::store::users::{self, ADMIN_ROLE, CreateError, NewUser};
+use crate::accounts::{self, NewAccount};
+use crate::store::users::{ADMIN_ROLE, CreateError};
 use crate::store::{DEFAULT_TENANT_ID, Store};
 
 /// Why an admin could not be created.
@@ -45,26 +45,20 @@ impl From<sqlx::Error> for AdminError {
 /// `InvalidName` when the name breaks the name rule; `NameTaken` when a live
 /// user of the default tenant has it; `Database` otherwise.
 pub async fn create(store: &Store, name: &str) -> Result<String, AdminError> {
-    // Names are stored lowercase, so "Leon" and "leon" are one user
-    // (doc/adr/0020).
+    // The rule applies to the name as it is stored, in lowercase.
     let name = name.to_lowercase();
     if !valid_name(&name) {
         return Err(AdminError::InvalidName(name));
     }
-    let password = password::generate();
-    let password_hash = password::hash(password.clone()).await;
     let mut tx = store.begin().await?;
     // create-admin may run again: a second admin is how a lost admin password
     // is recovered. Only a taken name is refused.
-    users::create(
+    let password = accounts::create(
         &mut tx,
-        NewUser {
+        NewAccount {
             tenant_id: DEFAULT_TENANT_ID,
-            user_name: &name,
+            name: &name,
             role_name: ADMIN_ROLE,
-            password_hash: &password_hash,
-            // The UI asks for a new password at the first login.
-            password_must_change: true,
         },
     )
     .await
