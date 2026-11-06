@@ -158,8 +158,8 @@ async fn open_for_serve(settings: &Settings) -> Option<Store> {
     let url = settings.database.url.expose();
     let store = match store::open(url).await {
         Ok(store) => store,
-        // A database that exists and does not open is refused with the
-        // open's error.
+        // A database that exists, or whose existence cannot be asked, is
+        // refused with the open's error.
         Err(error) if !matches!(store::exists(url).await, Ok(false)) => {
             eprintln!("{error}");
             return None;
