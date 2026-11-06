@@ -42,3 +42,5 @@ a minimum role.
   stretched under a per-installation salt, and a per-user revocation cutoff
   (owner, 2026-11-05):
   `doc/adr/0025-signed-tokens-and-the-revocation-cutoff.md`.
+- A minimum role per route on a ladder, with the superadmin at the top
+  (owner, 2026-11-06): `doc/adr/0029-role-ladder.md`.

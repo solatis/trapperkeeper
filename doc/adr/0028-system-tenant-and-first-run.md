@@ -14,7 +14,8 @@ The superadmin is the user `admin` of the system tenant `$tk`, which holds
 the role `superadmin` alone. Login, tokens and the revocation cutoff serve
 it unchanged (owner, 2026-11-06).
 
-Names that start with `$` are the server's own (owner, 2026-11-06).
+Names that start with `$` are the server's own (owner, 2026-11-06). The API
+refuses a tenant name or a user name that starts with `$`.
 
 Every user is created with a generated password that must be changed at the
 first login. Only the delivery differs: the console for the superadmin, or

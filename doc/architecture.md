@@ -51,7 +51,8 @@ instances scale horizontally with no coordination.
 The single write path for everything that is not an event: rules, API keys,
 users and roles, emergency pause. Also the read path for events (filter and
 aggregate by time, rule, tag, metadata). Owns validation, authorization and the
-audit trail. Web UI, CLI and AI agent are equal clients; none of them touches
+audit trail. Authorization is a minimum role per route on a ladder
+(`adr/0029`). Web UI, CLI and AI agent are equal clients; none of them touches
 the store. Also exposed as an agent tool surface. Its code is in the server;
 see `server/AGENTS.md`.
 

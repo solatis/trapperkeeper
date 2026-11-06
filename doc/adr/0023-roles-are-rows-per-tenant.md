@@ -13,7 +13,8 @@ owner decided while the first users were planned (owner, 2026-11-05).
 Roles are rows in a `roles` table, one set per tenant, each with a lowercase
 `role_name` and a display `role_title`. The migration seeds the system tenant's
 one role, `superadmin`, with a fixed id, a version 7 UUID with an all-zero
-timestamp like the tenant's, so code and tests can name it (`doc/adr/0028`). Nearly
+timestamp like the tenant's, so code and tests can name it (`doc/adr/0028`). A tenant
+the superadmin creates gets the roles admin, operator and observer. Nearly
 every table carries a tenant id, and the roles follow that rule (owner,
 2026-11-05).
 
