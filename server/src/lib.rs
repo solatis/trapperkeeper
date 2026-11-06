@@ -8,6 +8,7 @@ mod cli;
 mod config;
 mod http;
 mod logging;
+mod names;
 mod store;
 mod superadmin;
 mod tenants;
