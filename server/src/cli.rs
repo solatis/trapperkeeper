@@ -90,6 +90,7 @@ pub enum Command {
     Serve,
     /// Apply pending database migrations.
     Migrate,
-    /// Give the superadmin a new one-time password and print it, creating the superadmin when it is missing.
+    /// Give the superadmin a new one-time password and print it, creating the
+    /// superadmin when it is missing.
     ResetSuperadmin,
 }
