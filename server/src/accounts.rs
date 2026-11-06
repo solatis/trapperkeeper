@@ -2,8 +2,8 @@
 //! too, gets a generated password that must be changed at the first login.
 
 use crate::auth::password;
-use crate::store::Tx;
-use crate::store::users::{self, CreateError, NewUser};
+use crate::store::users::{self, CreateError, NewUser, PasswordSet};
+use crate::store::{Tx, now_micros};
 
 /// Who a new user is.
 pub struct NewAccount<'a> {
@@ -36,6 +36,29 @@ pub async fn create(tx: &mut Tx, new: NewAccount<'_>) -> Result<String, CreateEr
             // The person who receives the password replaces it at the first
             // login.
             password_must_change: true,
+        },
+    )
+    .await?;
+    Ok(password)
+}
+
+/// Gives the user a new generated password that must be changed, revokes its
+/// tokens, and returns the password. Does not commit.
+///
+/// # Errors
+///
+/// Fails when the database cannot be written.
+pub async fn reset(tx: &mut Tx, tenant_id: &str, user_id: &str) -> Result<String, sqlx::Error> {
+    let password = password::generate();
+    let password_hash = password::hash(password.clone()).await;
+    users::set_password(
+        tx,
+        PasswordSet {
+            tenant_id,
+            user_id,
+            password_hash: &password_hash,
+            must_change: true,
+            now: now_micros(),
         },
     )
     .await?;

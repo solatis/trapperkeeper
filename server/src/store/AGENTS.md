@@ -18,6 +18,8 @@ event log is a separate store, whose engine is still open (see
 
 **Invariants**:
 
+- `$tk` is the one tenant the migrations seed, and it holds the role
+  `superadmin` alone (`doc/adr/0028`).
 - Every table other than `tenants` and `installation` has a `tenant_id`
   column, and every query filters on it (`doc/adr/0003`). `installation` is
   one row of facts that belong to no tenant.

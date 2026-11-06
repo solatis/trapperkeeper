@@ -43,9 +43,9 @@ fn tracked_versions(database: &TestDatabase) -> Vec<i64> {
     })
 }
 
-/// migrate builds a missing database with the default tenant, its three roles
-/// and a signing salt; a second migrate applies nothing and keeps the salt;
-/// serve accepts the result.
+/// migrate builds a missing database with the system tenant, its superadmin
+/// role and a signing salt. A second migrate applies nothing and keeps the
+/// salt, and serve accepts the result.
 #[test]
 fn migrate_builds_a_database_that_serve_accepts() {
     on_each_backend(|backend| {
@@ -79,18 +79,10 @@ fn migrate_builds_a_database_that_serve_accepts() {
             tenants,
             [(
                 "00000000-0000-7000-8000-000000000000".to_owned(),
-                "default".to_owned()
+                "$tk".to_owned()
             )]
         );
-
-        assert_eq!(
-            roles,
-            [
-                ("admin".to_owned(), "Admin".to_owned()),
-                ("operator".to_owned(), "Operator".to_owned()),
-                ("observer".to_owned(), "Observer".to_owned()),
-            ]
-        );
+        assert_eq!(roles, [("superadmin".to_owned(), "Superadmin".to_owned())]);
 
         let salt = || -> String {
             on_pool!(database, |pool| {

@@ -12,8 +12,10 @@ CREATE TABLE tenants (
 -- used again (doc/adr/0024).
 CREATE UNIQUE INDEX tenants_live_name ON tenants (tenant_name) WHERE deleted_at IS NULL;
 
--- A fixed id, so the default tenant has the same id in every installation and
--- code can hold it as a constant. It is a version 7 UUID with an all-zero
--- timestamp, so it sorts first.
+-- The system tenant, which holds the superadmin (doc/adr/0028). A fixed id,
+-- so it has the same id in every installation and code can hold it as a
+-- constant (doc/adr/0023). It is a version 7 UUID with an all-zero timestamp,
+-- so it sorts first. Its name starts with `$`, which only the server uses for
+-- names.
 INSERT INTO tenants (tenant_id, tenant_name)
-VALUES ('00000000-0000-7000-8000-000000000000', 'default');
+VALUES ('00000000-0000-7000-8000-000000000000', '$tk');

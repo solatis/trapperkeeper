@@ -345,6 +345,7 @@ pub async fn change_password(
                 tenant_id: &user.tenant_id,
                 user_id: &user.id,
                 password_hash: &password_hash,
+                must_change: false,
                 now: now_micros(),
             },
         )

@@ -90,9 +90,6 @@ pub enum Command {
     Serve,
     /// Apply pending database migrations.
     Migrate,
-    /// Create an admin user in the default tenant and print its generated password.
-    CreateAdmin {
-        /// Name of the admin, which is stored lowercase.
-        name: String,
-    },
+    /// Give the superadmin a new one-time password and print it, creating the superadmin when it is missing.
+    ResetSuperadmin,
 }

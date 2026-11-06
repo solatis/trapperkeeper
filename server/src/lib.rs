@@ -1,24 +1,24 @@
 //! The server behind the `trapperkeeper` binary. The binary calls `run`, and
-//! tests reach the router, the store, the keyring and the admin creator
-//! through the items exported here.
+//! tests reach the router, the store, the keyring and the superadmin through
+//! the items exported here.
 
 mod accounts;
-mod admin;
 mod auth;
 mod cli;
 mod config;
 mod http;
 mod logging;
 mod store;
+mod superadmin;
 
-// The integration tests build a migrated store with an admin, derive a
+// The integration tests build a migrated store with its superadmin, derive a
 // keyring from it, serve the router on a listener they bound, and mint tokens
 // of their own. Nothing else in the crate is part of its interface.
-pub use admin::create as create_admin;
 pub use auth::token::{Claims, Keyring, Kind};
 pub use http::{AppState, router};
 pub use store::migrate::apply as apply_migrations;
 pub use store::{Store, create as create_store};
+pub use superadmin::reset as reset_superadmin;
 
 use std::process::ExitCode;
 use std::sync::Arc;
@@ -82,7 +82,7 @@ pub async fn run() -> ExitCode {
     match cli.command {
         Command::Serve => serve(&settings).await,
         Command::Migrate => migrate(&settings).await,
-        Command::CreateAdmin { name } => create_admin_command(&settings, &name).await,
+        Command::ResetSuperadmin => reset_superadmin_command(&settings).await,
     }
 }
 
@@ -190,16 +190,16 @@ async fn migrate(settings: &Settings) -> ExitCode {
     }
 }
 
-/// Creates an admin named `name` in the default tenant, prints its generated
-/// password, and returns the exit status.
-async fn create_admin_command(settings: &Settings, name: &str) -> ExitCode {
+/// Gives the superadmin a new one-time password, prints it, and returns the
+/// exit status.
+async fn reset_superadmin_command(settings: &Settings) -> ExitCode {
     let Some(store) = open_checked(settings).await else {
         return ExitCode::FAILURE;
     };
-    match admin::create(&store, name).await {
+    match superadmin::reset(&store).await {
         Ok(password) => {
-            // println and not tracing, so the password is never a log event
-            // with a level and fields.
+            // println and not tracing: the command's output is the password
+            // alone, so a script can read it, and it is never a log event.
             println!("{password}");
             ExitCode::SUCCESS
         }

@@ -141,7 +141,7 @@ impl fmt::Debug for DatabaseUrl {
 }
 
 /// Settings of authentication. The default holds neither key: serve refuses to
-/// start without `signing_key`, and migrate and create-admin need none.
+/// start without `signing_key`, and migrate and reset-superadmin need none.
 #[derive(Serialize, Deserialize, Debug, Default)]
 #[serde(deny_unknown_fields)]
 pub struct AuthSettings {

@@ -9,32 +9,29 @@ mod common;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use common::{
-    ADMIN, TENANT, TEST_KEY, TEST_PREVIOUS_KEY, backends, block_on, on_each_backend, on_pool,
-    placeholders, request, serve_in_process,
+    ADMIN, SYSTEM_TENANT, SYSTEM_TENANT_ID, TEST_KEY, TEST_PREVIOUS_KEY, backends, block_on,
+    on_each_backend, on_pool, placeholders, request, serve_in_process,
 };
 use proptest::prelude::*;
 use serde_json::{Value, json};
 use sqlx::AssertSqlSafe;
 use trapperkeeper_server::{Keyring, Kind};
 
-/// The id of the default tenant, as the first migration seeds it.
-const DEFAULT_TENANT: &str = "00000000-0000-7000-8000-000000000000";
-
-/// A login with the admin's tenant and name, in any case, and its password
-/// returns a bearer access token that lives an hour and a refresh token that
-/// lives a week, and says the password must change. Both tokens come in the
-/// body and in cookies page scripts and other sites cannot use, and the
-/// refresh cookie goes to the refresh route alone. The access token reads the
-/// admin back on the bearer header and on the cookie alone. An unknown
-/// tenant, the admin's name and password under another tenant, a wrong
-/// password and an unknown name get the same refusal.
+/// A login with the superadmin's tenant and name, in any case, and its
+/// password returns a bearer access token that lives an hour and a refresh
+/// token that lives a week, and says the password must change. Both tokens
+/// come in the body and in cookies page scripts and other sites cannot use,
+/// and the refresh cookie goes to the refresh route alone. The access token
+/// reads the superadmin back on the bearer header and on the cookie alone. An
+/// unknown tenant, the superadmin's name and password under another tenant, a
+/// wrong password and an unknown name get the same refusal.
 #[test]
 fn login_then_me() {
     on_each_backend(|backend| {
         let server = serve_in_process(backend);
         let response = log_in(
             &server,
-            &TENANT.to_uppercase(),
+            &SYSTEM_TENANT.to_uppercase(),
             &ADMIN.to_uppercase(),
             &server.admin_password,
         );
@@ -70,7 +67,7 @@ fn login_then_me() {
         let body: Value = serde_json::from_str(&response.body).expect("a JSON body");
         assert_eq!(
             body,
-            json!({ "name": ADMIN, "role": "admin", "password_must_change": true })
+            json!({ "name": ADMIN, "role": "superadmin", "password_must_change": true })
         );
         let cookie = format!("tk_access={token}");
         assert_eq!(me(&server, &[("Cookie", &cookie)]).status, 200);
@@ -95,7 +92,7 @@ fn login_then_me() {
         assert_eq!(response.header_values("www-authenticate"), ["Bearer"]);
 
         // A second tenant, inserted through sqlx because no route creates
-        // tenants, so the admin's credentials are refused under its name.
+        // tenants, so the superadmin's credentials are refused under its name.
         on_pool!(server.database(), |pool| {
             sqlx::query(
                 "INSERT INTO tenants (tenant_id, tenant_name) \
@@ -109,8 +106,8 @@ fn login_then_me() {
         for (tenant, name, password) in [
             ("nowhere", ADMIN, password),
             ("other", ADMIN, password),
-            (TENANT, ADMIN, "not the password"),
-            (TENANT, "nobody", password),
+            (SYSTEM_TENANT, ADMIN, "not the password"),
+            (SYSTEM_TENANT, "nobody", password),
         ] {
             let response = log_in(&server, tenant, name, password);
             assert_eq!(response.status, 401);
@@ -201,7 +198,7 @@ fn admin_id(database: &common::TestDatabase) -> String {
     );
     on_pool!(database, |pool| {
         sqlx::query_scalar(AssertSqlSafe(select))
-            .bind(DEFAULT_TENANT)
+            .bind(SYSTEM_TENANT_ID)
             .bind(ADMIN)
             .fetch_one(&pool)
             .await
@@ -267,7 +264,7 @@ proptest! {
             let now = SystemTime::now();
             let issued = if has(Defect::Expired) { now - Duration::from_hours(2) } else { now };
             let signer = if has(Defect::UnknownKey) { &other } else { &own };
-            let mut token = signer.issue(Kind::Access, &user_id, DEFAULT_TENANT, issued);
+            let mut token = signer.issue(Kind::Access, &user_id, SYSTEM_TENANT_ID, issued);
             if has(Defect::FlippedSignature) {
                 token = flip_signature(&token);
             }
@@ -406,7 +403,7 @@ proptest! {
                 match op {
                     Op::Login { right_password } => {
                         let password = if *right_password { model.password.clone() } else { "wrong".to_owned() };
-                        let response = log_in(&server, TENANT, ADMIN, &password);
+                        let response = log_in(&server, SYSTEM_TENANT, ADMIN, &password);
                         if !*right_password {
                             prop_assert_eq!(response.status, 401, "{:?} on {}", op, backend);
                             continue;
@@ -499,7 +496,7 @@ proptest! {
                         let kind = if *refresh { Kind::Refresh } else { Kind::Access };
                         let issued = SystemTime::now() - Duration::from_hours(8 * 24);
                         model.held.push(Held {
-                            value: own.issue(kind, &user_id, DEFAULT_TENANT, issued),
+                            value: own.issue(kind, &user_id, SYSTEM_TENANT_ID, issued),
                             kind,
                             epoch: model.epoch,
                             expired: true,

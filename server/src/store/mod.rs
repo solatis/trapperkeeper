@@ -17,8 +17,8 @@ use sqlx::postgres::{PgPool, Postgres};
 use sqlx::sqlite::{Sqlite, SqliteConnectOptions, SqlitePool};
 use sqlx::{Database, Executor, Transaction};
 
-/// The id of the default tenant, which the first migration seeds.
-pub const DEFAULT_TENANT_ID: &str = "00000000-0000-7000-8000-000000000000";
+/// The id of the system tenant `$tk`, which the first migration seeds.
+pub const SYSTEM_TENANT_ID: &str = "00000000-0000-7000-8000-000000000000";
 
 /// An open store on one of the three backends. Clones share one connection
 /// pool.

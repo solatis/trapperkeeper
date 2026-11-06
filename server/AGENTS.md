@@ -6,8 +6,10 @@
 relational store's database on SQLite, Postgres or MariaDB when it is missing
 and applies the migrations embedded in the binary. `serve` refuses a database
 that does not match those migrations, then binds the listen address and runs
-the HTTP server until a signal stops it. `create-admin` creates an admin user
-in the default tenant and prints its generated password once. Before a
+the HTTP server until a signal stops it. `reset-superadmin` gives the
+superadmin, the user `admin` of the system tenant `$tk`, a new one-time
+password, creating the superadmin when it is missing, and prints the
+password. Before a
 subcommand runs, the binary resolves its settings: the listen address, the log
 level and the database URL. Each module directory that appears under `src/`
 gets its own `AGENTS.md`, and this file indexes them.
@@ -21,14 +23,13 @@ gets its own `AGENTS.md`, and this file indexes them.
 | `src/lib.rs`          | the entry point: parse, resolve, dispatch; what the library exports                                                                                                                                                                           | how a subcommand starts and how it fails; what tests can reach                     |
 | `src/main.rs`         | starts the tokio runtime and calls the library                                                                                                                                                                                                | why the binary is so small                                                         |
 | `src/accounts.rs`     | creating users with a generated password that must be changed                                                                                                                                                                                 | creating a user, what a new user must do first                                     |
-| `src/admin.rs`        | creating an admin: the generated password, the must-change flag                                                                                                                                                                               | what create-admin stores and prints                                                |
 | `src/auth/`           | authentication of people: passwords, signed tokens, login, the caller of a route; see its `AGENTS.md`                                                                                                                                         | passwords, tokens, the signing keys, logging in                                    |
 | `src/cli.rs`          | the command line                                                                                                                                                                                                                              | adding a flag or a subcommand                                                      |
 | `src/config.rs`       | the settings and how they are resolved                                                                                                                                                                                                        | adding a setting, precedence, environment variable names, the log level            |
 | `src/http.rs`         | the router and its state, the `/api/v1` prefix, how the server is served and stopped                                                                                                                                                          | adding an endpoint, what a handler can reach, how shutdown works                   |
 | `src/logging.rs`      | the subscriber: log format and level                                                                                                                                                                                                          | log format, log level, RUST_LOG                                                    |
 | `src/store/`          | the relational store and its migrations; see its `AGENTS.md`                                                                                                                                                                                  | the database, migrations, tables                                                   |
-| `tests/admin.rs`      | end-to-end: a property over sequences of create-admin runs against a model                                                                                                                                                                    | what create-admin does with a new, a taken or an invalid name                      |
+| `src/superadmin.rs`   | the superadmin of `$tk`, reset from the console                                                                                                                                                                                               | the superadmin, recovering its password                                            |
 | `tests/cli.rs`        | end-to-end: runs the binary and checks its command line                                                                                                                                                                                       | how the binary behaves on the command line                                         |
 | `tests/common/mod.rs` | test helpers: the backends a run tests, test databases, a pool on one of them with placeholders rewritten, the router served in-process for integration tests, the binary started as a process for end-to-end tests, run migrate, GET a route | writing a server test; testing on every backend; which kind of server a test needs |
 | `tests/http.rs`       | integration tests of the endpoints on the router served in-process                                                                                                                                                                            | what the probes and the document promise                                           |
@@ -37,6 +38,7 @@ gets its own `AGENTS.md`, and this file indexes them.
 | `tests/settings.rs`   | end-to-end: the settings precedence as one property through the binary                                                                                                                                                                        | how precedence is tested                                                           |
 | `tests/shutdown.rs`   | end-to-end test that SIGTERM stops the binary                                                                                                                                                                                                 | how the server stops                                                               |
 | `tests/store.rs`      | end-to-end: runs migrate and serve against SQLite files                                                                                                                                                                                       | what migrate builds, which databases serve accepts                                 |
+| `tests/superadmin.rs` | end-to-end runs of reset-superadmin                                                                                                                                                                                                           | what reset-superadmin prints and stores                                            |
 
 **Invariants**:
 
@@ -121,7 +123,7 @@ then starts the server on `127.0.0.1:8080`; Ctrl-C stops it. A local serve
 needs a signing key: `signing_key = "<any passphrase of 32 or more
 characters>"` under `[auth]` in the file, or
 `TRAPPERKEEPER_AUTH__SIGNING_KEY` in the environment. `cargo run --
-create-admin leon` after migrate prints the admin's generated password once.
+reset-superadmin` after migrate prints the superadmin's one-time password.
 The tests run against SQLite, and also against Postgres and MariaDB when
 `TK_TEST_POSTGRES_URL` and `TK_TEST_MARIADB_URL` are set; see
 `src/store/AGENTS.md`, How to. `RUST_LOG=trapperkeeper_server=debug cargo run -- serve` is a debugging run; piping

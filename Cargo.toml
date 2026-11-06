@@ -26,8 +26,8 @@ all = { level = "deny", priority = -1 }
 pedantic = { level = "deny", priority = -1 }
 
 # Argon2id at 64 MiB and three passes takes about a second unoptimized and
-# tens of milliseconds optimized, and every create-admin run and login hashes
-# once. The dev profile optimizes that crate alone, so tests and local runs
-# pay the optimized cost.
+# tens of milliseconds optimized, and every reset-superadmin run and login
+# hashes once. The dev profile optimizes that crate alone, so tests and local
+# runs pay the optimized cost.
 [profile.dev.package.argon2]
 opt-level = 3

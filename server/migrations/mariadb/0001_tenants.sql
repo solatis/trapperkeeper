@@ -14,4 +14,4 @@ CREATE TABLE tenants (
 ) DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin;
 
 INSERT INTO tenants (tenant_id, tenant_name)
-VALUES ('00000000-0000-7000-8000-000000000000', 'default');
+VALUES ('00000000-0000-7000-8000-000000000000', '$tk');

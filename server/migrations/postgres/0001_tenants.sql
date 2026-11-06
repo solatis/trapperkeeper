@@ -9,4 +9,4 @@ CREATE TABLE tenants (
 CREATE UNIQUE INDEX tenants_live_name ON tenants (tenant_name) WHERE deleted_at IS NULL;
 
 INSERT INTO tenants (tenant_id, tenant_name)
-VALUES ('00000000-0000-7000-8000-000000000000', 'default');
+VALUES ('00000000-0000-7000-8000-000000000000', '$tk');

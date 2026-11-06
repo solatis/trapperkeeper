@@ -1,5 +1,5 @@
 //! Helpers for the server tests: test databases on each backend, a pool on
-//! one of them, the router served in this process with an admin and a
+//! one of them, the router served in this process with its superadmin and a
 //! keyring, the binary started as a process, and HTTP requests.
 
 // Each test crate compiles this module and uses only part of it.
@@ -24,7 +24,7 @@ use sqlx::mysql::MySql;
 use sqlx::postgres::Postgres;
 use sqlx::sqlite::Sqlite;
 use trapperkeeper_server::{
-    AppState, Keyring, apply_migrations, create_admin, create_store, router,
+    AppState, Keyring, apply_migrations, create_store, reset_superadmin, router,
 };
 use url::Url;
 
@@ -39,12 +39,14 @@ pub const TEST_KEY: &str = "the test signing passphrase of trapperkeeper";
 /// A second passphrase, for the rotation cases.
 pub const TEST_PREVIOUS_KEY: &str = "the previous test signing passphrase of trapperkeeper";
 
-/// The name of the admin every in-process server seeds.
+/// The system tenant's name, which every in-process login names.
+pub const SYSTEM_TENANT: &str = "$tk";
+
+/// The superadmin every in-process server seeds.
 pub const ADMIN: &str = "admin";
 
-/// The name of the tenant the in-process admin belongs to, which every
-/// in-process login names.
-pub const TENANT: &str = "default";
+/// The id of the system tenant, as the first migration seeds it.
+pub const SYSTEM_TENANT_ID: &str = "00000000-0000-7000-8000-000000000000";
 
 /// Numbers the scratch directories of this process.
 static SCRATCH: AtomicU32 = AtomicU32::new(0);
@@ -276,7 +278,7 @@ pub fn placeholders(backend: Backend, statement: &'static str) -> String {
 }
 
 /// The production router on a freshly migrated database of its own on one
-/// backend, with the admin `ADMIN` seeded and the keys derived from
+/// backend, with the superadmin `ADMIN` seeded and the keys derived from
 /// `TEST_KEY`, served in this process on `addr`. Dropping it stops the server
 /// and then drops the database.
 pub struct InProcess {
@@ -303,7 +305,7 @@ impl InProcess {
 /// cannot be created, migrated or seeded.
 pub fn serve_in_process(backend: Backend) -> InProcess {
     // 1. create and migrate a database of its own through the library, seed
-    //    the admin, and derive the keys
+    //    the superadmin, and derive the keys
     // 2. bind a listener on port 0 and keep it
     // 3. serve the router on that listener, on a runtime the value owns
 
@@ -321,9 +323,9 @@ pub fn serve_in_process(backend: Backend) -> InProcess {
         apply_migrations(&store)
             .await
             .expect("the migrations apply");
-        let password = create_admin(&store, ADMIN)
+        let password = reset_superadmin(&store)
             .await
-            .expect("the admin is created");
+            .expect("the superadmin is created");
         let keyring = Keyring::from_store(&store, TEST_KEY, None)
             .await
             .expect("the keys derive");

@@ -13,9 +13,8 @@ CREATE TABLE roles (
 
 CREATE UNIQUE INDEX roles_live_name ON roles (tenant_id, role_name) WHERE deleted_at IS NULL;
 
--- Fixed ids, version 7 UUIDs with an all-zero timestamp like the default
--- tenant's, so code and tests can name them.
+-- The system tenant holds the superadmin role and nothing else. A fixed id, a
+-- version 7 UUID with an all-zero timestamp like the system tenant's, so code
+-- and tests can name it.
 INSERT INTO roles (role_id, tenant_id, role_name, role_title) VALUES
-    ('00000000-0000-7000-8000-000000000001', '00000000-0000-7000-8000-000000000000', 'admin', 'Admin'),
-    ('00000000-0000-7000-8000-000000000002', '00000000-0000-7000-8000-000000000000', 'operator', 'Operator'),
-    ('00000000-0000-7000-8000-000000000003', '00000000-0000-7000-8000-000000000000', 'observer', 'Observer');
+    ('00000000-0000-7000-8000-000000000001', '00000000-0000-7000-8000-000000000000', 'superadmin', 'Superadmin');

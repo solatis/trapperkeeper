@@ -20,8 +20,8 @@ unauthenticated and each hash holds 64 MiB while it runs (owner, 2026-11-05).
 Hashing runs on a blocking thread (`doc/adr/0014`).
 
 A generated password is 16 random ASCII letters and digits, about 95 bits,
-printed once by `create-admin`, and the user's must-change flag is set so the
-UI asks for a new one at the first login. The flag restricts nothing (owner,
+shown once to the person who receives it (`doc/adr/0028`), and the user's
+must-change flag is set so the UI asks for a new one at the first login. The flag restricts nothing (owner,
 2026-11-05).
 
 ## Rejected alternatives

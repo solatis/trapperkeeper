@@ -8,9 +8,6 @@ use uuid::Uuid;
 
 use super::{Tx, now_micros, on_tx, sql};
 
-/// The `role_name` of the admin role the migration seeds for every tenant.
-pub const ADMIN_ROLE: &str = "admin";
-
 /// A live user, as read with its role's name.
 #[derive(FromRow, Debug, Clone)]
 pub struct User {
@@ -120,6 +117,26 @@ pub async fn create(tx: &mut Tx, new: NewUser<'_>) -> Result<(), CreateError> {
     Ok(())
 }
 
+/// The live user named `user_name` in `tenant_id`, or `None`.
+///
+/// # Errors
+///
+/// Fails when the database cannot be read.
+pub async fn find(
+    tx: &mut Tx,
+    tenant_id: &str,
+    user_name: &str,
+) -> Result<Option<User>, sqlx::Error> {
+    let select = sql(tx, concat!(SELECT_USER!(), " AND u.user_name = $2"));
+    on_tx!(tx, |conn| {
+        sqlx::query_as(AssertSqlSafe(select))
+            .bind(tenant_id)
+            .bind(user_name)
+            .fetch_optional(conn)
+            .await
+    })
+}
+
 /// The live user named `user_name` in the live tenant named `tenant_name`, or
 /// `None`.
 ///
@@ -205,11 +222,13 @@ pub struct PasswordSet<'a> {
     pub tenant_id: &'a str,
     pub user_id: &'a str,
     pub password_hash: &'a str,
+    /// Whether the user must change the password at the next login.
+    pub must_change: bool,
     /// The new `tokens_valid_after`.
     pub now: i64,
 }
 
-/// Replaces the user's password hash, clears the must-change flag, and sets
+/// Replaces the user's password hash, sets the must-change flag, and sets
 /// `tokens_valid_after` to `now`.
 ///
 /// # Errors
@@ -224,7 +243,7 @@ pub async fn set_password(tx: &mut Tx, change: PasswordSet<'_>) -> Result<(), sq
     on_tx!(tx, |conn| {
         sqlx::query(AssertSqlSafe(update))
             .bind(change.password_hash)
-            .bind(false)
+            .bind(change.must_change)
             .bind(change.now)
             .bind(change.tenant_id)
             .bind(change.user_id)
