@@ -5,10 +5,12 @@
 mod common;
 
 use common::{
-    ADMIN, InProcess, Response, SYSTEM_TENANT, on_each_backend, request, serve_in_process,
+    ADMIN, InProcess, Response, SYSTEM_TENANT, block_on, on_each_backend, on_pool, request,
+    serve_in_process,
 };
 use proptest::prelude::*;
 use serde_json::{Value, json};
+use trapperkeeper_server::{NewAccount, create_account};
 
 /// Logs in to `tenant` as `name` with `password`, and returns the access
 /// token and whether the password must change. Panics when the login fails.
@@ -171,4 +173,98 @@ proptest! {
             prop_assert_eq!(created["admin"].as_str(), Some(lower_admin.as_str()));
         }
     }
+}
+
+/// The rank of each role on the ladder, lowest first, and `None` for a role
+/// that is not on it.
+fn rank(role: &str) -> Option<u8> {
+    ["observer", "operator", "admin", "superadmin"]
+        .iter()
+        .position(|r| *r == role)
+        .map(|p| u8::try_from(p).expect("four roles"))
+}
+
+/// Every route that checks a role, with its minimum, and the routes of the
+/// caller's own account, with `None`. Logout comes last, because it revokes
+/// the token every route before it uses.
+const ROUTES: [(&str, &str, Option<&str>); 4] = [
+    ("GET", "/api/v1/tenants", Some("superadmin")),
+    ("POST", "/api/v1/tenants", Some("superadmin")),
+    ("GET", "/api/v1/me", None),
+    ("POST", "/api/v1/logout", None),
+];
+
+/// Every role, plus a role that is not on the ladder, against every route:
+/// 403 exactly when the role ranks below the route's minimum, and the routes
+/// of the caller's own account answer every role.
+#[test]
+fn every_role_meets_each_route_minimum() {
+    // The roles and routes are a small fixed set, so the test covers every
+    // pair instead of sampling them (doc/adr/0018).
+    on_each_backend(|backend| {
+        let server = serve_in_process(backend);
+        let token = superadmin_token(&server);
+        let new = json!({ "name": "acme", "title": "Acme", "admin": "ada@example.com" });
+        let response = call(&server, &token, "POST", "/api/v1/tenants", Some(&new));
+        assert_eq!(response.status, 201, "{} on {backend}", response.body);
+        let tenant_id: String = on_pool!(server.database(), |pool| {
+            sqlx::query_scalar("SELECT tenant_id FROM tenants WHERE tenant_name = 'acme'")
+                .fetch_one(&pool)
+                .await
+                .expect("the tenant is read")
+        });
+        // Inserted through sqlx, because no route creates roles.
+        on_pool!(server.database(), |pool| {
+            let insert = common::placeholders(
+                backend,
+                "INSERT INTO roles (role_id, tenant_id, role_name, role_title) \
+                 VALUES ('00000000-0000-7000-8000-0000000000aa', $1, 'auditor', 'Auditor')",
+            );
+            sqlx::query(sqlx::AssertSqlSafe(insert))
+                .bind(&tenant_id)
+                .execute(&pool)
+                .await
+                .expect("the role is inserted");
+        });
+
+        let mut callers = vec![("superadmin", token)];
+        for role in ["admin", "operator", "observer", "auditor"] {
+            let name = format!("{role}@example.com");
+            let password = block_on(async {
+                let mut tx = server.store.begin().await.expect("a transaction");
+                let password = create_account(
+                    &mut tx,
+                    NewAccount {
+                        tenant_id: &tenant_id,
+                        name: &name,
+                        role_name: role,
+                    },
+                )
+                .await
+                .expect("the user is created");
+                tx.commit().await.expect("the user is committed");
+                password
+            });
+            callers.push((role, log_in(&server, "acme", &name, &password).0));
+        }
+
+        for (role, token) in &callers {
+            for (n, (method, path, minimum)) in ROUTES.iter().enumerate() {
+                // Each create names a tenant of its own, so a permitted one
+                // succeeds.
+                let body =
+                    json!({ "name": format!("t{n}-{role}"), "title": "T", "admin": "a@b.io" });
+                let body = (*method == "POST" && path.ends_with("tenants")).then_some(&body);
+                let response = call(&server, token, method, path, body);
+                let below = minimum.is_some_and(|m| rank(role).is_none_or(|r| Some(r) < rank(m)));
+                let context = format!("{role} on {method} {path} on {backend}: {}", response.body);
+                if below {
+                    assert_eq!(response.status, 403, "{context}");
+                    assert_eq!(response.body, "forbidden", "{context}");
+                } else {
+                    assert!((200..300).contains(&response.status), "{context}");
+                }
+            }
+        }
+    });
 }

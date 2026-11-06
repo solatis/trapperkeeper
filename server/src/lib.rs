@@ -1,6 +1,6 @@
 //! The server behind the `trapperkeeper` binary. The binary calls `run`, and
-//! tests reach the router, the store, the keyring and the superadmin through
-//! the items exported here.
+//! tests reach the router, the store, the keyring, the superadmin and the
+//! creation of users through the items exported here.
 
 mod accounts;
 mod auth;
@@ -14,8 +14,10 @@ mod superadmin;
 mod tenants;
 
 // The integration tests build a migrated store with its superadmin, derive a
-// keyring from it, serve the router on a listener they bound, and mint tokens
-// of their own. Nothing else in the crate is part of its interface.
+// keyring from it, serve the router on a listener they bound, create users
+// of any role, and mint tokens of their own. Nothing else in the crate is
+// part of its interface.
+pub use accounts::{NewAccount, create as create_account};
 pub use auth::token::{Claims, Keyring, Kind};
 pub use http::{AppState, router};
 pub use store::migrate::apply as apply_migrations;
