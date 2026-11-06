@@ -17,7 +17,7 @@ dropped.
 | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | `0001-management-api-is-the-single-write-path.md`                 | every write that is not an event goes through one API                                                        |
 | `0002-ai-agent-is-an-external-client.md`                          | the agent is a client with its own principal and manages rules only                                          |
-| `0003-tenant-aware-model-single-tenant-operation.md`              | everything carries a tenant id, one default tenant ships                                                     |
+| `0003-tenants-share-one-database.md`                              | hosted and self-hosted tenants share one database; everything carries a tenant id; a login names its tenant  |
 | `0004-events-embed-rule-snapshots.md`                             | an event carries the rule as it was evaluated                                                                |
 | `0005-one-vocabulary-for-failure-behavior.md`                     | pass-through, halt, cached per sensor; skip, match, fail per condition                                       |
 | `0006-conformance-fixtures-are-the-evaluation-spec.md`            | fixtures, not prose, define evaluation                                                                       |

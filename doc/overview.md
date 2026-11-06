@@ -49,7 +49,7 @@ evaluation.
 | Metadata   | Key-value context on events. A reserved prefix carries system context (SDK type and version, scheduler and orchestrator identifiers); rest is user-defined.            |
 | Operator   | Human managing rules. Roles: admin, operator, observer.                                                                                                                |
 | Principal  | Anything that authenticates to the management API: a human, a CLI credential, the AI agent.                                                                            |
-| Tenant     | Owner of rules, keys, users and events. See `adr/0003`.                                                                                                                |
+| Tenant     | Owner of rules, keys, users and events. A hosted install holds many tenants, a self-hosted install usually one. See `adr/0003`.                                        |
 | Id         | An entity's internal identifier, `<entity>_id`: a time-ordered UUID the server generates. Used in logs and references, never typed or shown to people. See `adr/0020`. |
 | Name       | What people type and address an entity by, `<entity>_name`: lowercase, unique in its scope (a tenant's name globally, a user's within its tenant). See `adr/0020`.     |
 | Title      | A user-friendly display name, `<entity>_title`, such as `role_title`. Keeps its case; not an identifier. See `adr/0020`.                                               |

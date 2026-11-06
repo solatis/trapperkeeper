@@ -75,6 +75,9 @@ gets its own `AGENTS.md`, and this file indexes them.
 
 **Why**:
 
+- Tenants of a hosted and of a self-hosted install share one database, and
+  a login names its tenant (owner, 2026-11-06):
+  `doc/adr/0003-tenants-share-one-database.md`.
 - The package and the binary have different names; the reason sits at
   `[[bin]]` in `Cargo.toml`.
 - clap parses the command line and figment merges the settings layers:
