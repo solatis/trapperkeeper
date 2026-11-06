@@ -27,8 +27,17 @@ use trapperkeeper_server::{Keyring, Kind};
 /// wrong password and an unknown name get the same refusal.
 #[test]
 fn login_then_me() {
+    // 1. log in with the tenant and the name in upper case
+    // 2. check the body and the two cookies
+    // 3. read me with the bearer header, then with the cookie alone
+    // 4. refresh with the refresh cookie alone
+    // 5. read me with no token
+    // 6. try four logins that must fail
     on_each_backend(|backend| {
         let server = serve_in_process(backend);
+
+        // 1. Upper case, so the test sees that login lowercases the tenant
+        //    and the name before it looks them up (doc/adr/0020).
         let response = log_in(
             &server,
             &SYSTEM_TENANT.to_uppercase(),
@@ -36,6 +45,10 @@ fn login_then_me() {
             &server.admin_password,
         );
         assert_eq!(response.status, 200, "{}", response.body);
+
+        // 2. The lifetimes are the access token's hour and the refresh
+        //    token's week, and the superadmin's generated password must
+        //    change.
         let login: Value = serde_json::from_str(&response.body).expect("a JSON body");
         assert_eq!(login["token_type"], "Bearer");
         assert_eq!(login["expires_in"], 3600);
@@ -61,6 +74,8 @@ fn login_then_me() {
             "Max-Age=604800",
         );
 
+        // 3. The CLI sends the header and the browser sends the cookie, so
+        //    each one alone must authenticate.
         let bearer = format!("Bearer {token}");
         let response = me(&server, &[("Authorization", &bearer)]);
         assert_eq!(response.status, 200, "{}", response.body);
@@ -72,7 +87,7 @@ fn login_then_me() {
         let cookie = format!("tk_access={token}");
         assert_eq!(me(&server, &[("Cookie", &cookie)]).status, 200);
 
-        // The refresh cookie alone yields a new access token that works.
+        // 4. The refresh cookie alone yields a new access token that works.
         let cookie = format!("tk_refresh={refresh}");
         let response = request(
             server.addr,
@@ -87,12 +102,15 @@ fn login_then_me() {
         let bearer = format!("Bearer {fresh}");
         assert_eq!(me(&server, &[("Authorization", &bearer)]).status, 200);
 
+        // 5. A request with no token gets the 401 that asks for a bearer
+        //    token (RFC 6750, 3).
         let response = me(&server, &[]);
         assert_eq!(response.status, 401);
         assert_eq!(response.header_values("www-authenticate"), ["Bearer"]);
 
-        // A second tenant, inserted through sqlx because no route creates
-        // tenants, so the superadmin's credentials are refused under its name.
+        // 6. A second tenant, inserted through sqlx because no route creates
+        //    tenants, so the superadmin's credentials are refused under its
+        //    name.
         on_pool!(server.database(), |pool| {
             sqlx::query(
                 "INSERT INTO tenants (tenant_id, tenant_name) \
@@ -102,6 +120,9 @@ fn login_then_me() {
             .await
             .expect("the tenant is inserted");
         });
+        // An unknown tenant, another tenant, a wrong password and an unknown
+        // name. All four get the same body, so a response does not say which
+        // part was wrong.
         let password = server.admin_password.as_str();
         for (tenant, name, password) in [
             ("nowhere", ADMIN, password),

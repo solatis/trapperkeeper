@@ -77,9 +77,14 @@ fn tracked_versions(database: &TestDatabase) -> Vec<i64> {
 /// and logs no password. serve accepts the result.
 #[test]
 fn migrate_builds_a_database_that_serve_accepts() {
+    // 1. migrate a missing database and read what it built
+    // 2. migrate again
+    // 3. start serve on the result
     on_each_backend(|backend| {
         let database = TestDatabase::fresh(backend);
 
+        // 1. The first migrate is the one that creates the superadmin, so its
+        //    stdout holds exactly one password event.
         let out = run_migrate(&database.url);
         let first = applied_count(&out);
         let passwords = created_passwords(&stdout_lines(&out));
@@ -103,6 +108,7 @@ fn migrate_builds_a_database_that_serve_accepts() {
             .await
             .expect("the roles are read")
         });
+        // Every migration the tracking table lists ran in this migrate.
         assert!(first > 0);
         assert_eq!(
             usize::try_from(first).expect("a small count"),
@@ -125,14 +131,19 @@ fn migrate_builds_a_database_that_serve_accepts() {
                     .expect("the salt is read")
             })
         };
+        // 16 random bytes as hex.
         let first_salt = salt();
         assert_eq!(first_salt.len(), 32);
 
+        // 2. A second migrate changes nothing: the salt stays, because the
+        //    keys derived from it would change, and the superadmin exists,
+        //    so no second password is logged.
         let out = run_migrate(&database.url);
         assert_eq!(applied_count(&out), 0);
         assert_eq!(created_passwords(&stdout_lines(&out)), Vec::<String>::new());
         assert_eq!(salt(), first_salt);
 
+        // 3.
         let Launch::Listening(server) = launch(&["--database-url", &database.url]) else {
             panic!("serve refused the database migrate built");
         };
@@ -333,6 +344,8 @@ proptest! {
     /// versions and says what to do.
     #[test]
     fn serve_accepts_only_a_matching_database(state in database_state()) {
+        // `build` makes the database the state describes, and `expected` is
+        // the model of what serve must do with it.
         for backend in backends() {
             let database = TestDatabase::fresh(backend);
             build(&state, &database);
@@ -353,6 +366,8 @@ proptest! {
                     }
                 }
             }
+            // A missing database is created by serve itself, which the exit
+            // status alone does not show.
             if matches!(state, State::Absent) {
                 prop_assert!(database.exists(), "serve did not create the database on {backend}");
             }
@@ -366,7 +381,12 @@ proptest! {
 /// serve on the same database logs no such line.
 #[test]
 fn first_serve_sets_up_the_database() {
+    // 1. start serve on a missing database
+    // 2. log in with the password it logged
+    // 3. start serve again on the same database
     on_each_backend(|backend| {
+        // 1. `startup` holds the lines up to "listening", so the password
+        //    event is logged before the server takes requests.
         let database = TestDatabase::fresh(backend);
         let Launch::Listening(server) = launch(&["--database-url", &database.url]) else {
             panic!("serve refused a missing database on {backend}");
@@ -374,8 +394,8 @@ fn first_serve_sets_up_the_database() {
         let passwords = created_passwords(&server.startup);
         assert_eq!(passwords.len(), 1, "{passwords:?} on {backend}");
         assert!(generated(&passwords[0]), "{passwords:?} on {backend}");
-        // The in-process helpers do not apply to a process, so the login goes
-        // over HTTP to it.
+        // 2. The in-process helpers do not apply to a process, so the login
+        //    goes over HTTP to it.
         let credentials =
             json!({ "tenant": SYSTEM_TENANT, "name": ADMIN, "password": passwords[0] });
         let response = request(
@@ -388,6 +408,7 @@ fn first_serve_sets_up_the_database() {
         assert_eq!(response.status, 200, "{} on {backend}", response.body);
         drop(server);
 
+        // 3. The superadmin exists now, so this start logs no password.
         let Launch::Listening(server) = launch(&["--database-url", &database.url]) else {
             panic!("serve refused the database it set up on {backend}");
         };

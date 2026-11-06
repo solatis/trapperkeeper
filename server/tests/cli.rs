@@ -98,6 +98,9 @@ fn serve_refuses_without_a_signing_key() {
     let scratch = Scratch::create();
     let migrated = scratch.sqlite_url("store.db");
     assert!(common::run_migrate(&migrated).status.success());
+    // On a missing database, serve would otherwise set it up and create a
+    // superadmin whose password nobody sees, so the key check must come
+    // first.
     let missing = scratch.sqlite_url("missing.db");
     for url in [&migrated, &missing] {
         let out = Command::new(env!("CARGO_BIN_EXE_trapperkeeper"))
@@ -108,6 +111,8 @@ fn serve_refuses_without_a_signing_key() {
         assert_eq!(out.status.code(), Some(1), "{url}");
         assert!(stderr(&out).contains("auth.signing_key"), "{url}");
     }
+    // The file's absence shows that serve refused before it touched the
+    // database.
     assert!(!scratch.path.join("missing.db").exists());
 }
 

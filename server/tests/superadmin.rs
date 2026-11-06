@@ -95,7 +95,13 @@ fn reset_and_check(database: &TestDatabase) -> (String, i64) {
 #[test]
 fn reset_superadmin_sets_a_new_one_time_password() {
     // A scenario, because no input varies (doc/adr/0018).
+    //
+    // 1. run reset-superadmin on a missing database
+    // 2. migrate, which creates the superadmin, then reset twice
+    // 3. delete the superadmin and reset once more
     on_each_backend(|backend| {
+        // 1. reset-superadmin never creates a database, so it refuses and
+        //    names the commands that set one up.
         let database = TestDatabase::fresh(backend);
         let out = reset_superadmin(&database.url);
         assert_eq!(
@@ -109,6 +115,9 @@ fn reset_superadmin_sets_a_new_one_time_password() {
             "{stderr:?} on {backend}"
         );
 
+        // 2. Each reset must replace the hash and move the cutoff, so the
+        //    password migrate logged and every token issued before stop
+        //    working.
         migrate_database(&database);
         let (_, _, created_hash, created_valid_after) =
             stored(&database).expect("migrate created the superadmin");
@@ -126,6 +135,8 @@ fn reset_superadmin_sets_a_new_one_time_password() {
             "the cutoff stayed on {backend}"
         );
 
+        // 3. The missing-superadmin branch, which recovers a first run that
+        //    stopped before the superadmin existed.
         delete(&database);
         reset_and_check(&database);
     });
