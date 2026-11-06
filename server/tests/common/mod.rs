@@ -147,8 +147,8 @@ pub fn on_each_backend(body: impl Fn(Backend)) {
 static DATABASE: AtomicU32 = AtomicU32::new(0);
 
 /// A database URL of its own for one test, on one backend. Nothing exists at
-/// the URL until migrate creates it, and whatever exists is dropped with the
-/// value.
+/// the URL until migrate or serve creates it, and whatever exists is dropped
+/// with the value.
 pub struct TestDatabase {
     pub backend: Backend,
     pub url: String,
@@ -505,7 +505,6 @@ fn stderr_of(child: &mut Child) -> String {
 /// `backend`, and returns the listening server. Panics when the server exits
 /// before listening.
 pub fn spawn_server(backend: Backend, extra_args: &[&str]) -> Server {
-    // serve refuses a database that migrate has not built.
     let database = TestDatabase::fresh(backend);
     migrate_database(&database);
     let mut args = vec!["--database-url", database.url.as_str()];
