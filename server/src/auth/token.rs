@@ -131,18 +131,34 @@ impl Keyring {
         signing: &str,
         previous: Option<&str>,
     ) -> Result<Self, KeyringError> {
+        // 1. read the salt
+        // 2. derive the signing key
+        // 3. derive the previous key, when one is set
+        // 4. assemble the ring
+
+        // 1. A transaction of its own, because store functions take one and
+        //    nothing else is read. A missing salt means migrate never ran.
         let salt = {
             let mut tx = store.begin().await?;
             installation::salt(&mut tx).await?
         }
         .ok_or(KeyringError::NoSalt)?;
+
+        // 2. The signing key checks as well as signs, so it goes into the
+        //    checking keys under its id.
         let (signing_kid, signing_key) = derive(signing.to_owned(), salt.clone()).await;
         let mut checking = HashMap::new();
         checking.insert(signing_kid.clone(), DecodingKey::from_secret(&signing_key));
+
+        // 3. The previous key only checks, so the tokens it signed stay valid
+        //    until they expire.
         if let Some(previous) = previous {
             let (kid, key) = derive(previous.to_owned(), salt).await;
             checking.insert(kid, DecodingKey::from_secret(&key));
         }
+
+        // 4. The same bytes serve as the encoding key and as a decoding key,
+        //    because HS256 is symmetric.
         Ok(Self {
             signing_kid,
             signing: EncodingKey::from_secret(&signing_key),
