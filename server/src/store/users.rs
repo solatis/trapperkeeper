@@ -276,6 +276,34 @@ pub async fn find_in(
     })
 }
 
+/// The id of the user named `user_name` in `tenant_id`, deleted or not: the
+/// live one when there is one, else the most recently created, or `None`.
+///
+/// # Errors
+///
+/// Fails when the database cannot be read.
+pub async fn find_id_any(
+    tx: &mut Tx,
+    tenant_id: &str,
+    user_name: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    // Deleted users count, because the audit trail of one is still asked
+    // for, and a name is reused after a delete, so the live user comes first
+    // (doc/adr/0024).
+    let select = sql(
+        tx,
+        "SELECT user_id FROM users WHERE tenant_id = $1 AND user_name = $2 \
+         ORDER BY (deleted_at IS NULL) DESC, created_at DESC LIMIT 1",
+    );
+    on_tx!(tx, |conn| {
+        sqlx::query_scalar(AssertSqlSafe(select))
+            .bind(tenant_id)
+            .bind(user_name)
+            .fetch_optional(conn)
+            .await
+    })
+}
+
 /// The live user with id `user_id` in `tenant_id`, or `None`.
 ///
 /// # Errors

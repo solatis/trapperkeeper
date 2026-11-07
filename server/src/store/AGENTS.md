@@ -9,7 +9,7 @@ event log is a separate store, whose engine is still open (see
 
 | File                         | What                                                                             | When to read                                                                |
 | ---------------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| `audit.rs`                   | appending to the audit trail                                                     | the trail's columns                                                         |
+| `audit.rs`                   | appending to and paging the audit trail                                          | the trail's columns, the cursor, the user join                              |
 | `mod.rs`                     | choosing the backend, opening the store, transactions                            | which URL schemes work; whether a database exists; `Tx`; placeholders       |
 | `migrate.rs`                 | the embedded migrations: apply, check                                            | what makes serve refuse, what each refusal means, what an empty database is |
 | `tenants.rs`                 | tenants and their roles; finding a tenant by name; whether a tenant holds a role | creating a tenant with its roles, listing tenants                           |

@@ -1,22 +1,30 @@
 //! The audit trail: the middleware that records every changing request under
-//! `/api/v1` once the handler has answered, and the identity cell the handler
-//! side fills with the caller and the tenant acted on
-//! (doc/adr/0031-audit-trail.md).
+//! `/api/v1` once the handler has answered, the identity cell the handler
+//! side fills with the caller and the tenant acted on, and the admin's read
+//! route (doc/adr/0031-audit-trail.md).
 
 use std::convert::Infallible;
 use std::future::ready;
 use std::net::SocketAddr;
 use std::sync::{Arc, OnceLock};
 
-use axum::extract::{ConnectInfo, FromRequestParts, MatchedPath, RawPathParams, Request, State};
+use axum::Json;
+use axum::extract::{
+    ConnectInfo, FromRequestParts, MatchedPath, Path, Query, RawPathParams, Request, State,
+};
 use axum::http::Method;
 use axum::http::request::Parts;
 use axum::middleware::Next;
-use axum::response::Response;
+use axum::response::{IntoResponse, Response};
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
+use utoipa::{IntoParams, ToSchema};
 
+use crate::auth::role::{self, AtLeast};
 use crate::http::{API_PREFIX, AppState};
-use crate::store::audit::{self, Record};
+use crate::scope;
+use crate::store::audit::{self, Record, Row};
+use crate::store::users;
 
 /// Who a request turned out to be from, and which tenant it acted on, filled
 /// by the handler side once it knows.
@@ -163,4 +171,109 @@ fn params_json(params: Option<&RawPathParams>) -> String {
         .map(|(name, value)| (name.to_owned(), Value::String(value.to_owned())))
         .collect();
     Value::Object(object).to_string()
+}
+
+/// A row of the trail as the API shows it.
+#[derive(Serialize, ToSchema)]
+pub struct AuditView {
+    /// The row's id, which is the `before` cursor of the next page.
+    id: String,
+    /// Epoch microseconds in UTC.
+    recorded_at: i64,
+    /// The caller's name, or null for an anonymous request.
+    user: Option<String>,
+    /// The caller's own tenant, which is `$tk` when the superadmin acted on
+    /// this tenant.
+    user_tenant: Option<String>,
+    method: String,
+    /// The matched route template.
+    route: String,
+    path_params: Value,
+    status: i32,
+    peer_address: String,
+    client_address: String,
+}
+
+/// `row` as the API shows it.
+fn view(row: Row) -> AuditView {
+    AuditView {
+        id: row.id,
+        recorded_at: row.recorded_at,
+        user: row.user_name,
+        user_tenant: row.user_tenant,
+        method: row.method,
+        route: row.route,
+        // Stored as the JSON the middleware wrote, so it parses.
+        path_params: serde_json::from_str(&row.path_params).unwrap_or(Value::Null),
+        status: row.status,
+        peer_address: row.peer_address,
+        client_address: row.client_address,
+    }
+}
+
+/// The page asked for, and the user to narrow it to.
+#[derive(Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+pub struct Page {
+    /// The name of the user whose rows alone are listed.
+    user: Option<String>,
+    /// The id of the last row seen; the page holds the rows before it.
+    before: Option<String>,
+    /// How many rows at most: 100 by default, 1000 at most.
+    limit: Option<u32>,
+}
+
+/// Lists the tenant's trail, newest first. Needs admin of that tenant, or
+/// superadmin. `user` narrows it to one user's name, `before` is the id of
+/// the last row seen, and `limit` defaults to 100 and is capped at 1000.
+#[utoipa::path(
+    get,
+    path = "/tenants/{tenant}/audit",
+    params(("tenant" = String, Path, description = "the tenant's name"), Page),
+    security(("bearer" = [])),
+    responses(
+        (status = OK, description = "the rows, newest first", body = Vec<AuditView>),
+        (status = UNAUTHORIZED, description = "no valid access token", body = String),
+        (status = FORBIDDEN, description = "the caller is below admin, or of another tenant", body = String),
+        (status = NOT_FOUND, description = "no such tenant", body = String)
+    )
+)]
+pub async fn list(
+    caller: AtLeast<role::Admin>,
+    State(state): State<AppState>,
+    Path(tenant): Path<String>,
+    Query(page): Query<Page>,
+) -> Response {
+    // 1000 rows bounds one response, and is no policy: a client pages.
+    let limit = page.limit.unwrap_or(100).min(1000);
+    let listed = async {
+        let mut tx = state.store.begin().await?;
+        let scope = scope::resolve(&mut tx, &caller.user, &caller.identity, &tenant).await?;
+        // The name is looked up among deleted users too, because the trail
+        // of a deleted user is still asked for; an unknown name is an empty
+        // page.
+        let user_id = match &page.user {
+            Some(name) => {
+                match users::find_id_any(&mut tx, &scope.tenant.id, &name.to_lowercase()).await? {
+                    Some(user_id) => Some(user_id),
+                    None => return Ok(Vec::new()),
+                }
+            }
+            None => None,
+        };
+        let rows = audit::page(
+            &mut tx,
+            &scope.tenant.id,
+            user_id.as_deref(),
+            page.before.as_deref(),
+            limit,
+        )
+        .await?;
+        Ok::<_, scope::Refused>(rows)
+    }
+    .await;
+    match listed {
+        Ok(rows) => Json(rows.into_iter().map(view).collect::<Vec<_>>()).into_response(),
+        Err(refused) => refused.into_response(),
+    }
 }
