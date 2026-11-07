@@ -159,7 +159,7 @@ fn rank(role: &str) -> Option<u8> {
 /// any caller and allows the target itself; its minimum for another user's
 /// name is admin. Logout comes last, because it revokes the token every route
 /// before it uses.
-const ROUTES: [(&str, &str, Option<&str>); 10] = [
+const ROUTES: [(&str, &str, Option<&str>); 11] = [
     ("GET", "/api/v1/tenants", Some("superadmin")),
     ("POST", "/api/v1/tenants", Some("superadmin")),
     ("GET", "/api/v1/tenants/acme/users", Some("admin")),
@@ -185,6 +185,7 @@ const ROUTES: [(&str, &str, Option<&str>); 10] = [
         "/api/v1/tenants/acme/users/admin@example.com/session",
         Some("superadmin"),
     ),
+    ("GET", "/api/v1/tenants/acme/audit", Some("admin")),
     ("GET", "/api/v1/me", None),
     ("POST", "/api/v1/logout", None),
 ];
