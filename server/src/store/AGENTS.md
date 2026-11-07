@@ -7,15 +7,15 @@ event log is a separate store, whose engine is still open (see
 
 **Map**:
 
-| File                         | What                                                  | When to read                                                                |
-| ---------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------- |
-| `mod.rs`                     | choosing the backend, opening the store, transactions | which URL schemes work; whether a database exists; `Tx`; placeholders       |
-| `migrate.rs`                 | the embedded migrations: apply, check                 | what makes serve refuse, what each refusal means, what an empty database is |
-| `tenants.rs`                 | tenants and their roles                               | creating a tenant with its roles, listing tenants                           |
-| `users.rs`                   | creating a user with one of its tenant's roles        | the users table, the role subselect                                         |
-| `../../migrations/sqlite/`   | the SQLite migration files, one per version           | adding a table                                                              |
-| `../../migrations/postgres/` | the Postgres migration files                          | adding a table                                                              |
-| `../../migrations/mariadb/`  | the MariaDB migration files                           | adding a table                                                              |
+| File                         | What                                                                             | When to read                                                                |
+| ---------------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `mod.rs`                     | choosing the backend, opening the store, transactions                            | which URL schemes work; whether a database exists; `Tx`; placeholders       |
+| `migrate.rs`                 | the embedded migrations: apply, check                                            | what makes serve refuse, what each refusal means, what an empty database is |
+| `tenants.rs`                 | tenants and their roles; finding a tenant by name; whether a tenant holds a role | creating a tenant with its roles, listing tenants                           |
+| `users.rs`                   | creating, listing, finding, re-roling and deleting a user; the live-admin count  | the users table, the role subselect, the soft delete                        |
+| `../../migrations/sqlite/`   | the SQLite migration files, one per version                                      | adding a table                                                              |
+| `../../migrations/postgres/` | the Postgres migration files                                                     | adding a table                                                              |
+| `../../migrations/mariadb/`  | the MariaDB migration files                                                      | adding a table                                                              |
 
 **Invariants**:
 

@@ -1,6 +1,7 @@
 //! The role ladder: observer, operator, admin and superadmin, each above the
 //! one before, and the extractor that holds a route to a minimum role
-//! (doc/adr/0029-role-ladder.md).
+//! (doc/adr/0029-role-ladder.md). The rungs that exist as types, `Admin` and
+//! `Superadmin`, are the minimums routes name.
 
 use std::marker::PhantomData;
 
@@ -9,6 +10,7 @@ use axum::http::request::Parts;
 
 use crate::auth::caller::{Caller, Refusal};
 use crate::http::AppState;
+use crate::store::users::User;
 
 /// A rung of the ladder. The order of the variants is the ranking.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -41,6 +43,13 @@ pub trait Rung {
     const RANK: Rank;
 }
 
+/// The admin's rung.
+pub struct Admin;
+
+impl Rung for Admin {
+    const RANK: Rank = Rank::Admin;
+}
+
 /// The superadmin's rung.
 pub struct Superadmin;
 
@@ -48,8 +57,10 @@ impl Rung for Superadmin {
     const RANK: Rank = Rank::Superadmin;
 }
 
-/// Proof that the caller of a route holds at least the role `R`.
+/// Proof that the caller of a route holds at least the role `R`, with the
+/// caller's user, so a route scopes to a tenant without a second extractor.
 pub struct AtLeast<R: Rung> {
+    pub user: User,
     rung: PhantomData<R>,
 }
 
@@ -67,6 +78,9 @@ where
         if Rank::of(&caller.user.role_name).is_none_or(|rank| rank < R::RANK) {
             return Err(Refusal::Forbidden);
         }
-        Ok(Self { rung: PhantomData })
+        Ok(Self {
+            user: caller.user,
+            rung: PhantomData,
+        })
     }
 }

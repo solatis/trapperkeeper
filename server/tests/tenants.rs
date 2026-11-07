@@ -5,59 +5,11 @@
 mod common;
 
 use common::{
-    ADMIN, InProcess, Response, SYSTEM_TENANT, block_on, on_each_backend, on_pool, request,
-    serve_in_process,
+    block_on, call, log_in, on_each_backend, on_pool, serve_in_process, superadmin_token,
 };
 use proptest::prelude::*;
 use serde_json::{Value, json};
 use trapperkeeper_server::{NewAccount, create_account};
-
-/// Logs in to `tenant` as `name` with `password`, and returns the access
-/// token and whether the password must change. Panics when the login fails.
-fn log_in(server: &InProcess, tenant: &str, name: &str, password: &str) -> (String, bool) {
-    let credentials = json!({ "tenant": tenant, "name": name, "password": password });
-    let response = request(
-        server.addr,
-        "POST",
-        "/api/v1/login",
-        &[],
-        Some(&credentials.to_string()),
-    );
-    assert_eq!(response.status, 200, "{}", response.body);
-    let login: Value = serde_json::from_str(&response.body).expect("a JSON body");
-    (
-        login["access_token"]
-            .as_str()
-            .expect("an access token")
-            .to_owned(),
-        login["password_must_change"].as_bool().expect("a flag"),
-    )
-}
-
-/// The superadmin's access token.
-fn superadmin_token(server: &InProcess) -> String {
-    log_in(server, SYSTEM_TENANT, ADMIN, &server.admin_password).0
-}
-
-/// Sends `method` to `path` with `token` as the bearer, and `body` as JSON
-/// when there is one.
-fn call(
-    server: &InProcess,
-    token: &str,
-    method: &str,
-    path: &str,
-    body: Option<&Value>,
-) -> Response {
-    let bearer = format!("Bearer {token}");
-    let body = body.map(Value::to_string);
-    request(
-        server.addr,
-        method,
-        path,
-        &[("Authorization", &bearer)],
-        body.as_deref(),
-    )
-}
 
 /// The superadmin creates a tenant, the new tenant shows in the list, and its
 /// admin logs in with the returned password and must change it. The same
@@ -201,18 +153,56 @@ fn rank(role: &str) -> Option<u8> {
 }
 
 /// Every route that checks a role, with its minimum, and the routes of the
-/// caller's own account, with `None`. Logout comes last, because it revokes
-/// the token every route before it uses.
-const ROUTES: [(&str, &str, Option<&str>); 4] = [
+/// caller's own account, with `None`. The user routes act on the matrix's
+/// tenant `acme`, and the three that name a user name one that does not
+/// exist, so the matrix changes nothing it later reads. The delete route takes
+/// any caller and allows the target itself; its minimum for another user's
+/// name is admin. Logout comes last, because it revokes the token every route
+/// before it uses.
+const ROUTES: [(&str, &str, Option<&str>); 9] = [
     ("GET", "/api/v1/tenants", Some("superadmin")),
     ("POST", "/api/v1/tenants", Some("superadmin")),
+    ("GET", "/api/v1/tenants/acme/users", Some("admin")),
+    ("POST", "/api/v1/tenants/acme/users", Some("admin")),
+    (
+        "DELETE",
+        "/api/v1/tenants/acme/users/nobody@example.com",
+        Some("admin"),
+    ),
+    (
+        "PUT",
+        "/api/v1/tenants/acme/users/nobody@example.com/role",
+        Some("admin"),
+    ),
+    (
+        "POST",
+        "/api/v1/tenants/acme/users/nobody@example.com/password",
+        Some("admin"),
+    ),
     ("GET", "/api/v1/me", None),
     ("POST", "/api/v1/logout", None),
 ];
 
+/// The body route `n`, `method` on `path`, takes from caller `role`, or
+/// `None`. Each create names a tenant or a user of its own, so a permitted
+/// create succeeds.
+fn body_for(n: usize, role: &str, method: &str, path: &str) -> Option<Value> {
+    match (method, path.rsplit('/').next()?) {
+        ("POST", "tenants") => {
+            Some(json!({ "name": format!("t{n}-{role}"), "title": "T", "admin": "a@b.io" }))
+        }
+        ("POST", "users") => {
+            Some(json!({ "name": format!("u{n}-{role}@example.com"), "role": "observer" }))
+        }
+        ("PUT", "role") => Some(json!({ "role": "observer" })),
+        _ => None,
+    }
+}
+
 /// Every role, plus a role that is not on the ladder, against every route:
-/// 403 exactly when the role ranks below the route's minimum, and the routes
-/// of the caller's own account answer every role.
+/// 403 exactly when the role ranks below the route's minimum, neither 401 nor
+/// 403 otherwise, and the routes of the caller's own account answer every
+/// role.
 #[test]
 fn every_role_meets_each_route_minimum() {
     // The roles and routes are a small fixed set, so the test covers every
@@ -273,16 +263,13 @@ fn every_role_meets_each_route_minimum() {
             callers.push((role, log_in(&server, "acme", &name, &password).0));
         }
 
-        // 4. A permitted call answers 2xx, and a refused one answers 403
-        //    with the body `forbidden`.
+        // 4. A permitted call answers neither 401 nor 403, because it can
+        //    still be refused on its content, as a delete of a name no user
+        //    has is 404; a refused one answers 403 with the body `forbidden`.
         for (role, token) in &callers {
             for (n, (method, path, minimum)) in ROUTES.iter().enumerate() {
-                // Each create names a tenant of its own, so a permitted one
-                // succeeds.
-                let body =
-                    json!({ "name": format!("t{n}-{role}"), "title": "T", "admin": "a@b.io" });
-                let body = (*method == "POST" && path.ends_with("tenants")).then_some(&body);
-                let response = call(&server, token, method, path, body);
+                let body = body_for(n, role, method, path);
+                let response = call(&server, token, method, path, body.as_ref());
                 // The off-ladder role has no rank, so it counts as below
                 // every minimum.
                 let below = minimum.is_some_and(|m| rank(role).is_none_or(|r| Some(r) < rank(m)));
@@ -291,7 +278,10 @@ fn every_role_meets_each_route_minimum() {
                     assert_eq!(response.status, 403, "{context}");
                     assert_eq!(response.body, "forbidden", "{context}");
                 } else {
-                    assert!((200..300).contains(&response.status), "{context}");
+                    assert!(
+                        response.status != 401 && response.status != 403,
+                        "{context}"
+                    );
                 }
             }
         }

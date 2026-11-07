@@ -1,11 +1,12 @@
-//! Users and their roles in the relational store. Every read ignores deleted
-//! rows.
+//! Users and their roles in the relational store: creating, listing, finding,
+//! re-roling and deleting them. Every read ignores deleted rows.
 
 use std::fmt;
 
 use sqlx::{AssertSqlSafe, FromRow};
 use uuid::Uuid;
 
+use super::tenants::ADMIN_ROLE;
 use super::{Tx, now_micros, on_tx, sql};
 
 /// A live user, as read with its role's name.
@@ -115,6 +116,112 @@ pub async fn create(tx: &mut Tx, new: NewUser<'_>) -> Result<(), CreateError> {
             .map(|_| ())
     })?;
     Ok(())
+}
+
+/// The live users of `tenant_id` with their role names, ordered by name.
+///
+/// # Errors
+///
+/// Fails when the database cannot be read.
+pub async fn list(tx: &mut Tx, tenant_id: &str) -> Result<Vec<User>, sqlx::Error> {
+    let select = sql(tx, concat!(SELECT_USER!(), " ORDER BY u.user_name"));
+    on_tx!(tx, |conn| {
+        sqlx::query_as(AssertSqlSafe(select))
+            .bind(tenant_id)
+            .fetch_all(conn)
+            .await
+    })
+}
+
+/// How many live users of `tenant_id` hold the role `admin`: the read behind
+/// the 409 of a delete or a demotion. A read of its own rather than a
+/// condition in the UPDATE's WHERE, so that zero rows affected still tells a
+/// missing user from a last admin.
+///
+/// # Errors
+///
+/// Fails when the database cannot be read.
+pub async fn count_admins(tx: &mut Tx, tenant_id: &str) -> Result<i64, sqlx::Error> {
+    let select = sql(
+        tx,
+        "SELECT COUNT(*) FROM users u \
+         JOIN roles r ON r.tenant_id = u.tenant_id AND r.role_id = u.role_id \
+         WHERE u.tenant_id = $1 AND u.deleted_at IS NULL AND r.deleted_at IS NULL \
+         AND r.role_name = $2",
+    );
+    on_tx!(tx, |conn| {
+        sqlx::query_scalar(AssertSqlSafe(select))
+            .bind(tenant_id)
+            .bind(ADMIN_ROLE)
+            .fetch_one(conn)
+            .await
+    })
+}
+
+/// Gives the live user `user_id` of `tenant_id` the tenant's live role named
+/// `role_name`, which the caller has checked the tenant holds.
+///
+/// # Errors
+///
+/// Fails when the database cannot be written, which a role the tenant does
+/// not hold causes through the NOT NULL role id.
+pub async fn set_role(
+    tx: &mut Tx,
+    tenant_id: &str,
+    user_id: &str,
+    role_name: &str,
+) -> Result<(), sqlx::Error> {
+    // The role id comes from the subselect the insert uses, so callers never
+    // hold role ids (doc/adr/0023).
+    let update = sql(
+        tx,
+        "UPDATE users SET role_id = \
+         (SELECT role_id FROM roles WHERE tenant_id = $1 AND role_name = $2 AND deleted_at IS NULL) \
+         WHERE tenant_id = $3 AND user_id = $4 AND deleted_at IS NULL",
+    );
+    on_tx!(tx, |conn| {
+        sqlx::query(AssertSqlSafe(update))
+            .bind(tenant_id)
+            .bind(role_name)
+            .bind(tenant_id)
+            .bind(user_id)
+            .execute(conn)
+            .await
+            .map(|_| ())
+    })
+}
+
+/// Marks the live user `user_id` of `tenant_id` deleted at `now`. Returns
+/// whether a row changed.
+///
+/// # Errors
+///
+/// Fails when the database cannot be written.
+pub async fn delete(
+    tx: &mut Tx,
+    tenant_id: &str,
+    user_id: &str,
+    now: i64,
+) -> Result<bool, sqlx::Error> {
+    // A soft delete, because events and the audit trail keep naming the user
+    // (doc/adr/0024).
+    let update = sql(
+        tx,
+        "UPDATE users SET deleted_at = $1 \
+         WHERE tenant_id = $2 AND user_id = $3 AND deleted_at IS NULL",
+    );
+    // Zero rows means the user was deleted between the caller's read and
+    // this write, which the route answers as 404.
+    let changed = on_tx!(tx, |conn| {
+        sqlx::query(AssertSqlSafe(update))
+            .bind(now)
+            .bind(tenant_id)
+            .bind(user_id)
+            .execute(conn)
+            .await
+            .map(|done| done.rows_affected())
+    })?;
+    Ok(changed > 0)
 }
 
 /// The live user named `user_name` in `tenant_id`, or `None`.

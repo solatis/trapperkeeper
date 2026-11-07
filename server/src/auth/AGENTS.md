@@ -13,7 +13,7 @@ a minimum role.
 | `token.rs`    | the token kinds, their claims, the keyring: derive, issue, check                                                                                       | how a token is signed and checked, key rotation                                            |
 | `login.rs`    | the login route, which takes a tenant name, a name and a password; the refresh, logout, password and me routes; the token cookies; the uniform refusal | what the routes hand out and refuse, the cookies' attributes, how a login names its tenant |
 | `caller.rs`   | the `Caller` extractor and the token check behind it: key, kind, user read, cutoff                                                                     | what a management route checks before it runs                                              |
-| `role.rs`     | the ladder and `AtLeast<R>`                                                                                                                            | which role a route needs, how a 403 comes about                                            |
+| `role.rs`     | the ladder, `AtLeast<R>` and the rungs `Admin` and `Superadmin`                                                                                        | which role a route needs, how a 403 comes about                                            |
 
 **Invariants**:
 
@@ -28,6 +28,8 @@ a minimum role.
   a password change takes effect at the next request.
 - A route that needs a role takes `AtLeast<R>`. A route that serves the
   caller's own account takes `Caller`.
+- `AtLeast<R>` carries the caller's user, so a route scopes to a tenant
+  without a second extractor.
 - A role that is not on the ladder ranks below every `AtLeast` route, so a
   role a tenant defines later opens no route until it gets a rung.
 - A refresh hands out an access token and keeps the refresh token, so a

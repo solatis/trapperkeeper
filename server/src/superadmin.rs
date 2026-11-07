@@ -9,8 +9,9 @@ use crate::store::{SYSTEM_TENANT_ID, Store};
 /// The superadmin's user name.
 pub const NAME: &str = "admin";
 
-/// The superadmin's role, the one role the system tenant holds.
-const ROLE: &str = "superadmin";
+/// The superadmin's role, the one role the system tenant holds. No route
+/// gives it, so the server alone creates a superadmin (doc/adr/0028).
+pub const ROLE: &str = "superadmin";
 
 /// The new account of the superadmin.
 fn account() -> NewAccount<'static> {

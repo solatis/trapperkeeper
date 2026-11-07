@@ -1,4 +1,5 @@
-//! Tenants and the roles each one is created with.
+//! Tenants and the roles each one is created with: creating, listing and
+//! finding a tenant, and whether a tenant holds a role.
 
 use std::fmt;
 
@@ -17,9 +18,11 @@ const ROLES: [(&str, &str); 3] = [
     ("observer", "Observer"),
 ];
 
-/// A live tenant, as listed.
+/// A live tenant, as listed and as found by name.
 #[derive(FromRow, Debug)]
 pub struct Tenant {
+    #[sqlx(rename = "tenant_id")]
+    pub id: String,
     #[sqlx(rename = "tenant_name")]
     pub name: String,
     #[sqlx(rename = "tenant_title")]
@@ -114,7 +117,7 @@ pub async fn list(tx: &mut Tx) -> Result<Vec<Tenant>, sqlx::Error> {
     // `$tk` holds the superadmin and no customer, so it is left out.
     let select = sql(
         tx,
-        "SELECT tenant_name, tenant_title FROM tenants \
+        "SELECT tenant_id, tenant_name, tenant_title FROM tenants \
          WHERE deleted_at IS NULL AND tenant_id <> $1 ORDER BY tenant_name",
     );
     on_tx!(tx, |conn| {
@@ -123,4 +126,48 @@ pub async fn list(tx: &mut Tx) -> Result<Vec<Tenant>, sqlx::Error> {
             .fetch_all(conn)
             .await
     })
+}
+
+/// The live tenant named `tenant_name`, or `None`.
+///
+/// # Errors
+///
+/// Fails when the database cannot be read.
+pub async fn find(tx: &mut Tx, tenant_name: &str) -> Result<Option<Tenant>, sqlx::Error> {
+    let select = sql(
+        tx,
+        "SELECT tenant_id, tenant_name, tenant_title FROM tenants \
+         WHERE deleted_at IS NULL AND tenant_name = $1",
+    );
+    on_tx!(tx, |conn| {
+        sqlx::query_as(AssertSqlSafe(select))
+            .bind(tenant_name)
+            .fetch_optional(conn)
+            .await
+    })
+}
+
+/// Whether `tenant_id` holds a live role named `role_name`.
+///
+/// # Errors
+///
+/// Fails when the database cannot be read.
+pub async fn role_exists(
+    tx: &mut Tx,
+    tenant_id: &str,
+    role_name: &str,
+) -> Result<bool, sqlx::Error> {
+    let select = sql(
+        tx,
+        "SELECT COUNT(*) FROM roles \
+         WHERE tenant_id = $1 AND role_name = $2 AND deleted_at IS NULL",
+    );
+    let count: i64 = on_tx!(tx, |conn| {
+        sqlx::query_scalar(AssertSqlSafe(select))
+            .bind(tenant_id)
+            .bind(role_name)
+            .fetch_one(conn)
+            .await
+    })?;
+    Ok(count > 0)
 }
