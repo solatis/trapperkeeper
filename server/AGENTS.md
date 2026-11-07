@@ -65,7 +65,7 @@ gets its own `AGENTS.md`, and this file indexes them.
   the API document stay at the root.
 - A tenant-scoped route is `/api/v1/tenants/{tenant}/...`, and its caller is
   a member of that tenant at the route's minimum role, or the superadmin
-  (owner, 2026-11-07). `scope::resolve` is that rule.
+  (owner, 2026-11-07). `scope::tenant` is that rule.
 - The system tenant is not reachable under `/api/v1/tenants/{tenant}/...`;
   its one user, the superadmin, is managed from the console and its own
   account routes (`doc/adr/0028`).

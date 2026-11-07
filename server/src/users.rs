@@ -109,8 +109,8 @@ pub async fn list(
 ) -> Response {
     let listed = async {
         let mut tx = state.store.begin().await?;
-        let scope = scope::resolve(&mut tx, &caller.user, &tenant).await?;
-        Ok::<_, Refused>(users::list(&mut tx, &scope.tenant.id).await?)
+        let tenant = scope::tenant(&mut tx, &caller.user, &tenant).await?;
+        Ok::<_, Refused>(users::list(&mut tx, &tenant.id).await?)
     }
     .await;
     match listed {
@@ -171,7 +171,7 @@ pub async fn create(
     Json(request): Json<NewUserRequest>,
 ) -> Response {
     // 1. check the name's shape and refuse the superadmin role
-    // 2. open the transaction, resolve the scope, check the tenant holds the role
+    // 2. open the transaction, resolve the tenant, check it holds the role
     // 3. create the user through accounts::create
     // 4. commit and return the password
 
@@ -187,11 +187,11 @@ pub async fn create(
 
     let created = async {
         let mut tx = state.store.begin().await?;
-        let scope = scope::resolve(&mut tx, &caller.user, &tenant).await?;
+        let tenant = scope::tenant(&mut tx, &caller.user, &tenant).await?;
         // 2. The role is checked before the insert, because a role the tenant
         //    does not hold would otherwise fail the insert's NOT NULL role id,
         //    which is a 500.
-        if !tenants::role_exists(&mut tx, &scope.tenant.id, &request.role).await? {
+        if !tenants::role_exists(&mut tx, &tenant.id, &request.role).await? {
             return Err(Refused::BadRequest("the tenant does not hold this role"));
         }
         // 3. Through accounts::create, so the user gets a generated password
@@ -199,14 +199,14 @@ pub async fn create(
         let password = accounts::create(
             &mut tx,
             NewAccount {
-                tenant_id: &scope.tenant.id,
+                tenant_id: &tenant.id,
                 name: &name,
                 role_name: &request.role,
             },
         )
         .await?;
         tx.commit().await?;
-        Ok((scope.tenant.id, password))
+        Ok((tenant.id, password))
     }
     .await;
 
@@ -250,7 +250,7 @@ pub async fn delete(
     State(state): State<AppState>,
     Path((tenant, name)): Path<(String, String)>,
 ) -> Response {
-    // 1. resolve the scope as any caller, then find the live user by its lowercased name
+    // 1. resolve the tenant as any caller, then find the live user by its lowercased name
     // 2. allow the call when the caller ranks admin or above, or is the target
     // 3. when the target's role is admin, count the tenant's admins
     // 4. mark it deleted
@@ -259,12 +259,12 @@ pub async fn delete(
     let deleted = async {
         let mut tx = state.store.begin().await?;
         // 1. `Caller` rather than `AtLeast<Admin>`, because a user below admin
-        //    may delete itself; the scope rule still applies, so a member of
+        //    may delete itself; the tenant rule still applies, so a member of
         //    another tenant gets 403.
-        let scope = scope::resolve(&mut tx, &caller.user, &tenant).await?;
+        let tenant = scope::tenant(&mut tx, &caller.user, &tenant).await?;
         // The name is lowercased as the store keeps it and not checked for
         // shape, because a name that fails the shape matches no row (doc/adr/0020).
-        let found = users::find(&mut tx, &scope.tenant.id, &name.to_lowercase()).await?;
+        let found = users::find(&mut tx, &tenant.id, &name.to_lowercase()).await?;
 
         // 2. The target is found before the permission is checked, so a
         //    non-admin probing another user's name gets 403 whether or not the
@@ -281,19 +281,17 @@ pub async fn delete(
         //    write's transaction; two concurrent deletes on Postgres or MariaDB
         //    can both count two and both pass, which is accepted over a row
         //    lock SQLite does not have.
-        if target.role_name == ADMIN_ROLE
-            && users::count_admins(&mut tx, &scope.tenant.id).await? <= 1
-        {
+        if target.role_name == ADMIN_ROLE && users::count_admins(&mut tx, &tenant.id).await? <= 1 {
             return Err(Refused::LastAdmin);
         }
 
         // 4. The user's tokens need no revocation, because every request reads
         //    the user and a deleted one is refused.
-        if !users::delete(&mut tx, &scope.tenant.id, &target.id, now_micros()).await? {
+        if !users::delete(&mut tx, &tenant.id, &target.id, now_micros()).await? {
             return Err(Refused::NoSuchUser);
         }
 
-        // 5.
+        // 5. Committed only now, so a refusal above writes nothing.
         tx.commit().await?;
         Ok(())
     }
@@ -339,7 +337,7 @@ pub async fn change_role(
     Json(change): Json<RoleChange>,
 ) -> Response {
     // 1. refuse the superadmin role by name
-    // 2. resolve the scope, find the live user, check the tenant holds the role
+    // 2. resolve the tenant, find the live user, check the tenant holds the role
     // 3. when the user is an admin and the new role is not, count the admins
     // 4. set the role and commit
 
@@ -351,27 +349,27 @@ pub async fn change_role(
 
     let changed = async {
         let mut tx = state.store.begin().await?;
-        // 2.
-        let scope = scope::resolve(&mut tx, &caller.user, &tenant).await?;
-        let Some(mut target) = users::find(&mut tx, &scope.tenant.id, &name.to_lowercase()).await?
-        else {
+        // 2. The user is found before the role is checked, so an unknown
+        //    name is 404 whatever role the body names.
+        let tenant = scope::tenant(&mut tx, &caller.user, &tenant).await?;
+        let Some(mut target) = users::find(&mut tx, &tenant.id, &name.to_lowercase()).await? else {
             return Err(Refused::NoSuchUser);
         };
-        if !tenants::role_exists(&mut tx, &scope.tenant.id, &change.role).await? {
+        if !tenants::role_exists(&mut tx, &tenant.id, &change.role).await? {
             return Err(Refused::BadRequest("the tenant does not hold this role"));
         }
 
         // 3. Only a demotion needs the count: a change to admin, or between
         //    two other roles, cannot empty the admins.
         let demotion = target.role_name == ADMIN_ROLE && change.role != ADMIN_ROLE;
-        if demotion && users::count_admins(&mut tx, &scope.tenant.id).await? <= 1 {
+        if demotion && users::count_admins(&mut tx, &tenant.id).await? <= 1 {
             return Err(Refused::LastAdmin);
         }
 
         // 4. The role takes effect at the user's next request, because the
         //    caller's role is read from the store each time, so no token is
         //    revoked (doc/adr/0025).
-        users::set_role(&mut tx, &scope.tenant.id, &target.id, &change.role).await?;
+        users::set_role(&mut tx, &tenant.id, &target.id, &change.role).await?;
         tx.commit().await?;
         target.role_name = change.role;
         Ok(target)
@@ -408,14 +406,13 @@ pub async fn reset_password(
 ) -> Response {
     let reset = async {
         let mut tx = state.store.begin().await?;
-        let scope = scope::resolve(&mut tx, &caller.user, &tenant).await?;
-        let Some(target) = users::find(&mut tx, &scope.tenant.id, &name.to_lowercase()).await?
-        else {
+        let tenant = scope::tenant(&mut tx, &caller.user, &tenant).await?;
+        let Some(target) = users::find(&mut tx, &tenant.id, &name.to_lowercase()).await? else {
             return Err(Refused::NoSuchUser);
         };
         // accounts::reset sets tokens_valid_after too, so the person who held
         // the old password is logged out everywhere (doc/adr/0025).
-        let password = accounts::reset(&mut tx, &scope.tenant.id, &target.id).await?;
+        let password = accounts::reset(&mut tx, &tenant.id, &target.id).await?;
         tx.commit().await?;
         Ok((target, password))
     }

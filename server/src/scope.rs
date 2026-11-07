@@ -2,7 +2,8 @@
 //! caller is a member of that tenant, or the caller is the superadmin, whose
 //! rank opens every customer tenant without a session minted as one of its
 //! users. The rule is one function the routes call, so a route of a later
-//! milestone reuses it as it is.
+//! milestone reuses it as it is. A path segment that names something else,
+//! such as a user, gets a resolver of its own here when routes share one.
 
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
@@ -13,12 +14,6 @@ use crate::auth::role::Rank;
 use crate::store::tenants::{self, Tenant};
 use crate::store::users::User;
 use crate::store::{SYSTEM_TENANT_ID, Tx};
-
-/// The tenant a route acts on, resolved from the `{tenant}` path segment and
-/// allowed for the caller.
-pub struct Scope {
-    pub tenant: Tenant,
-}
 
 /// Why the tenant in the path is not the route's to act on. It converts into
 /// the response the caller gets.
@@ -48,15 +43,15 @@ impl IntoResponse for Refused {
     }
 }
 
-/// Resolves the live tenant named in the path and allows it when it is the
-/// caller's own or the caller is the superadmin. Takes the caller's user, so
-/// a route on `Caller` and one on `AtLeast<R>` use it alike.
+/// The live tenant the `{tenant}` path segment names, when it is the caller's
+/// own or the caller is the superadmin. Takes the caller's user, so a route
+/// on `Caller` and one on `AtLeast<R>` use it alike.
 ///
 /// # Errors
 ///
 /// `NotFound` for no such live tenant and for the system tenant; `Forbidden`
 /// for another tenant's; `Store` when the store fails.
-pub async fn resolve(tx: &mut Tx, caller: &User, tenant_name: &str) -> Result<Scope, Refused> {
+pub async fn tenant(tx: &mut Tx, caller: &User, tenant_name: &str) -> Result<Tenant, Refused> {
     // The name is lowercased as the store keeps it and not checked for
     // shape, because a name that fails the shape matches no row (doc/adr/0020).
     let found = tenants::find(tx, &tenant_name.to_lowercase()).await?;
@@ -72,5 +67,5 @@ pub async fn resolve(tx: &mut Tx, caller: &User, tenant_name: &str) -> Result<Sc
     if tenant.id != caller.tenant_id && !superadmin {
         return Err(Refused::Forbidden);
     }
-    Ok(Scope { tenant })
+    Ok(tenant)
 }
