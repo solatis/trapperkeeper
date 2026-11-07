@@ -34,7 +34,7 @@ use crate::store::users;
     )
 )]
 pub async fn mint(
-    _caller: AtLeast<role::Superadmin>,
+    caller: AtLeast<role::Superadmin>,
     State(state): State<AppState>,
     Path((tenant, name)): Path<(String, String)>,
 ) -> Response {
@@ -53,6 +53,9 @@ pub async fn mint(
         Ok(None) => return (StatusCode::NOT_FOUND, "no such tenant or user").into_response(),
         Err(error) => return database_error(&error),
     };
+    // Noted so the audit row is filed under the user's tenant, whose admins
+    // then see who minted a session for whom.
+    caller.identity.set_scope(&user.tenant_id);
     // The body alone, no cookie, so the superadmin's own browser session
     // stays and the client decides what to do with the tokens. The
     // must-change flag passes through as it is, because it restricts nothing

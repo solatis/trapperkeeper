@@ -109,7 +109,7 @@ pub async fn list(
 ) -> Response {
     let listed = async {
         let mut tx = state.store.begin().await?;
-        let scope = scope::resolve(&mut tx, &caller.user, &tenant).await?;
+        let scope = scope::resolve(&mut tx, &caller.user, &caller.identity, &tenant).await?;
         Ok::<_, Refused>(users::list(&mut tx, &scope.tenant.id).await?)
     }
     .await;
@@ -187,7 +187,7 @@ pub async fn create(
 
     let created = async {
         let mut tx = state.store.begin().await?;
-        let scope = scope::resolve(&mut tx, &caller.user, &tenant).await?;
+        let scope = scope::resolve(&mut tx, &caller.user, &caller.identity, &tenant).await?;
         // 2. The role is checked before the insert, because a role the tenant
         //    does not hold would otherwise fail the insert's NOT NULL role id,
         //    which is a 500.
@@ -261,7 +261,7 @@ pub async fn delete(
         // 1. `Caller` rather than `AtLeast<Admin>`, because a user below admin
         //    may delete itself; the scope rule still applies, so a member of
         //    another tenant gets 403.
-        let scope = scope::resolve(&mut tx, &caller.user, &tenant).await?;
+        let scope = scope::resolve(&mut tx, &caller.user, &caller.identity, &tenant).await?;
         // The name is lowercased as the store keeps it and not checked for
         // shape, because a name that fails the shape matches no row (doc/adr/0020).
         let found = users::find(&mut tx, &scope.tenant.id, &name.to_lowercase()).await?;
@@ -352,7 +352,7 @@ pub async fn change_role(
     let changed = async {
         let mut tx = state.store.begin().await?;
         // 2.
-        let scope = scope::resolve(&mut tx, &caller.user, &tenant).await?;
+        let scope = scope::resolve(&mut tx, &caller.user, &caller.identity, &tenant).await?;
         let Some(mut target) = users::find(&mut tx, &scope.tenant.id, &name.to_lowercase()).await?
         else {
             return Err(Refused::NoSuchUser);
@@ -408,7 +408,7 @@ pub async fn reset_password(
 ) -> Response {
     let reset = async {
         let mut tx = state.store.begin().await?;
-        let scope = scope::resolve(&mut tx, &caller.user, &tenant).await?;
+        let scope = scope::resolve(&mut tx, &caller.user, &caller.identity, &tenant).await?;
         let Some(target) = users::find(&mut tx, &scope.tenant.id, &name.to_lowercase()).await?
         else {
             return Err(Refused::NoSuchUser);
