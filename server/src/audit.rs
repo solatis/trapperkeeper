@@ -116,7 +116,7 @@ pub async fn record(
     parts.extensions.insert(identity.clone());
     let request = Request::from_parts(parts, body);
 
-    // 3.
+    // 3. The handler commits its own transaction before this returns.
     let response = next.run(request).await;
 
     // 4. The row's tenant is the one the route resolved from its path when it
@@ -157,7 +157,7 @@ pub async fn record(
         tracing::error!(%error, route, "the audit row was not written");
     }
 
-    // 6.
+    // 6. The handler's response, whatever happened to the row.
     response
 }
 

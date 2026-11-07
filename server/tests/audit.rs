@@ -82,7 +82,7 @@ fn changing_requests_leave_rows_and_reads_do_not() {
     on_each_backend(|backend| {
         let server = serve_in_process(backend);
 
-        // 1.
+        // 1. The login is itself a changing request, so it is the first row.
         let token = superadmin_token(&server);
         create_acme(&server, &token);
         let response = call(&server, &token, "GET", "/api/v1/tenants", None);
@@ -162,7 +162,7 @@ fn changing_requests_leave_rows_and_reads_do_not() {
         assert_eq!(rows.len(), 1, "{rows:?} on {backend}");
         assert_eq!((rows[0].1.as_str(), rows[0].2), ("/api/v1/login", 401));
 
-        // 5.
+        // 5. The mint names acme in its path, so it is filed there, not in $tk.
         let response = call(
             &server,
             &token,
