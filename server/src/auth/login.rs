@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::OnceCell;
 use utoipa::ToSchema;
 
+use crate::audit::Identity;
 use crate::auth::caller::{Caller, authenticate};
 use crate::auth::password;
 use crate::auth::token::Kind;
@@ -72,6 +73,7 @@ static DUMMY_HASH: OnceCell<String> = OnceCell::const_new();
 )]
 pub async fn login(
     State(state): State<AppState>,
+    identity: Identity,
     jar: CookieJar,
     Json(credentials): Json<Credentials>,
 ) -> Response {
@@ -87,6 +89,12 @@ pub async fn login(
         Ok(user) => user,
         Err(error) => return database_error(&error),
     };
+    // The tenant of the named user goes to the audit row for a right and a
+    // wrong password alike, and the name is never stored, so a tenant's
+    // admins see failed logins against their users without the names tried.
+    if let Some(user) = &user {
+        identity.set_caller(&user.tenant_id, None);
+    }
     // An unknown tenant and an unknown name are both checked against the
     // dummy hash, so the response time does not tell whether either exists.
     let hash = match &user {
@@ -204,6 +212,7 @@ pub struct Refreshed {
 )]
 pub async fn refresh(
     State(state): State<AppState>,
+    identity: Identity,
     jar: CookieJar,
     body: Option<Json<RefreshRequest>>,
 ) -> Response {
@@ -221,6 +230,9 @@ pub async fn refresh(
         Ok(user) => user,
         Err(refusal) => return refusal.into_response(),
     };
+    // Noted here, because the refresh token is checked without the Caller
+    // extractor, which notes the caller for every other route.
+    identity.set_caller(&user.tenant_id, Some(&user.id));
     // No new refresh token, so a login ends 7 days after it began, however
     // often it refreshes.
     let access_token =
