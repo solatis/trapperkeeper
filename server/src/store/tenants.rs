@@ -1,4 +1,5 @@
-//! Tenants and the roles each one is created with.
+//! Tenants and the roles each one is created with: creating, listing and
+//! finding a tenant, and whether a tenant holds a role.
 
 use std::fmt;
 
@@ -144,4 +145,29 @@ pub async fn find(tx: &mut Tx, tenant_name: &str) -> Result<Option<Tenant>, sqlx
             .fetch_optional(conn)
             .await
     })
+}
+
+/// Whether `tenant_id` holds a live role named `role_name`.
+///
+/// # Errors
+///
+/// Fails when the database cannot be read.
+pub async fn role_exists(
+    tx: &mut Tx,
+    tenant_id: &str,
+    role_name: &str,
+) -> Result<bool, sqlx::Error> {
+    let select = sql(
+        tx,
+        "SELECT COUNT(*) FROM roles \
+         WHERE tenant_id = $1 AND role_name = $2 AND deleted_at IS NULL",
+    );
+    let count: i64 = on_tx!(tx, |conn| {
+        sqlx::query_scalar(AssertSqlSafe(select))
+            .bind(tenant_id)
+            .bind(role_name)
+            .fetch_one(conn)
+            .await
+    })?;
+    Ok(count > 0)
 }
