@@ -68,6 +68,9 @@ gets its own `AGENTS.md`, and this file indexes them.
 - The system tenant is not reachable under `/api/v1/tenants/{tenant}/...`;
   its one user, the superadmin, is managed from the console and its own
   account routes (`doc/adr/0028`).
+- A tenant keeps at least one live user with the role `admin`; the user
+  routes refuse the delete or demotion that would break it with 409, the
+  caller's own included (owner, 2026-11-06, 2026-11-07).
 - No route gives the role `superadmin`, so the superadmin is created only by
   the server (`doc/adr/0028`).
 - Every handler carries a `utoipa::path` annotation and enters the router
