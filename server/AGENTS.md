@@ -31,9 +31,11 @@ gets its own `AGENTS.md`, and this file indexes them.
 | `src/http.rs`         | the router and its state, the `/api/v1` prefix, how the server is served and stopped                                                                                                                                                          | adding an endpoint, what a handler can reach, how shutdown works                   |
 | `src/logging.rs`      | the subscriber: log format and level                                                                                                                                                                                                          | log format, log level, RUST_LOG                                                    |
 | `src/names.rs`        | the tenant name and user name rules                                                                                                                                                                                                           | what a created name may hold, the `$` prefix                                       |
+| `src/scope.rs`        | the rule for the tenant in a route's path                                                                                                                                                                                                     | who may call a tenant-scoped route                                                 |
 | `src/store/`          | the relational store and its migrations; see its `AGENTS.md`                                                                                                                                                                                  | the database, migrations, tables                                                   |
 | `src/superadmin.rs`   | the superadmin of `$tk`, reset from the console                                                                                                                                                                                               | the superadmin, recovering its password                                            |
 | `src/tenants.rs`      | the superadmin's tenant routes                                                                                                                                                                                                                | creating and listing tenants                                                       |
+| `src/users.rs`        | the admin's routes for a tenant's users                                                                                                                                                                                                       | adding a user route                                                                |
 | `tests/cli.rs`        | end-to-end: runs the binary and checks its command line                                                                                                                                                                                       | how the binary behaves on the command line                                         |
 | `tests/common/mod.rs` | test helpers: the backends a run tests, test databases, a pool on one of them with placeholders rewritten, the router served in-process for integration tests, the binary started as a process for end-to-end tests, run migrate, GET a route | writing a server test; testing on every backend; which kind of server a test needs |
 | `tests/http.rs`       | integration tests of the endpoints on the router served in-process                                                                                                                                                                            | what the probes and the document promise                                           |
@@ -60,6 +62,12 @@ gets its own `AGENTS.md`, and this file indexes them.
   `AtLeast<R>`, except login and refresh, which take the credentials
   themselves. The probes and
   the API document stay at the root.
+- A tenant-scoped route is `/api/v1/tenants/{tenant}/...`, and its caller is
+  a member of that tenant at the route's minimum role, or the superadmin
+  (owner, 2026-11-07). `scope::resolve` is that rule.
+- The system tenant is not reachable under `/api/v1/tenants/{tenant}/...`;
+  its one user, the superadmin, is managed from the console and its own
+  account routes (`doc/adr/0028`).
 - Every handler carries a `utoipa::path` annotation and enters the router
   through `routes!`; a handler added with `.route` is missing from the API
   document. A handler's doc comment is its operation summary in that document,

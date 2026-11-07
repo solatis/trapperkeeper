@@ -1,5 +1,5 @@
-//! Users and their roles in the relational store. Every read ignores deleted
-//! rows.
+//! Users and their roles in the relational store: creating, listing and
+//! finding them. Every read ignores deleted rows.
 
 use std::fmt;
 
@@ -115,6 +115,21 @@ pub async fn create(tx: &mut Tx, new: NewUser<'_>) -> Result<(), CreateError> {
             .map(|_| ())
     })?;
     Ok(())
+}
+
+/// The live users of `tenant_id` with their role names, ordered by name.
+///
+/// # Errors
+///
+/// Fails when the database cannot be read.
+pub async fn list(tx: &mut Tx, tenant_id: &str) -> Result<Vec<User>, sqlx::Error> {
+    let select = sql(tx, concat!(SELECT_USER!(), " ORDER BY u.user_name"));
+    on_tx!(tx, |conn| {
+        sqlx::query_as(AssertSqlSafe(select))
+            .bind(tenant_id)
+            .fetch_all(conn)
+            .await
+    })
 }
 
 /// The live user named `user_name` in `tenant_id`, or `None`.

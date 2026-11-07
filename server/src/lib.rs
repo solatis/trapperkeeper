@@ -9,9 +9,11 @@ mod config;
 mod http;
 mod logging;
 mod names;
+mod scope;
 mod store;
 mod superadmin;
 mod tenants;
+mod users;
 
 // The integration tests build a migrated store with its superadmin, derive a
 // keyring from it, serve the router on a listener they bound, create users

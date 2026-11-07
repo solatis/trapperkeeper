@@ -17,9 +17,11 @@ const ROLES: [(&str, &str); 3] = [
     ("observer", "Observer"),
 ];
 
-/// A live tenant, as listed.
+/// A live tenant, as listed and as found by name.
 #[derive(FromRow, Debug)]
 pub struct Tenant {
+    #[sqlx(rename = "tenant_id")]
+    pub id: String,
     #[sqlx(rename = "tenant_name")]
     pub name: String,
     #[sqlx(rename = "tenant_title")]
@@ -114,13 +116,32 @@ pub async fn list(tx: &mut Tx) -> Result<Vec<Tenant>, sqlx::Error> {
     // `$tk` holds the superadmin and no customer, so it is left out.
     let select = sql(
         tx,
-        "SELECT tenant_name, tenant_title FROM tenants \
+        "SELECT tenant_id, tenant_name, tenant_title FROM tenants \
          WHERE deleted_at IS NULL AND tenant_id <> $1 ORDER BY tenant_name",
     );
     on_tx!(tx, |conn| {
         sqlx::query_as(AssertSqlSafe(select))
             .bind(SYSTEM_TENANT_ID)
             .fetch_all(conn)
+            .await
+    })
+}
+
+/// The live tenant named `tenant_name`, or `None`.
+///
+/// # Errors
+///
+/// Fails when the database cannot be read.
+pub async fn find(tx: &mut Tx, tenant_name: &str) -> Result<Option<Tenant>, sqlx::Error> {
+    let select = sql(
+        tx,
+        "SELECT tenant_id, tenant_name, tenant_title FROM tenants \
+         WHERE deleted_at IS NULL AND tenant_name = $1",
+    );
+    on_tx!(tx, |conn| {
+        sqlx::query_as(AssertSqlSafe(select))
+            .bind(tenant_name)
+            .fetch_optional(conn)
             .await
     })
 }
