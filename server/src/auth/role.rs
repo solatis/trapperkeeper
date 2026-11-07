@@ -8,6 +8,7 @@ use std::marker::PhantomData;
 use axum::extract::{FromRef, FromRequestParts};
 use axum::http::request::Parts;
 
+use crate::audit::Identity;
 use crate::auth::caller::{Caller, Refusal};
 use crate::http::AppState;
 use crate::store::users::User;
@@ -58,9 +59,11 @@ impl Rung for Superadmin {
 }
 
 /// Proof that the caller of a route holds at least the role `R`, with the
-/// caller's user, so a route scopes to a tenant without a second extractor.
+/// caller's user and identity cell, so a route scopes to a tenant without a
+/// second extractor.
 pub struct AtLeast<R: Rung> {
     pub user: User,
+    pub identity: Identity,
     rung: PhantomData<R>,
 }
 
@@ -80,6 +83,7 @@ where
         }
         Ok(Self {
             user: caller.user,
+            identity: caller.identity,
             rung: PhantomData,
         })
     }

@@ -3,6 +3,7 @@
 //! creation of users through the items exported here.
 
 mod accounts;
+mod audit;
 mod auth;
 mod cli;
 mod config;

@@ -25,6 +25,7 @@ gets its own `AGENTS.md`, and this file indexes them.
 | `src/lib.rs`          | the entry point: parse, resolve, dispatch; what the library exports                                                                                                                                                                                                              | how a subcommand starts and how it fails; what tests can reach                     |
 | `src/main.rs`         | starts the tokio runtime and calls the library                                                                                                                                                                                                                                   | why the binary is so small                                                         |
 | `src/accounts.rs`     | creating users with a generated password that must be changed                                                                                                                                                                                                                    | creating a user, what a new user must do first                                     |
+| `src/audit.rs`        | the middleware that records changing requests, and the identity cell                                                                                                                                                                                                             | what the trail records, how a handler names the caller and the tenant acted on     |
 | `src/auth/`           | authentication of people: passwords, signed tokens, login, the caller of a route; see its `AGENTS.md`                                                                                                                                                                            | passwords, tokens, the signing keys, logging in                                    |
 | `src/cli.rs`          | the command line                                                                                                                                                                                                                                                                 | adding a flag or a subcommand                                                      |
 | `src/config.rs`       | the settings and how they are resolved                                                                                                                                                                                                                                           | adding a setting, precedence, environment variable names, the log level            |
@@ -76,6 +77,9 @@ gets its own `AGENTS.md`, and this file indexes them.
   caller's own included (owner, 2026-11-06, 2026-11-07).
 - No route gives the role `superadmin`, so the superadmin is created only by
   the server (`doc/adr/0028`).
+- Every non-GET request under `/api/v1` that matched a route leaves one
+  audit row, written after the response and outside the handler's
+  transaction.
 - Every handler carries a `utoipa::path` annotation and enters the router
   through `routes!`; a handler added with `.route` is missing from the API
   document. A handler's doc comment is its operation summary in that document,
