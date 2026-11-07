@@ -146,6 +146,8 @@ gets its own `AGENTS.md`, and this file indexes them.
   `doc/adr/0025-signed-tokens-and-the-revocation-cutoff.md`.
 - Management routes live under `/api/v1` (owner, 2026-11-05):
   `doc/adr/0026-versioned-api-route-prefix.md`.
+- The superadmin acts as a user through ordinary tokens minted for that
+  user (owner, 2026-11-07): `doc/adr/0030-minted-sessions.md`.
 
 **How to**: build, lint and test with the commands in the root `AGENTS.md`,
 How to. `cargo run -- --help` shows the command line. `cargo run -- serve` on
