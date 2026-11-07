@@ -37,7 +37,7 @@ pub const REFRESH_COOKIE: &str = "tk_refresh";
 pub const REFRESH_PATH: &str = "/api/v1/refresh";
 
 /// What a login hands out. The tokens also come back in the `tk_access` and
-/// `tk_refresh` cookies.
+/// `tk_refresh` cookies, except from a minted session, which sets no cookie.
 #[derive(Serialize, ToSchema)]
 pub struct Login {
     /// The access token, sent back as `Authorization: Bearer`.
@@ -103,48 +103,51 @@ pub async fn login(
     logged_in(&state, jar, &user, user.password_must_change)
 }
 
-/// The response of a login for `user`: a fresh access token and refresh
-/// token, in the body and in the cookies.
+/// The login body for `user`: fresh tokens of both kinds issued at `now`.
+pub fn login_body(
+    state: &AppState,
+    user: &User,
+    password_must_change: bool,
+    now: SystemTime,
+) -> Login {
+    Login {
+        access_token: state
+            .keyring
+            .issue(Kind::Access, &user.id, &user.tenant_id, now),
+        token_type: "Bearer",
+        expires_in: Kind::Access.lifetime().as_secs(),
+        refresh_token: state
+            .keyring
+            .issue(Kind::Refresh, &user.id, &user.tenant_id, now),
+        refresh_expires_in: Kind::Refresh.lifetime().as_secs(),
+        password_must_change,
+    }
+}
+
+/// The response of a login for `user`: the body and both cookies.
 fn logged_in(
     state: &AppState,
     jar: CookieJar,
     user: &User,
     password_must_change: bool,
 ) -> Response {
-    let now = SystemTime::now();
-    let access_token = state
-        .keyring
-        .issue(Kind::Access, &user.id, &user.tenant_id, now);
-    let refresh_token = state
-        .keyring
-        .issue(Kind::Refresh, &user.id, &user.tenant_id, now);
+    let body = login_body(state, user, password_must_change, SystemTime::now());
     // The refresh cookie goes to the refresh route alone, so no other request
-    // carries it.
+    // carries it (doc/adr/0025).
     let jar = jar
         .add(token_cookie(
             ACCESS_COOKIE,
-            &access_token,
+            &body.access_token,
             Kind::Access,
             "/",
         ))
         .add(token_cookie(
             REFRESH_COOKIE,
-            &refresh_token,
+            &body.refresh_token,
             Kind::Refresh,
             REFRESH_PATH,
         ));
-    (
-        jar,
-        Json(Login {
-            access_token,
-            token_type: "Bearer",
-            expires_in: Kind::Access.lifetime().as_secs(),
-            refresh_token,
-            refresh_expires_in: Kind::Refresh.lifetime().as_secs(),
-            password_must_change,
-        }),
-    )
-        .into_response()
+    (jar, Json(body)).into_response()
 }
 
 /// The cookie `name` carrying `token` of `kind`, sent to `path` alone.

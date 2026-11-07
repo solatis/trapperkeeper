@@ -11,9 +11,9 @@ signal stops it. Setting up a database, by serve or by migrate, creates the
 superadmin and logs its one-time password. `reset-superadmin` gives the
 superadmin, the user `admin` of the system tenant `$tk`, a new one-time
 password, creating the superadmin when it is missing, and prints the
-password. Before a
-subcommand runs, the binary resolves its settings: the listen address, the log
-level and the database URL. Each module directory that appears under `src/`
+password. The superadmin creates tenants and mints a session for any user
+through the management routes. Before a subcommand runs, the binary resolves
+its settings: the listen address, the log level and the database URL. Each module directory that appears under `src/`
 gets its own `AGENTS.md`, and this file indexes them.
 
 **Map**:
@@ -32,6 +32,7 @@ gets its own `AGENTS.md`, and this file indexes them.
 | `src/logging.rs`      | the subscriber: log format and level                                                                                                                                                                                                                                             | log format, log level, RUST_LOG                                                    |
 | `src/names.rs`        | the tenant name and user name rules                                                                                                                                                                                                                                              | what a created name may hold, the `$` prefix                                       |
 | `src/scope.rs`        | the rule for the tenant in a route's path                                                                                                                                                                                                                                        | who may call a tenant-scoped route                                                 |
+| `src/sessions.rs`     | the superadmin's route that mints a session for a user                                                                                                                                                                                                                           | acting as a user                                                                   |
 | `src/store/`          | the relational store and its migrations; see its `AGENTS.md`                                                                                                                                                                                                                     | the database, migrations, tables                                                   |
 | `src/superadmin.rs`   | the superadmin of `$tk`, reset from the console                                                                                                                                                                                                                                  | the superadmin, recovering its password                                            |
 | `src/tenants.rs`      | the superadmin's tenant routes                                                                                                                                                                                                                                                   | creating and listing tenants                                                       |
@@ -41,6 +42,7 @@ gets its own `AGENTS.md`, and this file indexes them.
 | `tests/http.rs`       | integration tests of the endpoints on the router served in-process                                                                                                                                                                                                               | what the probes and the document promise                                           |
 | `tests/login.rs`      | integration tests of login, refresh, logout, password change and me on the router served in-process: a scenario, a property over defective tokens, and a property over sequences of the routes against a model                                                                   | what the routes hand out and refuse, which tokens pass, an unknown tenant at login |
 | `tests/logs.rs`       | end-to-end: checks the log lines the binary writes under a pipe                                                                                                                                                                                                                  | what a log line contains                                                           |
+| `tests/sessions.rs`   | integration tests of the mint route                                                                                                                                                                                                                                              | what a minted session can do, what the mint refuses                                |
 | `tests/settings.rs`   | end-to-end: the settings precedence as one property through the binary                                                                                                                                                                                                           | how precedence is tested                                                           |
 | `tests/shutdown.rs`   | end-to-end test that SIGTERM stops the binary                                                                                                                                                                                                                                    | how the server stops                                                               |
 | `tests/store.rs`      | end-to-end: runs migrate and serve against SQLite files                                                                                                                                                                                                                          | what migrate builds, which databases serve accepts, what the first serve sets up   |
@@ -144,6 +146,8 @@ gets its own `AGENTS.md`, and this file indexes them.
   `doc/adr/0025-signed-tokens-and-the-revocation-cutoff.md`.
 - Management routes live under `/api/v1` (owner, 2026-11-05):
   `doc/adr/0026-versioned-api-route-prefix.md`.
+- The superadmin acts as a user through ordinary tokens minted for that
+  user (owner, 2026-11-07): `doc/adr/0030-minted-sessions.md`.
 
 **How to**: build, lint and test with the commands in the root `AGENTS.md`,
 How to. `cargo run -- --help` shows the command line. `cargo run -- serve` on

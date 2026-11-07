@@ -10,6 +10,7 @@ mod http;
 mod logging;
 mod names;
 mod scope;
+mod sessions;
 mod store;
 mod superadmin;
 mod tenants;
