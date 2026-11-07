@@ -54,7 +54,7 @@ fn admin_manages_the_users_of_its_tenant() {
         let server = serve_in_process(backend);
         let token = superadmin_token(&server);
 
-        // 1.
+        // 1. The admin logs in with the password the create returned.
         let password = create_tenant(&server, &token, "acme", "ada@example.com");
         let (ada, _) = log_in(&server, "acme", "ada@example.com", &password);
 
@@ -83,7 +83,7 @@ fn admin_manages_the_users_of_its_tenant() {
             ])
         );
 
-        // 4.
+        // 4. The operator becomes a second admin, which step 5 relies on.
         let change = json!({ "role": "admin" });
         let response = call(
             &server,
