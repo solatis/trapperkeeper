@@ -1,6 +1,7 @@
 //! Helpers for the server tests: test databases on each backend, a pool on
 //! one of them, the router served in this process with its superadmin and a
-//! keyring, the binary started as a process, and HTTP requests.
+//! keyring, the binary started as a process, HTTP requests, and calls on the
+//! management routes as a logged-in user.
 
 // Each test crate compiles this module and uses only part of it.
 #![allow(dead_code, unused_imports, unused_macros)]
@@ -18,7 +19,7 @@ use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use serde_json::Value;
+use serde_json::{Value, json};
 use sqlx::migrate::MigrateDatabase;
 use sqlx::mysql::MySql;
 use sqlx::postgres::Postgres;
@@ -640,4 +641,51 @@ fn header<'a>(head: &'a str, name: &str) -> Option<&'a str> {
         let (key, value) = line.split_once(':')?;
         key.eq_ignore_ascii_case(name).then_some(value.trim())
     })
+}
+
+/// Logs in to `tenant` as `name` with `password`, and returns the access
+/// token and whether the password must change. Panics when the login fails.
+pub fn log_in(server: &InProcess, tenant: &str, name: &str, password: &str) -> (String, bool) {
+    let credentials = json!({ "tenant": tenant, "name": name, "password": password });
+    let response = request(
+        server.addr,
+        "POST",
+        "/api/v1/login",
+        &[],
+        Some(&credentials.to_string()),
+    );
+    assert_eq!(response.status, 200, "{}", response.body);
+    let login: Value = serde_json::from_str(&response.body).expect("a JSON body");
+    (
+        login["access_token"]
+            .as_str()
+            .expect("an access token")
+            .to_owned(),
+        login["password_must_change"].as_bool().expect("a flag"),
+    )
+}
+
+/// The superadmin's access token.
+pub fn superadmin_token(server: &InProcess) -> String {
+    log_in(server, SYSTEM_TENANT, ADMIN, &server.admin_password).0
+}
+
+/// Sends `method` to `path` with `token` as the bearer, and `body` as JSON
+/// when there is one.
+pub fn call(
+    server: &InProcess,
+    token: &str,
+    method: &str,
+    path: &str,
+    body: Option<&Value>,
+) -> Response {
+    let bearer = format!("Bearer {token}");
+    let body = body.map(Value::to_string);
+    request(
+        server.addr,
+        method,
+        path,
+        &[("Authorization", &bearer)],
+        body.as_deref(),
+    )
 }
