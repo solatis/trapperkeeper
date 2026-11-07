@@ -8,15 +8,18 @@ use axum::http::request::Parts;
 use axum::response::{IntoResponse, Response};
 use axum_extra::extract::cookie::CookieJar;
 
+use crate::audit::Identity;
 use crate::auth::login::{ACCESS_COOKIE, database_error};
 use crate::auth::token::Kind;
 use crate::http::AppState;
 use crate::store::users::{self, User};
 
 /// The authenticated caller of a management route: a live user holding a
-/// valid access token issued after the user's cutoff.
+/// valid access token issued after the user's cutoff, and the request's
+/// identity cell, through which a route names the tenant it acts on.
 pub struct Caller {
     pub user: User,
+    pub identity: Identity,
 }
 
 impl<S> FromRequestParts<S> for Caller
@@ -37,7 +40,10 @@ where
                 .ok_or_else(|| refuse("no token"))?,
         };
         let user = authenticate(&app, Kind::Access, &token).await?;
-        Ok(Self { user })
+        // Noted in the cell, so the audit row names the caller.
+        let Ok(identity) = Identity::from_request_parts(parts, state).await;
+        identity.set_caller(&user.tenant_id, Some(&user.id));
+        Ok(Self { user, identity })
     }
 }
 

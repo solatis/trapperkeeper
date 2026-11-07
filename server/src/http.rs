@@ -4,12 +4,13 @@
 //! convention, and the document sits at the conventional file name.
 
 use std::io;
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::extract::{FromRef, State};
 use axum::http::StatusCode;
 use axum::routing::get;
-use axum::{Json, Router};
+use axum::{Json, Router, middleware};
 use tokio::net::TcpListener;
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
 use tracing::Level;
@@ -18,6 +19,7 @@ use utoipa::{Modify, OpenApi};
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
+use crate::audit;
 use crate::auth::login;
 use crate::auth::token::Keyring;
 use crate::config::Settings;
@@ -25,6 +27,9 @@ use crate::sessions;
 use crate::store::{self, Store};
 use crate::tenants;
 use crate::users;
+
+/// The prefix every management route sits under (doc/adr/0026).
+pub const API_PREFIX: &str = "/api/v1";
 
 /// What every handler can reach: the store and the keyring.
 #[derive(Clone)]
@@ -100,13 +105,14 @@ async fn readyz(State(store): State<Store>) -> (StatusCode, &'static str) {
 
 /// Builds the router with the management routes under `/api/v1` and the
 /// probes at the root, the API document that describes them, served at
-/// `/openapi.json`, and the request log. The handlers share `state`.
+/// `/openapi.json`, the audit trail and the request log. The handlers share
+/// `state`.
 pub fn router(state: AppState) -> Router {
     // 1. register the management routes, nested under /api/v1
     // 2. register the probes at the root
     // 3. split the router from the finished document
     // 4. add the route that serves the document, and give the handlers the state
-    // 5. wrap the whole router with the trace layer
+    // 5. wrap the whole router with the audit layer, then the trace layer
     //
     // The document must be split off before the route that serves it is
     // added, or it would describe itself, and the trace layer must wrap every
@@ -126,28 +132,33 @@ pub fn router(state: AppState) -> Router {
         .routes(routes!(users::delete))
         .routes(routes!(users::change_role))
         .routes(routes!(users::reset_password))
-        .routes(routes!(sessions::mint));
+        .routes(routes!(sessions::mint))
+        .routes(routes!(audit::list));
 
     // 2. The probes and the document stay at the root, where orchestrators
     //    and tools look for them.
     let (router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
-        .nest("/api/v1", management)
+        .nest(API_PREFIX, management)
         .routes(routes!(healthz))
         .routes(routes!(readyz))
         // 3.
         .split_for_parts();
 
-    // 4. The document route is not in the document itself.
+    // 4. The document route is not in the document itself. The audit layer
+    //    takes the state too, so it is built before the state moves.
+    let audit = middleware::from_fn_with_state(state.clone(), audit::record);
     let router = router
         .route("/openapi.json", get(move || async move { Json(api) }))
         .with_state(state);
 
-    // 5. The trace layer's span and response event are raised to INFO, so
-    //    each request is one info line with method, URI, status and latency
-    //    at the default level. tower-http emits both at DEBUG, where its
-    //    "started processing request" and "end of stream" events stay,
-    //    because one line per request is the point.
-    router.layer(
+    // 5. The audit layer covers the whole router and skips by method and
+    //    template, so no route is missed. The trace layer sits outside it, so
+    //    its span covers the audit write. The span and the response event are
+    //    raised to INFO, so each request is one info line with method, URI,
+    //    status and latency at the default level. tower-http emits both at
+    //    DEBUG, where its "started processing request" and "end of stream"
+    //    events stay, because one line per request is the point.
+    router.layer(audit).layer(
         TraceLayer::new_for_http()
             .make_span_with(DefaultMakeSpan::new().level(Level::INFO))
             .on_response(DefaultOnResponse::new().level(Level::INFO)),
@@ -177,10 +188,14 @@ pub async fn serve(settings: &Settings, state: AppState) -> io::Result<()> {
 
     // 3. Serve until a signal arrives, then finish the in-flight requests, so
     //    a SIGTERM from an orchestrator drains the connections instead of
-    //    cutting them.
-    axum::serve(listener, router(state))
-        .with_graceful_shutdown(shutdown)
-        .await?;
+    //    cutting them. With connect info, because the audit trail records the
+    //    peer's address.
+    axum::serve(
+        listener,
+        router(state).into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown)
+    .await?;
 
     // 4. Say that the drain completed, so the log can tell a clean stop from a
     //    crash.

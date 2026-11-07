@@ -9,6 +9,7 @@ event log is a separate store, whose engine is still open (see
 
 | File                         | What                                                                             | When to read                                                                |
 | ---------------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `audit.rs`                   | appending to and paging the audit trail                                          | the trail's columns, the cursor, the user join                              |
 | `mod.rs`                     | choosing the backend, opening the store, transactions                            | which URL schemes work; whether a database exists; `Tx`; placeholders       |
 | `migrate.rs`                 | the embedded migrations: apply, check                                            | what makes serve refuse, what each refusal means, what an empty database is |
 | `tenants.rs`                 | tenants and their roles; finding a tenant by name; whether a tenant holds a role | creating a tenant with its roles, listing tenants                           |
@@ -25,13 +26,15 @@ event log is a separate store, whose engine is still open (see
   column, and every query filters on it (`doc/adr/0003`). `installation` is
   one row of facts that belong to no tenant.
 - Every entity table has a `deleted_at` column, and a deleted row stays in the
-  table. Every read filters on `deleted_at IS NULL` as it filters on
-  `tenant_id`. A name is unique among live rows: a partial unique index on
+  table, except `audit`, whose rows are records and are never deleted. Every
+  read filters on `deleted_at IS NULL` as it filters on `tenant_id`. A name is unique among live rows: a partial unique index on
   SQLite and Postgres, and a unique key over a generated `live` column on
   MariaDB, which has no partial index (`doc/adr/0024`).
 - A reference to a tenant-scoped row carries the `tenant_id` too, as the
   composite key from `users` to `roles` does, so a row cannot reference
-  another tenant's row.
+  another tenant's row. The exception is an actor reference, who did it,
+  which is a foreign key on `users (user_id)` alone, because the actor may be
+  the superadmin of `$tk`; `audit.user_id` is the first (owner, 2026-11-07).
 - An entity's `_id` is a time-ordered UUID that Rust generates, stored as
   36-character text. Its `_name` is unique in its scope and lowercase, and
   constraints in the table enforce both. A display name is a `_title` column,
@@ -74,7 +77,8 @@ event log is a separate store, whose engine is still open (see
 
 - Add a table: add the next numbered file to each of the three migration
   directories, with a `tenant_id` column, a `deleted_at` column, and the
-  live-only unique index on the name as `0001_tenants.sql` has it.
+  live-only unique index on the name as `0001_tenants.sql` has it. A table
+  of records rather than entities, as `audit` is, has no `deleted_at`.
 - Start over after editing a migration: delete the database and run
   `migrate`.
 - Run the tests against Postgres or MariaDB: set `TK_TEST_POSTGRES_URL` or

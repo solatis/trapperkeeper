@@ -3,6 +3,7 @@
 //! `AGENTS.md`. Store functions take a `Tx` and never commit, so a caller
 //! composes them in one transaction.
 
+pub mod audit;
 pub mod installation;
 pub mod migrate;
 pub mod tenants;

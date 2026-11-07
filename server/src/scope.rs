@@ -7,6 +7,7 @@
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 
+use crate::audit::Identity;
 use crate::auth::caller::Refusal;
 use crate::auth::login::database_error;
 use crate::auth::role::Rank;
@@ -48,15 +49,21 @@ impl IntoResponse for Refused {
     }
 }
 
-/// Resolves the live tenant named in the path and allows it when it is the
-/// caller's own or the caller is the superadmin. Takes the caller's user, so
-/// a route on `Caller` and one on `AtLeast<R>` use it alike.
+/// Resolves the live tenant named in the path, allows it when it is the
+/// caller's own or the caller is the superadmin, and notes it in the
+/// caller's identity cell. Takes the caller's user and cell, so a route on
+/// `Caller` and one on `AtLeast<R>` use it alike.
 ///
 /// # Errors
 ///
 /// `NotFound` for no such live tenant and for the system tenant; `Forbidden`
 /// for another tenant's; `Store` when the store fails.
-pub async fn resolve(tx: &mut Tx, caller: &User, tenant_name: &str) -> Result<Scope, Refused> {
+pub async fn resolve(
+    tx: &mut Tx,
+    caller: &User,
+    identity: &Identity,
+    tenant_name: &str,
+) -> Result<Scope, Refused> {
     // The name is lowercased as the store keeps it and not checked for
     // shape, because a name that fails the shape matches no row (doc/adr/0020).
     let found = tenants::find(tx, &tenant_name.to_lowercase()).await?;
@@ -72,5 +79,7 @@ pub async fn resolve(tx: &mut Tx, caller: &User, tenant_name: &str) -> Result<Sc
     if tenant.id != caller.tenant_id && !superadmin {
         return Err(Refused::Forbidden);
     }
+    // Noted so the audit row is filed under the tenant acted on.
+    identity.set_scope(&tenant.id);
     Ok(Scope { tenant })
 }
