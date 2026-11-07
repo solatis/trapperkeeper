@@ -21,6 +21,7 @@ use utoipa_axum::routes;
 use crate::auth::login;
 use crate::auth::token::Keyring;
 use crate::config::Settings;
+use crate::sessions;
 use crate::store::{self, Store};
 use crate::tenants;
 use crate::users;
@@ -124,7 +125,8 @@ pub fn router(state: AppState) -> Router {
         .routes(routes!(users::list, users::create))
         .routes(routes!(users::delete))
         .routes(routes!(users::change_role))
-        .routes(routes!(users::reset_password));
+        .routes(routes!(users::reset_password))
+        .routes(routes!(sessions::mint));
 
     // 2. The probes and the document stay at the root, where orchestrators
     //    and tools look for them.
