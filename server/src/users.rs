@@ -382,3 +382,52 @@ pub async fn change_role(
         Err(refused) => refused.into_response(),
     }
 }
+
+/// Gives the named user of the tenant a new generated password that must be
+/// changed, ends the user's sessions, and returns the password. Needs admin
+/// of that tenant, or superadmin. 404 for no such live user.
+#[utoipa::path(
+    post,
+    path = "/tenants/{tenant}/users/{name}/password",
+    params(
+        ("tenant" = String, Path, description = "the tenant's name"),
+        ("name" = String, Path, description = "the user's email address")
+    ),
+    security(("bearer" = [])),
+    responses(
+        (status = OK, description = "the user and its one-time password", body = CreatedUser),
+        (status = UNAUTHORIZED, description = "no valid access token", body = String),
+        (status = FORBIDDEN, description = "the caller is below admin, or of another tenant", body = String),
+        (status = NOT_FOUND, description = "no such tenant or user", body = String)
+    )
+)]
+pub async fn reset_password(
+    caller: AtLeast<role::Admin>,
+    State(state): State<AppState>,
+    Path((tenant, name)): Path<(String, String)>,
+) -> Response {
+    let reset = async {
+        let mut tx = state.store.begin().await?;
+        let scope = scope::resolve(&mut tx, &caller.user, &tenant).await?;
+        let Some(target) = users::find(&mut tx, &scope.tenant.id, &name.to_lowercase()).await?
+        else {
+            return Err(Refused::NoSuchUser);
+        };
+        // accounts::reset sets tokens_valid_after too, so the person who held
+        // the old password is logged out everywhere (doc/adr/0025).
+        let password = accounts::reset(&mut tx, &scope.tenant.id, &target.id).await?;
+        tx.commit().await?;
+        Ok((target, password))
+    }
+    .await;
+    match reset {
+        Ok((target, password)) => Json(CreatedUser {
+            tenant_id: target.tenant_id,
+            name: target.name,
+            role: target.role_name,
+            password,
+        })
+        .into_response(),
+        Err(refused) => refused.into_response(),
+    }
+}
