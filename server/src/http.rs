@@ -4,6 +4,7 @@
 //! convention, and the document sits at the conventional file name.
 
 use std::io;
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::extract::{FromRef, State};
@@ -177,10 +178,14 @@ pub async fn serve(settings: &Settings, state: AppState) -> io::Result<()> {
 
     // 3. Serve until a signal arrives, then finish the in-flight requests, so
     //    a SIGTERM from an orchestrator drains the connections instead of
-    //    cutting them.
-    axum::serve(listener, router(state))
-        .with_graceful_shutdown(shutdown)
-        .await?;
+    //    cutting them. With connect info, because the audit trail records the
+    //    peer's address.
+    axum::serve(
+        listener,
+        router(state).into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown)
+    .await?;
 
     // 4. Say that the drain completed, so the log can tell a clean stop from a
     //    crash.
