@@ -44,3 +44,4 @@ dropped.
 | `0027-opaque-hashed-sensor-api-keys.md`                           | a sensor key is opaque random text, stored as a hash, revoked by deletion                                           |
 | `0028-system-tenant-and-first-run.md`                             | the superadmin is `admin` of `$tk`; `$` names are the server's; the first migration of an empty database creates it |
 | `0029-role-ladder.md`                                             | observer < operator < admin < superadmin; each route names its lowest role; off the ladder ranks below all          |
+| `0030-minted-sessions.md`                                         | the superadmin mints ordinary tokens for a user, as a login body without cookies; no actor claim                    |
