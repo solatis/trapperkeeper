@@ -132,7 +132,8 @@ pub fn router(state: AppState) -> Router {
         .routes(routes!(users::delete))
         .routes(routes!(users::change_role))
         .routes(routes!(users::reset_password))
-        .routes(routes!(sessions::mint));
+        .routes(routes!(sessions::mint))
+        .routes(routes!(audit::list));
 
     // 2. The probes and the document stay at the root, where orchestrators
     //    and tools look for them.
