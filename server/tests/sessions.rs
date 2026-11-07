@@ -33,7 +33,7 @@ fn superadmin_mints_a_session_that_acts_as_the_user() {
         let server = serve_in_process(backend);
         let token = superadmin_token(&server);
 
-        // 1.
+        // 1. The admin's own session is what step 4's logout must end too.
         let password = create_acme(&server, &token);
         let (own, _) = log_in(&server, "acme", "ada@example.com", &password);
 
