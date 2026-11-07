@@ -48,6 +48,8 @@ pub async fn mint(
     .await;
     let user = match found {
         Ok(Some(user)) => user,
+        // 404 rather than login's uniform 401, because the caller is already
+        // the superadmin and nothing is hidden from it.
         Ok(None) => return (StatusCode::NOT_FOUND, "no such tenant or user").into_response(),
         Err(error) => return database_error(&error),
     };
