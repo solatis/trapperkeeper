@@ -11,9 +11,9 @@ signal stops it. Setting up a database, by serve or by migrate, creates the
 superadmin and logs its one-time password. `reset-superadmin` gives the
 superadmin, the user `admin` of the system tenant `$tk`, a new one-time
 password, creating the superadmin when it is missing, and prints the
-password. Before a
-subcommand runs, the binary resolves its settings: the listen address, the log
-level and the database URL. Each module directory that appears under `src/`
+password. The superadmin creates tenants and mints a session for any user
+through the management routes. Before a subcommand runs, the binary resolves
+its settings: the listen address, the log level and the database URL. Each module directory that appears under `src/`
 gets its own `AGENTS.md`, and this file indexes them.
 
 **Map**:
