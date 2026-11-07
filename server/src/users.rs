@@ -303,3 +303,82 @@ pub async fn delete(
         Err(refused) => refused.into_response(),
     }
 }
+
+/// The role to give.
+#[derive(Deserialize, ToSchema)]
+pub struct RoleChange {
+    role: String,
+}
+
+/// Gives the named user of the tenant another of the tenant's roles. Needs
+/// admin of that tenant, or superadmin. 400 for a role the tenant does not
+/// hold or `superadmin`; 404 for no such live user; 409 when the change would
+/// demote the last live admin.
+#[utoipa::path(
+    put,
+    path = "/tenants/{tenant}/users/{name}/role",
+    params(
+        ("tenant" = String, Path, description = "the tenant's name"),
+        ("name" = String, Path, description = "the user's email address")
+    ),
+    security(("bearer" = [])),
+    request_body = RoleChange,
+    responses(
+        (status = OK, description = "the user with its new role", body = UserView),
+        (status = BAD_REQUEST, description = "the tenant does not hold the role", body = String),
+        (status = UNAUTHORIZED, description = "no valid access token", body = String),
+        (status = FORBIDDEN, description = "the caller is below admin, or of another tenant", body = String),
+        (status = NOT_FOUND, description = "no such tenant or user", body = String),
+        (status = CONFLICT, description = "the user is the tenant's last live admin", body = String)
+    )
+)]
+pub async fn change_role(
+    caller: AtLeast<role::Admin>,
+    State(state): State<AppState>,
+    Path((tenant, name)): Path<(String, String)>,
+    Json(change): Json<RoleChange>,
+) -> Response {
+    // 1. refuse the superadmin role by name
+    // 2. resolve the scope, find the live user, check the tenant holds the role
+    // 3. when the user is an admin and the new role is not, count the admins
+    // 4. set the role and commit
+
+    // 1. `superadmin` is refused by name before any read, because `$tk` holds
+    //    it alone and a second superadmin was rejected (doc/adr/0028).
+    if change.role == superadmin::ROLE {
+        return Refused::BadRequest("no route gives the role superadmin").into_response();
+    }
+
+    let changed = async {
+        let mut tx = state.store.begin().await?;
+        // 2.
+        let scope = scope::resolve(&mut tx, &caller.user, &tenant).await?;
+        let Some(mut target) = users::find(&mut tx, &scope.tenant.id, &name.to_lowercase()).await?
+        else {
+            return Err(Refused::NoSuchUser);
+        };
+        if !tenants::role_exists(&mut tx, &scope.tenant.id, &change.role).await? {
+            return Err(Refused::BadRequest("the tenant does not hold this role"));
+        }
+
+        // 3. Only a demotion needs the count: a change to admin, or between
+        //    two other roles, cannot empty the admins.
+        let demotion = target.role_name == ADMIN_ROLE && change.role != ADMIN_ROLE;
+        if demotion && users::count_admins(&mut tx, &scope.tenant.id).await? <= 1 {
+            return Err(Refused::LastAdmin);
+        }
+
+        // 4. The role takes effect at the user's next request, because the
+        //    caller's role is read from the store each time, so no token is
+        //    revoked (doc/adr/0025).
+        users::set_role(&mut tx, &scope.tenant.id, &target.id, &change.role).await?;
+        tx.commit().await?;
+        target.role_name = change.role;
+        Ok(target)
+    }
+    .await;
+    match changed {
+        Ok(target) => Json(view(target)).into_response(),
+        Err(refused) => refused.into_response(),
+    }
+}

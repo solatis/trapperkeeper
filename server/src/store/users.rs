@@ -1,5 +1,5 @@
-//! Users and their roles in the relational store: creating, listing, finding
-//! and deleting them. Every read ignores deleted rows.
+//! Users and their roles in the relational store: creating, listing, finding,
+//! re-roling and deleting them. Every read ignores deleted rows.
 
 use std::fmt;
 
@@ -155,6 +155,39 @@ pub async fn count_admins(tx: &mut Tx, tenant_id: &str) -> Result<i64, sqlx::Err
             .bind(ADMIN_ROLE)
             .fetch_one(conn)
             .await
+    })
+}
+
+/// Gives the live user `user_id` of `tenant_id` the tenant's live role named
+/// `role_name`, which the caller has checked the tenant holds.
+///
+/// # Errors
+///
+/// Fails when the database cannot be written, which a role the tenant does
+/// not hold causes through the NOT NULL role id.
+pub async fn set_role(
+    tx: &mut Tx,
+    tenant_id: &str,
+    user_id: &str,
+    role_name: &str,
+) -> Result<(), sqlx::Error> {
+    // The role id comes from the subselect the insert uses, so callers never
+    // hold role ids (doc/adr/0023).
+    let update = sql(
+        tx,
+        "UPDATE users SET role_id = \
+         (SELECT role_id FROM roles WHERE tenant_id = $1 AND role_name = $2 AND deleted_at IS NULL) \
+         WHERE tenant_id = $3 AND user_id = $4 AND deleted_at IS NULL",
+    );
+    on_tx!(tx, |conn| {
+        sqlx::query(AssertSqlSafe(update))
+            .bind(tenant_id)
+            .bind(role_name)
+            .bind(tenant_id)
+            .bind(user_id)
+            .execute(conn)
+            .await
+            .map(|_| ())
     })
 }
 
