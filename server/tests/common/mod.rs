@@ -352,7 +352,15 @@ pub fn serve_in_process(backend: Backend) -> InProcess {
         let _context = runtime.enter();
         tokio::net::TcpListener::from_std(listener).expect("tokio adopts the listener")
     };
-    runtime.spawn(axum::serve(listener, router(state)).into_future());
+    // With connect info, as serve does, because the audit trail records the
+    // peer's address.
+    runtime.spawn(
+        axum::serve(
+            listener,
+            router(state).into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .into_future(),
+    );
 
     InProcess {
         addr,
