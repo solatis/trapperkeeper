@@ -24,6 +24,8 @@ mod users;
 // is part of its interface.
 pub use accounts::{NewAccount, create as create_account};
 pub use auth::token::{Claims, Keyring, Kind};
+pub use cli::{DatabaseOverrides, LogOverrides, Overrides};
+pub use config::{LogLevel, Settings, load as load_settings};
 pub use http::{AppState, router};
 pub use logging::json_subscriber;
 pub use store::Store;
@@ -36,7 +38,6 @@ use std::sync::Arc;
 use clap::Parser;
 
 use cli::{Cli, Command};
-use config::Settings;
 use setup::SetUp;
 
 /// Runs the subcommand named on the command line and returns its exit status.

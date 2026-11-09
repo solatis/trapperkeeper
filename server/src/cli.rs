@@ -51,6 +51,7 @@ pub struct Overrides {
 
 impl Overrides {
     /// The flags given on the command line that carry a secret, by name.
+    #[must_use]
     pub fn secrets(&self) -> Vec<&'static str> {
         let mut secrets = Vec::new();
         if self.database.url.is_some() {

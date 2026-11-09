@@ -1,26 +1,20 @@
-//! Checks the precedence of the settings layers through the binary. Three
-//! settings are covered: the listen address, the log level and the database
-//! URL. For each, the file, the environment and the flags each give a random
-//! value or stay silent. A database URL is a SQLite URL or a Postgres URL with
-//! a generated password. The binary logs the settings it resolved, and each
-//! must be the value of the highest layer that gave one, or the default when
-//! none did; the logged URL has its password replaced by `***`. One property
-//! over generated layers instead of a case per layer, as `doc/adr/0018` asks.
-//! The test runs `migrate`, because it resolves and logs the settings without
-//! needing a port. The Postgres URLs point at port 1, so migrate fails to
-//! connect, after it has logged the settings. Each run has a scratch directory
-//! as its working directory, because migrate creates the SQLite database the
-//! resolved URL names.
-
-mod common;
+//! The precedence of the settings layers through the loader. Three settings
+//! are covered: the listen address, the log level and the database URL. For
+//! each, the file, the environment and the flags each give a random value or
+//! stay silent. A database URL is a SQLite URL or a Postgres URL with a
+//! generated password. Each resolved setting must be the value of the highest
+//! layer that gave one, or the default when none did, and a resolved URL
+//! serializes with its password replaced by `***`. One property over
+//! generated layers instead of a case per layer, as `doc/adr/0018` asks, each
+//! case inside figment's jail.
 
 use std::fmt::Write as _;
-use std::fs;
-use std::process::Command;
+use std::path::Path;
 
-use common::Scratch;
+use figment::Jail;
 use proptest::prelude::*;
 use serde_json::Value;
+use trapperkeeper_server::{DatabaseOverrides, LogOverrides, Overrides, load_settings};
 
 /// The level names the settings accept, as a file would spell them.
 const LEVELS: [&str; 6] = ["trace", "debug", "info", "warn", "error", "off"];
@@ -50,8 +44,8 @@ impl DatabaseUrl {
         }
     }
 
-    /// The URL as the settings line must show it.
-    fn logged(&self) -> String {
+    /// The URL as the resolved settings must show it.
+    fn masked(&self) -> String {
         match self {
             Self::Sqlite(_) => self.given(),
             Self::Postgres(n, _) => format!("postgres://tk:***@127.0.0.1:1/db-{n}"),
@@ -83,84 +77,74 @@ fn address(port: u16) -> String {
     format!("127.0.0.1:{port}")
 }
 
-/// Runs `migrate` with the three layers and returns the lines it logged.
-fn logged(file: &Layer, env: &Layer, flags: &Layer) -> Vec<Value> {
-    // 1. Write the file layer as TOML, even when empty, so the file path is
-    //    always exercised.
-    let scratch = Scratch::create();
-    let path = scratch.path.join("trapperkeeper.toml");
-    let mut toml = String::new();
-    if let Some(port) = file.listen {
-        writeln!(toml, "listen = \"{}\"", address(port)).expect("a string grows");
-    }
-    if let Some(level) = file.level {
-        writeln!(toml, "[log]\nlevel = \"{level}\"").expect("a string grows");
-    }
-    if let Some(url) = &file.database {
-        writeln!(toml, "[database]\nurl = \"{}\"", url.given()).expect("a string grows");
-    }
-    fs::write(&path, toml).expect("the file is written");
+/// Resolves the three layers through the loader inside a jail and returns the
+/// settings as JSON with the flags that carry a secret.
+fn resolved(file: &Layer, env: &Layer, flags: &Layer) -> (Value, Vec<&'static str>) {
+    // 1. write the file layer as TOML into the jail's directory
+    // 2. clear the environment and set the environment layer
+    // 3. build the overrides from the flags layer
+    // 4. load, and serialize the settings to JSON
 
-    // 2. Run the binary with the environment and flag layers. The outer
-    //    environment's own variables are removed first, so a developer's shell
-    //    cannot leak into the property. RUST_LOG at debug makes the settings
-    //    line appear whatever level the layers chose, because the directive
-    //    replaces the setting for the filter and leaves the resolved value as
-    //    it is.
-    let mut command = Command::new(env!("CARGO_BIN_EXE_trapperkeeper"));
-    command
-        .current_dir(&scratch.path)
-        .env_remove("TRAPPERKEEPER_LISTEN")
-        .env_remove("TRAPPERKEEPER_LOG__LEVEL")
-        .env_remove("TRAPPERKEEPER_DATABASE__URL")
-        .env("RUST_LOG", "debug")
-        .arg("--config")
-        .arg(&path);
-    if let Some(port) = env.listen {
-        command.env("TRAPPERKEEPER_LISTEN", address(port));
-    }
-    if let Some(level) = env.level {
-        command.env("TRAPPERKEEPER_LOG__LEVEL", level);
-    }
-    if let Some(url) = &env.database {
-        command.env("TRAPPERKEEPER_DATABASE__URL", url.given());
-    }
-    if let Some(port) = flags.listen {
-        command.arg("--listen").arg(address(port));
-    }
-    if let Some(level) = flags.level {
-        command.arg("--log-level").arg(level);
-    }
-    if let Some(url) = &flags.database {
-        command.arg("--database-url").arg(url.given());
-    }
-    command.arg("migrate");
-    let output = command.output().expect("the binary runs");
+    let mut result = None;
+    // The jail fixes the closure's error type to figment's, which is over 200
+    // bytes, so the lint on large errors is relaxed here.
+    #[allow(clippy::result_large_err)]
+    Jail::try_with(|jail| {
+        // 1. An empty file still exists, so the file path is always exercised.
+        let mut toml = String::new();
+        if let Some(port) = file.listen {
+            writeln!(toml, "listen = \"{}\"", address(port)).expect("a string grows");
+        }
+        if let Some(level) = file.level {
+            writeln!(toml, "[log]\nlevel = \"{level}\"").expect("a string grows");
+        }
+        if let Some(url) = &file.database {
+            writeln!(toml, "[database]\nurl = \"{}\"", url.given()).expect("a string grows");
+        }
+        jail.create_file("trapperkeeper.toml", &toml)?;
+        let path = jail.directory().join("trapperkeeper.toml");
 
-    // 3. Parse each line of stdout.
-    let stdout = String::from_utf8(output.stdout).expect("UTF-8 stdout");
-    stdout
-        .lines()
-        .map(|line| serde_json::from_str::<Value>(line).expect("one JSON object per line"))
-        .collect()
+        // 2. The jail locks the environment and the working directory while
+        //    the case runs and restores both after, so parallel tests do not
+        //    race. The inherited environment is cleared first, so a
+        //    developer's shell cannot leak into the property.
+        jail.clear_env();
+        if let Some(port) = env.listen {
+            jail.set_env("TRAPPERKEEPER_LISTEN", address(port));
+        }
+        if let Some(level) = env.level {
+            jail.set_env("TRAPPERKEEPER_LOG__LEVEL", level);
+        }
+        if let Some(url) = &env.database {
+            jail.set_env("TRAPPERKEEPER_DATABASE__URL", url.given());
+        }
+
+        // 3.
+        let overrides = Overrides {
+            listen: flags
+                .listen
+                .map(|port| address(port).parse().expect("a socket address")),
+            log: LogOverrides {
+                level: flags.level.map(|level| level.parse().expect("a level")),
+            },
+            database: DatabaseOverrides {
+                url: flags.database.as_ref().map(DatabaseUrl::given),
+            },
+        };
+
+        // 4.
+        let settings = load_settings(Some(&path), &overrides).map_err(|error| *error)?;
+        let json = serde_json::to_value(&settings).expect("the settings serialize");
+        result = Some((json, overrides.secrets()));
+        Ok(())
+    })
+    .expect("the settings resolve");
+    result.expect("the jail ran the case")
 }
 
-/// The settings carried by the settings line among `lines`.
-fn settings(lines: &[Value]) -> Value {
-    let line = lines
-        .iter()
-        .find(|line| line["fields"]["message"] == "settings resolved")
-        .unwrap_or_else(|| panic!("no settings line in {lines:?}"));
-    let settings = line["fields"]["settings"]
-        .as_str()
-        .expect("the settings are a JSON string");
-    serde_json::from_str(settings).expect("the settings parse")
-}
-
-/// A database URL given as a flag is accepted with a warning that names the
-/// flag.
+/// A database URL given as a flag is reported as a secret flag.
 #[test]
-fn a_secret_flag_warns() {
+fn a_secret_flag_is_reported() {
     let silent = Layer {
         listen: None,
         level: None,
@@ -170,20 +154,30 @@ fn a_secret_flag_warns() {
         database: Some(DatabaseUrl::Postgres(0, "secret".to_owned())),
         ..silent.clone()
     };
-    let lines = logged(&silent, &silent, &flags);
-    let warning = lines
-        .iter()
-        .find(|line| line["level"] == "WARN")
-        .unwrap_or_else(|| panic!("no warning in {lines:?}"));
-    assert_eq!(warning["fields"]["flag"], "--database-url");
+    let (_, secrets) = resolved(&silent, &silent, &flags);
+    assert_eq!(secrets, ["--database-url"]);
+}
+
+/// A `--config` path that does not exist is refused, and the message names
+/// the path.
+#[test]
+fn a_missing_config_file_is_refused() {
+    let path = Path::new("no-such-directory/trapperkeeper.toml");
+    let error = load_settings(Some(path), Overrides::default()).err();
+    // A dedicated case, because figment reads a missing file as empty, and
+    // the refusal is this repository's guard.
+    let message = error.expect("a missing file is refused").to_string();
+    assert!(
+        message.contains("no-such-directory/trapperkeeper.toml"),
+        "{message:?}"
+    );
 }
 
 proptest! {
-    // 32 runs rather than proptest's 256: each run starts a process, and the
-    // property has few shapes to cover. No regression file, so a failure
-    // leaves nothing untracked in the tree; the failing seed is in the output.
+    // proptest's default case count, because a case costs one file write and
+    // one load. No regression file, so a failure leaves nothing untracked in
+    // the tree; the failing seed is in the output.
     #![proptest_config(ProptestConfig {
-        cases: 32,
         failure_persistence: None,
         .. ProptestConfig::default()
     })]
@@ -192,7 +186,7 @@ proptest! {
     /// over environment over file, and the default when every layer is silent.
     #[test]
     fn the_highest_layer_wins(file in layer(), env in layer(), flags in layer()) {
-        let settings = settings(&logged(&file, &env, &flags));
+        let (settings, _) = resolved(&file, &env, &flags);
 
         let listen = flags.listen.or(env.listen).or(file.listen)
             .map_or_else(|| address(8080), address);
@@ -202,7 +196,7 @@ proptest! {
         prop_assert_eq!(settings["log"]["level"].as_str(), Some(level));
 
         let database = flags.database.or(env.database).or(file.database)
-            .map_or_else(|| "sqlite://trapperkeeper.db".to_owned(), |url| url.logged());
+            .map_or_else(|| "sqlite://trapperkeeper.db".to_owned(), |url| url.masked());
         prop_assert_eq!(settings["database"]["url"].as_str(), Some(database.as_str()));
     }
 }
