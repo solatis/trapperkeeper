@@ -79,7 +79,7 @@ cookie = { version = "0.18", default-features = false }
 
 [dev-dependencies]
 # The settings precedence is one property over generated layers
-# (doc/adr/0018-integration-tests-over-unit-tests.md).
+# (doc/adr/0018-unit-integration-and-end-to-end-tests.md).
 proptest = "1"
 # The settings property loads inside figment's jail, which locks the
 # environment and the working directory while a case runs.

@@ -132,11 +132,10 @@ gets its own `AGENTS.md`, and this file indexes them.
   release of each database, and a platform skips only what has no build for
   it (owner, 2026-11-02):
   `doc/adr/0021-every-test-suite-runs-on-every-platform.md`.
-- Tests run at the highest level that observes a behavior, by default.
-  Integration tests build the server in the test process and start no
-  process, and only end-to-end tests start the binary. Tests generate their
-  data where it varies (owner, 2026-11-01, 2026-11-03, 2026-11-04):
-  `doc/adr/0018-integration-tests-over-unit-tests.md`.
+- Three kinds of test, unit, integration and end-to-end; only an end-to-end
+  test starts a process, and none exists; no mocks of subsystems without the
+  owner's approval; properties preferred (owner, 2026-11-01 to 2026-11-09):
+  `doc/adr/0018-unit-integration-and-end-to-end-tests.md`.
 - Passwords are hashed with Argon2id at RFC 9106's second recommended
   option, limited to the CPU count (owner, 2026-11-05):
   `doc/adr/0022-argon2id-for-passwords.md`.
