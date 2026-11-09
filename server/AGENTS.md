@@ -95,14 +95,13 @@ gets its own `AGENTS.md`, and this file indexes them.
   untested (owner, 2026-11-09).
 - A test never picks a free port, releases it and passes it on to a server.
   An in-process test keeps the listener it bound.
-- Tests run concurrently, as `cargo test` runs them, and are kept apart by
-  design, never by serializing them (owner, 2026-11-09): each test reserves
-  a database of its own, named after the process and a counter, binds a
-  listener of its own, and reads no other test's rows. The shared tokio
-  runtime is an executor and holds no test's state. What a process does
-  share is locked or used once: the settings property changes the
-  environment inside figment's jail, and the log test installs the global
-  subscriber alone in its binary.
+- Tests run concurrently and are kept apart by what they own, never by
+  serializing them (`doc/adr/0032`): each test reserves a database of its
+  own on every backend, binds a listener of its own, and reads no other
+  test's rows. The shared tokio runtime is an executor and holds no test's
+  state. What a process does share is locked or used once: the settings
+  property changes the environment inside figment's jail, and the log test
+  installs the global subscriber alone in its binary.
 
 **Why**:
 
@@ -160,6 +159,9 @@ gets its own `AGENTS.md`, and this file indexes them.
   user (owner, 2026-11-07): `doc/adr/0030-minted-sessions.md`.
 - The audit trail is one middleware, with the peer and the forwarded header
   as received (owner, 2026-11-06, 2026-11-07): `doc/adr/0031-audit-trail.md`.
+- Tests run concurrently and own their state, a database per test on every
+  backend (owner, 2026-11-09):
+  `doc/adr/0032-concurrent-tests-own-their-state.md`.
 
 **How to**: build, lint and test with the commands in the root `AGENTS.md`,
 How to. `cargo run -- --help` shows the command line. `cargo run -- serve` on
