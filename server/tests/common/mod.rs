@@ -213,10 +213,14 @@ impl Drop for TestDatabase {
 /// in-process server. Panics when it cannot be built.
 pub fn runtime() -> &'static tokio::runtime::Runtime {
     static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
-    // One runtime for the whole process, because a sqlx connection belongs to
-    // the runtime that opened it and fails once that runtime shuts down, and
-    // a store is opened in one call and used in the next. Multi-threaded, so
-    // the servers run on their own threads while a test blocks in a request.
+    // The runtime is the executor the futures run on, a thread pool with an
+    // event loop, and it holds nothing of a test: tests stay apart through
+    // their own databases, and nothing is locked here. One for the whole
+    // process, because a sqlx connection belongs to the runtime that opened
+    // it and fails once that runtime shuts down, and a store is opened in one
+    // call and used in the next. Multi-threaded, so tests that block in
+    // `block_on` at the same time run concurrently, and a server runs on its
+    // own threads while its test blocks in a request.
     RUNTIME.get_or_init(|| {
         tokio::runtime::Builder::new_multi_thread()
             .enable_all()
