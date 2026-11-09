@@ -5,8 +5,10 @@ use std::env;
 use std::fmt;
 use std::io::{self, IsTerminal};
 
+use tracing::Subscriber;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::filter::{FromEnvError, LevelFilter};
+use tracing_subscriber::fmt::MakeWriter;
 use tracing_subscriber::util::{SubscriberInitExt, TryInitError};
 
 /// Name of the environment variable whose filter directive, when set,
@@ -36,6 +38,19 @@ impl fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
+/// The JSON subscriber: the events `filter` passes, each written as one JSON
+/// line to `writer`.
+pub fn json_subscriber<W>(filter: EnvFilter, writer: W) -> impl Subscriber + Send + Sync + 'static
+where
+    W: for<'a> MakeWriter<'a> + Send + Sync + 'static,
+{
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .json()
+        .with_writer(writer)
+        .finish()
+}
+
 /// Installs the global tracing subscriber, writing to stdout. `level` is the
 /// resolved `log.level` setting.
 ///
@@ -64,11 +79,14 @@ pub fn init(level: LevelFilter) -> Result<(), Error> {
     //    when it is. `IsTerminal` on stdout decides and there is no setting: a
     //    collector reads a pipe, a person reads a terminal, and detection
     //    covers both without a switch.
-    let builder = tracing_subscriber::fmt().with_env_filter(filter);
     if io::stdout().is_terminal() {
-        builder.compact().finish().try_init()
+        tracing_subscriber::fmt()
+            .with_env_filter(filter)
+            .compact()
+            .finish()
+            .try_init()
     } else {
-        builder.json().finish().try_init()
+        json_subscriber(filter, io::stdout).try_init()
     }
     .map_err(Error::AlreadyInstalled)
 }

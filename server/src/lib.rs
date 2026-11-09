@@ -25,6 +25,7 @@ mod users;
 pub use accounts::{NewAccount, create as create_account};
 pub use auth::token::{Claims, Keyring, Kind};
 pub use http::{AppState, router};
+pub use logging::json_subscriber;
 pub use store::Store;
 pub use store::migrate::Mismatch;
 pub use superadmin::reset as reset_superadmin;
