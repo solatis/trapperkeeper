@@ -95,6 +95,14 @@ gets its own `AGENTS.md`, and this file indexes them.
   untested (owner, 2026-11-09).
 - A test never picks a free port, releases it and passes it on to a server.
   An in-process test keeps the listener it bound.
+- Tests run concurrently, as `cargo test` runs them, and are kept apart by
+  design, never by serializing them (owner, 2026-11-09): each test reserves
+  a database of its own, named after the process and a counter, binds a
+  listener of its own, and reads no other test's rows. The shared tokio
+  runtime is an executor and holds no test's state. What a process does
+  share is locked or used once: the settings property changes the
+  environment inside figment's jail, and the log test installs the global
+  subscriber alone in its binary.
 
 **Why**:
 
