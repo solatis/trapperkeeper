@@ -295,8 +295,9 @@ impl InProcess {
 /// superadmin's one-time password. Panics when the set-up fails or created no
 /// superadmin.
 pub fn set_up_database(database: &TestDatabase) -> (Store, String) {
-    // The store outlives the runtime `block_on` builds: the pool tests each
-    // connection before handing it out and reopens it on the caller's runtime.
+    // The store outlives the runtime `block_on` builds. The pool tests each
+    // connection before handing it out and reopens a dead one on the caller's
+    // runtime.
     let (store, set_up) = block_on(setup::create(&database.url)).expect("the database is set up");
     let password = set_up
         .password
