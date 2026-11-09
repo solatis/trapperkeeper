@@ -10,9 +10,10 @@ use std::env;
 use std::fmt;
 use std::fmt::Write as _;
 use std::fs;
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{self, BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::path::PathBuf;
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use serde_json::{Value, json};
@@ -208,14 +209,26 @@ impl Drop for TestDatabase {
     }
 }
 
-/// Runs `future` to completion on a runtime of its own, because the tests are
-/// synchronous and sqlx is not.
+/// The one runtime of the test process, shared by every helper and every
+/// in-process server. Panics when it cannot be built.
+pub fn runtime() -> &'static tokio::runtime::Runtime {
+    static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
+    // One runtime for the whole process, because a sqlx connection belongs to
+    // the runtime that opened it and fails once that runtime shuts down, and
+    // a store is opened in one call and used in the next. Multi-threaded, so
+    // the servers run on their own threads while a test blocks in a request.
+    RUNTIME.get_or_init(|| {
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("a runtime")
+    })
+}
+
+/// Runs `future` to completion on the process's runtime, because the tests
+/// are synchronous and sqlx is not.
 pub fn block_on<T>(future: impl Future<Output = T>) -> T {
-    tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .expect("a runtime")
-        .block_on(future)
+    runtime().block_on(future)
 }
 
 /// Evaluates `$body` with `$pool` bound to a pool on `$database`, whichever
@@ -278,9 +291,7 @@ pub struct InProcess {
     pub admin_password: String,
     /// The store the server runs on, for a test that derives keys of its own.
     pub store: Store,
-    // Declared before `database`, so the server and its pool stop before the
-    // database is dropped.
-    runtime: tokio::runtime::Runtime,
+    server: tokio::task::JoinHandle<io::Result<()>>,
     database: TestDatabase,
 }
 
@@ -291,13 +302,25 @@ impl InProcess {
     }
 }
 
+impl Drop for InProcess {
+    fn drop(&mut self) {
+        // The server stops and the pool closes before the fields drop, so no
+        // connection is open when the database is dropped.
+        self.server.abort();
+        block_on(async {
+            match &self.store {
+                Store::Sqlite(pool) => pool.close().await,
+                Store::Postgres(pool) => pool.close().await,
+                Store::MariaDb(pool) => pool.close().await,
+            }
+        });
+    }
+}
+
 /// Sets up `database` the way migrate does and returns its store and the
 /// superadmin's one-time password. Panics when the set-up fails or created no
 /// superadmin.
 pub fn set_up_database(database: &TestDatabase) -> (Store, String) {
-    // The store outlives the runtime `block_on` builds. The pool tests each
-    // connection before handing it out and reopens a dead one on the caller's
-    // runtime.
     let (store, set_up) = block_on(setup::create(&database.url)).expect("the database is set up");
     let password = set_up
         .password
@@ -310,19 +333,12 @@ pub fn set_up_database(database: &TestDatabase) -> (Store, String) {
 /// `TEST_KEY`, and returns once the address accepts connections. Panics when
 /// the keys do not derive.
 pub fn serve_store(database: TestDatabase, store: Store, admin_password: String) -> InProcess {
-    // 1. derive the keys on a runtime the value owns
+    // 1. derive the keys
     // 2. bind a listener on port 0 and keep it
     // 3. serve the router on that listener
 
-    // 1. A multi-thread runtime, so the server runs on its own threads while
-    //    the test blocks in a request.
-    let runtime = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .expect("a runtime");
-    let keyring = runtime
-        .block_on(Keyring::from_store(&store, TEST_KEY, None))
-        .expect("the keys derive");
+    // 1.
+    let keyring = block_on(Keyring::from_store(&store, TEST_KEY, None)).expect("the keys derive");
     let state = AppState {
         store: store.clone(),
         keyring: std::sync::Arc::new(keyring),
@@ -340,12 +356,12 @@ pub fn serve_store(database: TestDatabase, store: Store, admin_password: String)
         .set_nonblocking(true)
         .expect("the listener turns non-blocking");
     let listener = {
-        let _context = runtime.enter();
+        let _context = runtime().enter();
         tokio::net::TcpListener::from_std(listener).expect("tokio adopts the listener")
     };
     // With connect info, as serve does, because the audit trail records the
     // peer's address.
-    runtime.spawn(
+    let server = runtime().spawn(
         axum::serve(
             listener,
             router(state).into_make_service_with_connect_info::<SocketAddr>(),
@@ -357,7 +373,7 @@ pub fn serve_store(database: TestDatabase, store: Store, admin_password: String)
         addr,
         admin_password,
         store,
-        runtime,
+        server,
         database,
     }
 }
