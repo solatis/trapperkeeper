@@ -42,11 +42,29 @@ it is never dropped.
 
 1. **Outcome.** What is true in the tree when the issue is merged, and what
    it leaves for later issues, each named.
-2. **Verified facts.** What you checked against dependencies, crate docs,
+2. **Rationale.** One row per decision the issue rests on:
+   `| decision | why | rejected, and why | gained | given up | settled by |`.
+   It comes before the Design because the owner reads the plan top to
+   bottom, and a choice they have not seen cannot be ruled on. "Settled by"
+   is a path, "owner, <date>", or `proposal`. An owner row needs the
+   decision and the date; its "why" is the owner's reason when they gave
+   one and "owner's call" otherwise. A proposal row is a choice the owner
+   has not ruled on, so it carries the reason and the alternative that
+   lost, or it is a question asked before the gate. Every new type, route,
+   table, column or module the owner did not name is a row marked
+   `proposal`, so no choice hides in a sketch. "Rejected, and why" names
+   the alternative that lost and what sank it, so no later agent
+   re-litigates it. "Gained" and "given up" are the trade: what the issue
+   buys, and the cost it accepts (a limitation, a slower path, a rule the
+   code must now keep). Put here everything the conversation established
+   that the code will not show: a dependency's defect, an owner preference,
+   a reversal of an earlier rule. A decision another plan of the unit also
+   rests on is a row here too, worded the same.
+3. **Verified facts.** What you checked against dependencies, crate docs,
    a running tool or the documents, each with its evidence (`path:line`, a
    commit, a command's output, a dated session), so the executor neither
    re-verifies nor trusts what was never verified.
-3. **Design.** Every function, type and constant the issue adds or
+4. **Design.** Every function, type and constant the issue adds or
    changes, in the file order they will have. Each entry is a sketch: one
    fenced block in the language of the code, holding the doc comment above
    the signature, the signature, and a body made of comments where the
@@ -79,19 +97,7 @@ it is never dropped.
    way: a fenced block of bullets under the heading they will join. Tests are
    designed the same way.
 
-4. **Rationale.** One row per decision the issue rests on:
-   `| decision | why | rejected, and why | gained | given up | settled by |`.
-   "Why" is the reason the owner or the sources gave, never a
-   reconstruction. "Rejected, and why" names the alternative that lost and
-   what sank it, so no later agent re-litigates it. "Gained" and "given up"
-   are the trade: what the issue buys, and the cost it accepts (a
-   limitation, a slower path, a rule the code must now keep). "Settled by"
-   is a path, "owner, <date>", or `proposal`. Put here everything the
-   conversation established that the code will not show: a dependency's
-   defect, an owner preference, a reversal of an earlier rule. A decision
-   another plan of the unit also rests on is a row here too, worded the
-   same.
-5. **Knowledge.** Per commit, where each why of sections 3 and 4 lands:
+5. **Knowledge.** Per commit, where each why of sections 2 and 4 lands:
    the commented functions with the why-evidence of every claim;
    the `AGENTS.md` sections (What, Map, Invariants, Why, How to) and `doc/`
    passages the commit changes; every fact with no home yet, with the home
@@ -110,7 +116,7 @@ it is never dropped.
    alternative no reader would propose, is marked `plan only` and dies with
    the plan.
 6. **How the knowledge lands.** One line: the build stage is `/tk-build`,
-   which writes every comment and document row from sections 3 and 5 in the
+   which writes every comment and document row from sections 4 and 5 in the
    same commit as the code and reconciles the code against this plan before
    the push. Below it, only what is specific to this issue: a commit whose
    comments depend on a fact the executor must check first, a document row

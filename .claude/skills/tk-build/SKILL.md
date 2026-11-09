@@ -179,9 +179,22 @@ order, bottom of a stack first. For each PR:
    `/tk-workflow`, The Inbox, says:
    - `get_guide_brief`, then the patch `git diff <base>...<slug>`, which
      shows only what this PR adds over its base.
+   - Each chapter's overview is in this order, and a label with nothing
+     under it is left out. One or two sentences: what changed. "You
+     decided:" one line per owner decision the chapter rests on, the
+     decision and the date, no argument. "Proposed by the build:" one line
+     per proposal the chapter rests on, the choice, the alternative that
+     lost, why, and the line in the diff that carries it; every proposal
+     row of the plan appears under this label in exactly one chapter.
+     "Read closely:" one to three lines, each naming a spot in the diff and
+     what the comment or test there should carry, so the owner's eye lands
+     where the comments and the tests are judged; the cue aims, it does
+     not judge. One decision per sentence, the decision before its reason.
    - `submit_guide` with that exact patch, in the unit's thread. The body
      names the PR's URL and the head's SHA, because the owner's "Looks good" approves
-     that head and no other.
+     that head and no other. Then what changed since the last guide of
+     this PR when there was one, then each deviation from the plan with
+     the reason the code forced it and the chapter it lands in.
 
    Then end your turn. A watcher that exits wakes the session too: handle
    it as the table above says, report it in the conversation, and end your
@@ -215,7 +228,9 @@ watcher, and send a new logging guide; the owner marks it "Looks good". Then you
 the metrics guide, and the owner marks it "Looks good". Both new heads go green; the
 message names their runs and the two superseded heads.
 
-Incorrect: the owner marks a guide "Looks good" and the build-stage message is
+Incorrect: a chapter overview stacks six decisions in one paragraph, each
+with its defense, so the owner cannot tell which ones they made and asks
+"are you saying that...". Or: the owner marks a guide "Looks good" and the build-stage message is
 posted while the runs are still going. Or: the logging fix is pushed and
 the metrics guide is sent on the old stack, so the owner reviews code that
 will never merge. Or: both guides go out at once, and the owner can mark

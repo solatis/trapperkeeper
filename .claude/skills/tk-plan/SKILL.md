@@ -75,9 +75,18 @@ unit is already through this stage: say so and leave it out.
 
 5. Put all of the unit's draft plans to the owner in one Inbox message,
    with `send_message` in the unit's thread, as `/tk-workflow`, The Inbox,
-   says. `attachments` lists the plans in landing order, and the body says
-   in one line per plan what its issue delivers. The message carries no
-   question block, so the owner can mark it "Looks good". Then end your turn.
+   says. `attachments` lists the plans in landing order. The message
+   carries no question block, so the owner can mark it "Looks good". Then
+   end your turn.
+
+   The body, per plan in landing order: one line saying what the issue
+   delivers, then two labeled lists built from the plan's Rationale rows,
+   every row in exactly one of them. "Settled by you:" one line per owner
+   row, the decision and the date, nothing else. "Proposed here:" one line
+   per proposal row, the decision, the alternative that lost and why, so
+   the owner rules on it here and not at the code. A label with no rows is
+   left out. One decision per line, the decision before its reason. The
+   "Looks good" settles the proposals as it settles the open questions.
 
    The owner's answer is one of three, by The Inbox's table:
    - "Looks good" on this message: the owner's yes on these plans, and on the plans
@@ -111,4 +120,6 @@ because the plans are approved. Or: you send each plan in its own message,
 so the owner approves the metrics plan before seeing the logging plan it
 stacks on. Or: you add an "Approve the plans?" question to the message, so
 the owner cannot mark it "Looks good". Or: the owner replies with annotations and you
-start code while addressing them.
+start code while addressing them. Or: the body says what each plan
+delivers and nothing else, so the owner meets the planner's choices for
+the first time beside the code.
