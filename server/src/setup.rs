@@ -67,7 +67,7 @@ pub async fn create(url: &str) -> Result<(Store, SetUp), Error> {
 
 /// Opens the database, creating it only when it does not exist, and checks it
 /// against the migrations. An empty database is set up and the set-up
-/// returned; a database that matches returns `None`. For serve.
+/// returned, and a database that matches returns `None`. For serve.
 ///
 /// # Errors
 ///

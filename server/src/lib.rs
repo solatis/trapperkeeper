@@ -1,6 +1,7 @@
 //! The server behind the `trapperkeeper` binary. The binary calls `run`, and
-//! tests reach the router, the store, the keyring, the superadmin and the
-//! creation of users through the items exported here.
+//! the tests reach the set-up of a database, the settings, the router, the
+//! store, the keyring, the superadmin, the JSON subscriber and the creation
+//! of users through the items exported here.
 
 mod accounts;
 mod audit;
@@ -18,10 +19,11 @@ mod superadmin;
 mod tenants;
 mod users;
 
-// The integration tests set up a database the way the commands do, derive a
-// keyring from its store, serve the router on a listener they bound, create
-// users of any role, and mint tokens of their own. Nothing else in the crate
-// is part of its interface.
+// The integration tests set up a database the way the commands do, resolve
+// settings the way `run` does, install the JSON subscriber on a buffer,
+// derive a keyring from a store, serve the router on a listener they bound,
+// create users of any role, and mint tokens of their own. Nothing else in the
+// crate is part of its interface.
 pub use accounts::{NewAccount, create as create_account};
 pub use auth::token::{Claims, Keyring, Kind};
 pub use cli::{DatabaseOverrides, LogOverrides, Overrides};
@@ -202,8 +204,8 @@ async fn migrate(settings: &Settings) -> ExitCode {
 async fn reset_superadmin_command(settings: &Settings) -> ExitCode {
     let store = match setup::open_checked(settings.database.url.expose()).await {
         Ok(store) => store,
-        // The hint is printed here and not by the error, because this command
-        // never creates a database, so the advice is this command's.
+        // The hint is this command's and not the error's, because
+        // reset-superadmin is the command that never creates a database.
         Err(error @ setup::Error::Open(_)) => {
             eprintln!(
                 "{error}\nthe database does not open; when it does not exist, \
