@@ -1,27 +1,21 @@
-//! Runs reset-superadmin as a process on each backend: what it refuses before
-//! the database is set up, what it creates on a migrated database without a
-//! superadmin, and what a second run changes.
+//! reset-superadmin through the library on each backend: what it refuses
+//! before the database is set up, what it creates on a set-up database
+//! without a superadmin, and what a second run changes.
 
 mod common;
 
-use std::process::{Command, Output};
-
 use argon2::Argon2;
 use argon2::password_hash::PasswordVerifier;
-use common::{ADMIN, SYSTEM_TENANT_ID, TestDatabase, on_each_backend, on_pool, set_up_database};
+use common::{
+    ADMIN, SYSTEM_TENANT_ID, TestDatabase, block_on, on_each_backend, on_pool, set_up_database,
+};
 use sqlx::AssertSqlSafe;
+use trapperkeeper_server::setup::{self, Error};
+use trapperkeeper_server::{Store, reset_superadmin};
 
 /// The start of every stored hash: Argon2id at the parameters of
 /// doc/adr/0022.
 const HASH_PREFIX: &str = "$argon2id$v=19$m=65536,t=3,p=4$";
-
-/// Runs `reset-superadmin` on the database at `url` and returns its output.
-fn reset_superadmin(url: &str) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_trapperkeeper"))
-        .args(["reset-superadmin", "--database-url", url])
-        .output()
-        .expect("the binary runs")
-}
 
 /// What is stored for the live superadmin: the role name, the must-change
 /// flag, the password hash and `tokens_valid_after`, or `None`.
@@ -58,18 +52,14 @@ fn delete(database: &TestDatabase) {
     });
 }
 
-/// Runs reset-superadmin, checks that it printed a one-time password that the
-/// stored superadmin holds, and returns the password and `tokens_valid_after`.
-fn reset_and_check(database: &TestDatabase) -> (String, i64) {
-    let out = reset_superadmin(&database.url);
-    let stderr = String::from_utf8_lossy(&out.stderr);
-    assert_eq!(out.status.code(), Some(0), "{stderr}");
-    // The log lines share stdout, so the password is the last line.
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    let password = stdout.lines().last().unwrap_or_default().to_owned();
+/// Runs the reset on `store`, checks that the returned one-time password is
+/// the one the stored superadmin holds, and returns it with
+/// `tokens_valid_after`.
+fn reset_and_check(store: &Store, database: &TestDatabase) -> (String, i64) {
+    let password = block_on(reset_superadmin(store)).expect("the reset succeeds");
     assert!(
         password.len() == 16 && password.chars().all(|c| c.is_ascii_alphanumeric()),
-        "{stdout:?} is not a 16-character alphanumeric password"
+        "{password:?} is not a 16-character alphanumeric password"
     );
     let (role, must_change, hash, valid_after) = stored(database).expect("a live superadmin");
     assert_eq!(role, "superadmin");
@@ -81,63 +71,56 @@ fn reset_and_check(database: &TestDatabase) -> (String, i64) {
         Argon2::default()
             .verify_password(password.as_bytes(), hash.as_str())
             .is_ok(),
-        "the printed password does not match the stored hash"
+        "the returned password does not match the stored hash"
     );
     (password, valid_after)
 }
 
-/// On every backend, reset-superadmin on a missing database exits 1 and says
-/// how to set it up. After migrate, which creates the superadmin, a run
-/// prints a 16-character alphanumeric password that matches the stored
-/// Argon2id hash, sets the must-change flag and moves `tokens_valid_after`
-/// forward. A second run prints another password. With the superadmin
-/// deleted through sqlx, a run creates it again.
+/// On every backend, reset-superadmin's open of a missing database fails.
+/// After the set-up, which creates the superadmin, a reset returns a
+/// 16-character alphanumeric password that matches the stored Argon2id hash,
+/// sets the must-change flag and moves `tokens_valid_after` forward. A second
+/// reset returns another password. With the superadmin deleted through sqlx,
+/// a reset creates it again.
 #[test]
 fn reset_superadmin_sets_a_new_one_time_password() {
     // A scenario, because no input varies (doc/adr/0018).
     //
-    // 1. run reset-superadmin on a missing database
-    // 2. migrate, which creates the superadmin, then reset twice
+    // 1. open a missing database as reset-superadmin does
+    // 2. set up the database, which creates the superadmin, then reset twice
     // 3. delete the superadmin and reset once more
     on_each_backend(|backend| {
-        // 1. reset-superadmin never creates a database, so it refuses and
-        //    names the commands that set one up.
+        // 1. reset-superadmin never creates a database, so the open fails.
         let database = TestDatabase::fresh(backend);
-        let out = reset_superadmin(&database.url);
-        assert_eq!(
-            out.status.code(),
-            Some(1),
-            "reset before migrate on {backend}"
-        );
-        let stderr = String::from_utf8_lossy(&out.stderr);
+        let error = block_on(setup::open_checked(&database.url)).err();
         assert!(
-            stderr.contains("trapperkeeper migrate"),
-            "{stderr:?} on {backend}"
+            matches!(error, Some(Error::Open(_))),
+            "{error:?} before the set-up on {backend}"
         );
 
         // 2. Each reset must replace the hash and move the cutoff, so the
-        //    password migrate logged and every token issued before stop
+        //    password of the set-up and every token issued before stop
         //    working.
-        set_up_database(&database);
+        let (store, _) = set_up_database(&database);
         let (_, _, created_hash, created_valid_after) =
-            stored(&database).expect("migrate created the superadmin");
-        let (first, first_valid_after) = reset_and_check(&database);
+            stored(&database).expect("the set-up created the superadmin");
+        let (first, first_valid_after) = reset_and_check(&store, &database);
         assert!(
             first_valid_after > created_valid_after,
             "the cutoff stayed on {backend}"
         );
         let (_, _, first_hash, _) = stored(&database).expect("a live superadmin");
         assert_ne!(first_hash, created_hash);
-        let (second, second_valid_after) = reset_and_check(&database);
+        let (second, second_valid_after) = reset_and_check(&store, &database);
         assert_ne!(first, second);
         assert!(
             second_valid_after > first_valid_after,
             "the cutoff stayed on {backend}"
         );
 
-        // 3. The missing-superadmin branch, which recovers a first run that
-        //    stopped before the superadmin existed.
+        // 3. The missing-superadmin branch recovers a first run that stopped
+        //    before the superadmin existed.
         delete(&database);
-        reset_and_check(&database);
+        reset_and_check(&store, &database);
     });
 }

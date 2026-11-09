@@ -27,6 +27,7 @@ pub use auth::token::{Claims, Keyring, Kind};
 pub use http::{AppState, router};
 pub use store::Store;
 pub use store::migrate::Mismatch;
+pub use superadmin::reset as reset_superadmin;
 
 use std::process::ExitCode;
 use std::sync::Arc;
