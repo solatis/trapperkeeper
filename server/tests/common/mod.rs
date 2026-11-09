@@ -1,7 +1,7 @@
 //! Helpers for the server tests: test databases on each backend, a pool on
-//! one of them, the router served in this process with its superadmin and a
-//! keyring, the binary started as a process, HTTP requests, and calls on the
-//! management routes as a logged-in user.
+//! one of them, a database set up the way migrate does, the router served in
+//! this process with its superadmin and a keyring, HTTP requests, and calls
+//! on the management routes as a logged-in user.
 
 // Each test crate compiles this module and uses only part of it.
 #![allow(dead_code, unused_imports, unused_macros)]
@@ -13,11 +13,7 @@ use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::path::PathBuf;
-use std::process::{Child, ChildStdout, Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
-use std::thread;
-use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 use sqlx::migrate::MigrateDatabase;
@@ -26,10 +22,6 @@ use sqlx::postgres::Postgres;
 use sqlx::sqlite::Sqlite;
 use trapperkeeper_server::{AppState, Keyring, Store, router, setup};
 use url::Url;
-
-/// How long a start or a stop may take before a test gives up. Not measured;
-/// generous for a loaded CI runner.
-pub const TIMEOUT: Duration = Duration::from_secs(5);
 
 /// The signing passphrase of every test server, fixed so a failing run
 /// reproduces. 32 characters or more, as the setting requires.
@@ -375,174 +367,6 @@ pub fn serve_in_process(backend: Backend) -> InProcess {
     let database = TestDatabase::fresh(backend);
     let (store, admin_password) = set_up_database(&database);
     serve_store(database, store, admin_password)
-}
-
-/// A running `trapperkeeper serve`, killed when dropped so a failing assertion
-/// leaves no process behind.
-pub struct Server {
-    pub child: Child,
-    pub addr: SocketAddr,
-    /// The log lines up to and including "listening", parsed.
-    pub startup: Vec<Value>,
-    /// The log lines after "listening", forwarded by a drain thread.
-    pub lines: Receiver<String>,
-    // Fields drop after `Drop::drop` has stopped the process, so the server
-    // no longer holds the database when it is dropped.
-    pub database: Option<TestDatabase>,
-}
-
-impl Drop for Server {
-    fn drop(&mut self) {
-        // A child that already exited makes both calls fail, which is fine:
-        // the shutdown test waits for the exit itself.
-        let _ = self.child.kill();
-        let _ = self.child.wait();
-    }
-}
-
-/// How a started `serve` came out.
-pub enum Launch {
-    /// It listens on its port.
-    Listening(Server),
-    /// It exited before listening, with this status and stderr.
-    Exited(ExitStatus, String),
-}
-
-/// Starts `serve` with `args` on port 0, with stdout piped and drained, and
-/// returns once the "listening" line names the address or the process exits.
-/// Panics when neither happens within `TIMEOUT`.
-pub fn launch(args: &[&str]) -> Launch {
-    // 1. spawn `serve --listen 127.0.0.1:0` with stdout and stderr piped
-    // 2. forward stdout line by line on a thread
-    // 3. read lines until "listening" or the end of stdout
-
-    // 1. The server binds port 0 itself and keeps the socket, so no other
-    //    process ever holds the port first. stderr is read only after an
-    //    exit, because the server writes to it only when it fails. Every
-    //    serve needs a signing key, given through the environment.
-    let mut child = Command::new(env!("CARGO_BIN_EXE_trapperkeeper"))
-        .env("TRAPPERKEEPER_AUTH__SIGNING_KEY", TEST_KEY)
-        .arg("serve")
-        .arg("--listen")
-        .arg("127.0.0.1:0")
-        .args(args)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("the binary spawns");
-
-    // 2. An undrained pipe blocks the server once it is full.
-    let lines = drain(child.stdout.take().expect("stdout is piped"));
-
-    // 3. The end of stdout means the process exited, and its status and
-    //    stderr are returned.
-    let Some(startup) = read_until(&lines, "listening") else {
-        let status = child.wait().expect("the child is waited for");
-        return Launch::Exited(status, stderr_of(&mut child));
-    };
-    // The line's `address` holds the port the server bound, not 0.
-    let addr = startup.last().expect("the listening line")["fields"]["address"]
-        .as_str()
-        .expect("an address field")
-        .parse()
-        .expect("a socket address");
-    Launch::Listening(Server {
-        child,
-        addr,
-        startup,
-        lines,
-        database: None,
-    })
-}
-
-/// Forwards each line of `stdout` on a thread of its own, so a test can wait
-/// for a line with a deadline instead of blocking on a read that may never
-/// return.
-fn drain(stdout: ChildStdout) -> Receiver<String> {
-    let (sender, receiver) = mpsc::channel();
-    thread::spawn(move || {
-        for line in BufReader::new(stdout).lines() {
-            // The receiver is gone once the test ends; the pipe closes when
-            // the server is killed, which ends the loop.
-            if sender.send(line.expect("a line of stdout")).is_err() {
-                break;
-            }
-        }
-    });
-    receiver
-}
-
-/// Reads lines until one whose message is `message`, each parsed as JSON, and
-/// returns all of them, or `None` when stdout ends first. Panics when
-/// `TIMEOUT` passes first.
-fn read_until(lines: &Receiver<String>, message: &str) -> Option<Vec<Value>> {
-    let deadline = Instant::now() + TIMEOUT;
-    let mut read = Vec::new();
-    loop {
-        let remaining = deadline.saturating_duration_since(Instant::now());
-        let line = match lines.recv_timeout(remaining) {
-            Ok(line) => line,
-            Err(RecvTimeoutError::Disconnected) => return None,
-            Err(RecvTimeoutError::Timeout) => {
-                panic!("no line with message {message:?} within {TIMEOUT:?}")
-            }
-        };
-        let value: Value = serde_json::from_str(&line).expect("one JSON object per line");
-        let found = value["fields"]["message"] == message;
-        read.push(value);
-        if found {
-            return Some(read);
-        }
-    }
-}
-
-/// Reads lines until one whose message is `message`, each parsed as JSON, and
-/// returns all of them. Panics when `TIMEOUT` or the end of stdout comes
-/// first.
-pub fn lines_until(lines: &Receiver<String>, message: &str) -> Vec<Value> {
-    read_until(lines, message)
-        .unwrap_or_else(|| panic!("stdout ended before a line with message {message:?}"))
-}
-
-/// Everything an exited child wrote to its piped stderr.
-fn stderr_of(child: &mut Child) -> String {
-    let mut stderr = String::new();
-    child
-        .stderr
-        .take()
-        .expect("stderr is piped")
-        .read_to_string(&mut stderr)
-        .expect("stderr is read");
-    stderr
-}
-
-/// Starts `serve` like `launch` on a freshly migrated database of its own on
-/// `backend`, and returns the listening server. Panics when the server exits
-/// before listening.
-pub fn spawn_server(backend: Backend, extra_args: &[&str]) -> Server {
-    let database = TestDatabase::fresh(backend);
-    set_up_database(&database);
-    let mut args = vec!["--database-url", database.url.as_str()];
-    args.extend_from_slice(extra_args);
-    match launch(&args) {
-        Launch::Listening(mut server) => {
-            server.database = Some(database);
-            server
-        }
-        Launch::Exited(status, stderr) => {
-            panic!("the server exited before listening: {status}\n{stderr}")
-        }
-    }
-}
-
-/// Runs `migrate` on the database at `url` and returns its output.
-pub fn run_migrate(url: &str) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_trapperkeeper"))
-        .arg("migrate")
-        .arg("--database-url")
-        .arg(url)
-        .output()
-        .expect("the binary runs")
 }
 
 /// One response: the status code, the headers as sent, and the body.
