@@ -12,20 +12,22 @@ mod logging;
 mod names;
 mod scope;
 mod sessions;
+pub mod setup;
 mod store;
 mod superadmin;
 mod tenants;
 mod users;
 
-// The integration tests build a migrated store with its superadmin, derive a
-// keyring from it, serve the router on a listener they bound, create users
-// of any role, and mint tokens of their own. Nothing else in the crate is
-// part of its interface.
+// The integration tests set up a database the way the commands do, derive a
+// keyring from its store, serve the router on a listener they bound, create
+// users of any role, and mint tokens of their own. Nothing else in the crate
+// is part of its interface.
 pub use accounts::{NewAccount, create as create_account};
 pub use auth::token::{Claims, Keyring, Kind};
 pub use http::{AppState, router};
+pub use store::Store;
+pub use store::create as create_store;
 pub use store::migrate::apply as apply_migrations;
-pub use store::{Store, create as create_store};
 pub use superadmin::reset as reset_superadmin;
 
 use std::process::ExitCode;
@@ -35,7 +37,7 @@ use clap::Parser;
 
 use cli::{Cli, Command};
 use config::Settings;
-use store::migrate::Mismatch;
+use setup::SetUp;
 
 /// Runs the subcommand named on the command line and returns its exit status.
 /// Everything below is async wherever an async form exists.
@@ -119,8 +121,17 @@ async fn serve(settings: &Settings) -> ExitCode {
     };
 
     // 2.
-    let Some(store) = open_for_serve(settings).await else {
-        return ExitCode::FAILURE;
+    let store = match setup::open_or_set_up(settings.database.url.expose()).await {
+        Ok((store, set_up)) => {
+            if let Some(set_up) = &set_up {
+                log_set_up(set_up);
+            }
+            store
+        }
+        Err(error) => {
+            eprintln!("{error}");
+            return ExitCode::FAILURE;
+        }
     };
 
     // 3.
@@ -153,131 +164,56 @@ async fn serve(settings: &Settings) -> ExitCode {
     }
 }
 
-/// Opens the database for serve and checks it against the binary's
-/// migrations. Sets up an empty database first. Returns `None` after printing
-/// the refusal.
-async fn open_for_serve(settings: &Settings) -> Option<Store> {
-    // 1. open the database, and create it only when it does not exist
-    // 2. check it against the migrations
-    // 3. set up an empty database
-
-    // 1. Open is tried first, so a serve whose user may not create databases
-    //    still opens an existing one.
-    let url = settings.database.url.expose();
-    let store = match store::open(url).await {
-        Ok(store) => store,
-        // A database that exists, or whose existence cannot be asked, is
-        // refused with the open's error.
-        Err(error) if !matches!(store::exists(url).await, Ok(false)) => {
-            eprintln!("{error}");
-            return None;
-        }
-        Err(_) => match store::create(url).await {
-            Ok(store) => store,
-            Err(error) => {
-                eprintln!("{error}");
-                return None;
-            }
-        },
-    };
-
-    // 2. and 3. An empty database is migrated and given its superadmin, and
-    //    every other mismatch refuses.
-    match store::migrate::check(&store).await {
-        Ok(None) => Some(store),
-        Ok(Some(Mismatch::Empty)) => set_up(&store).await.then_some(store),
-        Ok(Some(mismatch)) => {
-            eprintln!("{mismatch}");
-            None
-        }
-        Err(error) => {
-            eprintln!("{error}");
-            None
-        }
-    }
-}
-
-/// Opens the database without creating it and checks it against the binary's
-/// migrations. Returns `None` after printing the refusal.
-async fn open_checked(settings: &Settings) -> Option<Store> {
-    let store = match store::open(settings.database.url.expose()).await {
-        Ok(store) => store,
-        Err(error) => {
-            eprintln!(
-                "{error}\nthe database does not open; when it does not exist, \
-                 `trapperkeeper serve` or `trapperkeeper migrate` sets it up"
-            );
-            return None;
-        }
-    };
-    match store::migrate::check(&store).await {
-        Ok(None) => Some(store),
-        Ok(Some(mismatch)) => {
-            eprintln!("{mismatch}");
-            None
-        }
-        Err(error) => {
-            eprintln!("{error}");
-            None
-        }
-    }
-}
-
-/// Applies the migrations, creates the superadmin when the database was
-/// empty, and logs the superadmin's one-time password. Returns whether both
-/// succeeded, after printing any error.
-async fn set_up(store: &Store) -> bool {
-    match store::migrate::apply(store).await {
-        // At info, so an operator sees what the command did.
-        Ok(count) => tracing::info!(count, "migrations applied"),
-        Err(error) => {
-            eprintln!("{error}");
-            return false;
-        }
-    }
-    // After the migrations, because they seed `$tk` and its role.
-    match superadmin::ensure(store).await {
-        // One INFO event with the password as a field, so a piped log stream
-        // stays JSON lines.
-        Ok(Some(password)) => {
-            tracing::info!(
-                tenant = "$tk",
-                name = superadmin::NAME,
-                password,
-                "superadmin created"
-            );
-            true
-        }
-        Ok(None) => true,
-        Err(error) => {
-            eprintln!("{error}");
-            false
-        }
+/// Logs what a set-up did: the migration count, and the superadmin's one-time
+/// password when the set-up created it, each as one INFO event.
+fn log_set_up(set_up: &SetUp) {
+    // At info, so an operator sees what the command did.
+    tracing::info!(count = set_up.applied, "migrations applied");
+    // One INFO event with the password as a field, so a piped log stream
+    // stays JSON lines.
+    if let Some(password) = &set_up.password {
+        tracing::info!(
+            tenant = "$tk",
+            name = superadmin::NAME,
+            password,
+            "superadmin created"
+        );
     }
 }
 
 /// Creates the database when it is missing, sets it up, and returns the exit
 /// status.
 async fn migrate(settings: &Settings) -> ExitCode {
-    let store = match store::create(settings.database.url.expose()).await {
-        Ok(store) => store,
+    match setup::create(settings.database.url.expose()).await {
+        Ok((_, set_up)) => {
+            log_set_up(&set_up);
+            ExitCode::SUCCESS
+        }
         Err(error) => {
             eprintln!("{error}");
-            return ExitCode::FAILURE;
+            ExitCode::FAILURE
         }
-    };
-    if set_up(&store).await {
-        ExitCode::SUCCESS
-    } else {
-        ExitCode::FAILURE
     }
 }
 
 /// Gives the superadmin a new one-time password, prints it, and returns the
 /// exit status.
 async fn reset_superadmin_command(settings: &Settings) -> ExitCode {
-    let Some(store) = open_checked(settings).await else {
-        return ExitCode::FAILURE;
+    let store = match setup::open_checked(settings.database.url.expose()).await {
+        Ok(store) => store,
+        // The hint is printed here and not by the error, because this command
+        // never creates a database, so the advice is this command's.
+        Err(error @ setup::Error::Open(_)) => {
+            eprintln!(
+                "{error}\nthe database does not open; when it does not exist, \
+                 `trapperkeeper serve` or `trapperkeeper migrate` sets it up"
+            );
+            return ExitCode::FAILURE;
+        }
+        Err(error) => {
+            eprintln!("{error}");
+            return ExitCode::FAILURE;
+        }
     };
     match superadmin::reset(&store).await {
         Ok(password) => {
