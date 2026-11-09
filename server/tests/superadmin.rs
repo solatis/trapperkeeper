@@ -8,7 +8,7 @@ use std::process::{Command, Output};
 
 use argon2::Argon2;
 use argon2::password_hash::PasswordVerifier;
-use common::{ADMIN, SYSTEM_TENANT_ID, TestDatabase, migrate_database, on_each_backend, on_pool};
+use common::{ADMIN, SYSTEM_TENANT_ID, TestDatabase, on_each_backend, on_pool, set_up_database};
 use sqlx::AssertSqlSafe;
 
 /// The start of every stored hash: Argon2id at the parameters of
@@ -118,7 +118,7 @@ fn reset_superadmin_sets_a_new_one_time_password() {
         // 2. Each reset must replace the hash and move the cutoff, so the
         //    password migrate logged and every token issued before stop
         //    working.
-        migrate_database(&database);
+        set_up_database(&database);
         let (_, _, created_hash, created_valid_after) =
             stored(&database).expect("migrate created the superadmin");
         let (first, first_valid_after) = reset_and_check(&database);

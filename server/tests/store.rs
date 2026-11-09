@@ -1,60 +1,21 @@
-//! Runs migrate and serve as processes against each backend the environment
-//! names: what migrate builds, and which databases serve accepts. Two tests
-//! cover the store, a migrate scenario and a property over generated
-//! databases, because `doc/adr/0018` asks for few tests over a large surface.
+//! What migrate builds, which databases serve accepts and what the first
+//! serve sets up, through the library's setup functions, on each backend the
+//! environment names: a scenario and a property over generated databases
+//! (`doc/adr/0018`).
 
 mod common;
 
 use std::collections::BTreeSet;
-use std::process::{ExitStatus, Output};
 use std::sync::OnceLock;
 
 use common::{
-    ADMIN, Backend, Launch, SYSTEM_TENANT, TestDatabase, backends, get, launch, migrate_database,
-    on_each_backend, on_pool, placeholders, request, run_migrate,
+    ADMIN, Backend, SYSTEM_TENANT, TestDatabase, backends, block_on, log_in, on_each_backend,
+    on_pool, placeholders, serve_store, set_up_database,
 };
 use proptest::prelude::*;
-use serde_json::{Value, json};
 use sqlx::AssertSqlSafe;
-
-/// The `count` of the line migrate logged after applying. Panics when migrate
-/// failed or logged no such line.
-fn applied_count(out: &Output) -> u64 {
-    assert!(
-        out.status.success(),
-        "migrate failed: {}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-    String::from_utf8_lossy(&out.stdout)
-        .lines()
-        .map(|line| serde_json::from_str::<Value>(line).expect("one JSON object per line"))
-        .find(|line| line["fields"]["message"] == "migrations applied")
-        .and_then(|line| line["fields"]["count"].as_u64())
-        .expect("a migrations applied line with a count")
-}
-
-/// The passwords of the "superadmin created" lines among the JSON log
-/// `lines`.
-fn created_passwords<'a>(lines: impl IntoIterator<Item = &'a Value>) -> Vec<String> {
-    lines
-        .into_iter()
-        .filter(|line| line["fields"]["message"] == "superadmin created")
-        .map(|line| {
-            line["fields"]["password"]
-                .as_str()
-                .expect("a password field")
-                .to_owned()
-        })
-        .collect()
-}
-
-/// The JSON lines migrate wrote to stdout.
-fn stdout_lines(out: &Output) -> Vec<Value> {
-    String::from_utf8_lossy(&out.stdout)
-        .lines()
-        .map(|line| serde_json::from_str(line).expect("one JSON object per line"))
-        .collect()
-}
+use trapperkeeper_server::setup::{self, Error, SetUp};
+use trapperkeeper_server::{Mismatch, Store};
 
 /// Whether `password` is 16 ASCII letters and digits, as a generated one is.
 fn generated(password: &str) -> bool {
@@ -71,25 +32,23 @@ fn tracked_versions(database: &TestDatabase) -> Vec<i64> {
     })
 }
 
-/// migrate builds a missing database with the system tenant, its superadmin
-/// role, the superadmin and a signing salt, and logs the superadmin's
-/// one-time password once. A second migrate applies nothing, keeps the salt
-/// and logs no password. serve accepts the result.
+/// migrate on a missing database creates the system tenant, its superadmin
+/// role, the superadmin and a signing salt, and returns one generated
+/// password. A second migrate applies nothing, keeps the salt and returns no
+/// password. serve accepts the result.
 #[test]
 fn migrate_builds_a_database_that_serve_accepts() {
-    // 1. migrate a missing database and read what it built
-    // 2. migrate again
-    // 3. start serve on the result
+    // 1. set up a missing database and read what it built
+    // 2. set up again
+    // 3. open the result as serve does
     on_each_backend(|backend| {
         let database = TestDatabase::fresh(backend);
 
-        // 1. The first migrate is the one that creates the superadmin, so its
-        //    stdout holds exactly one password event.
-        let out = run_migrate(&database.url);
-        let first = applied_count(&out);
-        let passwords = created_passwords(&stdout_lines(&out));
-        assert_eq!(passwords.len(), 1, "{passwords:?} on {backend}");
-        assert!(generated(&passwords[0]), "{passwords:?} on {backend}");
+        // 1. The first set-up is the one that creates the superadmin, so it is
+        //    the one that returns a password.
+        let (_, first) = block_on(setup::create(&database.url)).expect("the database is set up");
+        let password = first.password.as_deref().expect("a password");
+        assert!(generated(password), "{password:?} on {backend}");
         // Read through sqlx, because no endpoint shows tenants, roles or the
         // tracking table.
         let tenants: Vec<(String, String, String)> = on_pool!(database, |pool| {
@@ -108,12 +67,9 @@ fn migrate_builds_a_database_that_serve_accepts() {
             .await
             .expect("the roles are read")
         });
-        // Every migration the tracking table lists ran in this migrate.
-        assert!(first > 0);
-        assert_eq!(
-            usize::try_from(first).expect("a small count"),
-            tracked_versions(&database).len()
-        );
+        // Every migration the tracking table lists ran in this set-up.
+        assert!(first.applied > 0);
+        assert_eq!(first.applied, tracked_versions(&database).len());
         assert_eq!(
             tenants,
             [(
@@ -136,19 +92,21 @@ fn migrate_builds_a_database_that_serve_accepts() {
         let first_salt = salt();
         assert_eq!(first_salt.len(), 32);
 
-        // 2. A second migrate changes nothing: the salt stays, because the
-        //    keys derived from it would change, and the superadmin exists,
-        //    so no second password is logged.
-        let out = run_migrate(&database.url);
-        assert_eq!(applied_count(&out), 0);
-        assert_eq!(created_passwords(&stdout_lines(&out)), Vec::<String>::new());
+        // 2. A second set-up changes nothing: the salt stays, because the keys
+        //    derived from it would change, and the superadmin exists, so there
+        //    is no second password.
+        let (_, second) = block_on(setup::create(&database.url)).expect("the database is set up");
+        assert_eq!(second.applied, 0);
+        assert_eq!(second.password, None);
         assert_eq!(salt(), first_salt);
 
         // 3.
-        let Launch::Listening(server) = launch(&["--database-url", &database.url]) else {
-            panic!("serve refused the database migrate built");
-        };
-        assert_eq!(get(server.addr, "/healthz").0, 200);
+        let (_, set_up) = block_on(setup::open_or_set_up(&database.url))
+            .expect("serve accepts the database migrate built");
+        assert!(
+            set_up.is_none(),
+            "serve set up a database migrate built on {backend}"
+        );
     });
 }
 
@@ -176,9 +134,18 @@ enum State {
 /// What serve does with a database.
 #[derive(Debug, PartialEq, Eq)]
 enum Outcome {
-    Starts,
-    /// Exits 1, and stderr contains each of these fragments.
-    Refuses(Vec<String>),
+    /// Sets it up.
+    SetsUp,
+    /// Opens it as it is.
+    Opens,
+    /// Fails in a migration.
+    FailsMigration,
+    /// Refuses it, naming these versions the binary does not know.
+    Unknown(Vec<i64>),
+    /// Refuses it, naming these versions whose files differ.
+    Edited(Vec<i64>),
+    /// Refuses it, naming these versions it has not applied.
+    Pending(Vec<i64>),
 }
 
 /// The versions migrate applies, read once from the tracking table of a
@@ -187,7 +154,7 @@ fn embedded_versions() -> &'static [i64] {
     static VERSIONS: OnceLock<Vec<i64>> = OnceLock::new();
     VERSIONS.get_or_init(|| {
         let database = TestDatabase::fresh(Backend::Sqlite);
-        migrate_database(&database);
+        set_up_database(&database);
         tracked_versions(&database)
     })
 }
@@ -212,22 +179,13 @@ fn database_state() -> impl Strategy<Value = State> {
     prop_oneof![1 => Just(State::Absent), 7 => migrated]
 }
 
-/// The versions as serve lists them in its message.
-fn list(versions: &[i64]) -> String {
-    versions
-        .iter()
-        .map(i64::to_string)
-        .collect::<Vec<_>>()
-        .join(", ")
-}
-
-/// What serve must do for `state`: start; refuse naming the unknown, then
-/// edited, then pending versions; or fail to apply the migrations over a
-/// tracking table emptied beside the tables.
+/// What serve must do for `state`: set it up, open it, refuse it naming the
+/// unknown, then the edited, then the pending versions, or fail to apply the
+/// migrations over a tracking table emptied beside the tables.
 fn expected(state: &State) -> Outcome {
     // With no database, serve creates it and sets it up.
     let State::Migrated { rows, unknown } = state else {
-        return Outcome::Starts;
+        return Outcome::SetsUp;
     };
     let with = |r: Row| -> Vec<i64> {
         rows.iter()
@@ -238,28 +196,33 @@ fn expected(state: &State) -> Outcome {
     let unknown: Vec<i64> = unknown.iter().copied().collect();
     let (edited, missing) = (with(Row::Edited), with(Row::Missing));
     // The same precedence as `check`: empty, then unknown, edited and
-    // pending. An emptied table reads as a new database, so serve applies
-    // the first migration over the tables it already created, and sqlx
-    // names the migration that failed.
+    // pending. An emptied table reads as a new database, so the set-up
+    // applies the first migration over the tables it already created, and
+    // the migration fails.
     if unknown.is_empty() && missing.len() == rows.len() {
-        Outcome::Refuses(vec!["while executing migration".to_owned()])
+        Outcome::FailsMigration
     } else if !unknown.is_empty() {
-        Outcome::Refuses(vec![
-            format!("migrations {}", list(&unknown)),
-            "rebuild".to_owned(),
-        ])
+        Outcome::Unknown(unknown)
     } else if !edited.is_empty() {
-        Outcome::Refuses(vec![
-            format!("migrations {}", list(&edited)),
-            "rebuild".to_owned(),
-        ])
+        Outcome::Edited(edited)
     } else if !missing.is_empty() {
-        Outcome::Refuses(vec![
-            format!("migrations {}", list(&missing)),
-            "trapperkeeper migrate".to_owned(),
-        ])
+        Outcome::Pending(missing)
     } else {
-        Outcome::Starts
+        Outcome::Opens
+    }
+}
+
+/// What serve did, read from the result of `open_or_set_up`. Panics on an
+/// error the property never builds, such as a database that does not open.
+fn observed(result: Result<(Store, Option<SetUp>), Error>) -> Outcome {
+    match result {
+        Ok((_, Some(_))) => Outcome::SetsUp,
+        Ok((_, None)) => Outcome::Opens,
+        Err(Error::Migrate(_)) => Outcome::FailsMigration,
+        Err(Error::Mismatch(Mismatch::Unknown(versions))) => Outcome::Unknown(versions),
+        Err(Error::Mismatch(Mismatch::Edited(versions))) => Outcome::Edited(versions),
+        Err(Error::Mismatch(Mismatch::Pending(versions))) => Outcome::Pending(versions),
+        Err(error) => panic!("{error}"),
     }
 }
 
@@ -269,7 +232,7 @@ fn build(state: &State, database: &TestDatabase) {
     let State::Migrated { rows, unknown } = state else {
         return;
     };
-    migrate_database(database);
+    set_up_database(database);
     let delete = placeholders(
         database.backend,
         "DELETE FROM _sqlx_migrations WHERE version = $1",
@@ -320,19 +283,10 @@ fn build(state: &State, database: &TestDatabase) {
     });
 }
 
-/// Starts serve on the database at `url` and says what it did. A started
-/// server is killed.
-fn outcome(url: &str) -> (Option<ExitStatus>, String) {
-    match launch(&["--database-url", url]) {
-        Launch::Listening(_) => (None, String::new()),
-        Launch::Exited(status, stderr) => (Some(status), stderr),
-    }
-}
-
 proptest! {
-    // 32 cases rather than proptest's 256: each case starts two processes per
-    // backend. No regression file, so a failure leaves nothing untracked in the tree; the
-    // failing seed is in the output.
+    // 32 cases rather than proptest's 256: each case creates a database on
+    // every server backend. No regression file, so a failure leaves nothing
+    // untracked in the tree; the failing seed is in the output.
     #![proptest_config(ProptestConfig {
         cases: 32,
         failure_persistence: None,
@@ -340,9 +294,9 @@ proptest! {
     })]
 
     /// On every backend, serve sets up a database that does not exist or has
-    /// applied nothing, and starts on a database whose tracking table matches
-    /// the binary's migrations. Otherwise it exits 1, names the differing
-    /// versions and says what to do.
+    /// applied nothing, opens a database whose tracking table matches the
+    /// binary's migrations, and otherwise refuses it naming the differing
+    /// versions.
     #[test]
     fn serve_accepts_only_a_matching_database(state in database_state()) {
         // `build` makes the database the state describes, and `expected` is
@@ -350,25 +304,10 @@ proptest! {
         for backend in backends() {
             let database = TestDatabase::fresh(backend);
             build(&state, &database);
-            let (status, stderr) = outcome(&database.url);
-            match expected(&state) {
-                Outcome::Starts => {
-                    prop_assert!(status.is_none(), "serve refused on {backend}: {stderr}");
-                }
-                Outcome::Refuses(fragments) => {
-                    prop_assert_eq!(
-                        status.and_then(|s| s.code()), Some(1), "serve started on {}", backend
-                    );
-                    for fragment in fragments {
-                        prop_assert!(
-                            stderr.contains(&fragment),
-                            "{fragment:?} not in {stderr:?} on {backend}"
-                        );
-                    }
-                }
-            }
-            // A missing database is created by serve itself, which the exit
-            // status alone does not show.
+            let outcome = observed(block_on(setup::open_or_set_up(&database.url)));
+            prop_assert_eq!(outcome, expected(&state), "on {}", backend);
+            // A missing database is created by the set-up itself, which the
+            // outcome alone does not show.
             if matches!(state, State::Absent) {
                 prop_assert!(database.exists(), "serve did not create the database on {backend}");
             }
@@ -376,43 +315,35 @@ proptest! {
     }
 }
 
-/// On every backend, the first serve on a missing database logs one
-/// "superadmin created" line with a 16-character password before it listens,
-/// and a login to `$tk` as `admin` with that password succeeds. A second
-/// serve on the same database logs no such line.
+/// On every backend, the first serve on a missing database creates the
+/// superadmin with one 16-character password, a login to `$tk` as `admin`
+/// with it succeeds on the router served on that store, and a second serve on
+/// the same database sets nothing up.
 #[test]
 fn first_serve_sets_up_the_database() {
-    // 1. start serve on a missing database
-    // 2. log in with the password it logged
-    // 3. start serve again on the same database
+    // 1. open a missing database as serve does
+    // 2. serve the router on the store it returned and log in
+    // 3. open the same database again
     on_each_backend(|backend| {
-        // 1. `startup` holds the lines up to "listening", so the password
-        //    event is logged before the server takes requests.
+        // 1.
         let database = TestDatabase::fresh(backend);
-        let Launch::Listening(server) = launch(&["--database-url", &database.url]) else {
-            panic!("serve refused a missing database on {backend}");
-        };
-        let passwords = created_passwords(&server.startup);
-        assert_eq!(passwords.len(), 1, "{passwords:?} on {backend}");
-        assert!(generated(&passwords[0]), "{passwords:?} on {backend}");
-        // 2. The in-process helpers do not apply to a process, so the login
-        //    goes over HTTP to it.
-        let credentials =
-            json!({ "tenant": SYSTEM_TENANT, "name": ADMIN, "password": passwords[0] });
-        let response = request(
-            server.addr,
-            "POST",
-            "/api/v1/login",
-            &[],
-            Some(&credentials.to_string()),
-        );
-        assert_eq!(response.status, 200, "{} on {backend}", response.body);
-        drop(server);
+        let (store, set_up) = block_on(setup::open_or_set_up(&database.url))
+            .expect("serve accepts a missing database");
+        let password = set_up
+            .and_then(|set_up| set_up.password)
+            .expect("the first serve creates the superadmin");
+        assert!(generated(&password), "{password:?} on {backend}");
 
-        // 3. The superadmin exists now, so this start logs no password.
-        let Launch::Listening(server) = launch(&["--database-url", &database.url]) else {
-            panic!("serve refused the database it set up on {backend}");
-        };
-        assert_eq!(created_passwords(&server.startup), Vec::<String>::new());
+        // 2. Only a login shows the password is the superadmin's.
+        let server = serve_store(database, store, password.clone());
+        log_in(&server, SYSTEM_TENANT, ADMIN, &password);
+
+        // 3. The superadmin exists now, so this open sets nothing up.
+        let (_, set_up) = block_on(setup::open_or_set_up(&server.database().url))
+            .expect("serve accepts the database it set up");
+        assert!(
+            set_up.is_none(),
+            "serve set up its own database again on {backend}"
+        );
     });
 }

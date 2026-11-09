@@ -24,9 +24,7 @@ use sqlx::migrate::MigrateDatabase;
 use sqlx::mysql::MySql;
 use sqlx::postgres::Postgres;
 use sqlx::sqlite::Sqlite;
-use trapperkeeper_server::{
-    AppState, Keyring, apply_migrations, create_store, reset_superadmin, router,
-};
+use trapperkeeper_server::{AppState, Keyring, Store, router, setup};
 use url::Url;
 
 /// How long a start or a stop may take before a test gives up. Not measured;
@@ -278,16 +276,16 @@ pub fn placeholders(backend: Backend, statement: &'static str) -> String {
     }
 }
 
-/// The production router on a freshly migrated database of its own on one
-/// backend, with the superadmin `ADMIN` seeded and the keys derived from
-/// `TEST_KEY`, served in this process on `addr`. Dropping it stops the server
-/// and then drops the database.
+/// The production router on a database of its own on one backend, set up
+/// with the superadmin `ADMIN` and the keys derived from `TEST_KEY`, served
+/// in this process on `addr`. Dropping it stops the server and then drops the
+/// database.
 pub struct InProcess {
     pub addr: SocketAddr,
     /// The generated password of `ADMIN`.
     pub admin_password: String,
     /// The store the server runs on, for a test that derives keys of its own.
-    pub store: trapperkeeper_server::Store,
+    pub store: Store,
     // Declared before `database`, so the server and its pool stop before the
     // database is dropped.
     runtime: tokio::runtime::Runtime,
@@ -301,14 +299,27 @@ impl InProcess {
     }
 }
 
-/// Serves the router on `backend` in this process and returns once the
-/// address accepts connections. Starts no process. Panics when the database
-/// cannot be created, migrated or seeded.
-pub fn serve_in_process(backend: Backend) -> InProcess {
-    // 1. create and migrate a database of its own through the library, seed
-    //    the superadmin, and derive the keys
+/// Sets up `database` the way migrate does and returns its store and the
+/// superadmin's one-time password. Panics when the set-up fails or created no
+/// superadmin.
+pub fn set_up_database(database: &TestDatabase) -> (Store, String) {
+    // The store outlives the runtime `block_on` builds: the pool tests each
+    // connection before handing it out and reopens it on the caller's runtime.
+    let (store, set_up) = block_on(setup::create(&database.url)).expect("the database is set up");
+    let password = set_up
+        .password
+        .expect("the set-up of a fresh database creates the superadmin");
+    (store, password)
+}
+
+/// Serves the router on `store`, whose database is `database` and whose
+/// superadmin's password is `admin_password`, with the keys derived from
+/// `TEST_KEY`, and returns once the address accepts connections. Panics when
+/// the keys do not derive.
+pub fn serve_store(database: TestDatabase, store: Store, admin_password: String) -> InProcess {
+    // 1. derive the keys on a runtime the value owns
     // 2. bind a listener on port 0 and keep it
-    // 3. serve the router on that listener, on a runtime the value owns
+    // 3. serve the router on that listener
 
     // 1. A multi-thread runtime, so the server runs on its own threads while
     //    the test blocks in a request.
@@ -316,22 +327,9 @@ pub fn serve_in_process(backend: Backend) -> InProcess {
         .enable_all()
         .build()
         .expect("a runtime");
-    let database = TestDatabase::fresh(backend);
-    let (store, admin_password, keyring) = runtime.block_on(async {
-        let store = create_store(&database.url)
-            .await
-            .expect("the database is created");
-        apply_migrations(&store)
-            .await
-            .expect("the migrations apply");
-        let password = reset_superadmin(&store)
-            .await
-            .expect("the superadmin is created");
-        let keyring = Keyring::from_store(&store, TEST_KEY, None)
-            .await
-            .expect("the keys derive");
-        (store, password, keyring)
-    });
+    let keyring = runtime
+        .block_on(Keyring::from_store(&store, TEST_KEY, None))
+        .expect("the keys derive");
     let state = AppState {
         store: store.clone(),
         keyring: std::sync::Arc::new(keyring),
@@ -369,6 +367,14 @@ pub fn serve_in_process(backend: Backend) -> InProcess {
         runtime,
         database,
     }
+}
+
+/// The production router on a freshly set-up database of its own on
+/// `backend`, served in this process. Panics when the set-up fails.
+pub fn serve_in_process(backend: Backend) -> InProcess {
+    let database = TestDatabase::fresh(backend);
+    let (store, admin_password) = set_up_database(&database);
+    serve_store(database, store, admin_password)
 }
 
 /// A running `trapperkeeper serve`, killed when dropped so a failing assertion
@@ -515,7 +521,7 @@ fn stderr_of(child: &mut Child) -> String {
 /// before listening.
 pub fn spawn_server(backend: Backend, extra_args: &[&str]) -> Server {
     let database = TestDatabase::fresh(backend);
-    migrate_database(&database);
+    set_up_database(&database);
     let mut args = vec!["--database-url", database.url.as_str()];
     args.extend_from_slice(extra_args);
     match launch(&args) {
@@ -527,16 +533,6 @@ pub fn spawn_server(backend: Backend, extra_args: &[&str]) -> Server {
             panic!("the server exited before listening: {status}\n{stderr}")
         }
     }
-}
-
-/// Runs migrate on `database`. Panics when migrate fails.
-pub fn migrate_database(database: &TestDatabase) {
-    let out = run_migrate(&database.url);
-    assert!(
-        out.status.success(),
-        "migrate failed: {}",
-        String::from_utf8_lossy(&out.stderr)
-    );
 }
 
 /// Runs `migrate` on the database at `url` and returns its output.

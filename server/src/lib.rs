@@ -26,9 +26,7 @@ pub use accounts::{NewAccount, create as create_account};
 pub use auth::token::{Claims, Keyring, Kind};
 pub use http::{AppState, router};
 pub use store::Store;
-pub use store::create as create_store;
-pub use store::migrate::apply as apply_migrations;
-pub use superadmin::reset as reset_superadmin;
+pub use store::migrate::Mismatch;
 
 use std::process::ExitCode;
 use std::sync::Arc;
