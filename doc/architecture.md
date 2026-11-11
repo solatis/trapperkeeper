@@ -36,10 +36,13 @@ locally, buffers events, reports them in batches.
 
 ### Sensor API
 
-Stateless endpoint for sensors. Two operations:
+Stateless endpoint for sensors, except for the write throttle of the
+seen-scope index, which each instance keeps in memory. Two operations:
 
 - **sync rules**: conditional on a version tag derived from the active rule
-  set; an unchanged set costs an empty response. Filtered by scope tags.
+  set; an unchanged set costs an empty response. Filtered by scope tags. The
+  sync call also records the sensor's scope tags in the seen-scope index
+  (`adr/0034`).
 - **report events**: batched, with per-event results so a batch can partially
   succeed.
 
@@ -48,8 +51,8 @@ instances scale horizontally with no coordination.
 
 ### Management API
 
-The single write path for everything that is not an event: rules, API keys,
-users and roles, emergency pause. Also the read path for events (filter and
+The single write path for configuration (`adr/0001`): rules, API keys, users
+and roles, emergency pause. Also the read path for events (filter and
 aggregate by time, rule, tag, metadata). Owns validation, authorization and the
 audit trail. Authorization is a minimum role per route on a ladder
 (`adr/0029`). Web UI, CLI and AI agent are equal clients; none of them touches
