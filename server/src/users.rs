@@ -176,7 +176,7 @@ pub async fn create(
     // 4. commit and return the password
 
     // 1. `superadmin` is refused by name before any read, because `$tk` holds
-    //    it alone and a second superadmin was rejected (doc/adr/0028).
+    //    it alone and a second superadmin was rejected (ADR-0028).
     let name = match names::user_name(&request.name) {
         Ok(name) => name,
         Err(refused) => return Refused::BadRequest(refused.0).into_response(),
@@ -210,7 +210,7 @@ pub async fn create(
     }
     .await;
 
-    // 4. The password is in this response and nowhere else (doc/adr/0028).
+    // 4. The password is in this response and nowhere else (ADR-0028).
     match created {
         Ok((tenant_id, password)) => (
             StatusCode::CREATED,
@@ -263,7 +263,7 @@ pub async fn delete(
         //    another tenant gets 403.
         let tenant = scope::tenant(&mut tx, &caller.user, &caller.identity, &tenant).await?;
         // The name is lowercased as the store keeps it and not checked for
-        // shape, because a name that fails the shape matches no row (doc/adr/0020).
+        // shape, because a name that fails the shape matches no row (ADR-0020).
         let found = users::find(&mut tx, &tenant.id, &name.to_lowercase()).await?;
 
         // 2. The target is found before the permission is checked, so a
@@ -342,7 +342,7 @@ pub async fn change_role(
     // 4. set the role and commit
 
     // 1. `superadmin` is refused by name before any read, because `$tk` holds
-    //    it alone and a second superadmin was rejected (doc/adr/0028).
+    //    it alone and a second superadmin was rejected (ADR-0028).
     if change.role == superadmin::ROLE {
         return Refused::BadRequest("no route gives the role superadmin").into_response();
     }
@@ -368,7 +368,7 @@ pub async fn change_role(
 
         // 4. The role takes effect at the user's next request, because the
         //    caller's role is read from the store each time, so no token is
-        //    revoked (doc/adr/0025).
+        //    revoked (ADR-0025).
         users::set_role(&mut tx, &tenant.id, &target.id, &change.role).await?;
         tx.commit().await?;
         target.role_name = change.role;
@@ -411,7 +411,7 @@ pub async fn reset_password(
             return Err(Refused::NoSuchUser);
         };
         // accounts::reset sets tokens_valid_after too, so the person who held
-        // the old password is logged out everywhere (doc/adr/0025).
+        // the old password is logged out everywhere (ADR-0025).
         let password = accounts::reset(&mut tx, &tenant.id, &target.id).await?;
         tx.commit().await?;
         Ok((target, password))

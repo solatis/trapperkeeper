@@ -292,7 +292,7 @@ fn user_routes_refuse_bad_names_roles_and_other_users() {
 }
 
 /// Tenant isolation: an admin of tenant A gets 403 on tenant B's routes and
-/// 404 on an unknown tenant (doc/adr/0003).
+/// 404 on an unknown tenant (ADR-0003).
 #[test]
 fn user_routes_scope_to_the_tenant_in_the_path() {
     on_each_backend(|backend| {

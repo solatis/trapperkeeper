@@ -31,7 +31,7 @@ pub struct Cli {
 /// leaves the value of the layers below in place. Nested settings are nested
 /// here too, so the tree matches. `Default` is the "no flags" value the tests
 /// pass. The signing keys have no flag, because they are secrets that only
-/// the file or the environment gives (doc/adr/0025).
+/// the file or the environment gives (ADR-0025).
 #[derive(Args, Serialize, Default)]
 pub struct Overrides {
     /// Address the server listens on, `host:port`.

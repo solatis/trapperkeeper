@@ -115,7 +115,7 @@ pub fn backends() -> Vec<Backend> {
         .filter(|b| admin_url_var(*b).is_none_or(|var| env::var_os(var).is_some()))
         .collect();
     // A missing backend fails the run instead of being skipped, because a
-    // skipped test passes (doc/adr/0021).
+    // skipped test passes (ADR-0021).
     let expected = env::var("TK_TEST_EXPECT").unwrap_or_default();
     for name in expected.split(',').map(str::trim).filter(|n| !n.is_empty()) {
         assert!(

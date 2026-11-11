@@ -83,7 +83,7 @@ pub async fn run() -> ExitCode {
         return ExitCode::FAILURE;
     }
     // A secret on the command line is accepted with a warning, because the
-    // process list shows it (doc/adr/0013).
+    // process list shows it (ADR-0013).
     for flag in cli.overrides.secrets() {
         tracing::warn!(flag, "a secret setting was given on the command line");
     }
@@ -114,7 +114,7 @@ async fn serve(settings: &Settings) -> ExitCode {
 
     // 1. Checked before the database is touched, so a refused first start
     //    does not create a superadmin whose password nobody sees. The key has
-    //    no default, because a default holds no secret (doc/adr/0013).
+    //    no default, because a default holds no secret (ADR-0013).
     let Some(signing) = &settings.auth.signing_key else {
         eprintln!(
             "auth.signing_key is not set; serve needs a passphrase of at least 32 characters, \

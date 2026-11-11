@@ -14,7 +14,7 @@ use trapperkeeper_server::setup::{self, Error};
 use trapperkeeper_server::{Store, reset_superadmin};
 
 /// The start of every stored hash: Argon2id at the parameters of
-/// doc/adr/0022.
+/// ADR-0022.
 const HASH_PREFIX: &str = "$argon2id$v=19$m=65536,t=3,p=4$";
 
 /// What is stored for the live superadmin: the role name, the must-change
@@ -84,7 +84,7 @@ fn reset_and_check(store: &Store, database: &TestDatabase) -> (String, i64) {
 /// a reset creates it again.
 #[test]
 fn reset_superadmin_sets_a_new_one_time_password() {
-    // A scenario, because no input varies (doc/adr/0018).
+    // A scenario, because no input varies (ADR-0018).
     //
     // 1. open a missing database as reset-superadmin does
     // 2. set up the database, which creates the superadmin, then reset twice

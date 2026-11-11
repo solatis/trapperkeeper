@@ -1,5 +1,5 @@
 //! The rules for names people create: tenant names and user names. A name
-//! that starts with `$` belongs to the server (doc/adr/0028).
+//! that starts with `$` belongs to the server (ADR-0028).
 
 /// Why a name was refused, in words for the response body.
 #[derive(Debug)]

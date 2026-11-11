@@ -28,7 +28,7 @@ use crate::store::{self, Store};
 use crate::tenants;
 use crate::users;
 
-/// The prefix every management route sits under (doc/adr/0026).
+/// The prefix every management route sits under (ADR-0026).
 pub const API_PREFIX: &str = "/api/v1";
 
 /// What every handler can reach: the store and the keyring.
@@ -120,7 +120,7 @@ pub fn router(state: AppState) -> Router {
 
     // 1. Each annotated handler enters through `routes!`, so the handler and
     //    its description enter together and neither can be forgotten. The
-    //    prefix is the versioned namespace of doc/adr/0026.
+    //    prefix is the versioned namespace of ADR-0026.
     let management = OpenApiRouter::new()
         .routes(routes!(login::login))
         .routes(routes!(login::refresh))

@@ -1,5 +1,5 @@
 //! Password hashing with Argon2id, and generated passwords
-//! (doc/adr/0022-argon2id-for-passwords.md).
+//! (ADR-0022).
 
 use std::num::NonZero;
 use std::sync::OnceLock;
@@ -35,7 +35,7 @@ pub async fn hash(password: String) -> String {
         .await
         .expect("the semaphore is never closed");
     // A hash takes tens of milliseconds of CPU or more, which must not block
-    // the runtime (doc/adr/0014).
+    // the runtime (ADR-0014).
     task::spawn_blocking(move || {
         hasher()
             .hash_password(password.as_bytes())

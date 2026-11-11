@@ -2,7 +2,7 @@
 //! first: the defaults in `Settings::default`, the TOML file named on the
 //! command line, the environment variables prefixed `TRAPPERKEEPER_`, and the
 //! command line flags. The last layer merged wins. Where a secret may come
-//! from is doc/adr/0013-where-secrets-may-come-from.md, and a secret setting
+//! from is ADR-0013, and a secret setting
 //! has a type that masks it when serialized or printed. The database URL and
 //! the signing keys are the secret settings.
 
@@ -94,7 +94,7 @@ impl Default for DatabaseSettings {
 
 /// A database URL, which may carry a password. It serializes and prints with
 /// the password replaced by `***`, and `expose` gives the URL as written
-/// (doc/adr/0013).
+/// (ADR-0013).
 #[derive(Deserialize, Clone)]
 #[serde(transparent)]
 pub struct DatabaseUrl(String);
@@ -153,7 +153,7 @@ pub struct AuthSettings {
 }
 
 /// A signing passphrase as typed in the configuration: any text of at least
-/// 32 characters. Serializes and prints as `***` (doc/adr/0013).
+/// 32 characters. Serializes and prints as `***` (ADR-0013).
 #[derive(Deserialize, Clone)]
 #[serde(try_from = "String")]
 pub struct SigningKey(String);

@@ -172,7 +172,7 @@ pub async fn set_role(
     role_name: &str,
 ) -> Result<(), sqlx::Error> {
     // The role id comes from the subselect the insert uses, so callers never
-    // hold role ids (doc/adr/0023).
+    // hold role ids (ADR-0023).
     let update = sql(
         tx,
         "UPDATE users SET role_id = \
@@ -204,7 +204,7 @@ pub async fn delete(
     now: i64,
 ) -> Result<bool, sqlx::Error> {
     // A soft delete, because events and the audit trail keep naming the user
-    // (doc/adr/0024).
+    // (ADR-0024).
     let update = sql(
         tx,
         "UPDATE users SET deleted_at = $1 \
@@ -256,7 +256,7 @@ pub async fn find_in(
     user_name: &str,
 ) -> Result<Option<User>, sqlx::Error> {
     // The join on tenants filters its deleted_at too, so the users of a
-    // deleted tenant are not found (doc/adr/0024).
+    // deleted tenant are not found (ADR-0024).
     let select = sql(
         tx,
         "SELECT u.user_id, u.tenant_id, u.user_name, r.role_name, u.password_hash, \
@@ -289,7 +289,7 @@ pub async fn find_id_any(
 ) -> Result<Option<String>, sqlx::Error> {
     // Deleted users count, because the audit trail of one is still asked
     // for, and a name is reused after a delete, so the live user comes first
-    // (doc/adr/0024).
+    // (ADR-0024).
     let select = sql(
         tx,
         "SELECT user_id FROM users WHERE tenant_id = $1 AND user_name = $2 \

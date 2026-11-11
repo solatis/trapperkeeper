@@ -37,7 +37,7 @@ fn login_then_me() {
         let server = serve_in_process(backend);
 
         // 1. Upper case, so the test sees that login lowercases the tenant
-        //    and the name before it looks them up (doc/adr/0020).
+        //    and the name before it looks them up (ADR-0020).
         let response = log_in(
             &server,
             &SYSTEM_TENANT.to_uppercase(),

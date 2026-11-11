@@ -77,7 +77,7 @@ pub async fn login(
     jar: CookieJar,
     Json(credentials): Json<Credentials>,
 ) -> Response {
-    // Tenant names and user names are stored lowercase (doc/adr/0020).
+    // Tenant names and user names are stored lowercase (ADR-0020).
     let tenant = credentials.tenant.to_lowercase();
     let name = credentials.name.to_lowercase();
     let found = async {
@@ -141,7 +141,7 @@ fn logged_in(
 ) -> Response {
     let body = login_body(state, user, password_must_change, SystemTime::now());
     // The refresh cookie goes to the refresh route alone, so no other request
-    // carries it (doc/adr/0025).
+    // carries it (ADR-0025).
     let jar = jar
         .add(token_cookie(
             ACCESS_COOKIE,

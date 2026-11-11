@@ -1,7 +1,7 @@
 //! What migrate builds, which databases serve accepts and what the first
 //! serve sets up, through the library's setup functions, on each backend the
 //! environment names: a scenario and a property over generated databases
-//! (`doc/adr/0018`).
+//! (ADR-0018).
 
 mod common;
 

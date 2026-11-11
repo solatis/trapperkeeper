@@ -1,5 +1,5 @@
 //! Signed tokens: HS256 JWTs that name their signing key in `kid` and their
-//! kind in `typ` (doc/adr/0025-signed-tokens-and-the-revocation-cutoff.md).
+//! kind in `typ` (ADR-0025).
 
 use std::collections::HashMap;
 use std::fmt;
@@ -235,11 +235,11 @@ impl Keyring {
 /// first 16 hex characters of the key's SHA-256.
 async fn derive(passphrase: String, salt: String) -> (String, [u8; 32]) {
     // Each derivation takes a 64 MiB hash, once per key at startup
-    // (doc/adr/0014).
+    // (ADR-0014).
     task::spawn_blocking(move || {
         let mut key = [0_u8; 32];
         // The same parameters as passwords, so each offline guess at a
-        // passphrase costs one Argon2id run (doc/adr/0022).
+        // passphrase costs one Argon2id run (ADR-0022).
         password::hasher()
             .hash_password_into(passphrase.as_bytes(), salt.as_bytes(), &mut key)
             .expect("the salt and the output length are within argon2's bounds");

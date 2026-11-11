@@ -29,7 +29,7 @@ pub async fn create(tx: &mut Tx, new: NewAccount<'_>) -> Result<String, CreateEr
         NewUser {
             tenant_id: new.tenant_id,
             // Names are stored lowercase, so "Leon" and "leon" are one user
-            // (doc/adr/0020).
+            // (ADR-0020).
             user_name: &new.name.to_lowercase(),
             role_name: new.role_name,
             password_hash: &password_hash,

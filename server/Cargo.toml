@@ -19,15 +19,15 @@ path = "src/main.rs"
 path = "src/lib.rs"
 
 # clap parses the command line and figment merges the settings layers; why
-# these two is doc/adr/0012-clap-and-figment-for-the-command-line-and-configuration.md.
+# these two is ADR-0012.
 # figment has only the two providers the layers need; the file format is TOML.
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 figment = { version = "0.10", features = ["toml", "env"] }
 serde = { version = "1", features = ["derive"] }
-# tokio runs everything (doc/adr/0014-async-everywhere.md); axum serves HTTP
+# tokio runs everything (ADR-0014); axum serves HTTP
 # and utoipa derives the API contract from the handlers
-# (doc/adr/0016-axum-and-utoipa-for-http.md). tokio has only the features the
+# (ADR-0016). tokio has only the features the
 # server uses: the runtime and its macro, sockets, signals for shutdown, and
 # sync for the semaphore that limits concurrent password hashes.
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "sync"] }
@@ -35,7 +35,7 @@ axum = "0.8"
 utoipa = "6"
 utoipa-axum = "0.3"
 # tracing is the logging facade and tracing-subscriber writes the lines; the
-# format and level rules are doc/adr/0017-tracing-for-structured-logs.md.
+# format and level rules are ADR-0017.
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
 # The request log is tower-http's trace layer; no other tower-http feature yet.
@@ -44,7 +44,7 @@ tower-http = { version = "0.7", features = ["trace"] }
 # instead of Rust's Debug text; already in the tree through axum's json feature.
 serde_json = "1"
 # sqlx runs the store's SQL and its migrations; why sqlx is
-# doc/adr/0019-sqlx-with-hand-written-sql-over-three-backends.md. The default
+# ADR-0019. The default
 # features are off, because they bring the Any driver and json, which the store
 # does not use. macros is on because it provides migrate!, and the store calls
 # none of its compile-time query macros. sqlite-bundled compiles SQLite into
@@ -56,15 +56,15 @@ sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio",
 # sqlx.
 url = "2"
 # Passwords are hashed with Argon2id, stored as PHC strings
-# (doc/adr/0022-argon2id-for-passwords.md). The default features bring the
+# (ADR-0022). The default features bring the
 # PHC string format and the random salt.
 argon2 = "0.6"
-# Entity ids are version 7 UUIDs, generated in Rust (doc/adr/0020).
+# Entity ids are version 7 UUIDs, generated in Rust (ADR-0020).
 uuid = { version = "1", features = ["v7"] }
 # Generated passwords and the installation's signing salt draw from the
 # system's random source.
 rand = "0.10"
-# Access tokens are HS256 JWTs (doc/adr/0025-signed-tokens-and-the-revocation-cutoff.md).
+# Access tokens are HS256 JWTs (ADR-0025).
 # Default features off, because PEM parsing is for asymmetric keys; rust_crypto
 # is the HMAC provider and pulls the sha2 already in the tree.
 jsonwebtoken = { version = "11", default-features = false, features = ["rust_crypto"] }
@@ -79,7 +79,7 @@ cookie = { version = "0.18", default-features = false }
 
 [dev-dependencies]
 # The settings precedence is one property over generated layers
-# (doc/adr/0018-unit-integration-and-end-to-end-tests.md).
+# (ADR-0018).
 proptest = "1"
 # The settings property loads inside figment's jail, which locks the
 # environment and the working directory while a case runs.

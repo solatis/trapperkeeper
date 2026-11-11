@@ -60,16 +60,16 @@ pub async fn tenant(
     tenant_name: &str,
 ) -> Result<Tenant, Refused> {
     // The name is lowercased as the store keeps it and not checked for
-    // shape, because a name that fails the shape matches no row (doc/adr/0020).
+    // shape, because a name that fails the shape matches no row (ADR-0020).
     let found = tenants::find(tx, &tenant_name.to_lowercase()).await?;
     // An unknown tenant is 404 for every caller, so the superadmin's client
     // gets the same answer as an admin's. `$tk` is answered as unknown: it is
-    // not a customer, and its one user is managed from the console (doc/adr/0028).
+    // not a customer, and its one user is managed from the console (ADR-0028).
     let Some(tenant) = found.filter(|t| t.id != SYSTEM_TENANT_ID) else {
         return Err(Refused::NotFound);
     };
     // The superadmin's rank, not its tenant, opens every customer tenant
-    // (doc/adr/0029).
+    // (ADR-0029).
     let superadmin = Rank::of(&caller.role_name) == Some(Rank::Superadmin);
     if tenant.id != caller.tenant_id && !superadmin {
         return Err(Refused::Forbidden);

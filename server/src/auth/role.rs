@@ -1,6 +1,6 @@
 //! The role ladder: observer, operator, admin and superadmin, each above the
 //! one before, and the extractor that holds a route to a minimum role
-//! (doc/adr/0029-role-ladder.md). The rungs that exist as types, `Admin` and
+//! (ADR-0029). The rungs that exist as types, `Admin` and
 //! `Superadmin`, are the minimums routes name.
 
 use std::marker::PhantomData;
@@ -39,7 +39,7 @@ impl Rank {
 /// A minimum role, as a type, so a handler states it in its signature.
 // A marker type with a constant, because a const generic over an enum
 // (`AtLeast<{ Rank::Admin }>`) is unstable, and the toolchain is stable
-// (doc/adr/0009).
+// (ADR-0009).
 pub trait Rung {
     const RANK: Rank;
 }

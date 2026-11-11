@@ -1,7 +1,7 @@
 //! The audit trail: the middleware that records every changing request under
 //! `/api/v1` once the handler has answered, the identity cell the handler
 //! side fills with the caller and the tenant acted on, and the admin's read
-//! route (doc/adr/0031-audit-trail.md).
+//! route (ADR-0031).
 
 use std::convert::Infallible;
 use std::future::ready;

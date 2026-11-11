@@ -68,7 +68,7 @@ fn superadmin_mints_a_session_that_acts_as_the_user() {
         assert!(refreshed["access_token"].is_string());
 
         // 4. The cutoff is per user, so the admin's own session ends too
-        //    (doc/adr/0025).
+        //    (ADR-0025).
         let response = call(&server, access, "POST", "/api/v1/logout", None);
         assert_eq!(response.status, 200, "{} on {backend}", response.body);
         assert_eq!(call(&server, &own, "GET", "/api/v1/me", None).status, 401);

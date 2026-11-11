@@ -25,7 +25,7 @@ pub struct Record<'a> {
 ///
 /// Fails when the database cannot be written.
 pub async fn append(tx: &mut Tx, record: Record<'_>) -> Result<(), sqlx::Error> {
-    // A version 7 UUID, so the id orders the trail by time (doc/adr/0020).
+    // A version 7 UUID, so the id orders the trail by time (ADR-0020).
     let audit_id = Uuid::now_v7().to_string();
     let insert = sql(
         tx,
@@ -101,10 +101,10 @@ pub async fn page(
 ) -> Result<Vec<Row>, sqlx::Error> {
     // The join on users is on the id alone and ignores deleted_at, because
     // the trail names a user deleted since, and the superadmin's row under a
-    // customer tenant names a user of $tk (doc/adr/0024).
+    // customer tenant names a user of $tk (ADR-0024).
     //
     // The id is time-ordered, so it is the cursor and the order at once
-    // (doc/adr/0020).
+    // (ADR-0020).
     //
     // Two statements rather than a NULL-or-equal trick on the user, because
     // the placeholders are numbered once each in order and the trick defeats

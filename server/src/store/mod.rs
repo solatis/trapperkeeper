@@ -76,7 +76,7 @@ fn sql(tx: &Tx, statement: &'static str) -> Cow<'static, str> {
     match tx {
         Tx::Sqlite(_) | Tx::Postgres(_) => Cow::Borrowed(statement),
         // A statement uses each number once, in ascending order, because `?`
-        // binds by position (doc/adr/0019).
+        // binds by position (ADR-0019).
         Tx::MariaDb(_) => {
             let mut out = String::with_capacity(statement.len());
             let mut chars = statement.chars().peekable();
@@ -120,7 +120,7 @@ macro_rules! on_tx {
 use on_tx;
 
 /// The current time as epoch microseconds in UTC, the form every time column
-/// stores (doc/adr/0019).
+/// stores (ADR-0019).
 pub fn now_micros() -> i64 {
     let since_epoch = SystemTime::now()
         .duration_since(UNIX_EPOCH)

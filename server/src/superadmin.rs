@@ -1,6 +1,6 @@
 //! The superadmin: the user `admin` of the system tenant `$tk`, created on the
 //! first migration of an empty database and reset from the console
-//! (doc/adr/0028-system-tenant-and-first-run.md).
+//! (ADR-0028).
 
 use crate::accounts::{self, NewAccount};
 use crate::store::users::{self, CreateError};
@@ -10,7 +10,7 @@ use crate::store::{SYSTEM_TENANT_ID, Store};
 pub const NAME: &str = "admin";
 
 /// The superadmin's role name. Only the system tenant holds this role, and
-/// no route assigns it (doc/adr/0028).
+/// no route assigns it (ADR-0028).
 pub const ROLE: &str = "superadmin";
 
 /// The new account of the superadmin.

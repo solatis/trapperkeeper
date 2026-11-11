@@ -38,7 +38,7 @@ pub async fn mint(
     State(state): State<AppState>,
     Path((tenant, name)): Path<(String, String)>,
 ) -> Response {
-    // Both names lowercased, as login does (doc/adr/0020). Nothing refuses
+    // Both names lowercased, as login does (ADR-0020). Nothing refuses
     // the superadmin's own account, because that mint is the same as a
     // refresh.
     let found = async {

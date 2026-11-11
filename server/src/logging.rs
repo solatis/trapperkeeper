@@ -1,5 +1,5 @@
 //! Log output of the binary: which lines are written and in which format. The
-//! rules are doc/adr/0017-tracing-for-structured-logs.md.
+//! rules are ADR-0017.
 
 use std::env;
 use std::fmt;

@@ -88,7 +88,7 @@ pub async fn create(tx: &mut Tx, new: NewTenant<'_>) -> Result<String, CreateErr
             .await
             .map(|_| ())
     })?;
-    // Each tenant holds role rows of its own (doc/adr/0023).
+    // Each tenant holds role rows of its own (ADR-0023).
     for (name, title) in ROLES {
         let insert = sql(
             tx,

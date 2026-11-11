@@ -213,7 +213,7 @@ fn body_for(n: usize, role: &str, method: &str, path: &str) -> Option<Value> {
 #[test]
 fn every_role_meets_each_route_minimum() {
     // The roles and routes are a small fixed set, so the test covers every
-    // pair instead of sampling them (doc/adr/0018).
+    // pair instead of sampling them (ADR-0018).
     //
     // 1. create a tenant, which seeds admin, operator and observer
     // 2. add a role that is not on the ladder

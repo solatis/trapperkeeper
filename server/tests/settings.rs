@@ -5,7 +5,7 @@
 //! generated password. Each resolved setting must be the value of the highest
 //! layer that gave one, or the default when none did, and a resolved URL
 //! serializes with its password replaced by `***`. One property over
-//! generated layers instead of a case per layer, as `doc/adr/0018` asks, each
+//! generated layers instead of a case per layer, as ADR-0018 asks, each
 //! case inside figment's jail.
 
 use std::fmt::Write as _;
