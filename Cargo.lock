@@ -2620,6 +2620,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "trapperkeeper-engine"
+version = "0.1.0"
+dependencies = [
+ "proptest",
+ "serde",
+ "serde_json",
+ "uuid",
+]
+
+[[package]]
 name = "trapperkeeper-server"
 version = "0.1.0"
 dependencies = [
@@ -2777,6 +2787,7 @@ checksum = "4a0e2d11620c50695fe12bbbfde96b3477fe606e7284c22d505c12ce51214514"
 dependencies = [
  "getrandom 0.4.3",
  "js-sys",
+ "serde_core",
  "wasm-bindgen",
 ]
 

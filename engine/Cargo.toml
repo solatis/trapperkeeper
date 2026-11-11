@@ -1,0 +1,27 @@
+# The package keeps the `-engine` suffix, because the bare crate name
+# `trapperkeeper` is the Rust sensor library's.
+[package]
+name = "trapperkeeper-engine"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+# A pipeline embeds this crate, so it depends on nothing from the server, the
+# store or HTTP.
+[dependencies]
+# serde derives the JSON form of a rule, and serde_json reads and writes it.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# The serde feature reads and writes a rule's id. No generator feature is on,
+# because the server generates the ids and the engine only reads them.
+uuid = { version = "1", features = ["serde"] }
+
+[dev-dependencies]
+# The tests are properties over generated rules
+# (doc/adr/0018-unit-integration-and-end-to-end-tests.md).
+proptest = "1"
+
+[lints]
+workspace = true
