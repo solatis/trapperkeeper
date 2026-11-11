@@ -89,7 +89,10 @@ session. Then, issue by issue in landing order:
    wording, in the shape the root `AGENTS.md`, "Code comments", prescribes,
    and every claim the specification lists is present once, in the same
    commit as the code. A claim is written as a claim, without the plan's
-   evidence brackets. A claim the code contradicts is not written; it is
+   evidence brackets. A bracket that names the owner and a date is
+   evidence too, and it reaches no comment. A bracket that names a record
+   becomes `ADR-<number>` where the comment needs the pointer. A claim the
+   code contradicts is not written; it is
    reported in the build-stage message with both versions. Where a commit
    changes code that already has comments, the blocks it touches are
    rewritten whole from the new code, as the root `AGENTS.md`, "Code

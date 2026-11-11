@@ -130,6 +130,10 @@ short doc comment and a few inline comments, and many need none at all.
 8. After writing a function's comments, read them back top to bottom as
    separate claims and check each against the code below it. Fix or delete
    any claim the code does not bear out.
+9. A comment cites a decision record by its number, as `ADR-0020`, and not
+   by its path. A comment does not say who decided something or when, so it
+   holds no mark such as `(owner, 2026-11-10)`. The record in `doc/adr/`
+   says how the decision was made, and it may carry that trace.
 
 This is the primary path: new code is written this way. `/doc-discipline
 [all|placement|narrative|read] [check] [paths...] [plan.md]` is the repair

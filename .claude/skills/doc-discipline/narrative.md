@@ -233,6 +233,9 @@ function had always probed the store.
       - repeats another comment, including the overview;
       - mentions an earlier version, a plan, a review, an issue or the
         conversation;
+      - says who decided something or when, such as `(owner, 2026-11-10)`,
+        where the decision record is the place for that trace;
+      - cites a decision record by its path, where `ADR-0020` is the form;
       - explains implementation in a doc comment;
       - names a rejected alternative that a reader of that line would not
         propose;
