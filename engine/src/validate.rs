@@ -145,6 +145,7 @@ fn check_condition(at: &str, c: &Condition, errors: &mut Vec<Error>) {
     //    need a string, which only `string` declares.
     let (op, field_type) = (c.op, c.field_type);
     let allowed = match op {
+        // Equality and membership compare for sameness, which every type has.
         Operator::Eq | Operator::Ne | Operator::In | Operator::NotIn => true,
         Operator::Lt | Operator::Le | Operator::Gt | Operator::Ge => matches!(
             field_type,
@@ -155,20 +156,28 @@ fn check_condition(at: &str, c: &Condition, errors: &mut Vec<Error>) {
         }
     };
     if !allowed {
+        // The refusal points at the operator. The type could be the wrong
+        // one just as well, and a pointer names one place.
         refuse(
             format!("{at}/op"),
             Reason::OperatorNotForType { op, field_type },
         );
+        // The value is not checked against an operator that does not apply.
         return;
     }
 
-    // 2. Only the membership operators take a list.
+    // 2. Only the membership operators take a list. The arms collect each
+    //    scalar with its pointer for step 3, and a value of the wrong arity
+    //    ends the check, because its scalars have no type to be held to.
     let membership = matches!(op, Operator::In | Operator::NotIn);
     let value = format!("{at}/value");
     let scalars: Vec<(String, &Scalar)> = match (&c.value, membership) {
+        // One scalar sits at the value itself.
         (Value::One(s), false) => vec![(value, s)],
         (Value::Many(list), true) => {
             let count = list.len();
+            // An empty list matches nothing with `in` and everything with
+            // `not_in`, so the condition would test nothing.
             if count == 0 {
                 refuse(value, Reason::EmptyList);
                 return;
@@ -178,6 +187,7 @@ fn check_condition(at: &str, c: &Condition, errors: &mut Vec<Error>) {
                 refuse(value, Reason::ListTooLong { count, max });
                 return;
             }
+            // Each element gets its index, so a refusal names the element.
             let at = |(i, s)| (format!("{value}/{i}"), s);
             list.iter().enumerate().map(at).collect()
         }
@@ -222,7 +232,7 @@ pub fn validate(rule: &Rule) -> Result<(), Vec<Error>> {
     let mut refuse = |at: String, reason| errors.push(Error { at, reason });
 
     // 1. The id must be version 7, the time-ordered kind the server issues
-    //    (doc/adr/0020). The nil id is version 0 and fails the same check.
+    //    (ADR-0020). The nil id is version 0 and fails the same check.
     let version = rule.rule_id.get_version_num();
     if version != 7 {
         refuse(
@@ -239,7 +249,7 @@ pub fn validate(rule: &Rule) -> Result<(), Vec<Error>> {
             Reason::SampleRateOutOfRange { sample_rate },
         );
     }
-    // 1. The caps keep the seen-scope index finite (doc/adr/0034). A key or
+    // 1. The caps keep the seen-scope index finite (ADR-0034). A key or
     //    a value of zero length addresses nothing on any sensor.
     let count = rule.scope.len();
     if count > MAX_SCOPE_TAGS {
@@ -249,12 +259,15 @@ pub fn validate(rule: &Rule) -> Result<(), Vec<Error>> {
     let max = MAX_TAG_LENGTH;
     for (key, value) in &rule.scope {
         // Both refusals point at the tag, because a JSON pointer cannot
-        // point at a key.
+        // point at a key. The reason says which of the two is wrong.
         let at = format!("/scope/{}", token(key));
+        // The caps count characters, which is what a person types and reads.
+        // A byte count would cap a tag in a non-Latin script sooner.
         let len = key.chars().count();
         if !(1..=max).contains(&len) {
             refuse(at.clone(), Reason::TagKeyLength { len, max });
         }
+        // A tag whose key and value are both wrong gets both refusals.
         let len = value.chars().count();
         if !(1..=max).contains(&len) {
             refuse(at, Reason::TagValueLength { len, max });

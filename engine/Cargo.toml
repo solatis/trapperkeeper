@@ -23,7 +23,7 @@ uuid = { version = "1", features = ["serde"] }
 
 [dev-dependencies]
 # The tests are properties over generated rules
-# (doc/adr/0018-unit-integration-and-end-to-end-tests.md).
+# (ADR-0018).
 proptest = "1"
 
 [lints]

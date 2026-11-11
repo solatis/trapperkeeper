@@ -22,8 +22,7 @@ rules yet. It depends on no server, store or HTTP code.
 
 - Every later consumer assumes a rule that `validate` accepted. Nothing
   evaluates a rule that was not validated.
-- The limits are constants. A commit changes one, and no setting does (owner,
-  2026-11-10).
+- The limits are constants. A commit changes one, and no setting does.
 - The crate depends on serde, serde_json and uuid only. A dependency on the
   server, the store or HTTP breaks the milestone goal that a pipeline can
   embed the crate.

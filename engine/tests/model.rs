@@ -1,7 +1,7 @@
 //! Properties of the rule model: a generated valid rule round-trips through
 //! JSON unchanged and passes validation, and one defect applied to it is
 //! refused with that defect's reason at its place. Each claim is one property
-//! over generated rules, as doc/adr/0018 asks.
+//! over generated rules, as ADR-0018 asks.
 
 use std::collections::BTreeMap;
 

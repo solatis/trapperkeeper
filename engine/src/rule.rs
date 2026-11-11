@@ -1,6 +1,6 @@
 //! The rule types and their JSON form. A rule is an OR of groups, and each
 //! group is an AND of conditions. The format and the decisions behind it are
-//! doc/adr/0033-rule-format.md. Every struct refuses a JSON property it does
+//! ADR-0033. Every struct refuses a JSON property it does
 //! not know, so a misspelled property is a parse error and never a default.
 
 use std::collections::BTreeMap;
@@ -20,7 +20,7 @@ pub enum Action {
 }
 
 /// The type a condition declares for its field. The field's value is coerced
-/// to it at evaluation (doc/adr/0006).
+/// to it at evaluation (ADR-0006).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FieldType {
@@ -50,7 +50,7 @@ pub enum Operator {
 
 /// What a condition does when its field is missing or cannot be coerced:
 /// `skip` does not match, `match` matches, `fail` fails the rule
-/// (doc/adr/0005).
+/// (ADR-0005).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Policy {
@@ -91,7 +91,7 @@ pub struct Condition {
     pub field_type: FieldType,
     pub op: Operator,
     pub value: Value,
-    // A policy that is absent in JSON is `skip` (doc/adr/0005).
+    // A policy that is absent in JSON is `skip` (ADR-0005).
     #[serde(default)]
     pub on_missing: Policy,
     #[serde(default)]
@@ -111,9 +111,9 @@ pub struct Group {
 #[serde(deny_unknown_fields)]
 pub struct Rule {
     // The server generates the id and the engine reads it. Validation holds
-    // it to version 7, the time-ordered kind of doc/adr/0020.
+    // it to version 7, the time-ordered kind of ADR-0020.
     pub rule_id: Uuid,
-    // A display name in the `_title` form of doc/adr/0020. It is not part of
+    // A display name in the `_title` form of ADR-0020. It is not part of
     // the identity and may repeat. JSON omits it when it is absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rule_title: Option<String>,
@@ -123,7 +123,7 @@ pub struct Rule {
     #[serde(default = "every_record")]
     pub sample_rate: f64,
     // The key-value tags a sensor matches its own tags against
-    // (doc/adr/0034). The map is ordered, so the JSON is the same bytes every
+    // (ADR-0034). The map is ordered, so the JSON is the same bytes every
     // time.
     #[serde(default)]
     pub scope: BTreeMap<String, String>,
