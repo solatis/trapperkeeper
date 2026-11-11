@@ -2,6 +2,7 @@
 //! every rule passes before it reaches a sensor. This crate does not evaluate
 //! rules.
 
+pub mod limits;
 pub mod path;
 pub mod rule;
 
