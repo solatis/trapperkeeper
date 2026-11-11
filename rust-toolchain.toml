@@ -1,6 +1,6 @@
 [toolchain]
 # "stable" with no version: the project targets the latest stable release only
-# and has no minimum version (doc/adr/0009-latest-stable-rust-only.md).
+# and has no minimum version (ADR-0009).
 channel = "stable"
 components = ["clippy", "rustfmt"]
 profile = "minimal"

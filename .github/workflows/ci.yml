@@ -23,7 +23,7 @@ jobs:
       # requires; the owner keeps that list by hand. `backends` names the
       # server databases the entry's tests must reach. Windows aarch64 tests
       # SQLite only, because neither Postgres nor MariaDB ships a build for it
-      # and the runner has no Docker (doc/adr/0021).
+      # and the runner has no Docker (ADR-0021).
       matrix:
         include:
           - { name: linux-amd64, runner: ubuntu-24.04, backends: "postgres,mariadb" }
@@ -44,7 +44,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       # Postgres and MariaDB run on every platform that has a build of them,
       # at the latest Postgres major and the latest MariaDB LTS
-      # (doc/adr/0021). Each step below starts both, prints their versions so
+      # (ADR-0021). Each step below starts both, prints their versions so
       # the log shows what the run tested, and writes the admin URLs the tests
       # read. The steps time out, because each waits in a loop for a server.
       #

@@ -13,7 +13,7 @@ publish = false
 # Lint levels live here, not in CI flags, so a commit fails the same way on a
 # developer's machine as in CI. Every crate inherits them with
 # `[lints] workspace = true`. The decision and what it rejected are in
-# doc/adr/0011-clippy-pedantic-denied-everywhere.md.
+# ADR-0011.
 [workspace.lints.rust]
 # rustc warnings fail every build, local or CI.
 warnings = "deny"
