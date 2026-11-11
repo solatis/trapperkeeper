@@ -61,9 +61,9 @@ see `server/AGENTS.md`.
 
 ### Rule engine core
 
-Shared logic behind both APIs: rule validation, compilation to the distributed
-form, cost calculation, limits (path depth, nested wildcards, set sizes). Rules
-are validated strictly at creation so that evaluation can assume valid rules.
+The engine crate holds the rule model, its JSON form and its validation, and
+later the evaluator. Rules are validated strictly at creation so that
+evaluation can assume valid rules. See `engine/AGENTS.md`.
 
 ### Web UI
 

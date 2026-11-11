@@ -28,7 +28,7 @@ they arrive. A component directory has its own `AGENTS.md`, and inside
 | Directory      | What                                               | Exists                       |
 | -------------- | -------------------------------------------------- | ---------------------------- |
 | `server/`      | the server binary: APIs, store, `serve`, `migrate` | yes, see `server/AGENTS.md`  |
-| `engine/`      | the rule engine crate, embeddable by pipelines     | with M3                      |
+| `engine/`      | the rule engine crate, embeddable by pipelines     | yes, see `engine/AGENTS.md`  |
 | `sdk/<lang>/`  | one sensor SDK per language                        | Rust with M6, Python with M8 |
 | `web/`         | the browser UI                                     | with M7                      |
 | `conformance/` | the language-neutral evaluation fixtures           | with M3                      |
