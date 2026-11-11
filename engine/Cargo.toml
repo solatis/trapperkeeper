@@ -13,7 +13,10 @@ publish.workspace = true
 [dependencies]
 # serde derives the JSON form of a rule, and serde_json reads and writes it.
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+# float_roundtrip makes serde_json parse a float to the nearest f64, so a
+# value in a rule reads back as the number that was written. Without it the
+# parser can be off by one unit in the last place.
+serde_json = { version = "1", features = ["float_roundtrip"] }
 # The serde feature reads and writes a rule's id. No generator feature is on,
 # because the server generates the ids and the engine only reads them.
 uuid = { version = "1", features = ["serde"] }
