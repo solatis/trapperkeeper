@@ -15,7 +15,7 @@ The agent is a separate component and a client of the management API with its
 own principal and role. It manages rules, not sensors: a new instrumentation
 point in pipeline code is at most a suggested patch for a human. Agent-authored
 rules start as `observe` and are tagged as agent-authored; promotion to `drop`
-or `fail` needs a human.
+or `throw` needs a human.
 
 ## Rejected alternatives
 
