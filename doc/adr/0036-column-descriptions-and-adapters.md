@@ -49,6 +49,9 @@ arrow-rs arrays as the executor's column type, because owning the
 implementation gives more flexibility, and arrow-rs has no stride, no byte
 mask and no NaN as null.
 
+Writing the Arrow import ourselves, because dropping arrow-rs would be
+anti-pragmatic unless it performs badly.
+
 A third state per value in a column, because it is incompatible with fast
 column-oriented evaluation.
 
