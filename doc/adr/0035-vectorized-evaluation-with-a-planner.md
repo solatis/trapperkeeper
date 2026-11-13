@@ -9,9 +9,14 @@ of records a day. A rule arrives at run time as data, so no compiler sees it.
 
 ## Decision
 
-Evaluation is vectorized, column at a time (owner, 2026-11-12). A planner is
-part of the design from the start (owner, 2026-11-12). Fast things must be
-fast, and slow things must be possible (owner, 2026-11-12).
+Evaluation is vectorized, column at a time. "This is premature optimization"
+is not an argument in this design (owner, 2026-11-12). A planner is part of
+the design from the start (owner, 2026-11-12).
+
+Fast things must be fast, and slow things must be possible. A sensor over
+named numpy arrays or over a Spark dataframe is as fast as possible. A sensor
+over nested JSON, row by row, is slow and works (owner, 2026-11-12,
+2026-11-13).
 
 The executor is a vectorized interpreter. It runs one program per rule set
 over chunks of up to 2048 rows, with one call per step per chunk (owner,
