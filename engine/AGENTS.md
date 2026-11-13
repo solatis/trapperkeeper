@@ -40,9 +40,6 @@ the crate does not implement that yet.
   `doc/adr/0033-rule-format.md`.
 - The scope tags, their caps and the seen-scope index:
   `doc/adr/0034-scope-tags-and-the-seen-scope-index.md`.
-- One vocabulary for failure behavior, which gives the two policies their
-  words: `doc/adr/0005-one-vocabulary-for-failure-behavior.md`.
-- The field types: `doc/adr/0006-conformance-fixtures-are-the-evaluation-spec.md`.
 - Properties are the preferred tests:
   `doc/adr/0018-unit-integration-and-end-to-end-tests.md`.
 - The crate's directory: `doc/adr/0010-one-top-level-directory-per-component.md`.
