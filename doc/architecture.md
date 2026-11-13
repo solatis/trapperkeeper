@@ -67,7 +67,7 @@ evaluation can assume valid rules. See `engine/AGENTS.md`.
 
 ### Web UI
 
-Human client of the management API: rule builder, event viewer, user and key
+Human client of the management API: rule editor, event viewer, user and key
 management, pause switch, and the conversation surface for the AI agent.
 Rendered on the server, with no single-page application (`adr/0015`).
 
