@@ -92,5 +92,5 @@ the live window cannot keep rules. A rule whose scope went stale stays in
 force and is flagged, not retired. Tag cardinality is the operator's
 discipline, bounded per rule and per sensor by the caps and not per tenant.
 The engine's ordered serialization of the scope map is the canonical tuple.
-The sync wire (M6) carries the sensor's tags. The engine, the server and the
+The sync wire (M7) carries the sensor's tags. The engine, the server and the
 web components cite this record.

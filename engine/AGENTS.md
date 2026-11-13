@@ -3,7 +3,10 @@
 **What**: the rule engine crate, `trapperkeeper-engine`, with the library
 `trapperkeeper_engine`, which a pipeline can embed. It holds the rule model,
 the model's JSON form and the validation of a rule. It does not evaluate
-rules yet. It depends on no server, store or HTTP code.
+rules yet. It depends on no server, store or HTTP code. The rule model in the
+crate is groups of conditions. The records `doc/adr/0033-rule-format.md` and
+`doc/adr/0041-the-rule-language.md` describe a rule as one expression, and
+the crate does not implement that yet.
 
 **Map**:
 
