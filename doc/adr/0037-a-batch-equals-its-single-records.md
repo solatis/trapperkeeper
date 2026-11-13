@@ -20,8 +20,8 @@ removed and the observations done. Each SDK shapes the call for its language
 (owner, 2026-11-13).
 
 `throw` raises once per call, and the exception carries the whole result. The
-first row that throws is the only row that is thrown (owner, 2026-11-12,
-2026-11-13).
+first row that throws is the only row that is thrown, and for that row the
+rules that do not throw are not important (owner, 2026-11-12, 2026-11-13).
 
 ## Rejected alternatives
 
