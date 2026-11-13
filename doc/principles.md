@@ -5,12 +5,12 @@ Trade-offs we resolve the same way every time. Each lists what we give up.
 ## 1. Least intrusive by default
 
 An observability tool must be invisible when it works and harmless when it
-breaks. Every default degrades toward pass-through: missing field -> condition
-does not match; coercion failure -> condition does not match; server
-unreachable -> rules off, records flow. Strictness is opt-in, per condition or
-per sensor.
+breaks. Every default degrades toward pass-through. A rule that cannot be
+evaluated on a record does not apply to that record and is reported
+(`adr/0005`). When the server is unreachable, the rules are off and records
+flow. Strictness is opt-in per sensor.
 
-Cost: misconfigurations can fail silently; events can be lost.
+Cost: events can be lost.
 
 ## 2. Schema-agnostic server
 
@@ -18,7 +18,8 @@ The server never learns the shape of user data. Rules reference field paths
 that are resolved against the actual record at evaluation time. Schema drift
 needs no coordination.
 
-Cost: a typo in a field path is only visible as a rule that never matches.
+Cost: a typo in a field path is found only when a sensor reports that the
+rule could not be evaluated (`adr/0005`).
 Mitigation belongs in tooling (event-informed suggestions), not in a registry.
 
 ## 3. Ephemeral sensors
@@ -35,14 +36,17 @@ Evaluation happens in the pipeline process: no network round-trip per record,
 no server bottleneck, works while disconnected. Everything else (authoring,
 validation, authorization, audit) happens in exactly one place.
 
-Cost: every SDK carries an evaluator, and they must all agree. The conformance
-suite exists to pay this cost.
+Cost: every SDK carries the one core (`adr/0038`), and a host engine that
+runs translated rules must agree with it (`adr/0040`). The conformance suite
+exists to pay this cost.
 
 ## 5. Deterministic semantics
 
 Same rule plus same record gives the same outcome in every SDK. Where ordering
-matters, tie-breaking is specified. Optimizations (short-circuiting, condition
-reordering, vectorization) may change cost, never results.
+matters, tie-breaking is specified. A batch gives each record the outcome it
+gets alone (`adr/0037`). A source says what "no value" is, so two frameworks
+can differ on the same numbers (`adr/0036`). Optimizations (batching,
+vectorization, a later reordering of rules) may change cost, never results.
 
 ## 6. Reversible operations
 

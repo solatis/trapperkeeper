@@ -22,17 +22,17 @@ human-or-agent driven, and is where validation, authorization and audit live.
 Embedded in pipeline code. Syncs rules for its scope tags, evaluates them
 locally, buffers events, reports them in batches.
 
-- Rules arrive pre-compiled and pre-validated; the SDK contains an evaluator,
-  not a parser.
-- Conditions are evaluated cheapest-first using a deterministic cost model;
-  sampling is applied before evaluation.
-- Buffering is explicit: no background threads, flush happens inline or on
-  request.
+- A sensor receives each rule as a validated tree and holds no parser
+  (`adr/0033`).
+- Sampling is applied above the evaluation of a rule (`adr/0033`).
+- Buffering is explicit. A flush happens inline or on request. The engine
+  works on the calling thread unless the user turns its pool on (`adr/0039`).
 - Behavior when the server is unreachable is configurable per sensor:
   `pass-through` (default: rules off, records flow), `halt` (raise into the
   pipeline), `cached` (keep using the last synced rules).
-- Framework adapters sit on top: vectorized evaluation for dataframes,
-  automatic metadata from schedulers and orchestrators.
+- Framework adapters sit on top. They build views of the caller's data
+  (`adr/0036`) and take metadata from schedulers and orchestrators. On Spark
+  the rules are translated (`adr/0040`).
 
 ### Sensor API
 
@@ -80,7 +80,7 @@ manages rules, not sensors: new instrumentation points in pipeline code are at
 most a suggested patch for a human.
 
 Guardrails come from the rule model: agent-authored rules start as `observe`
-and are tagged as agent-authored; promotion to `drop` or `fail` needs a human;
+and are tagged as agent-authored; promotion to `drop` or `throw` needs a human;
 immutable versions and pause make every agent action reversible. Record
 contents are untrusted input to the model.
 
@@ -94,20 +94,22 @@ contents are untrusted input to the model.
 
 ### Conformance suite
 
-Language-neutral fixtures: rule, record, expected outcome. Defines field path
-resolution, type coercion, missing-vs-coercion-failure handling and wildcard
-semantics. Every SDK must pass it; it is the specification of evaluation.
+Language-neutral fixtures: a rule, records and the expected outcome of each.
+The fixtures define what each kind of expression gives and when a rule cannot
+be evaluated (`adr/0006`). Every SDK must pass them, and they are the
+specification of evaluation.
 
 ## Flows
 
-**Rule change.** Principal submits rule to management API -> validated and
-compiled -> stored as new immutable version -> active-set version tag changes
+**Rule change.** Principal submits rule to management API -> parsed and
+validated -> stored as new immutable version -> active-set version tag changes
 -> each sensor picks it up on next sync (seconds, eventually consistent).
 
-**Record evaluation.** Pipeline hands record to sensor -> sample -> resolve
-paths, coerce, evaluate -> apply action (`observe`: nothing; `drop`: tell the
-caller to discard; `fail`: raise) -> buffer event -> batch report -> server
-stamps receive time and appends to event log.
+**Record evaluation.** Pipeline hands record to sensor -> sample -> the
+adapter presents the fields the rules read -> evaluate -> apply action
+(`observe`: nothing; `drop`: tell the caller to discard; `throw`: raise) ->
+buffer event -> batch report -> server stamps receive time and appends to
+event log.
 
 **Troubleshooting.** Operator asks agent -> agent queries events -> agent
 creates a narrow `observe` rule -> sensors pick it up -> agent reads resulting
@@ -126,7 +128,8 @@ retries sync at a fixed interval. Unreported events beyond the buffer are lost.
   storage and on the wire; local time only at presentation. Both sensor and
   server timestamps are kept.
 - **Validation.** Strict for our own schemas (rules, config, API requests);
-  best-effort for user data, governed by per-condition policies.
+  best-effort for user data: a rule that cannot be evaluated on a record does
+  not apply to it (`adr/0005`).
 - **Operations.** One distributable with subcommands per role; the first
   serve on an empty database migrates it, and services refuse to start on
   pending migrations, which an explicit migration step applies; config

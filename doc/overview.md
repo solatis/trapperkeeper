@@ -39,11 +39,9 @@ evaluation.
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Sensor     | In-process SDK instance, lives as long as the job. No registration, no identity, no server-side inventory.                                                             |
 | Record     | One unit of user data passed to the sensor: any nested structure, or a dataframe row.                                                                                  |
-| Rule       | Immutable, versioned predicate over records plus an action, a sample rate and scope tags.                                                                              |
-| Condition  | Field path, declared field type, operator, value, and two policies: what to do on a missing field, what to do on a type coercion failure.                              |
-| Rule shape | OR of groups, each group an AND of conditions. Maps directly to a visual rule builder.                                                                                 |
-| Field path | List of segments (key, index, wildcard) resolved at evaluation time. A wildcard matches if any element matches.                                                        |
-| Action     | `observe` (report only), `drop` (remove the record from the pipeline), `fail` (raise into the pipeline).                                                               |
+| Rule       | Immutable, versioned predicate over records plus an action, a sample rate and scope tags. The predicate is one expression (`adr/0041`).                                |
+| Expression | One expression in Python-style syntax that gives a boolean, over the fields of a record.                                                                               |
+| Action     | `observe` (report only), `drop` (remove the record from the pipeline), `throw` (raise into the pipeline).                                                              |
 | Scope tags | Key-value tags on a rule; a sensor syncs only rules matching its own tags.                                                                                             |
 | Event      | Report of a match: the record or the matching subset, metadata, and a snapshot of each matched rule as it was evaluated.                                               |
 | Metadata   | Key-value context on events. A reserved prefix carries system context (SDK type and version, scheduler and orchestrator identifiers); rest is user-defined.            |
