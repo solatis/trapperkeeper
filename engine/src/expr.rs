@@ -157,7 +157,13 @@ pub enum Expr {
 impl Expr {
     /// The nodes directly under this one, in written order.
     pub(crate) fn children_mut(&mut self) -> Vec<&mut Expr> {
+        // The arms group the kinds by how many nodes they hold. `resolve` in
+        // `text/grammar.rs` is the only caller. It resolves each child on
+        // its own and handles `Any` and `All` itself, so no result of it
+        // depends on the order.
         match self {
+            // `None`, a boolean, a number and a text hold no node. A field
+            // and an element hold a path of segments, which are no nodes.
             Expr::None
             | Expr::Bool(_)
             | Expr::Int(_)
@@ -165,7 +171,11 @@ impl Expr {
             | Expr::Text(_)
             | Expr::Field(_)
             | Expr::Element { .. } => Vec::new(),
+            // A list of nodes, in written order.
             Expr::List(items) | Expr::And(items) | Expr::Or(items) => items.iter_mut().collect(),
+            // One node. The types of `IsInstance` and the pattern of a
+            // pattern function are no nodes, so only the value and the text
+            // are children.
             Expr::Not(x)
             | Expr::IsNone(x)
             | Expr::IsNotNone(x)
@@ -188,6 +198,8 @@ impl Expr {
             | Expr::ReSearch { text: x, .. }
             | Expr::ReMatch { text: x, .. }
             | Expr::ReFullmatch { text: x, .. } => vec![x],
+            // Two nodes, the left before the right. A method's receiver
+            // stands before its argument.
             Expr::Eq(l, r)
             | Expr::Ne(l, r)
             | Expr::Lt(l, r)
