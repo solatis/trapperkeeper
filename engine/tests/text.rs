@@ -1,11 +1,210 @@
-//! The rule language as text: two tables. The valid texts pin spellings that
-//! the printer never writes. The faulty texts are the specification of the
-//! errors: the place, the reason and the sentence of each.
+//! The rule language as text: two properties, and two tables for what a
+//! property cannot say. The valid texts pin spellings that the printer never
+//! writes. The faulty texts are the specification of the errors: the place,
+//! the reason and the sentence of each.
 
 use std::ops::Range;
 
+use proptest::collection::vec;
+use proptest::prelude::*;
+use proptest::sample::select;
+use trapperkeeper_engine::expr::{Expr, Segment, TypeName};
 use trapperkeeper_engine::parse;
 use trapperkeeper_engine::text::{Found, Reason};
+
+/// The builder of a node with one operand.
+type Unary = fn(Box<Expr>) -> Expr;
+/// The builder of a node with two operands.
+type Binary = fn(Box<Expr>, Box<Expr>) -> Expr;
+
+/// The kinds of node with one operand that have no rule of the canonical
+/// form.
+const UNARY: [Unary; 18] = [
+    Expr::Not,
+    Expr::IsNone,
+    Expr::IsNotNone,
+    Expr::Neg,
+    Expr::Len,
+    Expr::IsNan,
+    Expr::Upper,
+    Expr::Lower,
+    Expr::Strip,
+    Expr::LStrip,
+    Expr::RStrip,
+    Expr::IsDigit,
+    Expr::IsAlpha,
+    Expr::IsAlnum,
+    Expr::IsSpace,
+    Expr::IsUpper,
+    Expr::IsLower,
+    Expr::IsAscii,
+];
+
+/// The kinds of node with two operands that have no rule of the canonical
+/// form.
+const BINARY: [Binary; 13] = [
+    Expr::Lt,
+    Expr::Le,
+    Expr::Gt,
+    Expr::Ge,
+    Expr::In,
+    Expr::NotIn,
+    Expr::Add,
+    Expr::Sub,
+    Expr::Mul,
+    Expr::Div,
+    Expr::Mod,
+    Expr::StartsWith,
+    Expr::EndsWith,
+];
+
+const TYPES: [TypeName; 5] = [
+    TypeName::Int,
+    TypeName::Float,
+    TypeName::Str,
+    TypeName::Bool,
+    TypeName::List,
+];
+
+/// The words of the language, which no name can be.
+const WORDS: [&str; 14] = [
+    "and", "or", "not", "in", "is", "if", "else", "for", "None", "True", "False", "record", "re",
+    "math",
+];
+
+/// A name that an author can write bare: a letter or `_`, then letters,
+/// digits or `_`, and no word of the language.
+fn name() -> impl Strategy<Value = String> {
+    "[a-zA-Z_][a-zA-Z0-9_]{0,7}"
+        .prop_filter("a word of the language", |n| !WORDS.contains(&n.as_str()))
+}
+
+/// Any text of at most eight characters, line breaks included.
+fn text() -> &'static str {
+    "(?s).{0,8}"
+}
+
+/// A canonical tree of at most `depth` levels above its leaves, in which the
+/// names of `scope` are bound elements. A canonical tree is one the parser
+/// can build.
+fn canonical_in(scope: &[String], depth: u32) -> BoxedStrategy<Expr> {
+    let steps = |most: usize| {
+        let step = prop_oneof![
+            text().prop_map(Segment::Key),
+            any::<u32>().prop_map(Segment::Index),
+        ];
+        vec(step, 0..=most)
+    };
+    // Finite values only, because a tree holds no other float.
+    let float = {
+        use proptest::num::f64::{NEGATIVE, NORMAL, POSITIVE, SUBNORMAL, ZERO};
+        POSITIVE | NEGATIVE | NORMAL | SUBNORMAL | ZERO
+    };
+    // A field has one to four segments, and the first is a key, because the
+    // record is an object. A key is any text, so the bracket form gets
+    // exercised.
+    let field = (text(), steps(3)).prop_map(|(first, rest)| {
+        let key = Segment::Key(first);
+        Expr::Field(std::iter::once(key).chain(rest).collect())
+    });
+    let mut leaves = vec![
+        Just(Expr::None).boxed(),
+        any::<bool>().prop_map(Expr::Bool).boxed(),
+        any::<i64>().prop_map(Expr::Int).boxed(),
+        float.prop_map(Expr::Float).boxed(),
+        text().prop_map(Expr::Text).boxed(),
+        field.boxed(),
+    ];
+    // An element is one of the names of `scope`, because an element exists
+    // only under the quantifier that names it.
+    if !scope.is_empty() {
+        let element = (select(scope.to_vec()), steps(2));
+        leaves.push(
+            element
+                .prop_map(|(name, path)| Expr::Element { name, path })
+                .boxed(),
+        );
+    }
+    let leaf = proptest::strategy::Union::new(leaves);
+    // At depth 0 there are only leaves, so the recursion ends.
+    let Some(depth) = depth.checked_sub(1) else {
+        return leaf.boxed();
+    };
+
+    // Lists and operand lists hold at most three, keys and texts at most
+    // eight characters, and a tree at most three levels. That is at most 27
+    // leaves, so a printed tree stays far under the caps of the parser.
+    let sub = canonical_in(scope, depth);
+    let one = || sub.clone().prop_map(Box::new);
+    // `and` and `or` take two or three operands, and an operand of the same
+    // kind is spliced in, as the parser does.
+    let chain = |make: fn(Vec<Expr>) -> Expr| {
+        vec(sub.clone(), 2..=3).prop_map(move |operands| {
+            let kind = std::mem::discriminant(&make(Vec::new()));
+            let spliced = operands.into_iter().flat_map(|e| {
+                let same = std::mem::discriminant(&e) == kind;
+                match e {
+                    Expr::And(inner) | Expr::Or(inner) if same => inner,
+                    e => vec![e],
+                }
+            });
+            make(spliced.collect())
+        })
+    };
+    // No operand of `==` or `!=` is the literal `None`, because the parser
+    // refuses `x == None`.
+    let equality = |make: Binary| {
+        let no_none = |(l, r): &(Box<Expr>, Box<Expr>)| {
+            !matches!(**l, Expr::None) && !matches!(**r, Expr::None)
+        };
+        (one(), one())
+            .prop_filter("an operand is None", no_none)
+            .prop_map(move |(l, r)| make(l, r))
+    };
+    // The test of a quantifier is generated with its name added to `scope`,
+    // and its list without it.
+    let quantifier = |all: bool| {
+        let (scope, list) = (scope.to_vec(), sub.clone());
+        name().prop_flat_map(move |name| {
+            let inner: Vec<String> = scope.iter().cloned().chain([name.clone()]).collect();
+            let test = canonical_in(&inner, depth);
+            (Just(name), list.clone(), test).prop_map(move |(name, list, test)| {
+                let (list, test) = (Box::new(list), Box::new(test));
+                if all {
+                    Expr::All { name, list, test }
+                } else {
+                    Expr::Any { name, list, test }
+                }
+            })
+        })
+    };
+    let pattern = |make: fn(String, Box<Expr>) -> Expr| {
+        (text(), one()).prop_map(move |(pattern, text)| make(pattern, text))
+    };
+    prop_oneof![
+        leaf,
+        vec(sub.clone(), 0..=3).prop_map(Expr::List),
+        (select(UNARY.to_vec()), one()).prop_map(|(make, a)| make(a)),
+        (select(BINARY.to_vec()), one(), one()).prop_map(|(make, a, b)| make(a, b)),
+        chain(Expr::And),
+        chain(Expr::Or),
+        equality(Expr::Eq),
+        equality(Expr::Ne),
+        (one(), one(), one()).prop_map(|(test, then, otherwise)| Expr::If {
+            test,
+            then,
+            otherwise
+        }),
+        quantifier(false),
+        quantifier(true),
+        (one(), vec(select(TYPES.to_vec()), 1..=3))
+            .prop_map(|(value, types)| Expr::IsInstance { value, types }),
+        pattern(|pattern, text| Expr::ReSearch { pattern, text }),
+        pattern(|pattern, text| Expr::ReMatch { pattern, text }),
+        pattern(|pattern, text| Expr::ReFullmatch { pattern, text }),
+    ]
+    .boxed()
+}
 
 /// (text, the text its tree prints as).
 const VALID: &[(&str, &str)] = &[
@@ -366,6 +565,22 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
             "`lambda` is not part of the rule language",
         ),
     ]
+}
+
+proptest! {
+    // No regression file, so a failure leaves nothing untracked in the tree.
+    // The failing seed is in the output.
+    #![proptest_config(ProptestConfig {
+        failure_persistence: None,
+        .. ProptestConfig::default()
+    })]
+
+    /// A canonical tree prints to a text that parses back to the same tree.
+    #[test]
+    fn a_printed_tree_parses_back_to_itself(tree in canonical_in(&[], 3)) {
+        let printed = tree.to_string();
+        prop_assert_eq!(parse(&printed), Ok(tree), "{}", printed);
+    }
 }
 
 #[test]

@@ -33,8 +33,18 @@ gets, and the printer.
   reads, and every alternative of a choice says which text it is for. Every
   combinator of the kit shows what it does on an example. The cut pass of the
   comment rules leaves these comments.
+- A printed canonical tree parses back to itself. A change to the grammar or
+  to the printer keeps that property green.
 
 **Why**:
 
 - How the parser is built, and what lost:
   `doc/adr/0042-the-parser-of-the-rule-language.md`.
+- The grammar's decisions: `doc/adr/0041-the-rule-language.md`.
+
+**How to**:
+
+- `cargo test -p trapperkeeper-engine --test text` runs the properties and
+  the tables.
+- Adding a method: a variant of `Expr` with its row in `tests/tree.rs`, a row
+  in `METHODS`, an arm in the printer, and a case in `canonical_in`.
