@@ -102,7 +102,7 @@ pub fn expr() -> BoxedStrategy<Expr> {
     // no form for it.
     let float = {
         use proptest::num::f64::{NEGATIVE, NORMAL, POSITIVE, SUBNORMAL, ZERO};
-        POSITIVE | NEGATIVE | NORMAL | SUBNORMAL | ZERO
+        NEGATIVE | NORMAL | POSITIVE | SUBNORMAL | ZERO
     };
     let leaf = prop_oneof![
         Just(Expr::None),
