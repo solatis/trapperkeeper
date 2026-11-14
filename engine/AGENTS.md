@@ -8,18 +8,18 @@ evaluate rules yet. It depends on no server, store or HTTP code.
 
 **Map**:
 
-| File                  | What                                                                         | When to read                                                           |
-| --------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `Cargo.toml`          | the package name; the dependencies and their features                        | changing a dependency; why floats parse exactly; why no UUID generator |
-| `src/lib.rs`          | the modules and what the crate exports                                       | what a user of the crate can reach                                     |
-| `src/expr.rs`         | the expression tree, a path segment and the type names                       | the JSON key of a kind of node; adding a function or a method          |
-| `src/rule.rs`         | the rule and the action types                                                | the JSON form of a rule; a default                                     |
-| `src/limits.rs`       | the limits as constants, each with where its number came from                | how many scope tags, how long a tag                                    |
-| `src/validate.rs`     | `validate`, the refusal reasons and the JSON pointer of a refusal            | which fields of a rule are checked; why a rule was refused             |
-| `tests/common/mod.rs` | the strategies for trees and for rules                                       | generating trees or rules in another test                              |
-| `tests/tree.rs`       | one row per kind of node, the round trip and the refusals of the tree's JSON | what a node looks like in JSON; a renamed key                          |
-| `tests/format.rs`     | one literal rule document that pins the names and the order of the JSON form | what a rule looks like in JSON; a renamed property                     |
-| `tests/model.rs`      | the defects, and the round-trip and refusal properties                       | how validation is tested; adding a refusal reason and its defect       |
+| File                  | What                                                                                   | When to read                                                                            |
+| --------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `Cargo.toml`          | the package name; the dependencies and their features                                  | changing a dependency; why floats parse exactly; why no UUID generator                  |
+| `src/lib.rs`          | the modules and what the crate exports                                                 | what a user of the crate can reach                                                      |
+| `src/expr.rs`         | the expression tree, a path segment and the type names                                 | the JSON key of a kind of node; adding a function or a method                           |
+| `src/rule.rs`         | the rule and the action types                                                          | the JSON form of a rule; a default                                                      |
+| `src/limits.rs`       | the limits as constants, each with where its number came from                          | how many scope tags, how long a tag                                                     |
+| `src/validate.rs`     | `validate`, the refusal reasons and the JSON pointer of a refusal                      | which fields of a rule are checked; why a rule was refused                              |
+| `tests/common/mod.rs` | the strategies for trees and for rules                                                 | generating trees or rules in another test; adding a kind of node to the generated trees |
+| `tests/tree.rs`       | the round trip and the refusals of the tree's JSON, as properties over generated trees | how the JSON form of the tree is tested                                                 |
+| `tests/format.rs`     | one literal rule document that pins the names and the order of the JSON form           | what a rule looks like in JSON; a renamed property                                      |
+| `tests/model.rs`      | the defects, and the round-trip and refusal properties                                 | how validation is tested; adding a refusal reason and its defect                        |
 
 **Invariants**:
 
@@ -32,7 +32,8 @@ evaluate rules yet. It depends on no server, store or HTTP code.
   embed the crate.
 - Every struct of the model and every node of the tree refuses an unknown
   JSON property.
-- A new kind of node gets its row in `tests/tree.rs`.
+- A new kind of node is added to the strategy `expr` in
+  `tests/common/mod.rs`, so the properties of the tree cover it.
 - The engine never generates a `rule_id`.
 - A new refusal reason gets a defect in `tests/model.rs`, and a valid rule
   with that one defect gets that one refusal.
