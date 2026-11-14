@@ -243,7 +243,7 @@ fn mixed_text() -> impl Strategy<Value = String> {
                 chars.remove(at);
             }
             if let Some(c) = with {
-                chars.insert(at.min(chars.len()), c);
+                chars.insert(at, c);
             }
             chars.into_iter().collect()
         });
