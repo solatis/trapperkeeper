@@ -9,17 +9,29 @@ use super::grammar::WORDS;
 use crate::expr::{Expr, Segment, TypeName};
 
 // How tightly a node binds. The levels are those of the grammar, from the
-// conditional up to an atom.
+// conditional up to an atom. A node is written bare where a level at most
+// its own is wanted, and in parentheses elsewhere.
+// `a if b else c`.
 const CONDITIONAL: u8 = 1;
+// `a or b`.
 const OR: u8 = 2;
+// `a and b`.
 const AND: u8 = 3;
+// `not a`.
 const NOT: u8 = 4;
+// `a < b`, `a not in b` and `a is None`.
 const COMPARISON: u8 = 5;
+// `a + b` and `a - b`.
 const ADDITIVE: u8 = 6;
+// `a * b`, `a / b` and `a % b`.
 const TERM: u8 = 7;
+// `-a`.
 const UNARY: u8 = 8;
+// `a`, `5`, `"paid"`, `(a, b)`, `len(a)` and `a.upper()`.
 const ATOM: u8 = 9;
-// A level that no node has, so the node is always put in parentheses.
+// A level that no node has, so the node is always put in parentheses. A
+// number is written this way under a minus, as `-(5)`, and before a method,
+// as `(5).upper()`.
 const PARENTHESES: u8 = 10;
 
 /// How tightly `e` binds, from 1 for the conditional to 9 for an atom.
@@ -56,21 +68,28 @@ impl fmt::Display for Expr {
 /// the element names bound at this point.
 #[expect(clippy::too_many_lines, reason = "one arm per kind of node")]
 fn write(e: &Expr, min: u8, scope: &mut Vec<String>, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    // `e` binds looser than its place allows. In parentheses any level
+    // fits again. `And([Or([a, b]), c])` prints as `(a or b) and c`,
+    // because `a or b and c` reads back as `a or (b and c)`.
     if level(e) < min {
         f.write_str("(")?;
         write(e, CONDITIONAL, scope, f)?;
         return f.write_str(")");
     }
     // A comparison writes both operands one level tighter, because
-    // comparisons do not chain.
+    // comparisons do not chain. `Lt(Lt(a, b), c)` prints as `(a < b) < c`,
+    // because the parser refuses `a < b < c`.
     let compared = (ADDITIVE, ADDITIVE);
     // `+`, `-`, `*`, `/` and `%` write the right operand one level tighter,
-    // because they group to the left.
+    // because they group to the left. `Sub(a, Sub(b, c))` prints as
+    // `a - (b - c)`, because `a - b - c` reads back as `(a - b) - c`.
     let (added, multiplied) = ((ADDITIVE, TERM), (TERM, UNARY));
     match e {
         Expr::None => f.write_str("None"),
         Expr::Bool(true) => f.write_str("True"),
         Expr::Bool(false) => f.write_str("False"),
+        // A negative value prints as `-5`, and `unary` folds that minus
+        // back into the literal, also for `-9223372036854775808`.
         Expr::Int(v) => write!(f, "{v}"),
         // `{:?}` gives the shortest text that parses back to the same value,
         // and it always has a `.` or an `e`, so it reads back as a float.
@@ -80,32 +99,50 @@ fn write(e: &Expr, min: u8, scope: &mut Vec<String>, f: &mut fmt::Formatter<'_>)
             f.write_str("(")?;
             write_joined(items, ", ", CONDITIONAL, scope, f)?;
             // A list of one keeps its comma, because `(a)` reads back as
-            // `a`.
+            // `a`. The empty list is `()`. A list written `[a, b]` reads
+            // back to the same tree and prints as `(a, b)`.
             f.write_str(if items.len() == 1 { ",)" } else { ")" })
         }
         Expr::Field(path) => match path.first() {
             // The first key is written bare when it is a plain name that no
-            // element in scope has.
+            // element in scope has: `amount`, and `items[0].price`.
             Some(Segment::Key(key)) if plain(key) && !scope.contains(key) => {
                 f.write_str(key)?;
                 write_steps(&path[1..], f)
             }
             // `record.key` under an element of the same name, and
-            // `record["key"]` for a key that is no plain name.
+            // `record["key"]` for a key that is no plain name. Under
+            // `any(i > record.i for i in items)` a bare `i` reads back as
+            // the element. `record["unit price"]` has a space in its key,
+            // and `record["in"]` a word of the language. A path that is
+            // empty or starts with an index prints as `record` or
+            // `record[0]`, which the parser refuses.
             _ => {
                 f.write_str("record")?;
                 write_steps(path, f)
             }
         },
+        // In a canonical tree a quantifier around the node binds the name,
+        // so the bare name reads back as this element: `i.price` in
+        // `any(i.price > 100 for i in items)`.
         Expr::Element { name, path } => {
             f.write_str(name)?;
             write_steps(path, f)
         }
+        // `not not a` and `not a == 1` need no parentheses, and
+        // `not (a and b)` does, because `not a and b` reads back as
+        // `(not a) and b`.
         Expr::Not(x) => {
             f.write_str("not ")?;
             write(x, NOT, scope, f)
         }
+        // An operand of `and` is at the level of `not` or tighter, so an
+        // `or` among them gets parentheses, as in `a and (b or c)`. An `and`
+        // under an `and` is no canonical tree, because the parser joins
+        // `(a and b) and c` into one list.
         Expr::And(operands) => write_joined(operands, " and ", NOT, scope, f),
+        // An operand of `or` is at the level of `and` or tighter, so a
+        // conditional among them gets parentheses.
         Expr::Or(operands) => write_joined(operands, " or ", AND, scope, f),
         Expr::Eq(l, r) => write_infix(l, "==", r, compared, scope, f),
         Expr::Ne(l, r) => write_infix(l, "!=", r, compared, scope, f),
@@ -115,6 +152,9 @@ fn write(e: &Expr, min: u8, scope: &mut Vec<String>, f: &mut fmt::Formatter<'_>)
         Expr::Ge(l, r) => write_infix(l, ">=", r, compared, scope, f),
         Expr::In(l, r) => write_infix(l, "in", r, compared, scope, f),
         Expr::NotIn(l, r) => write_infix(l, "not in", r, compared, scope, f),
+        // The operand is written one level tighter than a comparison, as
+        // the operands of `<` are. `IsNone(Lt(a, b))` prints as
+        // `(a < b) is None`, because the parser refuses `a < b is None`.
         Expr::IsNone(x) => {
             write(x, ADDITIVE, scope, f)?;
             f.write_str(" is None")
@@ -131,7 +171,9 @@ fn write(e: &Expr, min: u8, scope: &mut Vec<String>, f: &mut fmt::Formatter<'_>)
         Expr::Neg(x) => {
             f.write_str("-")?;
             // A number under a `Neg` goes in parentheses, because `-5` reads
-            // back as a negative literal.
+            // back as a negative literal. `Neg(Int(5))` prints as `-(5)`.
+            // Any other operand is written at the level of a minus: `-a`,
+            // `--a` and `-(a + b)`.
             let number = matches!(**x, Expr::Int(_) | Expr::Float(_));
             write(x, if number { PARENTHESES } else { UNARY }, scope, f)
         }
@@ -142,7 +184,8 @@ fn write(e: &Expr, min: u8, scope: &mut Vec<String>, f: &mut fmt::Formatter<'_>)
         } => {
             // The first branch and the test are written at the level of
             // `or`, and the branch after `else` at the level of the
-            // conditional, because it groups to the right.
+            // conditional, because it groups to the right. A conditional as
+            // the first branch prints as `(a if b else c) if d else e`.
             write(then, OR, scope, f)?;
             f.write_str(" if ")?;
             write(test, OR, scope, f)?;
@@ -163,6 +206,8 @@ fn write(e: &Expr, min: u8, scope: &mut Vec<String>, f: &mut fmt::Formatter<'_>)
             write(value, CONDITIONAL, scope, f)?;
             let names: Vec<&str> = types.iter().map(|t| type_name(*t)).collect();
             // One type is written bare, and any other number as a list.
+            // `isinstance(x, (int,))` reads back to the same tree as
+            // `isinstance(x, int)`.
             match names.as_slice() {
                 [one] => write!(f, ", {one})"),
                 names => write!(f, ", ({}))", names.join(", ")),
@@ -203,7 +248,9 @@ fn write_joined(
 }
 
 /// Writes `l op r`, with the left operand at `mins.0` or tighter and the
-/// right operand at `mins.1` or tighter.
+/// right operand at `mins.1` or tighter. `Sub` passes `(ADDITIVE, TERM)`, so
+/// `a - b - c` keeps `a - b` bare on the left and `a - (b - c)` gets
+/// parentheses on the right.
 fn write_infix(
     l: &Expr,
     op: &str,
@@ -228,13 +275,17 @@ fn write_quantifier(
 ) -> fmt::Result {
     write!(f, "{function}(")?;
     // The test is written with the name in scope and the list without it.
+    // `scope` decides whether a field is written as `record.i`, so the
+    // name stays in it only while the test is written. It leaves before
+    // `?` returns an error, so `scope` is the same on every way out.
     scope.push(name.to_owned());
     let written = write(test, CONDITIONAL, scope, f);
     scope.pop();
     written?;
     write!(f, " for {name} in ")?;
     // The list is written at the level of `or`, which is where the grammar
-    // reads it.
+    // reads it. A conditional as the list prints in parentheses, because
+    // the grammar ends the list at the `if`.
     write(list, OR, scope, f)?;
     f.write_str(")")
 }
@@ -250,6 +301,9 @@ fn write_call(
 ) -> fmt::Result {
     write!(f, "{function}(")?;
     if let Some(pattern) = pattern {
+        // The pattern is written raw where it can be, as `r"^\d{5}$"`,
+        // because the escaped form doubles every backslash. It is escaped
+        // otherwise, as `"a\"b"`. Both forms read back to the same pattern.
         // The raw form cannot hold a `"` or a line break, and a backslash at
         // its end would take the closing quote with it.
         let raw = !pattern.contains(['"', '\n', '\r']) && !pattern.ends_with('\\');
@@ -272,9 +326,13 @@ fn write_method(
     scope: &mut Vec<String>,
     f: &mut fmt::Formatter<'_>,
 ) -> fmt::Result {
-    // A number goes in parentheses, because `5.upper()` reads as a float
-    // followed by a name.
+    // A number goes in parentheses. The tokenizer reads `5.upper` as a
+    // malformed float, and in `-0.5.upper()` the minus folds into the
+    // literal and no step is read after it.
     let number = matches!(receiver, Expr::Int(_) | Expr::Float(_));
+    // Any other receiver is an atom or in parentheses. `Upper(Add(a, b))`
+    // prints as `(a + b).upper()`, because `a + b.upper()` reads back as
+    // `a + (b.upper())`.
     write(receiver, if number { PARENTHESES } else { ATOM }, scope, f)?;
     write!(f, ".{name}(")?;
     if let Some(argument) = argument {
@@ -284,7 +342,8 @@ fn write_method(
 }
 
 /// Writes the steps of a path after its start. A key that is a plain name is
-/// written after a dot, and any other key in brackets.
+/// written after a dot, and any other key in brackets: `.lines`, `[2]` and
+/// `["unit price"]`.
 fn write_steps(path: &[Segment], f: &mut fmt::Formatter<'_>) -> fmt::Result {
     for step in path {
         match step {
@@ -303,6 +362,8 @@ fn write_steps(path: &[Segment], f: &mut fmt::Formatter<'_>) -> fmt::Result {
 /// Whether `key` can stand as a bare name: a name token that is no word of
 /// the language.
 fn plain(key: &str) -> bool {
+    // The first character and the rest follow the tokenizer's rule for a
+    // name, so a plain key reads back as one name token.
     let mut chars = key.chars();
     let starts = chars
         .next()
@@ -316,13 +377,18 @@ fn write_text(s: &str, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     f.write_str("\"")?;
     for c in s.chars() {
         match c {
+            // A backslash would start an escape and a `"` would end the
+            // text, so both are escaped.
             '\\' => f.write_str("\\\\")?,
             '"' => f.write_str("\\\"")?,
+            // The tokenizer refuses a line break inside a text, so `\n` and
+            // `\r` are always escaped.
             '\n' => f.write_str("\\n")?,
             '\t' => f.write_str("\\t")?,
             '\r' => f.write_str("\\r")?,
-            // Every control character is below U+0100, so two hex digits
-            // name it.
+            // Any other control character is written as an escape, so that
+            // a printed rule shows it. Every control character is below
+            // U+0100, so two hex digits name it.
             c if c.is_control() => write!(f, "\\x{:02x}", u32::from(c))?,
             c => write!(f, "{c}")?,
         }
