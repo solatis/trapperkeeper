@@ -9,6 +9,7 @@ use proptest::collection::vec;
 use proptest::prelude::*;
 use proptest::sample::select;
 use trapperkeeper_engine::expr::{Expr, Segment, TypeName};
+use trapperkeeper_engine::limits::{MAX_NESTING, MAX_TEXT_LENGTH};
 use trapperkeeper_engine::parse;
 use trapperkeeper_engine::text::{Found, Reason};
 
@@ -206,6 +207,31 @@ fn canonical_in(scope: &[String], depth: u32) -> BoxedStrategy<Expr> {
     .boxed()
 }
 
+/// Half arbitrary text, and half a printed canonical tree with one character
+/// deleted, replaced or inserted, so most cases get past the tokenizer.
+fn mixed_text() -> impl Strategy<Value = String> {
+    let edited = (
+        canonical_in(&[], 3),
+        any::<prop::sample::Index>(),
+        proptest::option::of(any::<char>()),
+        any::<bool>(),
+    )
+        .prop_map(|(tree, at, with, keep)| {
+            let mut chars: Vec<char> = tree.to_string().chars().collect();
+            let at = at.index(chars.len() + 1);
+            // `keep` inserts `with` before the character at `at`. Without
+            // it the character is replaced by `with`, or deleted.
+            if !keep && at < chars.len() {
+                chars.remove(at);
+            }
+            if let Some(c) = with {
+                chars.insert(at.min(chars.len()), c);
+            }
+            chars.into_iter().collect()
+        });
+    prop_oneof![any::<String>(), edited]
+}
+
 /// (text, the text its tree prints as).
 const VALID: &[(&str, &str)] = &[
     ("amount > 100", "amount > 100"),
@@ -331,6 +357,13 @@ fn found_name(wanted: &[&str], name: &str, after: Option<&str>) -> Reason {
 fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
     let foreign = |found, write| Reason::ForeignOperator { found, write };
     let after_condition = ["`and`", "`or`", "`if`", "the end of the rule"];
+    let after_operand = [
+        "an operator",
+        "`and`",
+        "`or`",
+        "`if`",
+        "the end of the rule",
+    ];
     let count = |name, takes, given| Reason::WrongArgumentCount { name, takes, given };
     vec![
         (
@@ -564,8 +597,314 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
             },
             "`lambda` is not part of the rule language",
         ),
+        (
+            "a and or b",
+            6..8,
+            expected(&["a value"], Found::Word("or"), Some("and")),
+            "expected a value after `and`, found `or`; to name a field `or`, write \
+             `record[\"or\"]`",
+        ),
+        (
+            "a adn b",
+            2..5,
+            Reason::Expected {
+                expected: after_operand.map(str::to_owned).to_vec(),
+                found: Found::Token("adn".to_owned()),
+                after: Some("a".to_owned()),
+                nearest: Some("and"),
+            },
+            "expected an operator, `and`, `or`, `if` or the end of the rule after `a`, found \
+             `adn`; did you mean `and`?",
+        ),
+        // `iz` is one edit from `is`, from `in` and from `if`, so none is
+        // offered.
+        (
+            "x iz None",
+            2..4,
+            found_name(&after_operand, "iz", Some("x")),
+            "expected an operator, `and`, `or`, `if` or the end of the rule after `x`, found `iz`",
+        ),
+        (
+            "x iss None",
+            2..5,
+            Reason::Expected {
+                expected: after_operand.map(str::to_owned).to_vec(),
+                found: Found::Token("iss".to_owned()),
+                after: Some("x".to_owned()),
+                nearest: Some("is"),
+            },
+            "expected an operator, `and`, `or`, `if` or the end of the rule after `x`, found \
+             `iss`; did you mean `is`?",
+        ),
+        (
+            "[1, 2) == x",
+            5..6,
+            found_name(
+                &["an operator", "`and`", "`or`", "`if`", "`,`", "`]`"],
+                ")",
+                Some("2"),
+            ),
+            "expected an operator, `and`, `or`, `if`, `,` or `]` after `2`, found `)`",
+        ),
+        (
+            "x not y",
+            6..7,
+            found_name(&["`in`"], "y", Some("not")),
+            "expected `in` after `not`, found `y`",
+        ),
+        (
+            "x is 5",
+            5..6,
+            found_name(&["`not`", "`None`"], "5", Some("is")),
+            "expected `not` or `None` after `is`, found `5`",
+        ),
+        (
+            "x is none",
+            5..9,
+            Reason::KeywordCase {
+                found: "none".to_owned(),
+                keyword: "None",
+            },
+            "write `None` with a capital letter",
+        ),
+        (
+            "re.serch(r\"a\", x)",
+            0..8,
+            Reason::UnknownFunction {
+                name: "re.serch".to_owned(),
+                nearest: Some("re.search"),
+            },
+            "unknown function `re.serch`; did you mean `re.search`?",
+        ),
+        (
+            "re.upper()",
+            0..8,
+            Reason::UnknownFunction {
+                name: "re.upper".to_owned(),
+                nearest: None,
+            },
+            "unknown function `re.upper`; the functions are len, any, all, isinstance, \
+             re.search, re.match, re.fullmatch, math.isnan",
+        ),
+        (
+            "re == 1",
+            0..2,
+            Reason::ModuleAlone { word: "re" },
+            "`re` names the pattern functions; to name a field `re`, write `record[\"re\"]`",
+        ),
+        (
+            "math > 50",
+            0..4,
+            Reason::ModuleAlone { word: "math" },
+            "`math` names the math functions; to name a field `math`, write `record[\"math\"]`",
+        ),
+        (
+            "len() > 1",
+            3..5,
+            count("len", 1, 0),
+            "`len` takes 1 argument, and 0 were given",
+        ),
+        (
+            "isinstance(x)",
+            10..13,
+            count("isinstance", 2, 1),
+            "`isinstance` takes 2 arguments, and 1 was given",
+        ),
+        (
+            "a === b",
+            4..5,
+            foreign("=", "=="),
+            "`=` is not an operator here; write `==`",
+        ),
+        (
+            "amount > 100;",
+            12..13,
+            Reason::UnexpectedCharacter { found: ';' },
+            "unexpected character `;`",
+        ),
+        (
+            "amount > $100",
+            9..10,
+            Reason::UnexpectedCharacter { found: '$' },
+            "unexpected character `$`",
+        ),
+        (
+            "a > 1 and",
+            9..9,
+            expected(&["a value"], Found::End, Some("and")),
+            "expected a value after `and`, found the end of the rule",
+        ),
+        (
+            "all(x > 1 for in items)",
+            14..16,
+            expected(&["a name"], Found::Word("in"), Some("for")),
+            "expected a name after `for`, found `in`; to name a field `in`, write \
+             `record[\"in\"]`",
+        ),
+        (
+            "price > 10 else 5",
+            11..15,
+            expected(&after_condition, Found::Word("else"), Some("price > 10")),
+            "expected `and`, `or`, `if` or the end of the rule after `price > 10`, found \
+             `else`; to name a field `else`, write `record[\"else\"]`",
+        ),
+        (
+            "\"abc\" \"def\" == name",
+            6..11,
+            Reason::AdjacentTexts,
+            "two texts side by side are not joined; write one text",
+        ),
+        (
+            "\"\"\"abc\"\"\" == x",
+            0..3,
+            Reason::TripleQuote,
+            "triple-quoted texts are not supported; write one pair of quotes",
+        ),
+        (
+            "amount > 1_",
+            9..11,
+            Reason::MalformedNumber,
+            "malformed number",
+        ),
+        ("0x > 1", 0..2, Reason::MalformedNumber, "malformed number"),
+        (
+            "9223372036854775808 > x",
+            0..19,
+            Reason::IntTooLarge,
+            "this number is too large for an integer",
+        ),
+        (
+            "a < b <",
+            6..7,
+            Reason::ChainedComparison { write: None },
+            "chained comparisons are not supported",
+        ),
+        (
+            "name == \"\\u12\"",
+            9..13,
+            Reason::BadEscape {
+                found: "\\u12".to_owned(),
+            },
+            "unknown escape `\\u12` in a text",
+        ),
+        (
+            "None == x",
+            0..7,
+            Reason::NoneComparison {
+                op: "==",
+                write: "x is None".to_owned(),
+            },
+            "`==` does not test for a missing value; write `x is None`",
+        ),
+        (
+            "x != None",
+            2..9,
+            Reason::NoneComparison {
+                op: "!=",
+                write: "x is not None".to_owned(),
+            },
+            "`!=` does not test for a missing value; write `x is not None`",
+        ),
+        (
+            "a > 1 and\n  b >\n  or c",
+            18..20,
+            expected(&["a value"], Found::Word("or"), Some(">")),
+            "expected a value after `>`, found `or`; to name a field `or`, write \
+             `record[\"or\"]`",
+        ),
+        (
+            "in > 5",
+            0..2,
+            expected(&["an expression"], Found::Word("in"), None),
+            "expected an expression, found `in`; to name a field `in`, write `record[\"in\"]`",
+        ),
+        (
+            "flows.in > 3",
+            6..8,
+            Reason::WordAfterDot {
+                word: "in".to_owned(),
+                write: "flows[\"in\"]".to_owned(),
+            },
+            "`in` is a word of the rule language; write `flows[\"in\"]`",
+        ),
+        (
+            "re.search(pattern, x)",
+            10..17,
+            Reason::PatternNotLiteral {
+                function: "re.search",
+            },
+            "the pattern of `re.search` must be a text literal, as in \
+             `re.search(r\"^a\", name)`",
+        ),
+        (
+            "\"abc\".x == 1",
+            5..7,
+            Reason::KeyOnValue,
+            "only a field has keys and indexes",
+        ),
+        (
+            "record[0] == 1",
+            0..9,
+            Reason::BareRecord,
+            "`record` is the whole record; name a field, as in `record[\"key\"]`",
+        ),
+        (
+            "class x",
+            0..5,
+            Reason::NotInLanguage {
+                word: "class".to_owned(),
+            },
+            "`class` is not part of the rule language",
+        ),
     ]
 }
+
+/// A number for each case of `Reason`, so the table of faulty texts can be
+/// checked for a row of every case.
+fn case(reason: &Reason) -> usize {
+    // One arm per case and no wildcard, so a new reason does not compile
+    // until it has a number here.
+    match reason {
+        Reason::TooLong { .. } => 0,
+        Reason::TooDeep { .. } => 1,
+        Reason::TooComplex => 2,
+        Reason::UnexpectedCharacter { .. } => 3,
+        Reason::ForeignOperator { .. } => 4,
+        Reason::Comment => 5,
+        Reason::UnclosedText => 6,
+        Reason::TripleQuote => 7,
+        Reason::TextPrefix { .. } => 8,
+        Reason::BadEscape { .. } => 9,
+        Reason::MalformedNumber => 10,
+        Reason::IntTooLarge => 11,
+        Reason::FloatTooLarge => 12,
+        Reason::Empty => 13,
+        Reason::Expected { .. } => 14,
+        Reason::NeverClosed { .. } => 15,
+        Reason::ClosesNothing { .. } => 16,
+        Reason::KeywordCase { .. } => 17,
+        Reason::NotInLanguage { .. } => 18,
+        Reason::WordAfterDot { .. } => 19,
+        Reason::BareRecord => 20,
+        Reason::ModuleAlone { .. } => 21,
+        Reason::KeyOnValue => 22,
+        Reason::NegativeIndex => 23,
+        Reason::ChainedComparison { .. } => 24,
+        Reason::NoneComparison { .. } => 25,
+        Reason::AdjacentTexts => 26,
+        Reason::UnknownFunction { .. } => 27,
+        Reason::UnknownMethod { .. } => 28,
+        Reason::UnknownType { .. } => 29,
+        Reason::WrongArgumentCount { .. } => 30,
+        Reason::PatternNotLiteral { .. } => 31,
+        Reason::QuantifierNeedsFor { .. } => 32,
+        Reason::ConditionalNeedsElse => CASES - 1,
+    }
+}
+
+/// How many cases `Reason` has. It is the number of arms of `case`, so it
+/// grows with the enum.
+const CASES: usize = 34;
 
 proptest! {
     // No regression file, so a failure leaves nothing untracked in the tree.
@@ -580,6 +919,17 @@ proptest! {
     fn a_printed_tree_parses_back_to_itself(tree in canonical_in(&[], 3)) {
         let printed = tree.to_string();
         prop_assert_eq!(parse(&printed), Ok(tree), "{}", printed);
+    }
+
+    /// Any text gets a tree or an error, and the error's place is a range of
+    /// whole characters inside the text.
+    #[test]
+    fn any_text_gets_a_tree_or_an_error_inside_it(text in mixed_text()) {
+        if let Err(error) = parse(&text) {
+            // `get` gives nothing for a range that leaves the text or that
+            // cuts a character.
+            prop_assert!(text.get(error.at.clone()).is_some(), "{:?}", error);
+        }
     }
 }
 
@@ -596,11 +946,91 @@ fn a_valid_text_prints_canonically_and_parses_back() {
 
 #[test]
 fn a_faulty_text_is_refused_at_its_place_with_its_reason() {
+    let mut seen = [false; CASES];
     for (text, at, reason, sentence) in faulty() {
         let error = parse(text).expect_err(text);
         assert_eq!((&error.at, &error.reason), (&at, &reason), "{text:?}");
         // The sentence is the reason's `Display`, so the row shows an
         // author's whole view of the mistake.
         assert_eq!(error.to_string(), sentence, "{text:?}");
+        seen[case(&reason)] = true;
+    }
+    // Every case of `Reason` has at least one row. The two limits have their
+    // texts in `the_limits_hold_at_their_edges`, because those are too long
+    // for a table, and no text reaches `TooComplex` while no two
+    // alternatives of the grammar read the same bracketed text.
+    let elsewhere = [
+        Reason::TooLong { max: 0 },
+        Reason::TooDeep { max: 0 },
+        Reason::TooComplex,
+    ];
+    for reason in &elsewhere {
+        seen[case(reason)] = true;
+    }
+    let missing: Vec<usize> = (0..CASES).filter(|n| !seen[*n]).collect();
+    assert!(
+        missing.is_empty(),
+        "no faulty text for the cases {missing:?}"
+    );
+}
+
+#[test]
+fn the_limits_hold_at_their_edges() {
+    // A rule of plain conditions, padded with spaces to the cap.
+    let conditions = format!("a > 1{}", " and a > 1".repeat(400));
+    let longest = format!("{conditions:<MAX_TEXT_LENGTH$}");
+    assert!(parse(&longest).is_ok());
+    let error = parse(&format!("{longest} ")).expect_err("a text over the cap");
+    let max = MAX_TEXT_LENGTH;
+    assert_eq!(error.reason, Reason::TooLong { max });
+    assert_eq!(error.at, max..max + 1);
+    assert_eq!(error.to_string(), "a rule is at most 4096 characters long");
+
+    let nested = |levels: usize| format!("{}x{}", "(".repeat(levels), ")".repeat(levels));
+    assert!(parse(&nested(MAX_NESTING)).is_ok());
+    let error = parse(&nested(MAX_NESTING + 1)).expect_err("a text nested over the cap");
+    let max = MAX_NESTING;
+    assert_eq!(error.reason, Reason::TooDeep { max });
+    // The error points at the opening bracket that is one too many.
+    assert_eq!(error.at, max..max + 1);
+    assert_eq!(error.to_string(), "a rule nests at most 32 levels deep");
+}
+
+#[test]
+fn a_deep_faulty_text_is_refused_for_its_own_mistake() {
+    // (what opens a level, what closes it, how many levels of nesting one
+    // level of the form takes)
+    let forms = [
+        ("(", ")", 1),
+        ("[", "]", 1),
+        ("x in (1, ", ")", 1),
+        ("a == (", ")", 1),
+        ("len(", ")", 1),
+        ("math.isnan(", ")", 1),
+        ("any(", " for i in xs)", 1),
+        ("all(", " for i in xs)", 1),
+        ("isinstance(", ", int)", 1),
+        ("re.search(r\"a\", ", ")", 1),
+        ("re.match(r\"a\", ", ")", 1),
+        ("re.fullmatch(r\"a\", ", ")", 1),
+        ("x.startswith(", ")", 1),
+        ("items[0].endswith(", ")", 1),
+        ("(1 if ", " else 2)", 1),
+        ("(", " if a else 2)", 1),
+        ("not (", ")", 2),
+        ("-(", ")", 2),
+        ("(a if b else ", ")", 2),
+    ];
+    for (open, close, levels) in forms {
+        // Each form is nested 30 levels deep, with the mistake `x y` at the
+        // innermost place.
+        let depth = 30 / levels;
+        let text = format!("{}x y{}", open.repeat(depth), close.repeat(depth));
+        let mistake = open.len() * depth + 2;
+        let error = parse(&text).expect_err("a faulty text");
+        // `TooComplex` here means that two alternatives of the grammar read
+        // the same bracket, which `engine/src/text/AGENTS.md` forbids.
+        assert_ne!(error.reason, Reason::TooComplex, "{open:?}");
+        assert_eq!(error.at, mistake..mistake + 1, "{open:?}");
     }
 }

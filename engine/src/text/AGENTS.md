@@ -24,7 +24,8 @@ gets, and the printer.
   text. A refusal is the error unless a note lies further.
 - No two alternatives of a choice read the same bracketed text, or the
   parser's time doubles per level of nesting. `call` is the only rule that
-  reads a name and its `(`.
+  reads a name and its `(`. The test of deep faulty texts fails when this
+  breaks.
 - A token that may follow almost any value is `hidden`, or it shows up in
   every "expected" error.
 - Every form that makes the grammar call itself goes through `nested` or
@@ -33,6 +34,8 @@ gets, and the printer.
   reads, and every alternative of a choice says which text it is for. Every
   combinator of the kit shows what it does on an example. The cut pass of the
   comment rules leaves these comments.
+- A new reason gets a faulty text with its sentence in `faulty`, in
+  `engine/tests/text.rs`. The test fails for a reason without a row.
 - A printed canonical tree parses back to itself. A change to the grammar or
   to the printer keeps that property green.
 
