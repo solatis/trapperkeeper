@@ -296,15 +296,14 @@ fn conditional(i: &Input<'_>, p: usize) -> Reply<Expr> {
     // in it needs parentheses. The branch after `else` is nested, because
     // this rule calls itself there.
     let tail = then(right(word("if"), or_expr), nested(needs_else, conditional));
-    // The closure's `then` is the value before `if`, `price` in the example.
-    // It shadows the combinator `then` inside the closure.
-    map(then(or_expr, opt(tail)), |(then, tail)| match tail {
+    // `first` is the value before `if`, `price` in the example.
+    map(then(or_expr, opt(tail)), |(first, tail)| match tail {
         // `a or b`, with no `if` after it.
-        None => then,
+        None => first,
         // `then if test else otherwise`.
         Some((test, otherwise)) => Expr::If {
             test: Box::new(test),
-            then: Box::new(then),
+            then: Box::new(first),
             otherwise: Box::new(otherwise),
         },
     })(i, p)
@@ -1217,11 +1216,10 @@ fn quantifier_arguments(function: &'static str, make: Quantifier) -> impl Parser
 ///
 /// Reads the `(price, (int, float))` of `isinstance(price, (int, float))`.
 fn isinstance_arguments(i: &Input<'_>, p: usize) -> Reply<Expr> {
-    // `types` reads `, (int, float)` after the value, and a comma at the
-    // end. The `types` inside the initializer is the rule `types`, because
-    // the new binding starts after this statement.
-    let types = opt(right(punct(","), left(types, opt(punct(",")))));
-    let inside = delimited(punct("("), then(expr, types), punct(")"));
+    // `after_value` reads `, (int, float)` after the value, and a comma at
+    // the end.
+    let after_value = opt(right(punct(","), left(types, opt(punct(",")))));
+    let inside = delimited(punct("("), then(expr, after_value), punct(")"));
     // `at` is the bytes of the arguments with their brackets.
     try_map(inside, |_, (value, types), at| {
         // `isinstance(x)`: the types are missing. The error covers `(x)`,
