@@ -1,9 +1,18 @@
-//! Strategies for the engine's tests: expression trees.
+//! Strategies for the engine's tests: expression trees, and rules that hold
+//! them.
 
-use proptest::collection::vec;
+// Each test crate compiles this module and uses only part of it.
+#![allow(dead_code)]
+
+use std::collections::BTreeMap;
+
+use proptest::collection::{btree_map, vec};
 use proptest::prelude::*;
 use proptest::sample::select;
 use trapperkeeper_engine::expr::{Expr, Segment, TypeName};
+use trapperkeeper_engine::limits::{MAX_SCOPE_TAGS, MAX_TAG_LENGTH};
+use trapperkeeper_engine::{Action, Rule};
+use uuid::Uuid;
 
 /// The builder of a node with one operand.
 type Unary = fn(Box<Expr>) -> Expr;
@@ -127,4 +136,40 @@ pub fn expr() -> BoxedStrategy<Expr> {
         ]
     })
     .boxed()
+}
+
+/// A version 7 id from a generated timestamp and generated random bytes.
+pub fn rule_id() -> impl Strategy<Value = Uuid> {
+    // A version 7 id holds 48 bits of milliseconds.
+    (0..1u64 << 48, any::<[u8; 10]>())
+        .prop_map(|(millis, bytes)| uuid::Builder::from_unix_timestamp_millis(millis, &bytes))
+        .prop_map(uuid::Builder::into_uuid)
+}
+
+/// A scope within the caps: 0 to `MAX_SCOPE_TAGS` tags, each key and value
+/// of 1 to `MAX_TAG_LENGTH` characters.
+pub fn scope() -> impl Strategy<Value = BTreeMap<String, String>> {
+    let text = || {
+        proptest::string::string_regex(&format!(".{{1,{MAX_TAG_LENGTH}}}"))
+            .expect("a valid pattern")
+    };
+    btree_map(text(), text(), 0..=MAX_SCOPE_TAGS)
+}
+
+/// A rule that `validate` accepts: a version 7 id, a sample rate in (0, 1],
+/// a scope within the caps and any expression.
+pub fn rule() -> impl Strategy<Value = Rule> {
+    let title = proptest::option::of(".{0,40}");
+    let action = select(vec![Action::Observe, Action::Drop, Action::Throw]);
+    let sample_rate = prop_oneof![Just(1.0), f64::MIN_POSITIVE..=1.0];
+    (rule_id(), title, action, sample_rate, scope(), expr()).prop_map(
+        |(rule_id, rule_title, action, sample_rate, scope, expression)| Rule {
+            rule_id,
+            rule_title,
+            action,
+            sample_rate,
+            scope,
+            expression,
+        },
+    )
 }

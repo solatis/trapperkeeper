@@ -1,14 +1,12 @@
-//! The rule model: what a rule is, its JSON form, and the validation that
-//! every rule passes before it reaches a sensor. This crate does not evaluate
-//! rules.
+//! The rule model: what a rule is, the tree of its expression, their JSON
+//! form, and the validation of a rule's own fields. This crate does not
+//! parse a rule's text, check an expression or evaluate rules.
 
 pub mod expr;
 pub mod limits;
-pub mod path;
 pub mod rule;
 pub mod validate;
 
-pub use expr::{Expr, TypeName};
-pub use path::{FieldPath, Segment};
-pub use rule::{Action, Condition, FieldType, Group, Operator, Policy, Rule, Scalar, Value};
+pub use expr::{Expr, Segment, TypeName};
+pub use rule::{Action, Rule};
 pub use validate::{Error, Reason, validate};

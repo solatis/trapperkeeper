@@ -2,37 +2,36 @@
 
 **What**: the rule engine crate, `trapperkeeper-engine`, with the library
 `trapperkeeper_engine`, which a pipeline can embed. It holds the rule model,
-the model's JSON form and the validation of a rule. It does not evaluate
-rules yet. It depends on no server, store or HTTP code. The rule model in the
-crate is groups of conditions. The records `doc/adr/0033-rule-format.md` and
-`doc/adr/0041-the-rule-language.md` describe a rule as one expression, and
-the crate does not implement that yet.
+the tree of a rule's expression, their JSON form and the validation of a
+rule's own fields. It does not parse a rule's text, check an expression or
+evaluate rules yet. It depends on no server, store or HTTP code.
 
 **Map**:
 
-| File                  | What                                                                                   | When to read                                                                                 |
-| --------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `Cargo.toml`          | the package name; the dependencies and their features                                  | changing a dependency; why floats parse exactly; why no UUID generator                       |
-| `src/lib.rs`          | the modules and what the crate exports                                                 | what a user of the crate can reach                                                           |
-| `src/expr.rs`         | the expression tree, a path segment and the type names                                 | the JSON key of a kind of node; adding a function or a method                                |
-| `src/path.rs`         | the field path and its segments                                                        | how a condition names a field; the JSON of a key, an index and the wildcard                  |
-| `src/rule.rs`         | the rule, group, condition, value, operator, policy, field type and action types       | the JSON form of a rule; a default; adding a field or an operator                            |
-| `src/limits.rs`       | the limits as constants, each with where its number came from                          | how deep a path, how long a list, how many conditions or scope tags                          |
-| `src/validate.rs`     | `validate`, the refusal reasons and the JSON pointer of a refusal                      | which operator fits which type; why a rule was refused; adding a shape rule                  |
-| `tests/common/mod.rs` | the strategies for trees                                                               | generating trees in another test                                                             |
-| `tests/tree.rs`       | one row per kind of node, the round trip and the refusals of the tree's JSON           | what a node looks like in JSON; a renamed key                                                |
-| `tests/format.rs`     | one literal rule document that pins the names and the order of the JSON form           | what a rule looks like in JSON; a renamed property                                           |
-| `tests/model.rs`      | the strategies for valid rules, the defects, and the round-trip and refusal properties | how validation is tested; adding a refusal reason and its defect; generating rules elsewhere |
+| File                  | What                                                                         | When to read                                                           |
+| --------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `Cargo.toml`          | the package name; the dependencies and their features                        | changing a dependency; why floats parse exactly; why no UUID generator |
+| `src/lib.rs`          | the modules and what the crate exports                                       | what a user of the crate can reach                                     |
+| `src/expr.rs`         | the expression tree, a path segment and the type names                       | the JSON key of a kind of node; adding a function or a method          |
+| `src/rule.rs`         | the rule and the action types                                                | the JSON form of a rule; a default                                     |
+| `src/limits.rs`       | the limits as constants, each with where its number came from                | how many scope tags, how long a tag                                    |
+| `src/validate.rs`     | `validate`, the refusal reasons and the JSON pointer of a refusal            | which fields of a rule are checked; why a rule was refused             |
+| `tests/common/mod.rs` | the strategies for trees and for rules                                       | generating trees or rules in another test                              |
+| `tests/tree.rs`       | one row per kind of node, the round trip and the refusals of the tree's JSON | what a node looks like in JSON; a renamed key                          |
+| `tests/format.rs`     | one literal rule document that pins the names and the order of the JSON form | what a rule looks like in JSON; a renamed property                     |
+| `tests/model.rs`      | the defects, and the round-trip and refusal properties                       | how validation is tested; adding a refusal reason and its defect       |
 
 **Invariants**:
 
 - Every later consumer assumes a rule that `validate` accepted. Nothing
-  evaluates a rule that was not validated.
+  evaluates a rule that was not validated. `validate` does not check the
+  expression yet.
 - The limits are constants. A commit changes one, and no setting does.
 - The crate depends on serde, serde_json and uuid only. A dependency on the
   server, the store or HTTP breaks the milestone goal that a pipeline can
   embed the crate.
-- Every struct of the model refuses an unknown JSON property.
+- Every struct of the model and every node of the tree refuses an unknown
+  JSON property.
 - A new kind of node gets its row in `tests/tree.rs`.
 - The engine never generates a `rule_id`.
 - A new refusal reason gets a defect in `tests/model.rs`, and a valid rule
@@ -40,8 +39,7 @@ the crate does not implement that yet.
 
 **Why**:
 
-- The rule format, with each owner decision and its date:
-  `doc/adr/0033-rule-format.md`.
+- The rule format and the form of the tree: `doc/adr/0033-rule-format.md`.
 - The rule language, its kinds of expression and the closed list of functions
   and methods: `doc/adr/0041-the-rule-language.md`.
 - The scope tags, their caps and the seen-scope index:

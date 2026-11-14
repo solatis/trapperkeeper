@@ -1,143 +1,75 @@
 //! The JSON form of a rule, pinned by one literal document: it parses to
 //! the expected rule, writes back to the same bytes, and an unknown property
-//! or a misspelled word is refused. The properties in `model.rs` cover
-//! generated rules, and this file fixes the names the format uses.
+//! or a misspelled word is refused. `tree.rs` pins the keys of the tree, and
+//! this file pins the properties of a rule and their order.
 
 use std::collections::BTreeMap;
 
-use trapperkeeper_engine::{
-    Action, Condition, FieldPath, FieldType, Group, Operator, Policy, Rule, Scalar, Segment, Value,
-    validate,
-};
+use trapperkeeper_engine::{Action, Expr, Rule, Segment, validate};
 
 /// One rule with every field set, as `serde_json::to_string_pretty` writes
-/// it.
+/// it. Its expression is `key.val1 > key.val2 and key.val3 > 0`.
 const RULE: &str = r#"{
   "rule_id": "01937b2e-7c00-7000-8000-000000000001",
-  "rule_title": "Expensive items in production",
-  "action": "drop",
+  "rule_title": "Values out of order in production",
+  "action": "throw",
   "sample_rate": 0.25,
   "scope": {
     "env": "prod"
   },
-  "groups": [
-    {
-      "conditions": [
-        {
-          "path": [
-            {
-              "key": "order"
-            },
-            {
-              "key": "items"
-            },
-            "*",
-            {
-              "key": "price"
-            }
-          ],
-          "field_type": "float",
-          "op": "gt",
-          "value": 100,
-          "on_missing": "skip",
-          "on_coercion_failure": "fail"
-        },
-        {
-          "path": [
-            {
-              "key": "order"
-            },
-            {
-              "key": "currency"
-            }
-          ],
-          "field_type": "string",
-          "op": "not_in",
-          "value": [
-            "EUR",
-            "USD"
-          ],
-          "on_missing": "match",
-          "on_coercion_failure": "skip"
-        }
-      ]
-    },
-    {
-      "conditions": [
-        {
-          "path": [
-            {
-              "key": "lines"
-            },
-            {
-              "index": 0
-            },
-            {
-              "key": "ratio"
-            }
-          ],
-          "field_type": "float",
-          "op": "le",
-          "value": 0.5,
-          "on_missing": "skip",
-          "on_coercion_failure": "skip"
-        }
-      ]
-    }
-  ]
+  "expression": {
+    "and": [
+      {
+        "gt": [
+          {
+            "field": [
+              "key",
+              "val1"
+            ]
+          },
+          {
+            "field": [
+              "key",
+              "val2"
+            ]
+          }
+        ]
+      },
+      {
+        "gt": [
+          {
+            "field": [
+              "key",
+              "val3"
+            ]
+          },
+          {
+            "int": 0
+          }
+        ]
+      }
+    ]
+  }
 }"#;
 
 /// The rule `RULE` spells.
 fn rule() -> Rule {
-    let key = |k: &str| Segment::Key(k.to_owned());
+    let field = |k: &str| {
+        let path = ["key", k].map(|k| Segment::Key(k.to_owned()));
+        Box::new(Expr::Field(path.to_vec()))
+    };
     Rule {
         rule_id: "01937b2e-7c00-7000-8000-000000000001"
             .parse()
             .expect("a UUID"),
-        rule_title: Some("Expensive items in production".to_owned()),
-        action: Action::Drop,
+        rule_title: Some("Values out of order in production".to_owned()),
+        action: Action::Throw,
         sample_rate: 0.25,
         scope: BTreeMap::from([("env".to_owned(), "prod".to_owned())]),
-        groups: vec![
-            Group {
-                conditions: vec![
-                    Condition {
-                        path: FieldPath(vec![
-                            key("order"),
-                            key("items"),
-                            Segment::Wildcard,
-                            key("price"),
-                        ]),
-                        field_type: FieldType::Float,
-                        op: Operator::Gt,
-                        value: Value::One(Scalar::Int(100)),
-                        on_missing: Policy::Skip,
-                        on_coercion_failure: Policy::Fail,
-                    },
-                    Condition {
-                        path: FieldPath(vec![key("order"), key("currency")]),
-                        field_type: FieldType::String,
-                        op: Operator::NotIn,
-                        value: Value::Many(vec![
-                            Scalar::String("EUR".to_owned()),
-                            Scalar::String("USD".to_owned()),
-                        ]),
-                        on_missing: Policy::Match,
-                        on_coercion_failure: Policy::Skip,
-                    },
-                ],
-            },
-            Group {
-                conditions: vec![Condition {
-                    path: FieldPath(vec![key("lines"), Segment::Index(0), key("ratio")]),
-                    field_type: FieldType::Float,
-                    op: Operator::Le,
-                    value: Value::One(Scalar::Float(0.5)),
-                    on_missing: Policy::Skip,
-                    on_coercion_failure: Policy::Skip,
-                }],
-            },
-        ],
+        expression: Expr::And(vec![
+            Expr::Gt(field("val1"), field("val2")),
+            Expr::Gt(field("val3"), Box::new(Expr::Int(0))),
+        ]),
     }
 }
 
@@ -154,9 +86,9 @@ fn the_document_parses_writes_back_and_validates() {
 #[test]
 fn an_unknown_property_and_a_misspelled_word_are_refused() {
     let misspelled = [
-        ("\"on_missing\"", "\"on_mising\""),
-        ("\"*\"", "\"wildcard\""),
-        ("\"drop\"", "\"dorp\""),
+        ("\"expression\"", "\"expresion\""),
+        ("\"throw\"", "\"thow\""),
+        ("\"gt\"", "\"gtt\""),
     ];
     for (word, typo) in misspelled {
         assert!(RULE.contains(word), "{word} is not in the document");

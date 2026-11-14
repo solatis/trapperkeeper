@@ -24,7 +24,8 @@ in `{"gt": [{"field": ["amount"]}, {"int": 100}]}` (owner, 2026-11-13). The
 tree keeps the operators as the author wrote them (owner, 2026-11-14). A
 field is one node with a path of keys and indexes (owner, 2026-11-14). `and`
 and `or` hold a list of operands. The pattern of a pattern function is a text
-in its node.
+in its node. The engine's rule holds the tree and not the text, because the
+text derives from the tree (owner, 2026-11-14).
 
 The actions are `observe`, `drop` and `throw`. `throw` raises into the
 pipeline. A rule has one action (owner, 2026-11-11, 2026-11-13).
@@ -78,6 +79,9 @@ A small core of operators that the parser lowers every form to, because a
 printed rule would read differently from what was written.
 
 A field as nested nodes, because the planner would fold them back into paths.
+
+The author's text beside the tree, because something would have to check that
+the two say the same.
 
 `and` and `or` as pairs, because a rule of many conditions would nest deeper
 than a JSON reader accepts.
