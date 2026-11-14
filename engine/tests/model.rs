@@ -120,7 +120,7 @@ fn scope() -> impl Strategy<Value = BTreeMap<String, String>> {
 /// scope within the caps, and 1 to 8 groups of 1 to 8 conditions each.
 fn rule() -> impl Strategy<Value = Rule> {
     let title = proptest::option::of(".{0,40}");
-    let action = select(vec![Action::Observe, Action::Drop, Action::Fail]);
+    let action = select(vec![Action::Observe, Action::Drop, Action::Throw]);
     let sample_rate = prop_oneof![Just(1.0), f64::MIN_POSITIVE..=1.0];
     // 8 groups of 8 conditions is MAX_CONDITIONS, so every generated rule
     // stays within the cap.

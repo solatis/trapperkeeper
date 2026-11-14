@@ -16,7 +16,7 @@ use crate::path::FieldPath;
 pub enum Action {
     Observe,
     Drop,
-    Fail,
+    Throw,
 }
 
 /// The type a condition declares for its field. The field's value is coerced
