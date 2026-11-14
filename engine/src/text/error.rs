@@ -181,7 +181,7 @@ fn unknown(
 
 impl fmt::Display for Reason {
     // A sentence names the mistake first and then what to write, in the
-    // words of an author.
+    // words of an author. `faulty` in `tests/text.rs` pins every sentence.
     #[expect(clippy::too_many_lines, reason = "one sentence per reason")]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
