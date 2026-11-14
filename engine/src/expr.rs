@@ -153,3 +153,64 @@ pub enum Expr {
     #[serde(rename = "isascii")]
     IsAscii(Box<Expr>),
 }
+
+impl Expr {
+    /// The nodes directly under this one, in written order.
+    pub(crate) fn children_mut(&mut self) -> Vec<&mut Expr> {
+        match self {
+            Expr::None
+            | Expr::Bool(_)
+            | Expr::Int(_)
+            | Expr::Float(_)
+            | Expr::Text(_)
+            | Expr::Field(_)
+            | Expr::Element { .. } => Vec::new(),
+            Expr::List(items) | Expr::And(items) | Expr::Or(items) => items.iter_mut().collect(),
+            Expr::Not(x)
+            | Expr::IsNone(x)
+            | Expr::IsNotNone(x)
+            | Expr::Neg(x)
+            | Expr::Len(x)
+            | Expr::IsNan(x)
+            | Expr::Upper(x)
+            | Expr::Lower(x)
+            | Expr::Strip(x)
+            | Expr::LStrip(x)
+            | Expr::RStrip(x)
+            | Expr::IsDigit(x)
+            | Expr::IsAlpha(x)
+            | Expr::IsAlnum(x)
+            | Expr::IsSpace(x)
+            | Expr::IsUpper(x)
+            | Expr::IsLower(x)
+            | Expr::IsAscii(x)
+            | Expr::IsInstance { value: x, .. }
+            | Expr::ReSearch { text: x, .. }
+            | Expr::ReMatch { text: x, .. }
+            | Expr::ReFullmatch { text: x, .. } => vec![x],
+            Expr::Eq(l, r)
+            | Expr::Ne(l, r)
+            | Expr::Lt(l, r)
+            | Expr::Le(l, r)
+            | Expr::Gt(l, r)
+            | Expr::Ge(l, r)
+            | Expr::In(l, r)
+            | Expr::NotIn(l, r)
+            | Expr::Add(l, r)
+            | Expr::Sub(l, r)
+            | Expr::Mul(l, r)
+            | Expr::Div(l, r)
+            | Expr::Mod(l, r)
+            | Expr::StartsWith(l, r)
+            | Expr::EndsWith(l, r) => vec![l, r],
+            // In the text the test of a quantifier stands before its list.
+            Expr::Any { list, test, .. } | Expr::All { list, test, .. } => vec![test, list],
+            // In the text the first branch stands before the test.
+            Expr::If {
+                test,
+                then,
+                otherwise,
+            } => vec![then, test, otherwise],
+        }
+    }
+}

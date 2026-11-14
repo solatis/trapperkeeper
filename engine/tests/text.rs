@@ -93,6 +93,23 @@ const VALID: &[(&str, &str)] = &[
     ),
     // A pattern that cannot be written raw.
     ("re.match(\"a\\\"b\", x)", "re.match(\"a\\\"b\", x)"),
+    (
+        "any(i.price > 100 for i in items)",
+        "any(i.price > 100 for i in items)",
+    ),
+    (
+        "all(len(t) > 0 and t.isascii() for t in tags) and \"vip\" in tags",
+        "all(len(t) > 0 and t.isascii() for t in tags) and \"vip\" in tags",
+    ),
+    (
+        "any(any(l.qty > i.max for l in i.lines) for i in items)",
+        "any(any(l.qty > i.max for l in i.lines) for i in items)",
+    ),
+    // A field of the record under an element of the same name.
+    (
+        "any(i > record.i for i in items)",
+        "any(i > record.i for i in items)",
+    ),
 ];
 
 /// The reason "expected `wanted` after `after`, found `found`".
@@ -279,6 +296,16 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
             "unknown function `lenn`; did you mean `len`?",
         ),
         (
+            "abs(a - b) > 1",
+            0..3,
+            Reason::UnknownFunction {
+                name: "abs".to_owned(),
+                nearest: None,
+            },
+            "unknown function `abs`; the functions are len, any, all, isinstance, re.search, \
+             re.match, re.fullmatch, math.isnan",
+        ),
+        (
             "name.startwith(\"a\")",
             5..14,
             Reason::UnknownMethod {
@@ -307,6 +334,18 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
                 nearest: None,
             },
             "unknown type `number`; the types are int, float, str, bool, list",
+        ),
+        (
+            "any(i.price > 100 for i items)",
+            24..29,
+            found_name(&["`in`"], "items", Some("i")),
+            "expected `in` after `i`, found `items`",
+        ),
+        (
+            "any(i.price > 100)",
+            17..18,
+            Reason::QuantifierNeedsFor { function: "any" },
+            "`any` needs `for <name> in <list>` after its test",
         ),
     ]
 }

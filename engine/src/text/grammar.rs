@@ -31,6 +31,8 @@ type Binary = fn(Box<Expr>, Box<Expr>) -> Expr;
 type Unary = fn(Box<Expr>) -> Expr;
 /// The builder of a pattern function from its pattern and its text.
 type Pattern = fn(String, Box<Expr>) -> Expr;
+/// The builder of a quantifier from its name, its list and its test.
+type Quantifier = fn(String, Box<Expr>, Box<Expr>) -> Expr;
 
 /// Parses `text` as a rule. Returns the tree, or the first error with its
 /// place.
@@ -41,10 +43,17 @@ type Pattern = fn(String, Box<Expr>) -> Expr;
 pub fn parse(text: &str) -> Result<Expr, SyntaxError> {
     // 1. split the text into tokens
     // 2. run the grammar over the tokens
-    // 3. on failure, pick the reason
+    // 3. on success, resolve the names
+    // 4. on failure, pick the reason
     let input = Input::new(text, lex(text));
     let refusal = match rule(&input, 0) {
-        Ok(Some((tree, _))) => return Ok(tree),
+        Ok(Some((mut tree, _))) => {
+            // 3. The grammar holds every bare name as an element, because
+            //    in `any(test for name in list)` the name comes after the
+            //    test that uses it.
+            resolve(&mut tree, &mut Vec::new());
+            return Ok(tree);
+        }
         Ok(None) => None,
         Err(refusal) => Some(refusal),
     };
@@ -468,6 +477,10 @@ fn apply_postfixes(
                 path.push(step);
                 Expr::Field(path)
             }
+            (Post::Step(step), Expr::Element { name, mut path }) => {
+                path.push(step);
+                Expr::Element { name, path }
+            }
             // Only a path has keys.
             (Post::Step(_), _) => return refuse(at, Reason::KeyOnValue),
             (Post::Word(word, word_at), _) => {
@@ -601,10 +614,16 @@ fn atom(i: &Input<'_>, p: usize) -> Reply<Expr> {
         // `len(name)`. The calls come before the bare name, because a name
         // followed by `(` is a call and never a field.
         call,
-        // `record`, the start of `record["unit price"]`.
+        // `record`, the start of `record["unit price"]`. It builds a field
+        // at once, so a field of the record can be named under a quantifier
+        // that binds the same name.
         map(word("record"), |_| Expr::Field(Vec::new())),
-        // `amount`. A bare name is a field of the record.
-        map(name, |name| Expr::Field(vec![Segment::Key(name)])),
+        // `amount`. A bare name is an element until `resolve` knows the
+        // scope.
+        map(name, |name| {
+            let path = Vec::new();
+            Expr::Element { name, path }
+        }),
         // `100`, `"paid"` and `None`.
         literal,
         // `(a or b)` and `(1, 2)`.
@@ -726,16 +745,26 @@ fn args(i: &Input<'_>, p: usize) -> Reply<Vec<Expr>> {
 pub(super) enum Arguments {
     // One expression, as in `len(name)`.
     One(Unary),
+    // `test for name in list`, as in `any(i > 1 for i in items)`.
+    Quantifier(Quantifier),
     // A value and its types, as in `isinstance(price, (int, float))`.
     IsInstance,
     // A pattern and a text, as in `re.search(r"^a", name)`.
     Pattern(Pattern),
 }
 
-// The functions that the grammar reads, of the closed list of ADR-0041: the
-// name of each, and how its arguments are read.
-pub(super) const FUNCTIONS: [(&str, Arguments); 6] = [
+// Every function of the closed list of ADR-0041: its name, and how its
+// arguments are read.
+pub(super) const FUNCTIONS: [(&str, Arguments); 8] = [
     ("len", Arguments::One(Expr::Len)),
+    (
+        "any",
+        Arguments::Quantifier(|name, list, test| Expr::Any { name, list, test }),
+    ),
+    (
+        "all",
+        Arguments::Quantifier(|name, list, test| Expr::All { name, list, test }),
+    ),
     ("isinstance", Arguments::IsInstance),
     (
         "re.search",
@@ -792,6 +821,7 @@ fn call(i: &Input<'_>, p: usize) -> Reply<Expr> {
     //    alternative reads the same bracket again.
     match arguments {
         Arguments::One(make) => one_argument(name, make)(i, q),
+        Arguments::Quantifier(make) => quantifier_arguments(name, make)(i, q),
         Arguments::IsInstance => isinstance_arguments(i, q),
         Arguments::Pattern(make) => pattern_arguments(name, make)(i, q),
     }
@@ -835,6 +865,23 @@ fn one_argument(name: &'static str, make: Unary) -> impl Parser<Expr> {
                 Err(SyntaxError { at, reason })
             }
         }
+    })
+}
+
+/// `"(" expr "for" name "in" or_expr ")"`
+///
+/// Reads the `(i.price > 100 for i in items)` of
+/// `any(i.price > 100 for i in items)`.
+fn quantifier_arguments(function: &'static str, make: Quantifier) -> impl Parser<Expr> {
+    // `any(i > 1)` without `for` is the mistake to name.
+    let needs_for = require(Reason::QuantifierNeedsFor { function }, word("for"));
+    // An error at `in` says after which name it stands.
+    let binding = right(needs_for, then_after(name, word("in")));
+    // The list is read at the level of `or`, as Python reads it.
+    let body = then(expr, then(binding, or_expr));
+    let inside = delimited(punct("("), body, punct(")"));
+    map(inside, move |(test, ((name, _), list))| {
+        make(name, Box::new(list), Box::new(test))
     })
 }
 
@@ -912,4 +959,29 @@ fn pattern_arguments(function: &'static str, make: Pattern) -> impl Parser<Expr>
     let body = then(pattern, right(punct(","), left(expr, opt(punct(",")))));
     let inside = delimited(punct("("), body, punct(")"));
     map(inside, move |(pattern, text)| make(pattern, Box::new(text)))
+}
+
+/// Turns every element that no enclosing `any` or `all` binds into a field
+/// of the record.
+fn resolve(e: &mut Expr, scope: &mut Vec<String>) {
+    match e {
+        Expr::Element { name, path } if !scope.contains(name) => {
+            let mut full = vec![Segment::Key(mem::take(name))];
+            full.append(path);
+            *e = Expr::Field(full);
+        }
+        // The list is resolved outside the new name and the test inside it,
+        // as Python scopes a generator.
+        Expr::Any { name, list, test } | Expr::All { name, list, test } => {
+            resolve(list, scope);
+            scope.push(name.clone());
+            resolve(test, scope);
+            scope.pop();
+        }
+        _ => {
+            for child in e.children_mut() {
+                resolve(child, scope);
+            }
+        }
+    }
 }

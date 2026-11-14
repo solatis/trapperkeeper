@@ -105,6 +105,9 @@ pub enum Reason {
     PatternNotLiteral {
         function: &'static str,
     },
+    QuantifierNeedsFor {
+        function: &'static str,
+    },
     ConditionalNeedsElse,
 }
 
@@ -265,6 +268,12 @@ impl fmt::Display for Reason {
                 "the pattern of `{function}` must be a text literal, as in \
                  `{function}(r\"^a\", name)`"
             ),
+            Reason::QuantifierNeedsFor { function } => {
+                write!(
+                    f,
+                    "`{function}` needs `for <name> in <list>` after its test"
+                )
+            }
             Reason::ConditionalNeedsElse => {
                 write!(f, "a conditional needs `else`; write `a if test else b`")
             }
