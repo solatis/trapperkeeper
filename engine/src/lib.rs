@@ -11,5 +11,7 @@ pub mod validate;
 
 pub use expr::{Expr, Segment, TypeName};
 pub use rule::{Action, Rule};
+// `text::Reason` stays in its module, because `validate::Reason` has that
+// name here.
 pub use text::{SyntaxError, parse};
 pub use validate::{Error, Reason, validate};
