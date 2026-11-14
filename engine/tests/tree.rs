@@ -204,8 +204,8 @@ fn every_kind() -> Vec<(Expr, &'static str)> {
 #[test]
 fn every_kind_writes_and_reads_its_json() {
     let rows = every_kind();
-    // The test fails when the table has fewer rows than `Expr` has variants,
-    // so a new kind of node cannot land without its row.
+    // `KINDS` counts the variants of `Expr`, so a table that misses a kind
+    // of node fails here.
     assert_eq!(rows.len(), KINDS);
     for (i, (node, json)) in rows.iter().enumerate() {
         assert_eq!(row(node), i, "{json} is not at the place of its kind");
