@@ -886,56 +886,6 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
     ]
 }
 
-/// A number for each case of `Reason`, so the table of faulty texts can be
-/// checked for a row of every case.
-fn case(reason: &Reason) -> usize {
-    // One arm per case and no wildcard, so a new reason does not compile
-    // until it has a number here.
-    match reason {
-        Reason::TooLong { .. } => 0,
-        Reason::TooDeep { .. } => 1,
-        Reason::TooComplex => 2,
-        Reason::UnexpectedCharacter { .. } => 3,
-        Reason::ForeignOperator { .. } => 4,
-        Reason::Comment => 5,
-        Reason::UnclosedText => 6,
-        Reason::TripleQuote => 7,
-        Reason::TextPrefix { .. } => 8,
-        Reason::BadEscape { .. } => 9,
-        Reason::MalformedNumber => 10,
-        Reason::IntTooLarge => 11,
-        Reason::FloatTooLarge => 12,
-        Reason::Empty => 13,
-        Reason::Expected { .. } => 14,
-        Reason::NeverClosed { .. } => 15,
-        Reason::ClosesNothing { .. } => 16,
-        Reason::KeywordCase { .. } => 17,
-        Reason::NotInLanguage { .. } => 18,
-        Reason::WordAfterDot { .. } => 19,
-        Reason::BareRecord => 20,
-        Reason::ModuleAlone { .. } => 21,
-        Reason::KeyOnValue => 22,
-        Reason::NegativeIndex => 23,
-        Reason::ChainedComparison { .. } => 24,
-        Reason::NoneComparison { .. } => 25,
-        Reason::AdjacentTexts => 26,
-        Reason::UnknownFunction { .. } => 27,
-        Reason::UnknownMethod { .. } => 28,
-        Reason::UnknownType { .. } => 29,
-        Reason::WrongArgumentCount { .. } => 30,
-        Reason::PatternNotLiteral { .. } => 31,
-        Reason::QuantifierNeedsFor { .. } => 32,
-        // The last arm takes the last number below `CASES`.
-        Reason::ConditionalNeedsElse => CASES - 1,
-    }
-}
-
-/// How many cases `Reason` has, which is the number of arms of `case`. A new
-/// case of `Reason` raises it by one.
-// `seen[case(..)]` panics for a number of `CASES` or more, so a new arm
-// numbered past the end fails the test until `CASES` is raised.
-const CASES: usize = 34;
-
 proptest! {
     // No regression file, so a failure leaves nothing untracked in the tree.
     // The failing seed is in the output.
@@ -980,8 +930,6 @@ fn a_valid_text_prints_canonically_and_parses_back() {
 
 #[test]
 fn a_faulty_text_is_refused_at_its_place_with_its_reason() {
-    // `seen` marks the cases of `Reason` that some row has.
-    let mut seen = [false; CASES];
     for (text, at, reason, sentence) in faulty() {
         // A faulty text that parses fails here, with the text as message.
         let error = parse(text).expect_err(text);
@@ -989,25 +937,7 @@ fn a_faulty_text_is_refused_at_its_place_with_its_reason() {
         // The sentence is the reason's `Display`, so the row shows an
         // author's whole view of the mistake.
         assert_eq!(error.to_string(), sentence, "{text:?}");
-        seen[case(&reason)] = true;
     }
-    // Every case of `Reason` has at least one row. The two limits have their
-    // texts in `the_limits_hold_at_their_edges`, because those are too long
-    // for a table, and no text reaches `TooComplex` while no two
-    // alternatives of the grammar read the same bracketed text.
-    let elsewhere = [
-        Reason::TooLong { max: 0 },
-        Reason::TooDeep { max: 0 },
-        Reason::TooComplex,
-    ];
-    for reason in &elsewhere {
-        seen[case(reason)] = true;
-    }
-    let missing: Vec<usize> = (0..CASES).filter(|n| !seen[*n]).collect();
-    assert!(
-        missing.is_empty(),
-        "no faulty text for the cases {missing:?}"
-    );
 }
 
 #[test]

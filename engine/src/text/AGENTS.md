@@ -35,7 +35,8 @@ gets, and the printer.
   combinator of the kit shows what it does on an example. The cut pass of the
   comment rules leaves these comments.
 - A new reason gets a faulty text with its sentence in `faulty`, in
-  `engine/tests/text.rs`. The test fails for a reason without a row.
+  `engine/tests/text.rs`. No test holds this, so a reason without a row has
+  an untested sentence.
 - A printed canonical tree parses back to itself. A change to the grammar or
   to the printer keeps that property green.
 
