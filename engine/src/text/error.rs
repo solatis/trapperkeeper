@@ -40,11 +40,13 @@ pub enum Reason {
     // Found by the grammar, generic.
     Empty,
     // What could have stood at the place, what stands there, and the text
-    // before it.
+    // before it. `nearest` is the expected word nearest to a name that
+    // stands at the place, when it is near enough to be a typo.
     Expected {
         expected: Vec<String>,
         found: Found,
         after: Option<String>,
+        nearest: Option<&'static str>,
     },
     TooDeep {
         max: usize,
@@ -59,6 +61,17 @@ pub enum Reason {
     },
     ClosesNothing {
         close: char,
+    },
+    // A name that differs from a word of the language only in case, where
+    // that word could stand.
+    KeywordCase {
+        found: String,
+        keyword: &'static str,
+    },
+    // A Python keyword outside the language, when the parse fails right
+    // after it.
+    NotInLanguage {
+        word: String,
     },
     // `write` is the bracket form of the same key.
     WordAfterDot {
@@ -114,6 +127,9 @@ pub enum Reason {
 /// What stands at the place of an `Expected` error.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Found {
+    // A word of the language. Its sentence also says how to name a field of
+    // that name, as `record["in"]`.
+    Word(&'static str),
     Token(String),
     End,
 }
@@ -121,6 +137,7 @@ pub enum Found {
 impl fmt::Display for Found {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Found::Word(word) => write!(f, "`{word}`"),
             Found::Token(token) => write!(f, "`{token}`"),
             Found::End => write!(f, "the end of the rule"),
         }
@@ -192,24 +209,43 @@ impl fmt::Display for Reason {
             Reason::IntTooLarge => write!(f, "this number is too large for an integer"),
             Reason::FloatTooLarge => write!(f, "this number is too large for a float"),
             Reason::Empty => write!(f, "a rule is empty; write an expression"),
-            // "expected a, b or c after `x`, found `y`".
+            // "expected a, b or c after `x`, found `y`", then what to write
+            // when the grammar knows it.
             Reason::Expected {
                 expected,
                 found,
                 after,
+                nearest,
             } => {
                 let after = after.as_ref().map(|a| format!(" after `{a}`"));
                 let after = after.unwrap_or_default();
                 if expected.is_empty() {
-                    write!(f, "unexpected {found}{after}")
+                    write!(f, "unexpected {found}{after}")?;
                 } else {
-                    write!(f, "expected {}{after}, found {found}", one_of(expected))
+                    write!(f, "expected {}{after}, found {found}", one_of(expected))?;
                 }
+                if let Found::Word(word) = found {
+                    write!(f, "; to name a field `{word}`, write `record[\"{word}\"]`")?;
+                }
+                if let Some(nearest) = nearest {
+                    write!(f, "; did you mean `{nearest}`?")?;
+                }
+                Ok(())
             }
             Reason::TooDeep { max } => write!(f, "a rule nests at most {max} levels deep"),
             Reason::TooComplex => write!(f, "this rule is too complex to parse"),
             Reason::NeverClosed { open } => write!(f, "this `{open}` is never closed"),
             Reason::ClosesNothing { close } => write!(f, "this `{close}` closes nothing"),
+            Reason::KeywordCase { keyword, .. } => {
+                if keyword.starts_with(char::is_uppercase) {
+                    write!(f, "write `{keyword}` with a capital letter")
+                } else {
+                    write!(f, "keywords are lowercase: write `{keyword}`")
+                }
+            }
+            Reason::NotInLanguage { word } => {
+                write!(f, "`{word}` is not part of the rule language")
+            }
             Reason::WordAfterDot { word, write } => {
                 write!(
                     f,

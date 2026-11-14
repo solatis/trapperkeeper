@@ -118,6 +118,7 @@ fn expected(wanted: &[&str], found: Found, after: Option<&str>) -> Reason {
         expected: wanted.iter().map(ToString::to_string).collect(),
         found,
         after: after.map(str::to_owned),
+        nearest: None,
     }
 }
 
@@ -346,6 +347,23 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
             17..18,
             Reason::QuantifierNeedsFor { function: "any" },
             "`any` needs `for <name> in <list>` after its test",
+        ),
+        (
+            "a > 1 AND b < 2",
+            6..9,
+            Reason::KeywordCase {
+                found: "AND".to_owned(),
+                keyword: "and",
+            },
+            "keywords are lowercase: write `and`",
+        ),
+        (
+            "lambda x: x > 1",
+            0..6,
+            Reason::NotInLanguage {
+                word: "lambda".to_owned(),
+            },
+            "`lambda` is not part of the rule language",
         ),
     ]
 }

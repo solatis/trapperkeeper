@@ -5,7 +5,7 @@
 use std::mem;
 use std::ops::Range;
 
-use super::error::{Reason, SyntaxError};
+use super::error::{Found, Reason, SyntaxError};
 use super::kit::{
     Input, Parser, Refusal, Reply, chain_left, choice, delimited, explain, hidden, label, left,
     many, map, nested, opt, or, require, right, spanned, then, then_after, token, try_map,
@@ -22,6 +22,14 @@ const WORDS: [&str; 14] = [
 
 // The two words that name a module and nothing else.
 const MODULES: [&str; 2] = ["re", "math"];
+
+// Python keywords outside the language. They are names here, and they are
+// used only to explain a failure right after one.
+const PYTHON_ONLY: [&str; 24] = [
+    "lambda", "def", "class", "import", "from", "return", "while", "elif", "try", "except",
+    "finally", "with", "as", "yield", "global", "nonlocal", "assert", "del", "pass", "break",
+    "continue", "raise", "async", "await",
+];
 
 /// A value with the bytes of the text it came from.
 type Placed<T> = (T, Range<usize>);
@@ -57,7 +65,82 @@ pub fn parse(text: &str) -> Result<Expr, SyntaxError> {
         Ok(None) => None,
         Err(refusal) => Some(refusal),
     };
-    Err(explain(&input, refusal))
+    // 4. Two targeted reasons are tried before the generic one, and neither
+    //    changes which texts are valid: a name that is a word in the wrong
+    //    case, and a Python keyword right before the failure.
+    let error = explain(&input, refusal);
+    // A refusal or a tokenizer's reason already says what is wrong, so it
+    // is left alone.
+    if !matches!(error.reason, Reason::Expected { .. }) {
+        return Err(error);
+    }
+    let targeted = miscased_word(&input).or_else(|| python_only_word(&input));
+    Err(targeted.unwrap_or_else(|| with_words(&input, error)))
+}
+
+/// `KeywordCase`, when the token at the failure is a name that differs only
+/// in case from a word of the language that could stand there.
+fn miscased_word(i: &Input<'_>) -> Option<SyntaxError> {
+    let (pos, wanted) = i.furthest();
+    let token = i.tok(pos);
+    let Tok::Name(found) = &token.kind else {
+        return None;
+    };
+    let miscased = |w: &&&str| w.eq_ignore_ascii_case(found) && **w != found.as_str();
+    let keyword = *WORDS.iter().find(miscased)?;
+    let reason = Reason::KeywordCase {
+        found: found.clone(),
+        keyword,
+    };
+    let at = token.at.clone();
+    wanted
+        .contains(&format!("`{keyword}`"))
+        .then_some(SyntaxError { at, reason })
+}
+
+/// `NotInLanguage`, when the token before the failure is a Python keyword
+/// outside the language. The error points at that keyword.
+fn python_only_word(i: &Input<'_>) -> Option<SyntaxError> {
+    let (pos, _) = i.furthest();
+    let token = i.tok(pos.checked_sub(1)?);
+    let Tok::Name(word) = &token.kind else {
+        return None;
+    };
+    let reason = Reason::NotInLanguage { word: word.clone() };
+    let at = token.at.clone();
+    PYTHON_ONLY
+        .contains(&word.as_str())
+        .then_some(SyntaxError { at, reason })
+}
+
+/// The generic error with what the grammar knows of the name at its place: a
+/// word of the language that stands there, or the nearest word that could
+/// stand there.
+fn with_words(i: &Input<'_>, error: SyntaxError) -> SyntaxError {
+    let (pos, wanted) = i.furthest();
+    let (
+        Tok::Name(name),
+        Reason::Expected {
+            expected, after, ..
+        },
+    ) = (&i.tok(pos).kind, &error.reason)
+    else {
+        return error;
+    };
+    let word = WORDS.iter().find(|w| **w == name).copied();
+    // Only a word that some test wanted at this place is offered.
+    let could_stand = |w: &&&str| wanted.contains(&format!("`{w}`"));
+    let known: Vec<&str> = WORDS.iter().filter(could_stand).copied().collect();
+    let reason = Reason::Expected {
+        expected: expected.clone(),
+        found: word.map_or_else(|| Found::Token(name.clone()), Found::Word),
+        after: after.clone(),
+        nearest: nearest(name, &known).filter(|_| word.is_none()),
+    };
+    SyntaxError {
+        at: error.at,
+        reason,
+    }
 }
 
 // Tokens.

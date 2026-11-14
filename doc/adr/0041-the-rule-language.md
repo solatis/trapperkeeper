@@ -70,6 +70,10 @@ the two modules. A lowercase `null`, `true` or `false` is a name
 like any other (owner, 2026-11-14). A word of the language never stands after
 a dot (owner, 2026-11-14).
 
+A rule may run over several lines. A number may hold underscores, and an
+integer may be hexadecimal. A membership list may hold fields (owner,
+2026-11-14). A comment is refused (owner, 2026-11-13).
+
 A text takes single or double quotes and has a raw form. `x == None` is
 refused, and its error says to write `x is None`.
 
@@ -112,6 +116,9 @@ fields.
 Any word after a dot as a key, because a typo such as `customer. and x > 1`
 would read `and` as a key.
 
+Accepting and dropping a comment, because the tree cannot carry it and it
+would disappear if the database keeps the tree alone.
+
 `abs`, for now.
 
 `dict` as a type that `isinstance` tests for, because no rule needs it yet.
@@ -122,5 +129,4 @@ All of Python's tests of a text's characters, because `isdecimal` and
 ## Consequences
 
 Timestamps wait (`decisions.md`). A translator for a host engine walks the
-same tree (`adr/0040`). The details of the grammar are fixed when the parser
-is written.
+same tree (`adr/0040`).

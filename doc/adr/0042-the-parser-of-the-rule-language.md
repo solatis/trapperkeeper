@@ -39,6 +39,9 @@ closed list, and the crate writes the sentence of each reason (owner,
 The parser holds a text to 4096 characters and to 32 levels of nesting
 (owner, 2026-11-14).
 
+A table of faulty texts with the place and the reason of each error is part
+of the parser's tests.
+
 ## Rejected alternatives
 
 A parser library. In every prototype a good message was code written for that

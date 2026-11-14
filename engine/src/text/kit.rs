@@ -23,6 +23,9 @@ use crate::limits::{MAX_NESTING, MAX_PARSE_STEPS};
 struct Log {
     pos: usize,
     wanted: Vec<String>,
+    // The notes that `label` and `hidden` took out of `wanted`. An error
+    // does not list them, and they still say what could stand at the place.
+    replaced: Vec<String>,
     // The text that the place comes after, when `then_after` recorded it.
     after: Option<Range<usize>>,
 }
@@ -83,7 +86,7 @@ impl<'t> Input<'t> {
             *log = Log {
                 pos: p,
                 wanted: vec![what.to_owned()],
-                after: None,
+                ..Log::default()
             };
         } else if p == log.pos && !log.wanted.iter().any(|w| w == what) {
             log.wanted.push(what.to_owned());
@@ -111,10 +114,20 @@ impl<'t> Input<'t> {
                 ..Log::default()
             };
         }
-        log.wanted.truncate(if mark.0 == p { mark.1 } else { 0 });
+        let kept = if mark.0 == p { mark.1 } else { 0 };
+        let taken = log.wanted.split_off(kept);
+        log.replaced.extend(taken);
         if let Some(name) = name.filter(|n| !log.wanted.iter().any(|w| w == n)) {
             log.wanted.push(name.to_owned());
         }
+    }
+
+    /// The token index of the furthest notes, and everything that a test
+    /// wanted there, listed in an error or not.
+    pub fn furthest(&self) -> (usize, Vec<String>) {
+        let log = self.log.borrow();
+        let all = log.wanted.iter().chain(&log.replaced);
+        (log.pos, all.cloned().collect())
     }
 
     /// Records that the notes at `p` come after the text at `at`.
@@ -420,6 +433,7 @@ pub(super) fn explain(i: &Input<'_>, refusal: Option<Refusal>) -> SyntaxError {
         expected: log.wanted.clone(),
         found,
         after: after.map(|at| i.slice(&at).to_owned()),
+        nearest: None,
     };
     SyntaxError { at, reason }
 }
