@@ -89,6 +89,8 @@ fn text() -> &'static str {
 /// names of `scope` are bound elements. A canonical tree is one the parser
 /// can build.
 fn canonical_in(scope: &[String], depth: u32) -> BoxedStrategy<Expr> {
+    // Up to `most` steps of a path. A key is any text, and an index any
+    // u32, which `bracket_step` reads up to `u32::MAX`.
     let steps = |most: usize| {
         let step = prop_oneof![
             text().prop_map(Segment::Key),
@@ -96,14 +98,15 @@ fn canonical_in(scope: &[String], depth: u32) -> BoxedStrategy<Expr> {
         ];
         vec(step, 0..=most)
     };
-    // Finite values only, because a tree holds no other float.
+    // Finite values only, because a tree holds no other float. The
+    // tokenizer refuses `1e999`, and no literal writes a NaN.
     let float = {
         use proptest::num::f64::{NEGATIVE, NORMAL, POSITIVE, SUBNORMAL, ZERO};
         NEGATIVE | NORMAL | POSITIVE | SUBNORMAL | ZERO
     };
     // A field has one to four segments, and the first is a key, because the
-    // record is an object. A key is any text, so the bracket form gets
-    // exercised.
+    // record is an object. The parser refuses `record[0] == 1` and
+    // `record == 1`. A key is any text, so the bracket form gets exercised.
     let field = (text(), steps(3)).prop_map(|(first, rest)| {
         let key = Segment::Key(first);
         Expr::Field(std::iter::once(key).chain(rest).collect())
@@ -111,13 +114,16 @@ fn canonical_in(scope: &[String], depth: u32) -> BoxedStrategy<Expr> {
     let mut leaves = vec![
         Just(Expr::None).boxed(),
         any::<bool>().prop_map(Expr::Bool).boxed(),
+        // Any i64, because `-9223372036854775808` reads back as the
+        // smallest one.
         any::<i64>().prop_map(Expr::Int).boxed(),
         float.prop_map(Expr::Float).boxed(),
         text().prop_map(Expr::Text).boxed(),
         field.boxed(),
     ];
     // An element is one of the names of `scope`, because an element exists
-    // only under the quantifier that names it.
+    // only under the quantifier that names it. Outside every quantifier a
+    // bare name reads back as a field, as `amount` does.
     if !scope.is_empty() {
         let element = (select(scope.to_vec()), steps(2));
         leaves.push(
@@ -135,10 +141,12 @@ fn canonical_in(scope: &[String], depth: u32) -> BoxedStrategy<Expr> {
     // Lists and operand lists hold at most three, keys and texts at most
     // eight characters, and a tree at most three levels. That is at most 27
     // leaves, so a printed tree stays far under the caps of the parser.
+    // `sub` gives the operands, one level less deep, and `one` boxes one.
     let sub = canonical_in(scope, depth);
     let one = || sub.clone().prop_map(Box::new);
     // `and` and `or` take two or three operands, and an operand of the same
-    // kind is spliced in, as the parser does.
+    // kind is spliced in, as the parser does: `(a and b) and c` reads back
+    // as one `And` of three.
     let chain = |make: fn(Vec<Expr>) -> Expr| {
         vec(sub.clone(), 2..=3).prop_map(move |operands| {
             let kind = std::mem::discriminant(&make(Vec::new()));
@@ -153,7 +161,7 @@ fn canonical_in(scope: &[String], depth: u32) -> BoxedStrategy<Expr> {
         })
     };
     // No operand of `==` or `!=` is the literal `None`, because the parser
-    // refuses `x == None`.
+    // refuses `x == None`, `None == x` and `x != None`.
     let equality = |make: Binary| {
         let no_none = |(l, r): &(Box<Expr>, Box<Expr>)| {
             !matches!(**l, Expr::None) && !matches!(**r, Expr::None)
@@ -163,7 +171,9 @@ fn canonical_in(scope: &[String], depth: u32) -> BoxedStrategy<Expr> {
             .prop_map(move |(l, r)| make(l, r))
     };
     // The test of a quantifier is generated with its name added to `scope`,
-    // and its list without it.
+    // and its list without it. The parser resolves the list outside the
+    // name, so `any(t for i in i)` reads its list `i` as a field. The test
+    // depends on the name, so `prop_flat_map` builds it per name.
     let quantifier = |all: bool| {
         let (scope, list) = (scope.to_vec(), sub.clone());
         name().prop_flat_map(move |name| {
@@ -179,11 +189,13 @@ fn canonical_in(scope: &[String], depth: u32) -> BoxedStrategy<Expr> {
             })
         })
     };
+    // Any text is a pattern, because the parser does not check a pattern.
     let pattern = |make: fn(String, Box<Expr>) -> Expr| {
         (text(), one()).prop_map(move |(pattern, text)| make(pattern, text))
     };
     prop_oneof![
         leaf,
+        // `()`, `(a,)` and longer lists all read back.
         vec(sub.clone(), 0..=3).prop_map(Expr::List),
         (select(UNARY.to_vec()), one()).prop_map(|(make, a)| make(a)),
         (select(BINARY.to_vec()), one(), one()).prop_map(|(make, a, b)| make(a, b)),
@@ -198,6 +210,8 @@ fn canonical_in(scope: &[String], depth: u32) -> BoxedStrategy<Expr> {
         }),
         quantifier(false),
         quantifier(true),
+        // One to three types, because the parser refuses
+        // `isinstance(x, ())`.
         (one(), vec(select(TYPES.to_vec()), 1..=3))
             .prop_map(|(value, types)| Expr::IsInstance { value, types }),
         pattern(|pattern, text| Expr::ReSearch { pattern, text }),
@@ -217,10 +231,14 @@ fn mixed_text() -> impl Strategy<Value = String> {
         any::<bool>(),
     )
         .prop_map(|(tree, at, with, keep)| {
+            // The edit works on characters, so it never cuts one in two.
             let mut chars: Vec<char> = tree.to_string().chars().collect();
+            // A place from 0 up to the length, so an insertion can also go
+            // at the end.
             let at = at.index(chars.len() + 1);
             // `keep` inserts `with` before the character at `at`. Without
-            // it the character is replaced by `with`, or deleted.
+            // it the character is replaced by `with`, or deleted. With
+            // `keep` and no `with`, the printed tree stays as it is.
             if !keep && at < chars.len() {
                 chars.remove(at);
             }
@@ -229,6 +247,8 @@ fn mixed_text() -> impl Strategy<Value = String> {
             }
             chars.into_iter().collect()
         });
+    // Arbitrary text mostly stops at the tokenizer, often at a character
+    // of several bytes.
     prop_oneof![any::<String>(), edited]
 }
 
@@ -356,7 +376,9 @@ fn found_name(wanted: &[&str], name: &str, after: Option<&str>) -> Reason {
 #[expect(clippy::too_many_lines, reason = "one row per faulty text")]
 fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
     let foreign = |found, write| Reason::ForeignOperator { found, write };
+    // What may follow a whole comparison, as `a > 1`.
     let after_condition = ["`and`", "`or`", "`if`", "the end of the rule"];
+    // What may follow an operand that has no operator yet, as `a`.
     let after_operand = [
         "an operator",
         "`and`",
@@ -636,6 +658,8 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
             "expected an operator, `and`, `or`, `if` or the end of the rule after `x`, found \
              `iss`; did you mean `is`?",
         ),
+        // A wrong closing bracket is no `NeverClosed`, because the text does
+        // not end there.
         (
             "[1, 2) == x",
             5..6,
@@ -710,6 +734,7 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
             count("isinstance", 2, 1),
             "`isinstance` takes 2 arguments, and 1 was given",
         ),
+        // The tokenizer reads `==` first, and the third `=` is the mistake.
         (
             "a === b",
             4..5,
@@ -898,12 +923,15 @@ fn case(reason: &Reason) -> usize {
         Reason::WrongArgumentCount { .. } => 30,
         Reason::PatternNotLiteral { .. } => 31,
         Reason::QuantifierNeedsFor { .. } => 32,
+        // The last arm takes the last number below `CASES`.
         Reason::ConditionalNeedsElse => CASES - 1,
     }
 }
 
-/// How many cases `Reason` has. It is the number of arms of `case`, so it
-/// grows with the enum.
+/// How many cases `Reason` has, which is the number of arms of `case`. A new
+/// case of `Reason` raises it by one.
+// `seen[case(..)]` panics for a number of `CASES` or more, so a new arm
+// numbered past the end fails the test until `CASES` is raised.
 const CASES: usize = 34;
 
 proptest! {
@@ -917,6 +945,9 @@ proptest! {
     /// A canonical tree prints to a text that parses back to the same tree.
     #[test]
     fn a_printed_tree_parses_back_to_itself(tree in canonical_in(&[], 3)) {
+        // The whole tree is compared, so a missing pair of parentheses or a
+        // key written bare where it needs `record` fails. The message is
+        // the printed text.
         let printed = tree.to_string();
         prop_assert_eq!(parse(&printed), Ok(tree), "{}", printed);
     }
@@ -937,6 +968,7 @@ proptest! {
 fn a_valid_text_prints_canonically_and_parses_back() {
     for (text, printed) in VALID {
         let tree = parse(text).unwrap_or_else(|e| panic!("{text:?} is refused: {e}"));
+        // The printer writes this spelling and no other, so the row pins it.
         assert_eq!(tree.to_string(), *printed, "{text:?}");
         // The printed text parses to the same tree as the text, so the
         // printed column is itself a valid rule.
@@ -946,8 +978,10 @@ fn a_valid_text_prints_canonically_and_parses_back() {
 
 #[test]
 fn a_faulty_text_is_refused_at_its_place_with_its_reason() {
+    // `seen` marks the cases of `Reason` that some row has.
     let mut seen = [false; CASES];
     for (text, at, reason, sentence) in faulty() {
+        // A faulty text that parses fails here, with the text as message.
         let error = parse(text).expect_err(text);
         assert_eq!((&error.at, &error.reason), (&at, &reason), "{text:?}");
         // The sentence is the reason's `Display`, so the row shows an
@@ -976,22 +1010,27 @@ fn a_faulty_text_is_refused_at_its_place_with_its_reason() {
 
 #[test]
 fn the_limits_hold_at_their_edges() {
-    // A rule of plain conditions, padded with spaces to the cap.
+    // A rule of plain conditions, padded with spaces to the cap. The 401
+    // conditions take 4005 characters, and the spaces fill the rest.
     let conditions = format!("a > 1{}", " and a > 1".repeat(400));
     let longest = format!("{conditions:<MAX_TEXT_LENGTH$}");
     assert!(parse(&longest).is_ok());
+    // One more space is the first character past the cap. The text is
+    // ASCII, so its byte is its index, and the error covers it alone.
     let error = parse(&format!("{longest} ")).expect_err("a text over the cap");
     let max = MAX_TEXT_LENGTH;
     assert_eq!(error.reason, Reason::TooLong { max });
     assert_eq!(error.at, max..max + 1);
     assert_eq!(error.to_string(), "a rule is at most 4096 characters long");
 
+    // `x` in `levels` pairs of parentheses. Each `(` opens one level.
     let nested = |levels: usize| format!("{}x{}", "(".repeat(levels), ")".repeat(levels));
     assert!(parse(&nested(MAX_NESTING)).is_ok());
     let error = parse(&nested(MAX_NESTING + 1)).expect_err("a text nested over the cap");
     let max = MAX_NESTING;
     assert_eq!(error.reason, Reason::TooDeep { max });
-    // The error points at the opening bracket that is one too many.
+    // The error points at the opening bracket that is one too many. It is
+    // the 33rd, at byte 32.
     assert_eq!(error.at, max..max + 1);
     assert_eq!(error.to_string(), "a rule nests at most 32 levels deep");
 }
@@ -999,7 +1038,9 @@ fn the_limits_hold_at_their_edges() {
 #[test]
 fn a_deep_faulty_text_is_refused_for_its_own_mistake() {
     // (what opens a level, what closes it, how many levels of nesting one
-    // level of the form takes)
+    // level of the form takes). In `not (`, `-(` and `(a if b else ` the
+    // `not`, the minus and the branch after `else` each open a level of
+    // their own beside the `(`.
     let forms = [
         ("(", ")", 1),
         ("[", "]", 1),
@@ -1024,8 +1065,11 @@ fn a_deep_faulty_text_is_refused_for_its_own_mistake() {
     for (open, close, levels) in forms {
         // Each form is nested 30 levels deep, with the mistake `x y` at the
         // innermost place.
+        // 30 levels stay under `MAX_NESTING`, so `TooDeep` cannot stand in
+        // for the mistake.
         let depth = 30 / levels;
         let text = format!("{}x y{}", open.repeat(depth), close.repeat(depth));
+        // `y` starts after the openings and the two bytes of `x `.
         let mistake = open.len() * depth + 2;
         let error = parse(&text).expect_err("a faulty text");
         // `TooComplex` here means that two alternatives of the grammar read
