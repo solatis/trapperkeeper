@@ -45,8 +45,8 @@ The limits are constants of the crate, and no caller sets them (owner,
 
 A rule's identity is its `rule_id` alone, a version 7 UUID that the server
 generates (`adr/0020`). An edit is a new rule with a new id (owner,
-2026-11-10). The engine never generates an id. It refuses the nil id (owner,
-2026-11-11) and every version other than 7. The title is a display name in
+2026-11-10). The engine never generates an id. It refuses the nil UUID (owner,
+2026-11-11) and every UUID version other than 7. The title is a display name in
 the `_title` form of `adr/0020`. It is not part of the identity and may
 repeat (owner, 2026-11-10). The engine's rule carries the title, and JSON
 omits it when it is absent.
@@ -96,7 +96,7 @@ unbounded system (owner, 2026-11-10).
 
 A lineage version number beside the id, because the id already changes with
 every edit and lineage and rollback are not goals. An opaque identity
-string, because the event query would have to parse it. Accepting the nil id
+string, because the event query would have to parse it. Accepting the nil UUID
 for the convenience of fixtures, because tests must not lower code quality
 (owner, 2026-11-11). Accepting any UUID version, because the format would
 admit ids the server never issues.
