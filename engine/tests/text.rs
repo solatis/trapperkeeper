@@ -1,13 +1,13 @@
-//! The rule language as text: two tables. The valid texts pin the spellings
-//! of the language. The faulty texts are the specification of the errors:
-//! the place, the reason and the sentence of each.
+//! The rule language as text: two tables. The valid texts pin spellings that
+//! the printer never writes. The faulty texts are the specification of the
+//! errors: the place, the reason and the sentence of each.
 
 use std::ops::Range;
 
 use trapperkeeper_engine::parse;
 use trapperkeeper_engine::text::{Found, Reason};
 
-/// (text, its canonical spelling). Both parse to the same tree.
+/// (text, the text its tree prints as).
 const VALID: &[(&str, &str)] = &[
     ("amount > 100", "amount > 100"),
     (
@@ -369,10 +369,13 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
 }
 
 #[test]
-fn a_valid_text_parses_as_its_canonical_spelling() {
-    for (text, canonical) in VALID {
+fn a_valid_text_prints_canonically_and_parses_back() {
+    for (text, printed) in VALID {
         let tree = parse(text).unwrap_or_else(|e| panic!("{text:?} is refused: {e}"));
-        assert_eq!(parse(canonical).as_ref(), Ok(&tree), "{text:?}");
+        assert_eq!(tree.to_string(), *printed, "{text:?}");
+        // The printed text parses to the same tree as the text, so the
+        // printed column is itself a valid rule.
+        assert_eq!(parse(printed).as_ref(), Ok(&tree), "{text:?}");
     }
 }
 

@@ -3,7 +3,7 @@
 **What**: the rule engine crate, `trapperkeeper-engine`, with the library
 `trapperkeeper_engine`, which a pipeline can embed. It holds the rule model,
 the tree of a rule's expression, their JSON form and the validation of a
-rule's own fields. It also parses a rule's text into the tree. It does not
+rule's own fields. It also parses a rule's text into the tree and prints a tree as text. It does not
 check an expression or evaluate rules yet. It depends on no server, store or HTTP code.
 
 **Map**:
@@ -16,7 +16,7 @@ check an expression or evaluate rules yet. It depends on no server, store or HTT
 | `src/rule.rs`         | the rule and the action types                                                          | the JSON form of a rule; a default                                                            |
 | `src/limits.rs`       | the limits as constants, each with where its number came from                          | how many scope tags, how long a tag; how long a rule's text may be and how deep it may nest   |
 | `src/validate.rs`     | `validate`, the refusal reasons and the JSON pointer of a refusal                      | which fields of a rule are checked; why a rule was refused                                    |
-| `src/text/`           | the parser of rule text                                                                | see `src/text/AGENTS.md`                                                                      |
+| `src/text/`           | the parser and the printer of rule text                                                | see `src/text/AGENTS.md`                                                                      |
 | `tests/common/mod.rs` | the strategies for trees and for rules                                                 | generating trees or rules in another test; adding a kind of node to the generated trees       |
 | `tests/tree.rs`       | the round trip and the refusals of the tree's JSON, as properties over generated trees | how the JSON form of the tree is tested                                                       |
 | `tests/text.rs`       | valid and faulty rule texts, with the place, the reason and the sentence of each error | what an error says for a mistake; adding a faulty text                                        |

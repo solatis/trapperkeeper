@@ -62,8 +62,8 @@ see `server/AGENTS.md`.
 ### Rule engine core
 
 The engine crate holds the rule model, the tree of an expression with its JSON
-form, the parser of rule text and the validation of a rule, and later the
-evaluator. Rules are validated strictly at creation so that
+form, the parser and the printer of rule text and the validation of a rule,
+and later the evaluator. Rules are validated strictly at creation so that
 evaluation can assume valid rules. See `engine/AGENTS.md`.
 
 ### Web UI

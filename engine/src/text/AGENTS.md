@@ -1,8 +1,8 @@
 # engine/src/text/
 
 **What**: a rule as text. The module holds the tokenizer, the kit of parser
-combinators, the grammar written with the kit and the error that a faulty
-text gets.
+combinators, the grammar written with the kit, the error that a faulty text
+gets, and the printer.
 
 **Map**:
 
@@ -13,6 +13,7 @@ text gets.
 | `tokens.rs`  | the tokenizer and the kinds of token                              | what a number, a text or an operator looks like; an error about one character             |
 | `kit.rs`     | the parser combinators, the log of what was wanted and `explain`  | how a choice picks the error it reports; adding a combinator                              |
 | `grammar.rs` | `parse` and the rules of the grammar, one per level of precedence | the precedence of an operator; adding a function, a method or a keyword; a targeted error |
+| `print.rs`   | `Display` for a tree, which writes it as rule text                | where a printed rule gets parentheses or brackets                                         |
 
 **Invariants**:
 

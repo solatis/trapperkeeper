@@ -15,7 +15,7 @@ use crate::expr::{Expr, Segment, TypeName};
 
 // The words of the language: the twelve of ADR-0041 and the two module
 // names. A name token that is one of them is no name.
-const WORDS: [&str; 14] = [
+pub(super) const WORDS: [&str; 14] = [
     "and", "or", "not", "in", "is", "if", "else", "for", "None", "True", "False", "record", "re",
     "math",
 ];
