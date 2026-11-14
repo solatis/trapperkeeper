@@ -99,7 +99,7 @@ fn canonical_in(scope: &[String], depth: u32) -> BoxedStrategy<Expr> {
     // Finite values only, because a tree holds no other float.
     let float = {
         use proptest::num::f64::{NEGATIVE, NORMAL, POSITIVE, SUBNORMAL, ZERO};
-        POSITIVE | NEGATIVE | NORMAL | SUBNORMAL | ZERO
+        NEGATIVE | NORMAL | POSITIVE | SUBNORMAL | ZERO
     };
     // A field has one to four segments, and the first is a key, because the
     // record is an object. A key is any text, so the bracket form gets
