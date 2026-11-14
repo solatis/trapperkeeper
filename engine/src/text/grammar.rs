@@ -11,18 +11,26 @@ use super::kit::{
     many, map, nested, opt, or, require, right, spanned, then, then_after, token, try_map,
 };
 use super::tokens::{Tok, lex};
-use crate::expr::{Expr, Segment};
+use crate::expr::{Expr, Segment, TypeName};
 
-// The words of the language (ADR-0041). A name token that is one of them is
-// no name.
-const WORDS: [&str; 12] = [
-    "and", "or", "not", "in", "is", "if", "else", "for", "None", "True", "False", "record",
+// The words of the language: the twelve of ADR-0041 and the two module
+// names. A name token that is one of them is no name.
+const WORDS: [&str; 14] = [
+    "and", "or", "not", "in", "is", "if", "else", "for", "None", "True", "False", "record", "re",
+    "math",
 ];
+
+// The two words that name a module and nothing else.
+const MODULES: [&str; 2] = ["re", "math"];
 
 /// A value with the bytes of the text it came from.
 type Placed<T> = (T, Range<usize>);
 /// The builder of a node with two operands.
 type Binary = fn(Box<Expr>, Box<Expr>) -> Expr;
+/// The builder of a node with one operand.
+type Unary = fn(Box<Expr>) -> Expr;
+/// The builder of a pattern function from its pattern and its text.
+type Pattern = fn(String, Box<Expr>) -> Expr;
 
 /// Parses `text` as a rule. Returns the tree, or the first error with its
 /// place.
@@ -390,11 +398,13 @@ enum Post {
     Step(Segment),
     // A word of the language after a dot, with its place.
     Word(String, Range<usize>),
+    // `.name(arguments)`: the name and the arguments, each with its place.
+    Call(String, Range<usize>, Vec<Expr>, Range<usize>),
 }
 
-/// `postfix := atom ("." name | "[" index "]" | "[" text "]")*`
+/// `postfix := atom ("." name | "[" index "]" | "[" text "]" | "." name "(" items ")")*`
 ///
-/// Reads `items[0].price` and `flows["in"]`.
+/// Reads `items[0].price`, `flows["in"]` and `name.strip().upper()`.
 fn postfix(i: &Input<'_>, p: usize) -> Reply<Expr> {
     // The steps are hidden from expected sets, because a `.` or a `[` may
     // follow almost any value.
@@ -402,20 +412,20 @@ fn postfix(i: &Input<'_>, p: usize) -> Reply<Expr> {
     try_map(then(spanned(atom), steps), apply_postfixes)(i, p)
 }
 
-/// `"." name`
+/// `"." name ("(" items ")")?`
 ///
-/// Reads the `.price` of `item.price`.
+/// Reads the `.price` of `item.price` and the `.upper()` of `name.upper()`.
 fn dot_step(i: &Input<'_>, p: usize) -> Reply<Post> {
     // Any name token is read here, also a word of the language, so that
     // `flows.in` gets a reason of its own in `apply_postfixes`.
-    map(right(punct("."), spanned(any_name)), |(name, at)| {
-        if WORDS.contains(&name.as_str()) {
-            // `.in`: a word of the language is never a key.
-            Post::Word(name, at)
-        } else {
-            // `.price`: a key.
-            Post::Step(Segment::Key(name))
-        }
+    let step = then(spanned(any_name), opt(spanned(args)));
+    map(right(punct("."), step), |((name, at), call)| match call {
+        // `.upper()`: a method call.
+        Some((args, args_at)) => Post::Call(name, at, args, args_at),
+        // `.in`: a word of the language is never a key.
+        None if WORDS.contains(&name.as_str()) => Post::Word(name, at),
+        // `.price`: a key.
+        None => Post::Step(Segment::Key(name)),
     })(i, p)
 }
 
@@ -467,6 +477,12 @@ fn apply_postfixes(
                 let write = format!("{before}[\"{word}\"]");
                 return refuse(word_at, Reason::WordAfterDot { word, write });
             }
+            (Post::Call(..), e) if bare_record(&e) => {
+                return refuse(atom_at, Reason::BareRecord);
+            }
+            (Post::Call(name, name_at, args, args_at), e) => {
+                method(e, &name, name_at, args, args_at)?
+            }
         };
     }
     // `record` with no key is the whole record, which is no value.
@@ -476,13 +492,115 @@ fn apply_postfixes(
     Ok(e)
 }
 
+/// How many arguments a method takes, with the builder of its node.
+#[derive(Clone, Copy)]
+pub(super) enum Arity {
+    Zero(Unary),
+    One(Binary),
+}
+
+// The methods of the closed list of ADR-0041: the name an author types, and
+// the builder.
+pub(super) const METHODS: [(&str, Arity); 14] = [
+    ("startswith", Arity::One(Expr::StartsWith)),
+    ("endswith", Arity::One(Expr::EndsWith)),
+    ("upper", Arity::Zero(Expr::Upper)),
+    ("lower", Arity::Zero(Expr::Lower)),
+    ("strip", Arity::Zero(Expr::Strip)),
+    ("lstrip", Arity::Zero(Expr::LStrip)),
+    ("rstrip", Arity::Zero(Expr::RStrip)),
+    ("isdigit", Arity::Zero(Expr::IsDigit)),
+    ("isalpha", Arity::Zero(Expr::IsAlpha)),
+    ("isalnum", Arity::Zero(Expr::IsAlnum)),
+    ("isspace", Arity::Zero(Expr::IsSpace)),
+    ("isupper", Arity::Zero(Expr::IsUpper)),
+    ("islower", Arity::Zero(Expr::IsLower)),
+    ("isascii", Arity::Zero(Expr::IsAscii)),
+];
+
+/// A method call on `receiver`, or why it is none: an unknown method with
+/// the nearest known one, or a wrong number of arguments.
+fn method(
+    receiver: Expr,
+    name: &str,
+    name_at: Range<usize>,
+    mut args: Vec<Expr>,
+    args_at: Range<usize>,
+) -> Result<Expr, SyntaxError> {
+    let Some(&(name, arity)) = METHODS.iter().find(|(n, _)| *n == name) else {
+        let nearest = nearest(name, &names(&METHODS));
+        let name = name.to_owned();
+        let reason = Reason::UnknownMethod { name, nearest };
+        return Err(SyntaxError {
+            at: name_at,
+            reason,
+        });
+    };
+    let receiver = Box::new(receiver);
+    let (takes, given) = (usize::from(matches!(arity, Arity::One(_))), args.len());
+    match (arity, args.pop()) {
+        (Arity::Zero(make), None) => Ok(make(receiver)),
+        (Arity::One(make), Some(argument)) if given == 1 => Ok(make(receiver, Box::new(argument))),
+        _ => {
+            let reason = Reason::WrongArgumentCount { name, takes, given };
+            Err(SyntaxError {
+                at: args_at,
+                reason,
+            })
+        }
+    }
+}
+
+/// The names of a table, as an error lists them and as `nearest` reads them.
+pub(super) fn names<T>(table: &[(&'static str, T)]) -> Vec<&'static str> {
+    table.iter().map(|(name, _)| *name).collect()
+}
+
+/// The known name nearest to `word`, when it is near enough to be a typo:
+/// one edit per four characters, and at least one. Two names that are
+/// equally near give none, because neither is the better guess.
+fn nearest<'a>(word: &str, known: &[&'a str]) -> Option<&'a str> {
+    let limit = (word.chars().count() / 4).max(1);
+    let distances: Vec<(usize, &str)> =
+        known.iter().map(|k| (edit_distance(word, k), *k)).collect();
+    let (least, name) = *distances.iter().min_by_key(|(d, _)| *d)?;
+    let unique = distances.iter().filter(|(d, _)| *d == least).count() == 1;
+    (least <= limit && unique).then_some(name)
+}
+
+/// How many edits turn `a` into `b`. An edit inserts, deletes or replaces a
+/// character, or swaps two neighbours.
+fn edit_distance(a: &str, b: &str) -> usize {
+    let (a, b): (Vec<char>, Vec<char>) = (a.chars().collect(), b.chars().collect());
+    let mut rows = vec![vec![0; b.len() + 1]; a.len() + 1];
+    for i in 0..=a.len() {
+        for j in 0..=b.len() {
+            if i == 0 || j == 0 {
+                rows[i][j] = i + j;
+                continue;
+            }
+            let replaced = rows[i - 1][j - 1] + usize::from(a[i - 1] != b[j - 1]);
+            let mut least = replaced.min(rows[i - 1][j] + 1).min(rows[i][j - 1] + 1);
+            // A swap counts as one edit, so `adn` is one edit from `and`.
+            if i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1] {
+                least = least.min(rows[i - 2][j - 2] + 1);
+            }
+            rows[i][j] = least;
+        }
+    }
+    rows[a.len()][b.len()]
+}
+
 // Atoms.
 
-/// `atom := "record" | name | literal | "(" items ")" | "[" items "]"`
+/// `atom := call | "record" | name | literal | "(" items ")" | "[" items "]"`
 ///
-/// Reads `record`, `amount`, `100`, `(a or b)` and `[1, 2]`.
+/// Reads `len(name)`, `record`, `amount`, `100`, `(a or b)` and `[1, 2]`.
 fn atom(i: &Input<'_>, p: usize) -> Reply<Expr> {
     choice!(
+        // `len(name)`. The calls come before the bare name, because a name
+        // followed by `(` is a call and never a field.
+        call,
         // `record`, the start of `record["unit price"]`.
         map(word("record"), |_| Expr::Field(Vec::new())),
         // `amount`. A bare name is a field of the record.
@@ -589,4 +707,209 @@ fn parenthesized(i: &Input<'_>, p: usize) -> Reply<Expr> {
 fn bracket_list(i: &Input<'_>, p: usize) -> Reply<Expr> {
     let inside = delimited(punct("["), items, punct("]"));
     map(inside, |(items, _)| Expr::List(items))(i, p)
+}
+
+/// `"(" items ")"`
+///
+/// Reads the `(name)` of `len(name)` and the `("a")` of `x.startswith("a")`.
+fn args(i: &Input<'_>, p: usize) -> Reply<Vec<Expr>> {
+    // The `(` is hidden from expected sets, because after any name it is
+    // one more thing that could follow.
+    let inside = delimited(hidden(punct("(")), items, punct(")"));
+    map(inside, |(items, _)| items)(i, p)
+}
+
+// Function calls.
+
+/// How the arguments of a function are read.
+#[derive(Clone, Copy)]
+pub(super) enum Arguments {
+    // One expression, as in `len(name)`.
+    One(Unary),
+    // A value and its types, as in `isinstance(price, (int, float))`.
+    IsInstance,
+    // A pattern and a text, as in `re.search(r"^a", name)`.
+    Pattern(Pattern),
+}
+
+// The functions that the grammar reads, of the closed list of ADR-0041: the
+// name of each, and how its arguments are read.
+pub(super) const FUNCTIONS: [(&str, Arguments); 6] = [
+    ("len", Arguments::One(Expr::Len)),
+    ("isinstance", Arguments::IsInstance),
+    (
+        "re.search",
+        Arguments::Pattern(|pattern, text| Expr::ReSearch { pattern, text }),
+    ),
+    (
+        "re.match",
+        Arguments::Pattern(|pattern, text| Expr::ReMatch { pattern, text }),
+    ),
+    (
+        "re.fullmatch",
+        Arguments::Pattern(|pattern, text| Expr::ReFullmatch { pattern, text }),
+    ),
+    ("math.isnan", Arguments::One(Expr::IsNan)),
+];
+
+/// `call := (name | ("re" | "math") "." name) "(" arguments ")"`
+///
+/// Reads `len(name)`, `isinstance(price, int)` and `re.search(r"a", x)`.
+/// The name picks how the arguments are read.
+fn call(i: &Input<'_>, p: usize) -> Reply<Expr> {
+    // 1. read the name: a plain name, or `re` or `math`, a dot and a name
+    // 2. see the `(`
+    // 3. look the name up
+    // 4. read the arguments in the way the function asks for
+    let Some(((function, in_module), q)) = function_name(i, p)? else {
+        return Ok(None);
+    };
+    let at = i.span(p, q);
+
+    // 2. A plain name without `(` is no call. The rule does not match, and
+    //    `atom` reads a field, so `len == 1` is a rule about a field `len`.
+    //    After `re.search` the `(` must follow, so it is not hidden there.
+    let open = punct("(");
+    let seen = if in_module {
+        open(i, q)?
+    } else {
+        hidden(open)(i, q)?
+    };
+    if seen.is_none() {
+        return Ok(None);
+    }
+
+    // 3. An unknown name is refused with the nearest known one.
+    let Some(&(name, arguments)) = FUNCTIONS.iter().find(|(n, _)| *n == function) else {
+        let nearest = nearest(&function, &names(&FUNCTIONS));
+        let name = function;
+        let reason = Reason::UnknownFunction { name, nearest };
+        let error = SyntaxError { at, reason };
+        return Err(Refusal { pos: q, error });
+    };
+
+    // 4. This is the only rule that reads a name and its `(`, so no other
+    //    alternative reads the same bracket again.
+    match arguments {
+        Arguments::One(make) => one_argument(name, make)(i, q),
+        Arguments::IsInstance => isinstance_arguments(i, q),
+        Arguments::Pattern(make) => pattern_arguments(name, make)(i, q),
+    }
+}
+
+/// `name | ("re" | "math") "." name`
+///
+/// Reads the `len` of `len(name)` and the `re.search` of
+/// `re.search(r"a", x)`, and says whether the name has a module.
+fn function_name(i: &Input<'_>, p: usize) -> Reply<(String, bool)> {
+    let module = token("", |t| match &t.kind {
+        Tok::Name(n) => MODULES.iter().find(|m| *m == n).copied(),
+        _ => None,
+    });
+    let Some((module, q)) = hidden(module)(i, p)? else {
+        // `len`: a plain name.
+        return map(name, |name| (name, false))(i, p);
+    };
+    // `re.search`: the module, a dot and the function. `re` or `math` with
+    // no function after it names nothing.
+    let Some((function, r)) = right(punct("."), any_name)(i, q)? else {
+        let (at, reason) = (i.tok(p).at.clone(), Reason::ModuleAlone { word: module });
+        let error = SyntaxError { at, reason };
+        return Err(Refusal { pos: q, error });
+    };
+    Ok(Some(((format!("{module}.{function}"), true), r)))
+}
+
+/// `"(" expr ")"`
+///
+/// Reads the `(name)` of `len(name)`. Any other number of arguments is
+/// refused.
+fn one_argument(name: &'static str, make: Unary) -> impl Parser<Expr> {
+    try_map(args, move |_, mut args, at| {
+        let given = args.len();
+        match args.pop() {
+            Some(argument) if given == 1 => Ok(make(Box::new(argument))),
+            _ => {
+                let takes = 1;
+                let reason = Reason::WrongArgumentCount { name, takes, given };
+                Err(SyntaxError { at, reason })
+            }
+        }
+    })
+}
+
+/// `"(" expr "," types ","? ")"`
+///
+/// Reads the `(price, (int, float))` of `isinstance(price, (int, float))`.
+fn isinstance_arguments(i: &Input<'_>, p: usize) -> Reply<Expr> {
+    let types = opt(right(punct(","), left(types, opt(punct(",")))));
+    let inside = delimited(punct("("), then(expr, types), punct(")"));
+    try_map(inside, |_, (value, types), at| {
+        // `isinstance(x)`: the types are missing.
+        let Some(types) = types else {
+            let (name, takes, given) = ("isinstance", 2, 1);
+            let reason = Reason::WrongArgumentCount { name, takes, given };
+            return Err(SyntaxError { at, reason });
+        };
+        let value = Box::new(value);
+        Ok(Expr::IsInstance { value, types })
+    })(i, p)
+}
+
+// The types that `isinstance` tests for (ADR-0041).
+pub(super) const TYPES: [(&str, TypeName); 5] = [
+    ("int", TypeName::Int),
+    ("float", TypeName::Float),
+    ("str", TypeName::Str),
+    ("bool", TypeName::Bool),
+    ("list", TypeName::List),
+];
+
+/// `type := "int" | "float" | "str" | "bool" | "list"`
+///
+/// Reads the `int` of `isinstance(price, int)`. Any other name is refused
+/// with the nearest known one.
+fn type_name(i: &Input<'_>, p: usize) -> Reply<TypeName> {
+    try_map(any_name, |_, name, at| {
+        let known = TYPES.iter().find(|(n, _)| *n == name);
+        known.map(|(_, t)| *t).ok_or_else(|| {
+            let nearest = nearest(&name, &names(&TYPES));
+            let reason = Reason::UnknownType { name, nearest };
+            SyntaxError { at, reason }
+        })
+    })(i, p)
+}
+
+/// `types := type | "(" type ("," type)* ","? ")"`
+///
+/// Reads `int` and `(int, float)`.
+fn types(i: &Input<'_>, p: usize) -> Reply<Vec<TypeName>> {
+    let several = then(type_name, many(right(punct(","), type_name)));
+    let inside = delimited(punct("("), left(several, opt(punct(","))), punct(")"));
+    let one_or_several = or(
+        // `int`.
+        map(type_name, |t| vec![t]),
+        // `(int, float)`.
+        map(inside, |(first, rest)| {
+            std::iter::once(first).chain(rest).collect()
+        }),
+    );
+    // An error says "a type" and does not list a name and a `(`.
+    label("a type", one_or_several)(i, p)
+}
+
+/// `"(" text "," expr ","? ")"`
+///
+/// Reads the `(r"^a", name)` of `re.search(r"^a", name)`.
+fn pattern_arguments(function: &'static str, make: Pattern) -> impl Parser<Expr> {
+    let text = token("a pattern", |t| match &t.kind {
+        Tok::Text(s) => Some(s.clone()),
+        _ => None,
+    });
+    // The pattern is a text token and no expression, so it can be checked
+    // when the rule is created (ADR-0041).
+    let pattern = require(Reason::PatternNotLiteral { function }, text);
+    let body = then(pattern, right(punct(","), left(expr, opt(punct(",")))));
+    let inside = delimited(punct("("), body, punct(")"));
+    map(inside, move |(pattern, text)| make(pattern, Box::new(text)))
 }

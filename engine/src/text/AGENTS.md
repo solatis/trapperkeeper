@@ -6,13 +6,13 @@ text gets.
 
 **Map**:
 
-| File         | What                                                              | When to read                                                                  |
-| ------------ | ----------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `mod.rs`     | the files of the module and what it exports                       | what the crate can reach of the parser                                        |
-| `error.rs`   | the syntax error, its reasons and their sentences                 | why a text was refused; adding a reason; the wording of an error              |
-| `tokens.rs`  | the tokenizer and the kinds of token                              | what a number, a text or an operator looks like; an error about one character |
-| `kit.rs`     | the parser combinators, the log of what was wanted and `explain`  | how a choice picks the error it reports; adding a combinator                  |
-| `grammar.rs` | `parse` and the rules of the grammar, one per level of precedence | the precedence of an operator; adding a keyword; a targeted error             |
+| File         | What                                                              | When to read                                                                              |
+| ------------ | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `mod.rs`     | the files of the module and what it exports                       | what the crate can reach of the parser                                                    |
+| `error.rs`   | the syntax error, its reasons and their sentences                 | why a text was refused; adding a reason; the wording of an error                          |
+| `tokens.rs`  | the tokenizer and the kinds of token                              | what a number, a text or an operator looks like; an error about one character             |
+| `kit.rs`     | the parser combinators, the log of what was wanted and `explain`  | how a choice picks the error it reports; adding a combinator                              |
+| `grammar.rs` | `parse` and the rules of the grammar, one per level of precedence | the precedence of an operator; adding a function, a method or a keyword; a targeted error |
 
 **Invariants**:
 
@@ -22,7 +22,8 @@ text gets.
   notes what it wanted, and the error comes from the notes furthest in the
   text. A refusal is the error unless a note lies further.
 - No two alternatives of a choice read the same bracketed text, or the
-  parser's time doubles per level of nesting.
+  parser's time doubles per level of nesting. `call` is the only rule that
+  reads a name and its `(`.
 - A token that may follow almost any value is `hidden`, or it shows up in
   every "expected" error.
 - Every form that makes the grammar call itself goes through `nested` or

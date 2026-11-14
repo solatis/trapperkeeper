@@ -4,6 +4,8 @@
 use std::fmt;
 use std::ops::Range;
 
+use super::grammar::{FUNCTIONS, METHODS, TYPES, names};
+
 /// Why a text is no rule. Each case holds what its sentence needs, and
 /// `Display` writes the sentence.
 #[derive(Debug, Clone, PartialEq)]
@@ -64,6 +66,11 @@ pub enum Reason {
         write: String,
     },
     BareRecord,
+    // `re` or `math` without a function after it. Its sentence also says how
+    // to name a field of that name.
+    ModuleAlone {
+        word: &'static str,
+    },
     KeyOnValue,
     NegativeIndex,
     // `write` is the two comparisons joined with `and`, when both operators
@@ -78,6 +85,26 @@ pub enum Reason {
         write: String,
     },
     AdjacentTexts,
+    UnknownFunction {
+        name: String,
+        nearest: Option<&'static str>,
+    },
+    UnknownMethod {
+        name: String,
+        nearest: Option<&'static str>,
+    },
+    UnknownType {
+        name: String,
+        nearest: Option<&'static str>,
+    },
+    WrongArgumentCount {
+        name: &'static str,
+        takes: usize,
+        given: usize,
+    },
+    PatternNotLiteral {
+        function: &'static str,
+    },
     ConditionalNeedsElse,
 }
 
@@ -113,9 +140,29 @@ fn one_of(names: &[String]) -> String {
     }
 }
 
+/// The sentence for a name outside a closed list: the nearest known name
+/// when there is one, and the whole list otherwise.
+fn unknown(
+    f: &mut fmt::Formatter<'_>,
+    what: &str,
+    name: &str,
+    nearest: Option<&str>,
+    known: &[&str],
+) -> fmt::Result {
+    match nearest {
+        Some(nearest) => write!(f, "unknown {what} `{name}`; did you mean `{nearest}`?"),
+        None => write!(
+            f,
+            "unknown {what} `{name}`; the {what}s are {}",
+            known.join(", ")
+        ),
+    }
+}
+
 impl fmt::Display for Reason {
     // A sentence names the mistake first and then what to write, in the
     // words of an author.
+    #[expect(clippy::too_many_lines, reason = "one sentence per reason")]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Reason::TooLong { max } => write!(f, "a rule is at most {max} characters long"),
@@ -170,6 +217,14 @@ impl fmt::Display for Reason {
                 f,
                 "`record` is the whole record; name a field, as in `record[\"key\"]`"
             ),
+            Reason::ModuleAlone { word } => {
+                let functions = if *word == "re" { "pattern" } else { "math" };
+                write!(
+                    f,
+                    "`{word}` names the {functions} functions; to name a field `{word}`, \
+                     write `record[\"{word}\"]`"
+                )
+            }
             Reason::KeyOnValue => write!(f, "only a field has keys and indexes"),
             Reason::NegativeIndex => write!(f, "a negative index is not supported"),
             Reason::ChainedComparison { write } => {
@@ -185,6 +240,31 @@ impl fmt::Display for Reason {
             Reason::AdjacentTexts => {
                 write!(f, "two texts side by side are not joined; write one text")
             }
+            Reason::UnknownFunction { name, nearest } => {
+                unknown(f, "function", name, *nearest, &names(&FUNCTIONS))
+            }
+            Reason::UnknownMethod { name, nearest } => {
+                unknown(f, "method", name, *nearest, &names(&METHODS))
+            }
+            Reason::UnknownType { name, nearest } => {
+                unknown(f, "type", name, *nearest, &names(&TYPES))
+            }
+            Reason::WrongArgumentCount { name, takes: 0, .. } => {
+                write!(f, "`{name}` takes no arguments")
+            }
+            Reason::WrongArgumentCount { name, takes, given } => {
+                let arguments = if *takes == 1 { "argument" } else { "arguments" };
+                let were = if *given == 1 { "was" } else { "were" };
+                write!(
+                    f,
+                    "`{name}` takes {takes} {arguments}, and {given} {were} given"
+                )
+            }
+            Reason::PatternNotLiteral { function } => write!(
+                f,
+                "the pattern of `{function}` must be a text literal, as in \
+                 `{function}(r\"^a\", name)`"
+            ),
             Reason::ConditionalNeedsElse => {
                 write!(f, "a conditional needs `else`; write `a if test else b`")
             }

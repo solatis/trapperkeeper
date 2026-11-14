@@ -65,7 +65,8 @@ and a text in brackets works at every step of a path (owner, 2026-11-13,
 
 Twelve words are reserved: `and`, `or`, `not`, `in`, `is`, `if`, `else`,
 `for`, `None`, `True`, `False` and `record`. Python's other keywords are
-names (owner, 2026-11-14). A lowercase `null`, `true` or `false` is a name
+names (owner, 2026-11-14). `re` and `math` are reserved too, as the names of
+the two modules. A lowercase `null`, `true` or `false` is a name
 like any other (owner, 2026-11-14). A word of the language never stands after
 a dot (owner, 2026-11-14).
 
@@ -101,6 +102,9 @@ for the record and are not Python syntax.
 
 Reserving all of Python's keywords, because a column named `from` would need
 a special form.
+
+`re` and `math` as ordinary names, because a call would then need four tokens
+to tell from a field.
 
 Refusing a lowercase `null` or `true`, because fields are compared with
 fields.

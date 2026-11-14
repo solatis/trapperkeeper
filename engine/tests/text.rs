@@ -65,6 +65,34 @@ const VALID: &[(&str, &str)] = &[
         "a - -5 > -(5) and -a * b > 0",
         "a - -5 > -(5) and -a * b > 0",
     ),
+    (
+        "customer.country == \"NL\" and customer.email.endswith(\"@example.com\")",
+        "customer.country == \"NL\" and customer.email.endswith(\"@example.com\")",
+    ),
+    (
+        "len(name.strip().upper()) > 3",
+        "len(name.strip().upper()) > 3",
+    ),
+    (
+        "re.search(r\"^\\d{5}$\", zip_code) and isinstance(price, (int, float))",
+        "re.search(r\"^\\d{5}$\", zip_code) and isinstance(price, (int, float))",
+    ),
+    // A comma after the last item of a list.
+    (
+        "status in (expected, \"paid\",)\n  and math.isnan(ratio)\n  or flag",
+        "status in (expected, \"paid\") and math.isnan(ratio) or flag",
+    ),
+    // A function name without `(` is a field.
+    ("len == 1", "len == 1"),
+    // A field named like a module.
+    ("record[\"math\"] > 50", "record[\"math\"] > 50"),
+    // A list of one, the empty list, and one type in parentheses.
+    (
+        "(a,) == () or isinstance(x, (int,))",
+        "(a,) == () or isinstance(x, int)",
+    ),
+    // A pattern that cannot be written raw.
+    ("re.match(\"a\\\"b\", x)", "re.match(\"a\\\"b\", x)"),
 ];
 
 /// The reason "expected `wanted` after `after`, found `found`".
@@ -86,6 +114,7 @@ fn found_name(wanted: &[&str], name: &str, after: Option<&str>) -> Reason {
 fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
     let foreign = |found, write| Reason::ForeignOperator { found, write };
     let after_condition = ["`and`", "`or`", "`if`", "the end of the rule"];
+    let count = |name, takes, given| Reason::WrongArgumentCount { name, takes, given };
     vec![
         (
             "",
@@ -239,6 +268,45 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
             18..18,
             Reason::ConditionalNeedsElse,
             "a conditional needs `else`; write `a if test else b`",
+        ),
+        (
+            "lenn(name) > 3",
+            0..4,
+            Reason::UnknownFunction {
+                name: "lenn".to_owned(),
+                nearest: Some("len"),
+            },
+            "unknown function `lenn`; did you mean `len`?",
+        ),
+        (
+            "name.startwith(\"a\")",
+            5..14,
+            Reason::UnknownMethod {
+                name: "startwith".to_owned(),
+                nearest: Some("startswith"),
+            },
+            "unknown method `startwith`; did you mean `startswith`?",
+        ),
+        (
+            "len(a, b) > 1",
+            3..9,
+            count("len", 1, 2),
+            "`len` takes 1 argument, and 2 were given",
+        ),
+        (
+            "name.upper(\"x\") == \"A\"",
+            10..15,
+            count("upper", 0, 1),
+            "`upper` takes no arguments",
+        ),
+        (
+            "isinstance(price, number)",
+            18..24,
+            Reason::UnknownType {
+                name: "number".to_owned(),
+                nearest: None,
+            },
+            "unknown type `number`; the types are int, float, str, bool, list",
         ),
     ]
 }
