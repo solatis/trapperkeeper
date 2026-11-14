@@ -138,9 +138,9 @@ pub fn expr() -> BoxedStrategy<Expr> {
     .boxed()
 }
 
-/// A version 7 id from a generated timestamp and generated random bytes.
+/// A version 7 UUID from a generated timestamp and generated random bytes.
 pub fn rule_id() -> impl Strategy<Value = Uuid> {
-    // A version 7 id holds 48 bits of milliseconds.
+    // A version 7 UUID holds 48 bits of milliseconds.
     (0..1u64 << 48, any::<[u8; 10]>())
         .prop_map(|(millis, bytes)| uuid::Builder::from_unix_timestamp_millis(millis, &bytes))
         .prop_map(uuid::Builder::into_uuid)
@@ -156,8 +156,8 @@ pub fn scope() -> impl Strategy<Value = BTreeMap<String, String>> {
     btree_map(text(), text(), 0..=MAX_SCOPE_TAGS)
 }
 
-/// A rule that `validate` accepts: a version 7 id, a sample rate in (0, 1],
-/// a scope within the caps and any expression.
+/// A rule that `validate` accepts: a version 7 UUID as its id, a sample rate
+/// in (0, 1], a scope within the caps and any expression.
 pub fn rule() -> impl Strategy<Value = Rule> {
     let title = proptest::option::of(".{0,40}");
     let action = select(vec![Action::Observe, Action::Drop, Action::Throw]);

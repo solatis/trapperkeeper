@@ -25,7 +25,7 @@ pub enum Action {
 #[serde(deny_unknown_fields)]
 pub struct Rule {
     // The server generates the id and the engine reads it. Validation holds
-    // it to version 7, the time-ordered kind of ADR-0020.
+    // it to a version 7 UUID, the time-ordered kind of ADR-0020.
     pub rule_id: Uuid,
     // A display name in the `_title` form of ADR-0020. It is not part of
     // the identity and may repeat. JSON omits it when it is absent.

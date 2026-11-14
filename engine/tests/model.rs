@@ -74,7 +74,7 @@ fn apply(d: Defect, rule: &mut Rule) -> (String, Reason) {
             )
         }
         Defect::RandomRuleId => {
-            // A well-formed version 4 id, so the refusal is about the
+            // A well-formed version 4 UUID, so the refusal is about the
             // version alone.
             rule.rule_id = uuid::Builder::from_random_bytes([0x5a; 16]).into_uuid();
             let version = 4;

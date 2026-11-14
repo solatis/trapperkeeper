@@ -43,8 +43,8 @@ pub fn validate(rule: &Rule) -> Result<(), Vec<Error>> {
     let mut errors = Vec::new();
     let mut refuse = |at: String, reason| errors.push(Error { at, reason });
 
-    // The id must be version 7, the time-ordered kind the server issues
-    // (ADR-0020). The nil id is version 0 and fails the same check.
+    // The id must be a version 7 UUID, the time-ordered kind the server
+    // issues (ADR-0020). The nil UUID is version 0 and fails the same check.
     let version = rule.rule_id.get_version_num();
     if version != 7 {
         refuse(
