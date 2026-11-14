@@ -28,6 +28,10 @@ The grammar is documented rule by rule, with the form and an example (owner,
 
 A tokenizer is a stage of its own before the parser (owner, 2026-11-14).
 
+The parser lives in the engine crate and is always built (owner, 2026-11-14).
+
+It reports the first syntax error and stops (owner, 2026-11-14).
+
 An error holds its place as a range of byte offsets and a reason from a
 closed list, and the crate writes the sentence of each reason (owner,
 2026-11-14).
@@ -58,6 +62,12 @@ Full parity of error messages with the best prototype. Code simplicity is
 balanced against the clarity of errors (owner, 2026-11-14).
 
 A parser over characters, because its errors list single characters.
+
+A cargo feature for the parser, because the tests and CI would cover the
+crate twice. A crate of its own, because an SDK could then not print a rule.
+
+Several errors with recovery, because the parser would need code that decides
+where to resume.
 
 A line and a column as the place, because they name a point and not a part of
 the text.

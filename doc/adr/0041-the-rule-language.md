@@ -58,6 +58,20 @@ lookaround and no backreferences. The server refuses a pattern outside it
 Text is UTF-8, and its encoding is the SDK's responsibility (owner,
 2026-11-12).
 
+A bare name is a field of the record. A key that cannot be a bare name is
+written with the word `record` and brackets, as in `record["unit price"]`,
+and a text in brackets works at every step of a path (owner, 2026-11-13,
+2026-11-14).
+
+Twelve words are reserved: `and`, `or`, `not`, `in`, `is`, `if`, `else`,
+`for`, `None`, `True`, `False` and `record`. Python's other keywords are
+names (owner, 2026-11-14). A lowercase `null`, `true` or `false` is a name
+like any other (owner, 2026-11-14). A word of the language never stands after
+a dot (owner, 2026-11-14).
+
+A text takes single or double quotes and has a raw form. `x == None` is
+refused, and its error says to write `x is None`.
+
 `adr/0005` says what a rule does with a value it cannot use.
 
 ## Rejected alternatives
@@ -81,6 +95,18 @@ A `*` in a path, because it cannot say that one element satisfies several
 conditions.
 
 Chained comparisons and negative indexes, for now.
+
+The word `row` for the record. Quoted names in backticks, which need no word
+for the record and are not Python syntax.
+
+Reserving all of Python's keywords, because a column named `from` would need
+a special form.
+
+Refusing a lowercase `null` or `true`, because fields are compared with
+fields.
+
+Any word after a dot as a key, because a typo such as `customer. and x > 1`
+would read `and` as a key.
 
 `abs`, for now.
 

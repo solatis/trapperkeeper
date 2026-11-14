@@ -48,7 +48,6 @@ const FOREIGN: [(&str, &str); 5] = [
 ];
 
 /// Splits `text` into tokens. The list always ends with `End` or `Bad`.
-#[expect(dead_code, reason = "the grammar that calls it is not written yet")]
 pub(super) fn lex(text: &str) -> Vec<Token> {
     let mut tokens = Vec::new();
     // The check counts characters and runs first, so a text over the cap

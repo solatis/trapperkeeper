@@ -36,6 +36,7 @@ pub enum Reason {
     FloatTooLarge,
 
     // Found by the grammar, generic.
+    Empty,
     // What could have stood at the place, what stands there, and the text
     // before it.
     Expected {
@@ -54,6 +55,29 @@ pub enum Reason {
     NeverClosed {
         open: char,
     },
+    ClosesNothing {
+        close: char,
+    },
+    // `write` is the bracket form of the same key.
+    WordAfterDot {
+        word: String,
+        write: String,
+    },
+    BareRecord,
+    KeyOnValue,
+    NegativeIndex,
+    // `write` is the two comparisons joined with `and`, when both operators
+    // are comparisons of two operands.
+    ChainedComparison {
+        write: Option<String>,
+    },
+    // `op` is `==` or `!=`, and `write` is the `is None` form of the same
+    // test.
+    NoneComparison {
+        op: &'static str,
+        write: String,
+    },
+    AdjacentTexts,
 }
 
 /// What stands at the place of an `Expected` error.
@@ -72,6 +96,13 @@ impl fmt::Display for Found {
     }
 }
 
+/// One syntax error: the bytes of the text it is about, and why.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SyntaxError {
+    pub at: Range<usize>,
+    pub reason: Reason,
+}
+
 /// "a", "a or b", "a, b or c".
 fn one_of(names: &[String]) -> String {
     match names {
@@ -79,13 +110,6 @@ fn one_of(names: &[String]) -> String {
         [one] => one.clone(),
         [first @ .., last] => format!("{} or {last}", first.join(", ")),
     }
-}
-
-/// One syntax error: the bytes of the text it is about, and why.
-#[derive(Debug, Clone, PartialEq)]
-pub struct SyntaxError {
-    pub at: Range<usize>,
-    pub reason: Reason,
 }
 
 impl fmt::Display for Reason {
@@ -116,6 +140,7 @@ impl fmt::Display for Reason {
             Reason::MalformedNumber => write!(f, "malformed number"),
             Reason::IntTooLarge => write!(f, "this number is too large for an integer"),
             Reason::FloatTooLarge => write!(f, "this number is too large for a float"),
+            Reason::Empty => write!(f, "a rule is empty; write an expression"),
             // "expected a, b or c after `x`, found `y`".
             Reason::Expected {
                 expected,
@@ -133,6 +158,32 @@ impl fmt::Display for Reason {
             Reason::TooDeep { max } => write!(f, "a rule nests at most {max} levels deep"),
             Reason::TooComplex => write!(f, "this rule is too complex to parse"),
             Reason::NeverClosed { open } => write!(f, "this `{open}` is never closed"),
+            Reason::ClosesNothing { close } => write!(f, "this `{close}` closes nothing"),
+            Reason::WordAfterDot { word, write } => {
+                write!(
+                    f,
+                    "`{word}` is a word of the rule language; write `{write}`"
+                )
+            }
+            Reason::BareRecord => write!(
+                f,
+                "`record` is the whole record; name a field, as in `record[\"key\"]`"
+            ),
+            Reason::KeyOnValue => write!(f, "only a field has keys and indexes"),
+            Reason::NegativeIndex => write!(f, "a negative index is not supported"),
+            Reason::ChainedComparison { write } => {
+                write!(f, "chained comparisons are not supported")?;
+                write.iter().try_for_each(|w| write!(f, "; write `{w}`"))
+            }
+            Reason::NoneComparison { op, write } => {
+                write!(
+                    f,
+                    "`{op}` does not test for a missing value; write `{write}`"
+                )
+            }
+            Reason::AdjacentTexts => {
+                write!(f, "two texts side by side are not joined; write one text")
+            }
         }
     }
 }

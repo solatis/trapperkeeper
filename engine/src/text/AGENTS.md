@@ -1,16 +1,18 @@
 # engine/src/text/
 
 **What**: a rule as text. The module holds the tokenizer, the kit of parser
-combinators and the error that a faulty text gets.
+combinators, the grammar written with the kit and the error that a faulty
+text gets.
 
 **Map**:
 
-| File        | What                                                             | When to read                                                                  |
-| ----------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `mod.rs`    | the files of the module and what it exports                      | what the crate can reach of the parser                                        |
-| `error.rs`  | the syntax error, its reasons and their sentences                | why a text was refused; adding a reason; the wording of an error              |
-| `tokens.rs` | the tokenizer and the kinds of token                             | what a number, a text or an operator looks like; an error about one character |
-| `kit.rs`    | the parser combinators, the log of what was wanted and `explain` | how a choice picks the error it reports; adding a combinator                  |
+| File         | What                                                              | When to read                                                                  |
+| ------------ | ----------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `mod.rs`     | the files of the module and what it exports                       | what the crate can reach of the parser                                        |
+| `error.rs`   | the syntax error, its reasons and their sentences                 | why a text was refused; adding a reason; the wording of an error              |
+| `tokens.rs`  | the tokenizer and the kinds of token                              | what a number, a text or an operator looks like; an error about one character |
+| `kit.rs`     | the parser combinators, the log of what was wanted and `explain`  | how a choice picks the error it reports; adding a combinator                  |
+| `grammar.rs` | `parse` and the rules of the grammar, one per level of precedence | the precedence of an operator; adding a keyword; a targeted error             |
 
 **Invariants**:
 

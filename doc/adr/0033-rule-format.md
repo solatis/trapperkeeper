@@ -86,8 +86,9 @@ the two say the same.
 `and` and `or` as pairs, because a rule of many conditions would nest deeper
 than a JSON reader accepts.
 
-Sending the text to a sensor, because the parser would then be part of every
-SDK. Validation in an SDK, because an SDK executes rules that the server
+Sending the text to a sensor, because a sensor would then parse at every sync
+and could meet a text that its version of the parser does not accept.
+Validation in an SDK, because an SDK executes rules that the server
 returned.
 
 Limits that the caller passes to validation, because a rule's validity would

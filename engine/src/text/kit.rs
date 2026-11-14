@@ -10,8 +10,6 @@
 //! One example runs through the comments of this file: the rule
 //! `x not in (1, 2)` and the faulty `x not y`.
 
-#![expect(dead_code, reason = "the grammar that uses the kit is not written yet")]
-
 use std::cell::{Cell, RefCell};
 use std::ops::Range;
 
@@ -258,20 +256,12 @@ pub(super) fn or<T>(a: impl Parser<T>, b: impl Parser<T>) -> impl Parser<T> {
 }
 
 /// `choice!(a, b, c)` is `or(a, or(b, c))`.
-#[expect(
-    unused_macros,
-    reason = "the grammar that uses the kit is not written yet"
-)]
 macro_rules! choice {
     ($a:expr $(,)?) => { $a };
     ($a:expr, $($rest:expr),+ $(,)?) => {
         $crate::text::kit::or($a, $crate::text::kit::choice!($($rest),+))
     };
 }
-#[expect(
-    unused_imports,
-    reason = "the grammar that uses the kit is not written yet"
-)]
 pub(super) use choice;
 
 /// `x (op x)*`, folded to the left with `f`: `a - b - c` as `(a - b) - c`.
@@ -327,6 +317,7 @@ pub(super) fn hidden<T>(a: impl Parser<T>) -> impl Parser<T> {
 /// `a`, and when it does not match, the refusal `reason` at the token found
 /// there. For a keyword whose absence is a mistake with a name, such as the
 /// `else` of a conditional.
+#[expect(dead_code, reason = "the conditional that needs it is not parsed yet")]
 pub(super) fn require<T>(reason: Reason, a: impl Parser<T>) -> impl Parser<T> {
     move |i: &Input<'_>, p: usize| {
         let reply = a(i, p)?;
