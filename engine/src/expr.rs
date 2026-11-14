@@ -35,8 +35,8 @@ pub enum Expr {
     None,
     Bool(bool),
     Int(i64),
-    // A float in a tree is finite, because JSON has no form for a NaN or an
-    // infinity.
+    // JSON has no form for a NaN or an infinity, so a float in a tree must
+    // be finite.
     Float(f64),
     Text(String),
     List(Vec<Expr>),
@@ -53,9 +53,9 @@ pub enum Expr {
 
     // Logic.
     Not(Box<Expr>),
-    // `And` and `Or` hold two or more operands in written order. No operand
-    // is a node of the same kind, so one chain is one node however the
-    // author grouped it.
+    // `And` and `Or` hold the operands of one chain in written order, two
+    // or more. An operand of the same kind belongs in the same list, so one
+    // chain is one node however the author grouped it.
     And(Vec<Expr>),
     Or(Vec<Expr>),
 
