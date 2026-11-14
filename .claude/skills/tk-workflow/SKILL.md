@@ -74,7 +74,8 @@ state as it is, not as a story: a merged issue is a fast-forward, so its
 commits sit on master with no merge commit, its branch is gone, its issue
 is closed and its plan is deleted; that is the workflow working. A leftover
 is a dirty tree, master behind origin, a local branch whose PR is merged or
-closed, or a plan whose issue is closed. In the
+closed, or a plan whose issue is closed. A branch named `rules-<slug>` with
+an open pull request belongs to a postmortem and is not a leftover. In the
 seed stage each leftover is
 a line under Open questions, not a reason to stop, unless it is the branch
 or plan of an issue in the unit; in the later stages the stage's entry
@@ -182,6 +183,65 @@ result into the unit's thread, so the review message is no longer the
 latest and the owner cannot mark it "Looks good". Or: the owner replies "fine, go
 ahead" and you treat it as an approval, because it reads like one.
 
+## Changing a rule
+
+A rule file is the root `AGENTS.md`, the `AGENTS.md` of a component or of
+`doc/`, a file under `.claude/skills/`, or a decision record that states a
+rule the code follows. A change to a rule file meets the requirements below,
+whoever asks for it: the postmortem, the owner in a review, or the owner in
+the chat. The owner's request settles that the rule changes. The requirements
+still hold, because they show the owner what the change costs before he
+approves it.
+
+1. **Evidence.** The change quotes each mark behind it, with its date and
+   the kind of place it was about: a doc comment, the top of a body, a line,
+   a test, a plan sketch or a message. The change touches rules for that
+   kind of place and for no other.
+2. **A class.** The marks come from two reviews or more, or the owner's
+   words say that the defect recurs, such as "again", "always" or "you
+   keep". One review without such words is a place. A place gets its fix
+   and no rule.
+3. **What failed.** It is one of four things. No rule covers the class. A
+   rule covers it and is unclear. A rule covers it and was not applied. The
+   rule asks for the wrong thing. A rule that was not applied gets a check
+   that cannot be skipped: a script, a line that the harness runs, or a
+   question of the cold reader. It gets no further rule text.
+4. **The sentence.** The change quotes the sentence before and after, with
+   its file and section. It changes one or two sentences.
+5. **The replay.** For each mark, the change says what the new sentence
+   would have produced at that place. Then it searches the owner's earlier
+   marks for the opposite complaint, in every project, with two or three
+   wordings, and quotes up to three of them. It says why the new sentence
+   does not provoke them, or it states the trade.
+6. **Kind before quantity.** A sentence that sets or removes a number, a
+   share or a cap, or that says "most", "many" or "few", gives way to a
+   sentence about the kind of thing and where it goes. A quantity stays
+   only with its reason beside it.
+7. **The decision records.** A rule of weight has a record in `doc/adr/`,
+   and its "Rejected alternatives" say what lost and why. A change that
+   brings back a rejected alternative names it and answers that reason. A
+   change to such a rule rewrites its record in the same commit.
+8. **A pause.** A sentence that a postmortem changed changes again only
+   after one unit has been built under it. The owner's own words lift the
+   pause.
+
+A stage asks the owner for a rule change in the postmortem, after the last
+PR of a unit has merged. During a review the build fixes the marked places
+and asks for no rule change. A lesson about how the owner wants the work
+done goes into a rule file through this section. A memory note may point at
+the rule, and it holds no lesson of its own.
+
+Correct: the owner marks a missing step number in two guides. After the
+merge, the postmortem proposes to reword the one sentence that the build had
+read another way, quotes the owner's earlier "don't go overboard with the
+numbering", and says why the new sentence adds no numbers. The owner picks
+it, and the change lands as a rules PR with its record.
+
+Incorrect: the owner writes "too much prose" at three doc comments in one
+review, and the session caps every comment at two lines in the next commit.
+One review is a place, the cap reaches comments the marks were not about,
+and the sentence sets a quantity.
+
 ## Lifecycle: four stages, three gates
 
 Every issue moves through these stages in order. Each stage is a skill the
@@ -191,12 +251,12 @@ wording: it answers a question inside the current stage, or it is a review
 comment on what the current stage produced. A "Looks good" on an Inbox review message
 approves that review, as "The Inbox" says, and opens no stage either.
 
-| Stage    | Opened by                                    | You produce                                                                                                                                                                    | You never                                                                                                   | Ends with                                            |
-| -------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| 1. Seed  | `/tk-start <task or #n>` or `/tk-start-next` | the seed report, and in `/tk-start-next` the close of a met active milestone                                                                                                   | write, create issues, branch, commit                                                                        | a wait for `/tk-plan`                                |
-| 2. Plan  | `/tk-plan`                                   | the GitHub issues that do not exist yet, one plan per issue that passes the step check, the review of all of them, and on approval `Status: approved` in each                  | touch code, tests, config or any tracked file; branch; commit                                               | the plan-stage message, then a wait for `/tk-build`  |
-| 3. Build | `/tk-build`                                  | per issue: the branch, the plan's commits, the comment checks (the step check, `/doc-read`, `/doc-audit`), the push, the PR, its CI run and its Inbox review                   | merge; deviate from a plan without saying so; invent a reason for a comment; ask about merging before green | the build-stage message, then a wait for `/tk-merge` |
-| 4. Merge | `/tk-merge`                                  | per PR in dependency order: the fast-forward, the push of `master`, the branch deletion, the issue closed, the plan deleted, and the milestone closed when the PR completed it | merge a head that is not the reviewed, green head; merge without the owner having invoked `/tk-merge`       | one line per merged PR                               |
+| Stage    | Opened by                                    | You produce                                                                                                                                                                                                                                                            | You never                                                                                                   | Ends with                                            |
+| -------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| 1. Seed  | `/tk-start <task or #n>` or `/tk-start-next` | the seed report, and in `/tk-start-next` the close of a met active milestone                                                                                                                                                                                           | write, create issues, branch, commit                                                                        | a wait for `/tk-plan`                                |
+| 2. Plan  | `/tk-plan`                                   | the GitHub issues that do not exist yet, one plan per issue that passes the step check, the review of all of them, and on approval `Status: approved` in each                                                                                                          | touch code, tests, config or any tracked file; branch; commit                                               | the plan-stage message, then a wait for `/tk-build`  |
+| 3. Build | `/tk-build`                                  | per issue: the branch, the plan's commits, the comment checks (the step check, `/doc-read`, `/doc-audit`), the push, the PR, its CI run and its Inbox review                                                                                                           | merge; deviate from a plan without saying so; invent a reason for a comment; ask about merging before green | the build-stage message, then a wait for `/tk-merge` |
+| 4. Merge | `/tk-merge`                                  | per PR in dependency order: the fast-forward, the push of `master`, the branch deletion, the issue closed, the plan deleted, and the milestone closed when the PR completed it; after the last PR of a unit, the postmortem and the rules PR of its accepted proposals | merge a head that is not the reviewed, green head; merge without the owner having invoked `/tk-merge`       | one line per merged PR                               |
 
 A session may begin at any stage from the tree, the plans and GitHub.
 `/tk-start #<n>` reads where an issue stands and names the next gate; it

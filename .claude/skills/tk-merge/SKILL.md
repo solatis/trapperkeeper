@@ -1,6 +1,6 @@
 ---
 name: tk-merge
-description: Open the merge stage -- per PR in dependency order, fast-forward master onto the reviewed green head, push it, retarget stacked children, delete the branch, close the issue, delete its plan, and close the milestone it completes. Invoked by the owner after reviewing the diffs; the invocation is the owner's yes on the code.
+description: Open the merge stage -- per PR in dependency order, fast-forward master onto the reviewed green head, push it, retarget stacked children, delete the branch, close the issue, delete its plan, close the milestone it completes, and after the last PR of a unit run its postmortem. Invoked by the owner after reviewing the diffs; the invocation is the owner's yes on the code.
 disable-model-invocation: true
 argument-hint: "[#n ... , issues or PRs to merge; empty means every PR of this session's unit]"
 ---
@@ -113,11 +113,39 @@ repos/{owner}/{repo}/milestones/<m> -q .open_issues` is 0, read the
    unmet, leave the milestone open, because `/tk-start-next` cuts the next
    issue from that line.
 
+## The postmortem
+
+A unit is complete when no plan in `.plans/` names its thread any more.
+After the last PR of this run, do this for each thread whose unit is
+complete:
+
+1. Run `/tk-postmortem <thread name>`, with the thread name and no other
+   word. The skill runs in its own subagent, which has not seen this
+   session. It returns the text of one message, or one line that starts with
+   `no class`.
+2. On `no class`, add that line to the closing lines below and send
+   nothing.
+3. Otherwise send the text as it came, with `send_message` in the unit's
+   thread, and end your turn until the owner answers. When a review waits in
+   the thread, send it after the owner answers that review.
+4. Land what the owner accepted as a rules PR. Cut the branch
+   `rules-<thread slug>` from master. Write one commit per accepted
+   proposal, each with the change to the decision record that `/tk-workflow`,
+   Changing a rule, asks for. Push, open the PR with an empty body, and send
+   its guided review into the thread as `/tk-build`, The runs and the
+   reviews, says. When the owner marks that guide "Looks good" and the head
+   is green, fast-forward the PR by steps 1 to 5 above. A rules PR has no
+   issue, no plan and no postmortem.
+
+The owner's answer to a proposal is his yes on its text. It is not his yes
+on the commit, which is why the rules PR gets its own review.
+
 Close with one line per PR: `<slug>: #<pr> merged, <n> commits, <first
 sha>..<last sha>, issue #<issue> closed`, plus "rebased first" when step 1
 rebased, ", milestone <title> closed" or ", milestone <title> open: <unmet
 line>" when step 8 read a milestone, and one line per PR that stopped, with
-the reason.
+the reason. Add one line per postmortem: its `no class` line, or the number
+of proposals sent and the rules PR that landed the accepted ones.
 
 Correct: logging (#20) and metrics (#21, stacked on logging) are green and
 approved. You fast-forward master to logging's head, push, see #20 MERGED,
@@ -131,4 +159,7 @@ closes #21. Or: the build-stage message said green, the list shows a check
 `IN_PROGRESS`, and the merge runs on the message. Or: the push is rejected
 and you retry with `--force`. Or: the seed report said the unit
 finishes M1, and you close M1 on that claim without checking the list
-against master.
+against master. Or: you tell `/tk-postmortem` which marks you think matter,
+so the postmortem sorts the marks the way the session that built the code
+sees them. Or: the owner picks a proposal, and you commit the change to
+master without a rules PR and its review.

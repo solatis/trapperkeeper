@@ -344,7 +344,13 @@ order, bottom of a stack first. For each PR:
      Then push, start a watcher for the new head, restack, and send a new
      guide for the new head from step 1, with `reply_to` set to the
      reply's id. The watcher of the superseded head is reported as
-     superseded, not waited for.
+     superseded, not waited for. The new guide's body names, for each kind
+     of mark in the reply, the rule sentence you had followed at the marked
+     places, or it says that no rule covers them. The postmortem reads these
+     lines. The build asks for no rule change during a review. When the
+     owner writes that a rule changes now, change it on this branch as
+     `/tk-workflow`, Changing a rule, says, in a commit of its own, and show
+     it in a chapter of its own.
    - The thread resolved without a "Looks good": stop and report. The owner decides
      in the conversation.
 

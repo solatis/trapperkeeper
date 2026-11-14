@@ -64,7 +64,10 @@ Work moves issue by issue through four stages, each opened by the owner:
 `/tk-merge`. A stage opens only when the owner invokes its skill; a chat
 message opens none. The rules all stages share (branches, commits, issues,
 the uncommitted plans in `.plans/`, the fast-forward onto `master`) are in
-`.claude/skills/tk-workflow/SKILL.md`.
+`.claude/skills/tk-workflow/SKILL.md`. After the last PR of a unit lands,
+`/tk-merge` runs a postmortem, which turns what the owner marked in the
+unit's reviews into proposals for the rules. A change to a rule file follows
+"Changing a rule" in that file, whoever asks for it.
 
 ## Documentation strategy
 
