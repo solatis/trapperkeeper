@@ -5,6 +5,7 @@
 pub mod expr;
 pub mod limits;
 pub mod rule;
+pub mod text;
 pub mod validate;
 
 pub use expr::{Expr, Segment, TypeName};
