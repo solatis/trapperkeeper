@@ -32,8 +32,7 @@ gets, and the printer.
   `delimited`, or the cap on nesting does not hold.
 - Every rule of the grammar says its form and gives an example of the text it
   reads, and every alternative of a choice says which text it is for. Every
-  combinator of the kit shows what it does on an example. The cut pass of the
-  comment rules leaves these comments.
+  combinator of the kit shows what it does on an example.
 - A new reason gets a faulty text with its sentence in `faulty`, in
   `engine/tests/text.rs`. No test holds this, so a reason without a row has
   an untested sentence.

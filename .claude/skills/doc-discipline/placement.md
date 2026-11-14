@@ -10,13 +10,18 @@ Place knowledge on the lowest rung that covers its subject. Lower wins.
 
 | The knowledge is about ...                    | It lives in ...                                         |
 | --------------------------------------------- | ------------------------------------------------------- |
-| one expression, branch, constant or step      | an inline comment at that line                          |
-| the order of one function's steps             | the overview comment at the top of that function's body |
+| one expression, branch or constant            | a note at that line                                     |
+| one step of a function, what it does and why  | that step's item in the function's walkthrough          |
+| the approach of one function, the step order  | the opening of that function's walkthrough, in its body |
 | what one function promises to callers         | the doc comment above that function                     |
 | one type, or one file as a whole              | the comment on the type, or the file header comment     |
 | several files in one directory                | that directory's `AGENTS.md` (Invariants, Why, How to)  |
 | several components                            | the documentation folder, per its `AGENTS.md`           |
 | history, a plan, a review or the conversation | nowhere. Delete it; git keeps history                   |
+
+A step spans several lines, so the lowest rung that covers it is its item in
+the walkthrough. The back-reference at the step holds no knowledge of its own
+and is not a rung of the ladder.
 
 Executable forms beat all prose rungs: if an assertion, a type, a schema or a
 test fixture can state it, prefer that and keep at most one line of prose
@@ -63,14 +68,17 @@ anything:
 1. Rewrite for the destination. A paragraph from a design document does not
    become a good comment by pasting it. Keep the facts and the reasons a
    reader of that code needs, drop the rest, and phrase each as a statement
-   about the line it explains. A reason usually lands as one inline comment.
+   about the line or the step it explains. A reason lands on the rung of its
+   subject.
 2. Verify against the code while moving. Documentation that describes
    behavior the code does not have is not moved; it is reported under "Needs a
    human" with both versions quoted, because either could be the wrong one.
 3. Delete the source passage. If the source needs to keep the topic visible,
    leave a pointer of one line at most: what, and which file.
-4. Shape the result per `narrative.md` even in `placement` mode, within its
-   budgets. Do not leave a wall of text above a function.
+4. Shape the result per `narrative.md`, within the sizes the policy gives.
+   Text above the signature is the contract. Text on how a function works
+   goes into the walkthrough inside the body, when the function qualifies
+   for one.
 5. After writing the destination comment, read it back as a list of separate
    claims and check each one against the code directly below it. Fix or
    delete any claim the code does not bear out.
@@ -103,4 +111,6 @@ While here, run every check the documentation folder's `AGENTS.md` lists
 (budgets, greps for words or numbers it forbids) and confirm the section
 order it prescribes for component `AGENTS.md` files. Overruns are fixed by
 moving knowledge down the ladder, never by splitting a document into more
-documents. What cannot be fixed by moving goes in the report.
+documents. What cannot be fixed by moving goes in the report. Read each
+sentence in scope against the "Prose" rules of the policy, and list each
+sentence that breaks one under "Wording".
