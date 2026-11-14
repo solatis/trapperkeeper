@@ -1,6 +1,6 @@
 # 0033. The rule format
 
-Date: 2026-11-13.
+Date: 2026-11-14.
 
 ## Context
 
@@ -18,6 +18,13 @@ A rule has a `rule_id`, an optional `rule_title`, an `action`, a
 
 The expression is written as text in the rule language (`adr/0041`). A
 planner reads it as a tree (owner, 2026-11-13).
+
+The tree is written in JSON with one key that names the kind of each node, as
+in `{"gt": [{"field": ["amount"]}, {"int": 100}]}` (owner, 2026-11-13). The
+tree keeps the operators as the author wrote them (owner, 2026-11-14). A
+field is one node with a path of keys and indexes (owner, 2026-11-14). `and`
+and `or` hold a list of operands. The pattern of a pattern function is a text
+in its node.
 
 The actions are `observe`, `drop` and `throw`. `throw` raises into the
 pipeline. A rule has one action (owner, 2026-11-11, 2026-11-13).
@@ -62,6 +69,18 @@ does.
 
 A rule as an OR of groups of conditions, because it cannot compare a field
 with a field or nest AND and OR.
+
+A `kind` property in every node, because it is the longest form and a reader
+has to buffer a node to find its kind. Nested arrays, because the reader and
+the writer would be written by hand.
+
+A small core of operators that the parser lowers every form to, because a
+printed rule would read differently from what was written.
+
+A field as nested nodes, because the planner would fold them back into paths.
+
+`and` and `or` as pairs, because a rule of many conditions would nest deeper
+than a JSON reader accepts.
 
 Sending the text to a sensor, because the parser would then be part of every
 SDK. Validation in an SDK, because an SDK executes rules that the server

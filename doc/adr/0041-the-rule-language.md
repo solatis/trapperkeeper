@@ -1,6 +1,6 @@
 # 0041. The rule language
 
-Date: 2026-11-13.
+Date: 2026-11-14.
 
 ## Context
 
@@ -26,7 +26,14 @@ The language has these kinds of expression (owner, 2026-11-12, 2026-11-13):
 - arithmetic
 - a conditional expression
 
-Functions and methods come from a closed list.
+Functions and methods come from a closed list. The functions are `len`,
+`any`, `all`, `isinstance`, `re.search`, `re.match`, `re.fullmatch` and
+`math.isnan` (owner, 2026-11-13). The methods of a text are `startswith`,
+`endswith`, `upper`, `lower`, `strip`, `lstrip`, `rstrip`, `isdigit`,
+`isalpha`, `isalnum`, `isspace`, `isupper`, `islower` and `isascii` (owner,
+2026-11-13, 2026-11-14). `isinstance` tests for `int`, `float`, `str`, `bool`
+and `list` (owner, 2026-11-14). The pattern of a pattern function is a
+literal.
 
 A comparison needs two values of compatible types, in every operator. An int
 widens to a float, and nothing else converts. Ordering is for numbers only
@@ -75,8 +82,15 @@ conditions.
 
 Chained comparisons and negative indexes, for now.
 
+`abs`, for now.
+
+`dict` as a type that `isinstance` tests for, because no rule needs it yet.
+
+All of Python's tests of a text's characters, because `isdecimal` and
+`isnumeric` differ from `isdigit` only on unusual digits.
+
 ## Consequences
 
 Timestamps wait (`decisions.md`). A translator for a host engine walks the
-same tree (`adr/0040`). The names of the functions and the details of the
-grammar are fixed when the parser is written.
+same tree (`adr/0040`). The details of the grammar are fixed when the parser
+is written.

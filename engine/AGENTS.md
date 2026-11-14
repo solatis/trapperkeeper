@@ -14,6 +14,7 @@ the crate does not implement that yet.
 | ----------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | `Cargo.toml`      | the package name; the dependencies and their features                                  | changing a dependency; why floats parse exactly; why no UUID generator                       |
 | `src/lib.rs`      | the modules and what the crate exports                                                 | what a user of the crate can reach                                                           |
+| `src/expr.rs`     | the expression tree, a path segment and the type names                                 | the JSON key of a kind of node; adding a function or a method                                |
 | `src/path.rs`     | the field path and its segments                                                        | how a condition names a field; the JSON of a key, an index and the wildcard                  |
 | `src/rule.rs`     | the rule, group, condition, value, operator, policy, field type and action types       | the JSON form of a rule; a default; adding a field or an operator                            |
 | `src/limits.rs`   | the limits as constants, each with where its number came from                          | how deep a path, how long a list, how many conditions or scope tags                          |
@@ -38,6 +39,8 @@ the crate does not implement that yet.
 
 - The rule format, with each owner decision and its date:
   `doc/adr/0033-rule-format.md`.
+- The rule language, its kinds of expression and the closed list of functions
+  and methods: `doc/adr/0041-the-rule-language.md`.
 - The scope tags, their caps and the seen-scope index:
   `doc/adr/0034-scope-tags-and-the-seen-scope-index.md`.
 - Properties are the preferred tests:

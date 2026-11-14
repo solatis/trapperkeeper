@@ -2,11 +2,13 @@
 //! every rule passes before it reaches a sensor. This crate does not evaluate
 //! rules.
 
+pub mod expr;
 pub mod limits;
 pub mod path;
 pub mod rule;
 pub mod validate;
 
+pub use expr::{Expr, TypeName};
 pub use path::{FieldPath, Segment};
 pub use rule::{Action, Condition, FieldType, Group, Operator, Policy, Rule, Scalar, Value};
 pub use validate::{Error, Reason, validate};
