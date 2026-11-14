@@ -34,6 +34,51 @@ pub enum Reason {
     MalformedNumber,
     IntTooLarge,
     FloatTooLarge,
+
+    // Found by the grammar, generic.
+    // What could have stood at the place, what stands there, and the text
+    // before it.
+    Expected {
+        expected: Vec<String>,
+        found: Found,
+        after: Option<String>,
+    },
+    TooDeep {
+        max: usize,
+    },
+    // The parser gave up at the cap on its work. No rule an author writes
+    // reaches it.
+    TooComplex,
+
+    // Found by the grammar, targeted.
+    NeverClosed {
+        open: char,
+    },
+}
+
+/// What stands at the place of an `Expected` error.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Found {
+    Token(String),
+    End,
+}
+
+impl fmt::Display for Found {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Found::Token(token) => write!(f, "`{token}`"),
+            Found::End => write!(f, "the end of the rule"),
+        }
+    }
+}
+
+/// "a", "a or b", "a, b or c".
+fn one_of(names: &[String]) -> String {
+    match names {
+        [] => String::new(),
+        [one] => one.clone(),
+        [first @ .., last] => format!("{} or {last}", first.join(", ")),
+    }
 }
 
 /// One syntax error: the bytes of the text it is about, and why.
@@ -71,6 +116,23 @@ impl fmt::Display for Reason {
             Reason::MalformedNumber => write!(f, "malformed number"),
             Reason::IntTooLarge => write!(f, "this number is too large for an integer"),
             Reason::FloatTooLarge => write!(f, "this number is too large for a float"),
+            // "expected a, b or c after `x`, found `y`".
+            Reason::Expected {
+                expected,
+                found,
+                after,
+            } => {
+                let after = after.as_ref().map(|a| format!(" after `{a}`"));
+                let after = after.unwrap_or_default();
+                if expected.is_empty() {
+                    write!(f, "unexpected {found}{after}")
+                } else {
+                    write!(f, "expected {}{after}, found {found}", one_of(expected))
+                }
+            }
+            Reason::TooDeep { max } => write!(f, "a rule nests at most {max} levels deep"),
+            Reason::TooComplex => write!(f, "this rule is too complex to parse"),
+            Reason::NeverClosed { open } => write!(f, "this `{open}` is never closed"),
         }
     }
 }

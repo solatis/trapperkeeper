@@ -1,20 +1,34 @@
 # engine/src/text/
 
-**What**: a rule as text. The module holds the tokenizer and the error that a
-faulty text gets.
+**What**: a rule as text. The module holds the tokenizer, the kit of parser
+combinators and the error that a faulty text gets.
 
 **Map**:
 
-| File        | What                                              | When to read                                                                  |
-| ----------- | ------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `mod.rs`    | the files of the module and what it exports       | what the crate can reach of the parser                                        |
-| `error.rs`  | the syntax error, its reasons and their sentences | why a text was refused; adding a reason; the wording of an error              |
-| `tokens.rs` | the tokenizer and the kinds of token              | what a number, a text or an operator looks like; an error about one character |
+| File        | What                                                             | When to read                                                                  |
+| ----------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `mod.rs`    | the files of the module and what it exports                      | what the crate can reach of the parser                                        |
+| `error.rs`  | the syntax error, its reasons and their sentences                | why a text was refused; adding a reason; the wording of an error              |
+| `tokens.rs` | the tokenizer and the kinds of token                             | what a number, a text or an operator looks like; an error about one character |
+| `kit.rs`    | the parser combinators, the log of what was wanted and `explain` | how a choice picks the error it reports; adding a combinator                  |
 
 **Invariants**:
 
 - The tokenizer does not fail. Its error is the last token, and the parser
   reports it only when it gets there.
+- The kit carries no failure in its replies. A token test that does not match
+  notes what it wanted, and the error comes from the notes furthest in the
+  text. A refusal is the error unless a note lies further.
+- No two alternatives of a choice read the same bracketed text, or the
+  parser's time doubles per level of nesting.
+- A token that may follow almost any value is `hidden`, or it shows up in
+  every "expected" error.
+- Every form that makes the grammar call itself goes through `nested` or
+  `delimited`, or the cap on nesting does not hold.
+- Every rule of the grammar says its form and gives an example of the text it
+  reads, and every alternative of a choice says which text it is for. Every
+  combinator of the kit shows what it does on an example. The cut pass of the
+  comment rules leaves these comments.
 
 **Why**:
 
