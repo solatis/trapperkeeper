@@ -49,5 +49,6 @@ gets, and the printer.
 
 - `cargo test -p trapperkeeper-engine --test text` runs the properties and
   the tables.
-- Adding a method: a variant of `Expr` with its row in `tests/tree.rs`, a row
-  in `METHODS`, an arm in the printer, and a case in `canonical_in`.
+- Adding a method: a variant of `Expr`, an entry in the strategy `expr` of
+  `tests/common/mod.rs`, a row in `METHODS`, an arm in the printer, and a
+  case in `canonical_in`.
