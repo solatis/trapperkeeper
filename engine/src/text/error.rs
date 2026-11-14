@@ -11,9 +11,11 @@ use super::grammar::{FUNCTIONS, METHODS, TYPES, names};
 #[derive(Debug, Clone, PartialEq)]
 pub enum Reason {
     // Found by the tokenizer.
+    // A text of more than `MAX_TEXT_LENGTH` characters.
     TooLong {
         max: usize,
     },
+    // The `;` of `amount > 100;`, a character that starts no token.
     UnexpectedCharacter {
         found: char,
     },
@@ -22,22 +24,33 @@ pub enum Reason {
         found: &'static str,
         write: &'static str,
     },
+    // The `# big ones` of `amount > 100 # big ones`.
     Comment,
+    // The `"abc` of `name == "abc`.
     UnclosedText,
+    // The `"""` of `"""abc""" == x`.
     TripleQuote,
     // One of Python's letters before the opening quote other than `r`, as in
     // an f-string.
     TextPrefix {
         prefix: String,
     },
+    // The `\q` of `name == 'a\qb'`, and the `\u12` of `name == "\u12"`,
+    // which has too few digits.
     BadEscape {
         found: String,
     },
+    // The `1_` of `amount > 1_`, and `0x` with no digits.
     MalformedNumber,
+    // The tokenizer refuses `99999999999999999999`, which no u64 holds. The
+    // grammar refuses `9223372036854775808` without a minus before it,
+    // which no i64 holds.
     IntTooLarge,
+    // The `1e999` of `amount > 1e999`, which no f64 holds.
     FloatTooLarge,
 
     // Found by the grammar, generic.
+    // The empty text, or a text of spaces.
     Empty,
     // What could have stood at the place, what stands there, and the text
     // before it. `nearest` is the expected word nearest to a name that
@@ -48,6 +61,8 @@ pub enum Reason {
         after: Option<String>,
         nearest: Option<&'static str>,
     },
+    // A text that opens more than `MAX_NESTING` levels, such as 33
+    // parentheses around `x`.
     TooDeep {
         max: usize,
     },
@@ -56,9 +71,11 @@ pub enum Reason {
     TooComplex,
 
     // Found by the grammar, targeted.
+    // The `(` of `(a > 1 and b < 2`, when the text ends inside it.
     NeverClosed {
         open: char,
     },
+    // The `)` of `a > 1) and b`.
     ClosesNothing {
         close: char,
     },
@@ -78,13 +95,17 @@ pub enum Reason {
         word: String,
         write: String,
     },
+    // `record == 1` and `record[0] == 1`, where `record` stands for the
+    // whole record.
     BareRecord,
     // `re` or `math` without a function after it. Its sentence also says how
     // to name a field of that name.
     ModuleAlone {
         word: &'static str,
     },
+    // The `.x` of `"abc".x == 1`, a key on a value that is no field.
     KeyOnValue,
+    // The `-1` of `items[-1].price > 5`.
     NegativeIndex,
     // `write` is the two comparisons joined with `and`, when both operators
     // are comparisons of two operands.
@@ -97,30 +118,40 @@ pub enum Reason {
         op: &'static str,
         write: String,
     },
+    // The second text of `"abc" "def" == name`, which Python would join.
     AdjacentTexts,
+    // The `lenn` of `lenn(name) > 3`. `nearest` is the known name nearest
+    // to it, `len` here, when one is near enough to be a typo.
     UnknownFunction {
         name: String,
         nearest: Option<&'static str>,
     },
+    // The `startwith` of `name.startwith("a")`, with `nearest` as above.
     UnknownMethod {
         name: String,
         nearest: Option<&'static str>,
     },
+    // The `number` of `isinstance(price, number)`, with `nearest` as above.
     UnknownType {
         name: String,
         nearest: Option<&'static str>,
     },
+    // The `(a, b)` of `len(a, b) > 1`, and the `("x")` of
+    // `name.upper("x")`.
     WrongArgumentCount {
         name: &'static str,
         takes: usize,
         given: usize,
     },
+    // The `pattern` of `re.search(pattern, x)`, which is no text literal.
     PatternNotLiteral {
         function: &'static str,
     },
+    // The `)` of `any(i.price > 100)`, where `for` should stand.
     QuantifierNeedsFor {
         function: &'static str,
     },
+    // The end of `price if price > 0`, where `else` should stand.
     ConditionalNeedsElse,
 }
 
@@ -130,7 +161,9 @@ pub enum Found {
     // A word of the language. Its sentence also says how to name a field of
     // that name, as `record["in"]`.
     Word(&'static str),
+    // Any other token, as the `y` of `x not y`.
     Token(String),
+    // The end of the text, as in `amount >`.
     End,
 }
 
@@ -153,6 +186,8 @@ pub struct SyntaxError {
 
 /// "a", "a or b", "a, b or c".
 fn one_of(names: &[String]) -> String {
+    // `Display` writes no list when `names` is empty, so the first arm
+    // gives nothing.
     match names {
         [] => String::new(),
         [one] => one.clone(),
@@ -169,6 +204,8 @@ fn unknown(
     nearest: Option<&str>,
     known: &[&str],
 ) -> fmt::Result {
+    // "unknown function `lenn`; did you mean `len`?", and with no name
+    // near enough, the whole list, as for `abs`.
     match nearest {
         Some(nearest) => write!(f, "unknown {what} `{name}`; did you mean `{nearest}`?"),
         None => write!(
@@ -219,14 +256,18 @@ impl fmt::Display for Reason {
             } => {
                 let after = after.as_ref().map(|a| format!(" after `{a}`"));
                 let after = after.unwrap_or_default();
+                // With no note left at the place, as when `hidden` dropped
+                // them all, the sentence names only what stands there.
                 if expected.is_empty() {
                     write!(f, "unexpected {found}{after}")?;
                 } else {
                     write!(f, "expected {}{after}, found {found}", one_of(expected))?;
                 }
+                // `a and or b` adds how to name a field `or`.
                 if let Found::Word(word) = found {
                     write!(f, "; to name a field `{word}`, write `record[\"{word}\"]`")?;
                 }
+                // `a adn b` adds "did you mean `and`?".
                 if let Some(nearest) = nearest {
                     write!(f, "; did you mean `{nearest}`?")?;
                 }
@@ -236,6 +277,8 @@ impl fmt::Display for Reason {
             Reason::TooComplex => write!(f, "this rule is too complex to parse"),
             Reason::NeverClosed { open } => write!(f, "this `{open}` is never closed"),
             Reason::ClosesNothing { close } => write!(f, "this `{close}` closes nothing"),
+            // `none` is told to write `None` with a capital, and `AND` to
+            // write `and` in lowercase.
             Reason::KeywordCase { keyword, .. } => {
                 if keyword.starts_with(char::is_uppercase) {
                     write!(f, "write `{keyword}` with a capital letter")
@@ -257,6 +300,8 @@ impl fmt::Display for Reason {
                 "`record` is the whole record; name a field, as in `record[\"key\"]`"
             ),
             Reason::ModuleAlone { word } => {
+                // `re` names the pattern functions and `math` the math
+                // functions.
                 let functions = if *word == "re" { "pattern" } else { "math" };
                 write!(
                     f,
@@ -267,6 +312,7 @@ impl fmt::Display for Reason {
             Reason::KeyOnValue => write!(f, "only a field has keys and indexes"),
             Reason::NegativeIndex => write!(f, "a negative index is not supported"),
             Reason::ChainedComparison { write } => {
+                // `0 < amount < 10` gets the rewrite, and `a < b <` has none.
                 write!(f, "chained comparisons are not supported")?;
                 write.iter().try_for_each(|w| write!(f, "; write `{w}`"))
             }
@@ -288,10 +334,14 @@ impl fmt::Display for Reason {
             Reason::UnknownType { name, nearest } => {
                 unknown(f, "type", name, *nearest, &names(&TYPES))
             }
+            // A method that takes no arguments, as `upper`, gets a sentence
+            // without numbers.
             Reason::WrongArgumentCount { name, takes: 0, .. } => {
                 write!(f, "`{name}` takes no arguments")
             }
             Reason::WrongArgumentCount { name, takes, given } => {
+                // "`len` takes 1 argument, and 2 were given", and
+                // "`isinstance` takes 2 arguments, and 1 was given".
                 let arguments = if *takes == 1 { "argument" } else { "arguments" };
                 let were = if *given == 1 { "was" } else { "were" };
                 write!(
