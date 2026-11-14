@@ -258,9 +258,11 @@ fn number(text: &str, at: usize) -> Result<Token, SyntaxError> {
     let digits = &text[if hex { at + 2 } else { at }..end];
     // An underscore stands between two digits. `1_000` passes, and `1_`
     // and `1__0` fail. The parts between the marks of a float are checked
-    // one by one.
+    // one by one. A hexadecimal number is one part, because `e` is one of
+    // its digits, as in `0x1e_5`.
+    let marks: &[char] = if hex { &[] } else { &['.', 'e', 'E', '+', '-'] };
     let underscores_fit = digits
-        .split(['.', 'e', 'E', '+', '-'])
+        .split(marks)
         .all(|part| !part.starts_with('_') && !part.ends_with('_') && !part.contains("__"));
     // `0x` with no digit after it is a malformed number, and not one that is
     // too large.

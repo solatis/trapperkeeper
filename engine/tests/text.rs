@@ -299,6 +299,8 @@ const VALID: &[(&str, &str)] = &[
         "record[\"unit price\"] * qty + 1 >= 16 - 1000 % 7",
     ),
     ("0x10 + 1_000 > .5", "16 + 1000 > 0.5"),
+    // In a hexadecimal integer `e` is a digit, and no exponent.
+    ("0x1e_5 > x", "485 > x"),
     (
         "(price if price is not None else 0) / 2 < limit",
         "(price if price is not None else 0) / 2 < limit",
