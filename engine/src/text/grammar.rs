@@ -8,7 +8,7 @@ use std::ops::Range;
 use super::error::{Reason, SyntaxError};
 use super::kit::{
     Input, Parser, Refusal, Reply, chain_left, choice, delimited, explain, hidden, label, left,
-    many, map, nested, opt, or, right, spanned, then, then_after, token, try_map,
+    many, map, nested, opt, or, require, right, spanned, then, then_after, token, try_map,
 };
 use super::tokens::{Tok, lex};
 use crate::expr::{Expr, Segment};
@@ -122,14 +122,36 @@ fn end_of_rule(i: &Input<'_>, p: usize) -> Reply<()> {
     or(end, hidden(stray))(i, p)
 }
 
-/// `expr := or_expr`
+/// `expr := conditional`
 ///
 /// Reads any expression, such as `a or b`. It is what stands in parentheses,
 /// in a list and in an argument.
 fn expr(i: &Input<'_>, p: usize) -> Reply<Expr> {
     // An error says "an expression" and does not list every token that can
     // start one.
-    label("an expression", or_expr)(i, p)
+    label("an expression", conditional)(i, p)
+}
+
+/// `conditional := or_expr ("if" or_expr "else" conditional)?`
+///
+/// Reads `price if price > 0 else 0`. The branch after `else` may be a
+/// conditional again, so `a if b else c if d else e` groups to the right.
+fn conditional(i: &Input<'_>, p: usize) -> Reply<Expr> {
+    // Python's `a if b` without `else` is the mistake to name.
+    let needs_else = require(Reason::ConditionalNeedsElse, word("else"));
+    // The branch after `else` is nested, because this rule calls itself
+    // there.
+    let tail = then(right(word("if"), or_expr), nested(needs_else, conditional));
+    map(then(or_expr, opt(tail)), |(then, tail)| match tail {
+        // `a or b`, with no `if` after it.
+        None => then,
+        // `then if test else otherwise`.
+        Some((test, otherwise)) => Expr::If {
+            test: Box::new(test),
+            then: Box::new(then),
+            otherwise: Box::new(otherwise),
+        },
+    })(i, p)
 }
 
 /// `or_expr := and_expr ("or" and_expr)*`
@@ -213,13 +235,13 @@ enum Tail {
     IsNone(bool),
 }
 
-/// `compare_tail := compare_op operand | "is" "not"? "None"`
+/// `compare_tail := compare_op additive | "is" "not"? "None"`
 ///
 /// Reads the `> 100` of `amount > 100` and the `is not None` of
 /// `discount is not None`.
 fn compare_tail(i: &Input<'_>, p: usize) -> Reply<Tail> {
     // `> 100`. The places are kept for the errors of `build_comparison`.
-    let operator_and_operand = then(spanned(compare_op), spanned(operand));
+    let operator_and_operand = then(spanned(compare_op), spanned(additive));
     let binary = map(operator_and_operand, |((make, op_at), (r, r_at))| {
         Tail::Binary(make, op_at, r, r_at)
     });
@@ -234,7 +256,7 @@ fn compare_tail(i: &Input<'_>, p: usize) -> Reply<Tail> {
 /// after it with its place, when there is one.
 type Chained = Option<(Placed<()>, Option<Placed<Expr>>)>;
 
-/// `comparison := operand compare_tail?`
+/// `comparison := additive compare_tail?`
 ///
 /// Reads `amount > 100`, `x not in (1, 2)` and `discount is not None`, or
 /// the operand alone. Comparisons do not chain, so `0 < amount < 10` is
@@ -243,9 +265,9 @@ fn comparison(i: &Input<'_>, p: usize) -> Reply<Expr> {
     // A second operator is read only to refuse the chain with the rewrite
     // that names its operands, and it is hidden from the expected set.
     let again = hidden(or(map(compare_op, |_| ()), map(word("is"), |_| ())));
-    let chained = opt(then(spanned(again), opt(spanned(operand))));
+    let chained = opt(then(spanned(again), opt(spanned(additive))));
     let tail = opt(then(compare_tail, chained));
-    try_map(then(spanned(operand), tail), build_comparison)(i, p)
+    try_map(then(spanned(additive), tail), build_comparison)(i, p)
 }
 
 /// The node of a comparison from its parts, or why it is none: a chain of
@@ -303,13 +325,61 @@ fn build_comparison(
     Ok(make(Box::new(left), Box::new(right)))
 }
 
-/// `operand := postfix`
+// The arithmetic operators of each level and the builder of each one's node.
+// They are hidden from expected sets, because they may follow almost any
+// value and would bury the keywords.
+const ADDITIVE: [(&str, Binary); 2] = [("+", Expr::Add), ("-", Expr::Sub)];
+const TERM: [(&str, Binary); 3] = [("*", Expr::Mul), ("/", Expr::Div), ("%", Expr::Mod)];
+
+/// `additive := term (("+" | "-") term)*`
 ///
-/// Reads one side of a comparison, such as the `amount` of `amount > 100`.
-fn operand(i: &Input<'_>, p: usize) -> Reply<Expr> {
+/// Reads `a - b + 1`, grouped to the left as `(a - b) + 1`.
+fn additive(i: &Input<'_>, p: usize) -> Reply<Expr> {
+    let op = hidden(symbol(&ADDITIVE));
+    chain_left(term, op, |l, make, r| make(Box::new(l), Box::new(r)))(i, p)
+}
+
+/// `term := unary (("*" | "/" | "%") unary)*`
+///
+/// Reads `price * qty % 7`, grouped to the left as `(price * qty) % 7`.
+fn term(i: &Input<'_>, p: usize) -> Reply<Expr> {
+    let op = hidden(symbol(&TERM));
+    chain_left(unary, op, |l, make, r| make(Box::new(l), Box::new(r)))(i, p)
+}
+
+/// `unary := "-" number | "-" unary | postfix`
+///
+/// Reads a leading minus. On a number token it gives a negative literal, as
+/// in `-5`, and on anything else a `Neg`, as in `-a` and `-(5)`.
+fn unary(i: &Input<'_>, p: usize) -> Reply<Expr> {
+    let int = token("a number", |t| match t.kind {
+        Tok::Int(v) => Some(v),
+        _ => None,
+    });
+    let float = token("a number", |t| match t.kind {
+        Tok::Float(v) => Some(v),
+        _ => None,
+    });
+    let minus_or_postfix = choice!(
+        // `-5`. The minus folds only into a number token and never into a
+        // parsed operand, so `-(5)` stays a `Neg` and a printed tree parses
+        // back to itself. The magnitude may be 2^63 with the minus, so the
+        // smallest integer can be written.
+        try_map(right(punct("-"), hidden(int)), |_, v, at| {
+            let reason = Reason::IntTooLarge;
+            let negative = 0_i64.checked_sub_unsigned(v);
+            negative.map(Expr::Int).ok_or(SyntaxError { at, reason })
+        }),
+        // `-0.5`.
+        map(right(punct("-"), hidden(float)), |v| Expr::Float(-v)),
+        // `-a` and `- -5`. Each minus counts as a level of nesting.
+        map(nested(punct("-"), unary), |e| Expr::Neg(Box::new(e))),
+        // Anything else binds tighter than a minus.
+        postfix,
+    );
     // An error says "a value" and does not list every token that can start
     // one.
-    label("a value", postfix)(i, p)
+    label("a value", minus_or_postfix)(i, p)
 }
 
 // Postfix: keys, indexes and method calls.

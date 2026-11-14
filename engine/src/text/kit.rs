@@ -317,7 +317,6 @@ pub(super) fn hidden<T>(a: impl Parser<T>) -> impl Parser<T> {
 /// `a`, and when it does not match, the refusal `reason` at the token found
 /// there. For a keyword whose absence is a mistake with a name, such as the
 /// `else` of a conditional.
-#[expect(dead_code, reason = "the conditional that needs it is not parsed yet")]
 pub(super) fn require<T>(reason: Reason, a: impl Parser<T>) -> impl Parser<T> {
     move |i: &Input<'_>, p: usize| {
         let reply = a(i, p)?;

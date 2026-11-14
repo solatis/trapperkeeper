@@ -44,6 +44,27 @@ const VALID: &[(&str, &str)] = &[
     ("x in [expected, 'paid']", "x in (expected, \"paid\")"),
     // A rule over several lines.
     ("a > 1 and\n  b < 2", "a > 1 and b < 2"),
+    (
+        "not (a == 1 or b != 2) and c <= -3.5",
+        "not (a == 1 or b != 2) and c <= -3.5",
+    ),
+    // A hexadecimal integer and underscores in a number.
+    (
+        "record[\"unit price\"] * qty + 1 >= 0x10 - 1_000 % 7",
+        "record[\"unit price\"] * qty + 1 >= 16 - 1000 % 7",
+    ),
+    ("0x10 + 1_000 > .5", "16 + 1000 > 0.5"),
+    (
+        "(price if price is not None else 0) / 2 < limit",
+        "(price if price is not None else 0) / 2 < limit",
+    ),
+    // The smallest integer.
+    ("-9223372036854775808 < x", "-9223372036854775808 < x"),
+    // The minus as a literal and as `Neg`.
+    (
+        "a - -5 > -(5) and -a * b > 0",
+        "a - -5 > -(5) and -a * b > 0",
+    ),
 ];
 
 /// The reason "expected `wanted` after `after`, found `found`".
@@ -64,6 +85,7 @@ fn found_name(wanted: &[&str], name: &str, after: Option<&str>) -> Reason {
 #[expect(clippy::too_many_lines, reason = "one row per faulty text")]
 fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
     let foreign = |found, write| Reason::ForeignOperator { found, write };
+    let after_condition = ["`and`", "`or`", "`if`", "the end of the rule"];
     vec![
         (
             "",
@@ -199,6 +221,24 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
             0..6,
             Reason::BareRecord,
             "`record` is the whole record; name a field, as in `record[\"key\"]`",
+        ),
+        (
+            "a > 1 b < 2",
+            6..7,
+            found_name(&after_condition, "b", Some("a > 1")),
+            "expected `and`, `or`, `if` or the end of the rule after `a > 1`, found `b`",
+        ),
+        (
+            "price * > 3",
+            8..9,
+            found_name(&["a value"], ">", Some("*")),
+            "expected a value after `*`, found `>`",
+        ),
+        (
+            "price if price > 0",
+            18..18,
+            Reason::ConditionalNeedsElse,
+            "a conditional needs `else`; write `a if test else b`",
         ),
     ]
 }

@@ -78,6 +78,7 @@ pub enum Reason {
         write: String,
     },
     AdjacentTexts,
+    ConditionalNeedsElse,
 }
 
 /// What stands at the place of an `Expected` error.
@@ -183,6 +184,9 @@ impl fmt::Display for Reason {
             }
             Reason::AdjacentTexts => {
                 write!(f, "two texts side by side are not joined; write one text")
+            }
+            Reason::ConditionalNeedsElse => {
+                write!(f, "a conditional needs `else`; write `a if test else b`")
             }
         }
     }
