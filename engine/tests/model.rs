@@ -1,7 +1,8 @@
 //! Properties of the rule model: a generated valid rule round-trips through
-//! JSON unchanged and passes validation, and one defect applied to it is
-//! refused with that defect's reason at its place. Each claim is one property
-//! over generated rules, as ADR-0018 asks.
+//! JSON unchanged and passes validation, its JSON with an unknown property is
+//! refused, and one defect applied to it is refused with that defect's reason
+//! at its place. Each claim is one property over generated rules, as ADR-0018
+//! asks.
 
 mod common;
 
@@ -128,6 +129,17 @@ proptest! {
         // text to the nearest f64.
         prop_assert_eq!(&back, &rule);
         prop_assert_eq!(validate(&rule), Ok(()));
+    }
+
+    /// A rule whose JSON holds a property that the model does not have is
+    /// refused.
+    #[test]
+    fn a_rule_with_an_unknown_property_is_refused(rule in rule()) {
+        let mut document = serde_json::to_value(&rule).expect("a rule serializes");
+        // A misspelled property must be a parse error and no default, so
+        // the expression stands a second time under a misspelled name.
+        document["expresion"] = document["expression"].clone();
+        prop_assert!(serde_json::from_value::<Rule>(document).is_err());
     }
 
     /// One defect is refused with its reason at its place, and nothing else
