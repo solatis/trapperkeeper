@@ -15,11 +15,13 @@ comment and every document row from the plan alone, without guessing and
 without asking, and who could defend each choice to the owner the way you
 can now.
 
-`/doc-discipline read` has loaded the comment shape and the placement
-ladder the build stage is held to, so the plan's comment specifications and
-homes name that shape from the start rather than repaired after. The
-skill's vocabulary names the shapes; the plan is still read by someone who
-has not loaded it, so every shape and reason is said in plain words.
+Step 2 of `/tk-plan` has loaded the doc-discipline skill and read its
+`narrative.md` and `placement.md`. They give the comment shape and the
+placement ladder the build stage is held to, so the plan's comment
+specifications and homes name that shape from the start rather than
+repaired after. The skill's vocabulary names the shapes; the plan is still
+read by someone who has not loaded it, so every shape and reason is said in
+plain words.
 
 ## Header
 
@@ -73,15 +75,22 @@ it is never dropped.
    `because:` line giving the reason for it in plain words a reader without
    the skill can follow ("one match over the event kinds"; "the batch is
    validated whole before anything is appended, and three things fail on
-   the way"). A rule number may follow in parentheses and never replaces
-   the reason. Below it, one claim per comment bullet, each ending with its
-   evidence in brackets (`path:line`, a test, a Rationale row): one to
-   three contract facts in the doc comment, the steps in an overview only
-   when their order is not obvious, and each why inline at the step or line
-   it explains. A why is a guard, a threshold or an ordering constraint. A
-   rejected alternative appears at a line only when a reader of that line
-   would propose it. Where step comments will sit, the bullets are numbered
-   (`// 1.`, `// 2.`). A pseudo-code statement may anchor a step
+   the way"). Below it, one claim per comment bullet, each ending with its
+   evidence in brackets (`path:line`, a test, a Rationale row). The doc
+   comment holds one to three contract facts. A function that qualifies
+   for a walkthrough under the root `AGENTS.md`, "Code comments", is
+   sketched with the walkthrough in full. The walkthrough opens with what
+   the function does and how, and then has one numbered item per step. An
+   item says what its step does, and it gives the step's reason when the
+   step has one. Below the walkthrough, the sketch puts one back-reference
+   per item at the place where its step will begin. A back-reference is a
+   one-line comment with the item's number and a few words from the item,
+   and it carries no claim and no evidence. A note claim sits at the line
+   or construct it explains. It gives a reason, such as why a guard, a
+   threshold, a constant or an order is there, or it says what a dense line
+   achieves, such as a closure, a pattern, a combinator chain or arithmetic
+   on indexes. A rejected alternative appears at a line only when a reader
+   of that line would propose it. A pseudo-code statement may anchor a step
    (`let rules = active_rules(&tags)?;`) and is illustrative: the code
    commit follows the signature and the claims, not the sketch's
    statements. A claim is one sentence, and two claims never
@@ -89,16 +98,22 @@ it is never dropped.
 
    The sketch is the shape and the claims, not the wording. The executor
    rewrites every comment at build time, with the code in view, in the
-   shape `/doc-discipline read` loads. It keeps every bullet as a claim and
-   drops the evidence brackets, which stay in the plan. Where the issue
-   changes existing code, the sketch names the comment blocks the change
+   shape the root `AGENTS.md`, "Code comments", defines. It keeps every
+   bullet as a claim and drops the evidence brackets, which stay in the
+   plan. The claims are the least the code carries. The build adds a note
+   at every line that makes the reader stop and that the sketch did not
+   foresee. A remark of the owner about comments rewrites the sketches it
+   concerns: their style lines, walkthroughs and notes. The plan does not
+   record the remark as a paragraph beside the sketches, because the build
+   follows the sketches and not the paragraph. Where the issue changes
+   existing code, the sketch names the comment blocks the change
    touches, and the build rewrites them whole from the new code. Document
    rows (an `AGENTS.md` bullet, a `doc/` paragraph) are sketched the same
    way: a fenced block of bullets under the heading they will join. Tests are
    designed the same way.
 
 5. **Knowledge.** Per commit, where each why of sections 2 and 4 lands:
-   the commented functions with the why-evidence of every claim;
+   the commented functions with the evidence for each reason of every claim;
    the `AGENTS.md` sections (What, Map, Invariants, Why, How to) and `doc/`
    passages the commit changes; every fact with no home yet, with the home
    it gets and the commit that gives it. When the issue creates a
@@ -108,76 +123,111 @@ it is never dropped.
    `doc/decisions.md` entries move into the new `AGENTS.md` under **Why**
    and are deleted from `doc/`. A Rationale row settled by "owner, <date>"
    lands in a Why entry marked the same way. Every Rationale row names its
-   landing place here, which is one of four. A decision that shapes more
+   landing place here, which is one of five. A decision that shapes more
    than one component lands in an ADR in `doc/adr/`. One that shapes a
-   component lands in its `AGENTS.md` under Why. A reason that explains one
-   line lands as an inline comment at that line. A reason the code will not
+   component lands in its `AGENTS.md` under Why. A reason about a whole
+   step of a function lands in that step's walkthrough item. A reason that
+   explains one line lands as a note at that line. A reason the code will not
    raise again, such as an owner's answer in the conversation or an
    alternative no reader would propose, is marked `plan only` and dies with
    the plan.
 6. **How the knowledge lands.** One line: the build stage is `/tk-build`,
    which writes every comment and document row from sections 4 and 5 in the
-   same commit as the code and reconciles the code against this plan before
-   the push. Below it, only what is specific to this issue: a commit whose
-   comments depend on a fact the executor must check first, a document row
-   that must land before a code commit can cite it, a reason the executor
-   must ask the owner for if the code turns out a certain way.
+   same commit as the code and has `/doc-audit` reconcile the code against
+   this plan before the push. Below it, only what is specific to this
+   issue: a commit whose comments depend on a fact the executor must check
+   first, a document row that must land before a code commit can cite it, a
+   reason the executor must ask the owner for if the code turns out a
+   certain way.
 7. **Commits.** The numbered list, one subject each in the commit form of
-   the workflow, in landing order: the build commits, then the
-   `/doc-discipline all` and `check` runs the build stage makes after the
-   last of them, then the Verify step, last.
+   the workflow, in landing order: the build commits, then the comment
+   checks the build stage makes after the last of them (the step check, the
+   `/doc-read` rounds and the `/doc-audit` run, whose commits depend on
+   their findings), then the Verify step, last. When the issue changes a
+   file whose comments do not pass the step check, the list holds one
+   `docs` commit that brings that file's comments into the shape of the
+   root `AGENTS.md`, "Code comments", before the first commit that changes
+   the file. The step check reads the whole of each file a branch changed,
+   so the build cannot reach the push without that commit.
 8. **Open questions and recommendations.** Every question the owner has
    not answered, with your recommendation, one line each. The gate's
    approval settles them.
 
 ## The sketch
 
-Correct: each Design entry is a sketch in this form, with one of the two
-styles named on the first body line:
+Correct: each Design entry is a sketch in this form, with its style named
+on the first body line:
 
 ```rust
 /// <contract claim> [evidence]
 /// <contract claim> [evidence]
 pub fn <name>(<params>) -> <result> {
-    // style: doc comment + overview + inline notes
+    // style: walkthrough
     // because: <reason for this style in plain words>
     //
-    // 1. <step> [evidence]
-    // 2. <step> [evidence]
-    // 3. <step> [evidence]
+    // <what the function does and how> [evidence].
     //
-    // 1. <the step's why> [evidence]
-    // 2. <the step's why> [evidence]
-    //    <pseudo-code anchor, illustrative>
+    // 1. <what step 1 does> [evidence].
+    //    <why step 1 exists or comes at its place> [evidence].
+    // 2. <what step 2 does> [evidence].
+    // 3. <what step 3 does> [evidence].
+    //    <why step 3 exists or comes at its place> [evidence].
+
+    // 1. <a few words from step 1>
+    <pseudo-code anchor, illustrative>
+
+    // 2. <a few words from step 2>
+    <pseudo-code anchor, illustrative>
+    // at <line or construct>: <reason or what the line achieves> [evidence]
+    <pseudo-code anchor, illustrative>
+
+    // 3. <a few words from step 3>
+    <pseudo-code anchor, illustrative>
 }
 ```
 
 ```rust
 /// <contract claim> [evidence]
 fn <name>(<params>) -> <result> {
-    // style: doc comment + inline notes
+    // style: notes
     // because: <reason, e.g. one match over the event kinds>
     //
-    // at <branch or constant>: <local claim> [evidence]
+    // at <line or construct>: <reason or what the line achieves> [evidence]
 }
 ```
 
 Code in another language uses its own doc-comment syntax in the same form.
-The style line is one of `doc comment alone`, `doc comment + inline notes`
-and `doc comment + overview + inline notes`, and any of them may add
-`+ Note: on <ownership | allocation | I/O>`. A rejected alternative at a
-line cites its Rationale row. A question the plan cannot answer is asked
-before the gate, never written as a claim.
+The style line names the level of the root `AGENTS.md`, "Code comments":
+`bare`, `notes` or `walkthrough`. Any of them may add
+`+ Note: on <ownership | allocation | I/O>`. The planner tests the levels in
+the order that section gives. A function at the level `bare` has a sketch
+with the doc comment, the signature and the two lines `style:` and
+`because:`. Its `because:` line says why none of its lines makes the reader
+stop, such as "it maps the row's fields one to one". A claim of a
+walkthrough ends with a period after its evidence bracket, because the step
+check reads a number as a new item only after a line that ends a sentence.
+A back-reference in a sketch is one line. The line below it is code, an
+empty line or a note whose text starts in the column of the
+back-reference's number, so that `check_steps.py --markdown` reads the
+sketch as it will read the code. A rejected alternative at a line cites its
+Rationale row. A question the plan cannot answer is asked before the gate,
+never written as a claim.
 
 Incorrect: the plan pastes the comments as finished Rust and tells the
 build to type them in, so the wording is frozen before the function exists;
 or it describes the comments in prose ("a doc comment and a numbered
-overview; claims: ...; ..."), so a reviewer rebuilds the function in their
+walkthrough; claims: ...; ..."), so a reviewer rebuilds the function in their
 head to see what is covered; or the style line says "commented (rule 3)" and
 nothing else; or the Rationale says what was chosen and not what lost, so
-the next issue tries the loser again. Or every step carries a rejected
-alternative and the overview repeats each step's reason, so the code reads
-like the planning session.
+the next issue tries the loser again. Or the walkthrough items are one word
+each and the explanations sit at the numbers in the body, so the reader
+meets the approach in fragments. Or a number appears twice in the body, or
+a back-reference is a bare number with no words, so the build copies a
+numbering that the step check rejects. Or a walkthrough item states a fact
+about one line, which belongs in a note at that line. Or a parser of thirty
+functions carries a handful of note claims, so the build lands those and
+leaves the closures and patterns of the helpers bare. Or every item names a
+rejected alternative, so the code reads like the planning session.
 
 ## The plan ends with a verified head
 

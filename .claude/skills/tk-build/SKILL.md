@@ -1,6 +1,6 @@
 ---
 name: tk-build
-description: Open the build stage of a unit -- per issue, in dependency order, cut the branch, land the commits its approved plan lists with their comments and document rows, run the doc-discipline checks, push and open the PR; then watch every PR's Actions runs while the owner reviews each PR in the Inbox, bottom of a stack first, and post the build-stage message. Invoked by the owner after the plan-stage message; the invocation is the gate.
+description: Open the build stage of a unit -- per issue, in dependency order, cut the branch, land the commits its approved plan lists with their comments and document rows, run the comment checks (the step check, /doc-read and /doc-audit), push and open the PR; then watch every PR's Actions runs while the owner reviews each PR in the Inbox, bottom of a stack first, and post the build-stage message. Invoked by the owner after the plan-stage message; the invocation is the gate.
 disable-model-invocation: true
 argument-hint: "[#n ... , only when the session does not already name the unit's issues]"
 ---
@@ -71,8 +71,9 @@ Per issue, the branch decides where the build starts:
 
 ## The commits
 
-Run `/doc-discipline read` once, before the first code commit of the
-session. Then, issue by issue in landing order:
+Load the doc-discipline skill once, before the first code commit of the
+session, and read its `narrative.md` and `placement.md`. Then, issue by
+issue in landing order:
 
 1. Cut the branch from its base: `git checkout -b <slug> master`, which
    the entry check has shown in sync with origin, or `git checkout -b
@@ -96,59 +97,177 @@ session. Then, issue by issue in landing order:
    reported in the build-stage message with both versions. Where a commit
    changes code that already has comments, the blocks it touches are
    rewritten whole from the new code, as the root `AGENTS.md`, "Code
-   comments", rule 5, prescribes. They are never patched with another
-   clause.
+   comments", prescribes. They are never patched with another clause.
 
-   A reason that arises while building (a threshold, an ordering
-   constraint, or a rejected alternative a reader of that line would
-   propose) and is not in the plan is written
-   where it is decided, with its evidence. One you would have to invent is
-   asked through the question tool before the commit that needs it, never
-   written as a guess and never left out silently.
+   The plan's claims are the least the code carries. A line that turns
+   out to make the reader stop, and that the plan did not foresee, gets its
+   note in the same commit as the code. The note gives a reason, such as
+   why a threshold, an ordering constraint or a constant is there, or it
+   says what a dense line achieves. A rejected alternative goes into a note
+   only where a reader of that line would propose it. A function that
+   comes into being during the build is commented under the same rules as
+   a sketched one, although the plan has no sketch of it. Each of these
+   comments is written from evidence you can name. A reason you would have
+   to invent is asked through the question tool before the commit that
+   needs it, never written as a guess and never left out silently.
 
-3. After the last code commit, `/doc-discipline all <paths the branch
-touched>`, and one small commit per finding.
-4. `/doc-discipline check <paths the branch touched>
-.plans/<slug>-plan.md`, which reconciles the code against the plan and
-   reports every reason the plan promised that the code and documents do
-   not state. Its "Unlanded from the plan" findings are fixed with a
-   further small commit each, or reported with the reason each was
-   dropped. Its "Dropped on purpose" findings are listed in the build-stage
-   message and get no commit. Keep its report for the build-stage message.
+   Steps 3 to 9 check the comments after the last code commit. They follow
+   the doc-discipline skill's `checks.md` with this repository's commands.
+   Run each step as written, through the command or the skill it names, and
+   save its output where the step says. The call to `/doc-read` holds the
+   range and the part number and no other word. Reading your own work
+   against the skill's text replaces none of these steps: it leaves no saved
+   file, and a step without its saved file counts as not run. The issue
+   reaches the push only when every step has run.
 
-   The reports of steps 3 and 4 are read in this repository's terms: a
-   "Rationale unknown" finding is a question to the owner through the
-   question tool before the push, and the answer lands in one further
-   commit; a "Needs a human" finding is a line of the build-stage message
-   and gets no commit.
+   You write every comment and document of the issue, from evidence you can
+   name. `/doc-read` and `/doc-audit` each run in a subagent of their own
+   on the agent `doc-reader`, which has no tool that writes. They report,
+   and you decide what changes.
 
-5. Push and open the PR, with the github skill's "Create":
+   The commits of steps 3 to 9 take two forms. A rename or a restructuring
+   is a `refactor` commit of its own. Comments and documents land in one
+   `docs` commit per file. Each of these commits builds and passes lint and
+   tests like every other commit.
+
+3. Run the step check over every file the branch changed, code and
+   Markdown:
 
    ```
-   git push -u origin <slug>
-   gh pr create -B <base> -t "<PR title>" -b ""
+   python3 .claude/skills/doc-discipline/scripts/check_steps.py --deny 'doc/adr/' --deny '\(owner,' --git-range <base>...HEAD --markdown-too
    ```
 
-6. With CI in the tree, start the watcher for the pushed head, in the
-   background, and go on to the next issue without waiting:
+   The check covers the whole of each changed file, so it also reports
+   functions in the old shape that the branch did not touch. Fix every
+   finding, and run the check again until its last line reports 0
+   findings.
+
+4. Reader round 1. List the parts of the change, with the plan's `Base:`
+   branch as `<base>`:
 
    ```
-   CHECKPOINT=7200 ~/.claude/skills/github/scripts/gh-watch.sh $(git rev-parse HEAD)
+   python3 .claude/skills/doc-discipline/scripts/change_parts.py <base>...HEAD
    ```
 
-   Without CI, run the repository's build, lint and tests for the touched
-   area and `npx prettier --check` on the touched Markdown instead, and
-   keep their result for the build-stage message.
+   Then run `/doc-read <base>...HEAD <part>` once for each part. The calls
+   may run side by side. The skill gives the range and the part number to a
+   reader that has seen neither the plan nor this conversation, and it
+   returns the reader's answer. Save the answers verbatim, in the order of
+   the parts, as `.plans/<slug>-read-1.md` before you close any stop. This
+   step makes no commit.
 
-Correct: a step comment needs to say why the server refuses an empty
-batch; you do not know; you ask, and the answer becomes the comment.
+5. Note the head as `<closed>` with `git rev-parse HEAD`. Then close every
+   stop of the answers. Test the four ways in this order, and take the first
+   that fits:
+   - A rename or a restructuring answers the question, when the code can
+     say it for itself.
+   - A comment written from evidence you can name: a `path:line`, a test,
+     a Rationale row of the plan or an answer of the owner. The comment
+     follows the root `AGENTS.md`, "Code comments", and it answers the
+     question without copying its words.
+   - A question to the owner through the question tool, when no evidence
+     gives the reason. Step 8 sends it.
+   - A decline with its reason, when the question asks what the language
+     or its standard library does, or when the line already answers it.
+
+   A statement the reader believed false is fixed, or it stays with the
+   line that shows it true as the reason. Below the answers of the readers,
+   without changing them, append one line per stop to
+   `.plans/<slug>-read-1.md`. Each stop gets one of these lines:
+
+   ```
+   <path>:<line> | rename <sha>
+   <path>:<line> | comment <sha>
+   <path>:<line> | question
+   <path>:<line> | decline: <reason>
+   ```
+
+6. Reader round 2, only when step 5 changed comments, documents or code.
+   List the parts of `<closed>...HEAD` as step 4 does, and run
+   `/doc-read <closed>...HEAD <part>` for each part, so that new readers read
+   what step 5 changed. They are not told what the readers of round 1 said.
+   Save their answers verbatim, in the order of the parts, as
+   `.plans/<slug>-read-2.md`, close their stops as step 5 says, and append
+   the closing lines to that file. There is no third round.
+
+7. The audit. Run `/doc-audit <base>...HEAD plan: .plans/<slug>-plan.md`.
+   When the plan's Knowledge section names a document that the branch did
+   not change, add `also:` and its path. The call holds no `focus:`, so
+   every check of the audit runs. Save the report verbatim as
+   `.plans/<slug>-audit.md`. Apply or decline each finding yourself, and
+   append one line per finding below the report:
+
+   ```
+   <section>: <finding> | applied <sha>
+   <section>: <finding> | declined: <reason>
+   ```
+
+   A proposal to cut a note that closed a reader's stop is declined, with
+   that stop as the reason. An "Unlanded from the plan" finding lands in a
+   commit, or it is declined with the reason it was dropped. A "Rationale
+   unknown" finding is a question to the owner. "Dropped on purpose" and
+   "Needs a human" findings get no commit.
+
+8. Send the questions of steps 5 to 7 together, as one Inbox message for
+   the issue in the unit's thread, one question block per question, as
+   `/tk-workflow`, The Inbox, says. When a review waits in the thread, end
+   your turn and send the message after the owner answers that review,
+   because the owner can mark only the latest message. After you send it,
+   end your turn until the answers arrive. Each answer lands in the `docs`
+   commit of the file it concerns. With no question, skip this step.
+
+9. Run the step check of step 3 again, fix each finding in one more commit,
+   and repeat until its last line reports 0 findings.
+
+10. Push and open the PR, with the github skill's "Create":
+
+    ```
+    git push -u origin <slug>
+    gh pr create -B <base> -t "<PR title>" -b ""
+    ```
+
+11. With CI in the tree, start the watcher for the pushed head, in the
+    background, and go on to the next issue without waiting:
+
+    ```
+    CHECKPOINT=7200 ~/.claude/skills/github/scripts/gh-watch.sh $(git rev-parse HEAD)
+    ```
+
+    Without CI, run the repository's build, lint and tests for the touched
+    area and `npx prettier --check` on the touched Markdown instead, and
+    keep their result for the build-stage message.
+
+Correct: the note at a guard needs to say why the server refuses an empty
+batch. You do not know, so you ask, and the answer becomes the note.
+
+Correct: after the last code commit, the step check reports two findings in
+one file, and you fix both in one commit. The change has two parts, and
+their two readers stop at nine lines. You save their answers, write six notes
+from evidence, rename one binding, ask the owner about one threshold, and
+decline one stop because it asks what `?` does. The reader of round 2 reads
+the six notes and the rename and stops nowhere. The audit's report is saved,
+two findings are applied and one is declined, and the last step check
+reports 0 findings. The guide's "Comment
+checks" section shows each of these from the saved files.
 
 Incorrect: the comment says "the server refuses an empty batch for safety",
 because that sounded right. Or: the plan lands the rejection of the
 per-request signature in an ADR, the PR is opened without that ADR, and the
-reason dies with the plan, which the merge stage deletes. Or: every step
-comment names an alternative the plan rejected, and the code reads like the
-planning session.
+reason dies with the plan, which the merge stage deletes. Or: every
+walkthrough item names an alternative the plan rejected, and the code reads
+like the planning session. Or: the build lands the note claims the plan
+sketched for two guards of a parser, and the closures and tuple patterns of
+its helpers stay bare, because the plan did not name them. The claims are
+the least the code carries. Or: you read `checks.md` and do the cold read
+and the audit from its text, without calling `/doc-read` and `/doc-audit`.
+The guide says "reader: no stops, audit: clean", and
+`.plans/<slug>-read-1.md` does not exist, so nothing shows the owner that no
+reader ran. Or: you call `/doc-read <base>...HEAD 1 the parser helpers are
+dense`. The reader finds its stops because it does not know what you know,
+so the call holds the range and the part number alone. Or: you start a
+subagent to write the comments for the reader's stops. It does not know the
+reasons, so it writes examples, byte offsets and paraphrases of the code, and
+some of them are false.
 
 ## The runs and the reviews
 
@@ -198,6 +317,20 @@ order, bottom of a stack first. For each PR:
      that head and no other. Then what changed since the last guide of
      this PR when there was one, then each deviation from the plan with
      the reason the code forced it and the chapter it lands in.
+   - Last in the body, a section "Comment checks", built from the files
+     `.plans/<slug>-read-1.md`, `.plans/<slug>-read-2.md` and
+     `.plans/<slug>-audit.md` and from a run of the step check of The
+     commits, step 3, at the pushed head:
+     - the last line of the step check
+     - the number of parts that each reader round read
+     - every stop of each reader round, with how it was closed
+     - every decline, with its reason
+     - every statement a reader believed false, with what was done
+     - the audit's first line, which repeats the call, and its findings,
+       each as applied or declined.
+
+     A file that does not exist is named as missing, and its check as not
+     run.
 
    Then end your turn. A watcher that exits wakes the session too: handle
    it as the table above says, report it in the conversation, and end your
@@ -206,10 +339,12 @@ order, bottom of a stack first. For each PR:
      to the next PR.
    - A reply: the owner's change requests, also when its words sound like
      a yes. Address every annotation and every point of the reply with
-     further small commits on this branch, push, start a watcher for the
-     new head, restack, and send a new guide for the new head from step 1,
-     with `reply_to` set to the reply's id. The watcher of the superseded
-     head is reported as superseded, not waited for.
+     further small commits on this branch, run the step check of The
+     commits, step 3, and fix its findings until it reports 0 findings.
+     Then push, start a watcher for the new head, restack, and send a new
+     guide for the new head from step 1, with `reply_to` set to the
+     reply's id. The watcher of the superseded head is reported as
+     superseded, not waited for.
    - The thread resolved without a "Looks good": stop and report. The owner decides
      in the conversation.
 
@@ -244,14 +379,17 @@ reopening the review, so the owner merges a commit they never saw.
 
 Exactly, per issue in landing order: the issue number and the branch; the
 PR's URL and base; a summary of the change in plain words; each deviation
-from the plan with the reason the code forced it; the doc-discipline
-check's report, or "clean", with its "Needs a human" findings; the review's
-outcome, with the Inbox message id the owner marked; the run ids and their state for the
-reviewed head, and any superseded heads, or the local checks that ran when
-there is no CI; the command `git diff <base>...<slug>`. After the issues,
-one line naming the local services the build started and removed, or
-"none". Then one line
-saying the merge waits for `/tk-merge`.
+from the plan with the reason the code forced it; the comment checks in
+three lines, which are the last line of the step check at the reviewed
+head, the number of parts read and the number of stops of each reader round
+with how many each way closed, and the audit's findings applied and
+declined, each line "not run" when its saved file is missing, followed by the
+audit's "Needs a human" findings; the review's outcome, with the Inbox
+message id the owner marked; the run ids and their state for the reviewed
+head, and any superseded heads, or the local checks that ran when there is
+no CI; the command `git diff <base>...<slug>`. After the issues, one line
+naming the local services the build started and removed, or "none". Then one
+line saying the merge waits for `/tk-merge`.
 
 Then wait. Do not ask whether to merge; the owner invokes `/tk-merge` when
 they are ready.

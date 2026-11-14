@@ -74,7 +74,8 @@ state as it is, not as a story: a merged issue is a fast-forward, so its
 commits sit on master with no merge commit, its branch is gone, its issue
 is closed and its plan is deleted; that is the workflow working. A leftover
 is a dirty tree, master behind origin, a local branch whose PR is merged or
-closed, or a plan whose issue is closed. In the seed stage each leftover is
+closed, or a plan whose issue is closed. In the
+seed stage each leftover is
 a line under Open questions, not a reason to stop, unless it is the branch
 or plan of an issue in the unit; in the later stages the stage's entry
 check says what a leftover means.
@@ -100,21 +101,24 @@ check says what a leftover means.
   this machine only: a fresh worktree or another machine does not have it.
 - The plan is deleted by the merge stage, after its issue lands. By then
   every reason it carried is in a comment or a document; the build stage's
-  `/doc-discipline check` against the plan makes sure of that.
+  `/doc-audit` run, which reconciles the code against the plan, makes sure
+  of that. The build's comment checks save their answers beside the plan,
+  as `.plans/<slug>-read-*.md` and `.plans/<slug>-audit.md`, and the merge
+  stage deletes them with the plan.
 
 ## Tools
 
 The stage skills say what to do; these skills say how:
 
-| Concern        | Skill and section                                                         | Values here                                                   |
-| -------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| Pull requests  | `~/.claude/skills/github/`, "Create", "Inspect"                           | repo `solatis/trapperkeeper`, resolved by `gh` from the clone |
-| CI             | `~/.claude/skills/github/`, "Watching checks"                             | `scripts/gh-watch.sh <sha>`, `CHECKPOINT=7200`                |
-| Merging        | `~/.claude/skills/github/`, "Fast-forward merge", "Stacked pull requests" | base `master`                                                 |
-| Rebasing       | `~/.claude/skills/github/`, "Review follow-ups"                           | only where a stage skill says so                              |
-| Plan review    | Inbox `send_message`, the plans in `attachments`                          | all plans of the unit in one message                          |
-| Code review    | Inbox `get_guide_brief`, then `submit_guide`                              | one PR per message, patch `git diff <base>...<slug>`          |
-| Comment policy | `/doc-discipline`                                                         | `read` before writing; `check <paths> <plan>` before the push |
+| Concern        | Skill and section                                                                                               | Values here                                                                                                                                                                                         |
+| -------------- | --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pull requests  | `~/.claude/skills/github/`, "Create", "Inspect"                                                                 | repo `solatis/trapperkeeper`, resolved by `gh` from the clone                                                                                                                                       |
+| CI             | `~/.claude/skills/github/`, "Watching checks"                                                                   | `scripts/gh-watch.sh <sha>`, `CHECKPOINT=7200`                                                                                                                                                      |
+| Merging        | `~/.claude/skills/github/`, "Fast-forward merge", "Stacked pull requests"                                       | base `master`                                                                                                                                                                                       |
+| Rebasing       | `~/.claude/skills/github/`, "Review follow-ups"                                                                 | only where a stage skill says so                                                                                                                                                                    |
+| Plan review    | Inbox `send_message`, the plans in `attachments`                                                                | all plans of the unit in one message                                                                                                                                                                |
+| Code review    | Inbox `get_guide_brief`, then `submit_guide`                                                                    | one PR per message, patch `git diff <base>...<slug>`                                                                                                                                                |
+| Comment policy | the doc-discipline skill, its `scripts/check_steps.py` and `scripts/change_parts.py`, `/doc-read`, `/doc-audit` | the guide loaded before writing; after the last code commit the step check, `/doc-read <base>...HEAD <part>` for each part of the change and `/doc-audit <base>...HEAD plan: .plans/<slug>-plan.md` |
 
 `CHECKPOINT=7200` because the watcher runs beside the owner's review, which
 can take hours.
@@ -190,8 +194,8 @@ approves that review, as "The Inbox" says, and opens no stage either.
 | Stage    | Opened by                                    | You produce                                                                                                                                                                    | You never                                                                                                   | Ends with                                            |
 | -------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
 | 1. Seed  | `/tk-start <task or #n>` or `/tk-start-next` | the seed report, and in `/tk-start-next` the close of a met active milestone                                                                                                   | write, create issues, branch, commit                                                                        | a wait for `/tk-plan`                                |
-| 2. Plan  | `/tk-plan`                                   | the GitHub issues that do not exist yet, one plan per issue, the review of all of them, and on approval `Status: approved` in each                                             | touch code, tests, config or any tracked file; branch; commit                                               | the plan-stage message, then a wait for `/tk-build`  |
-| 3. Build | `/tk-build`                                  | per issue: the branch, the plan's commits, the doc-discipline runs, the push, the PR, its CI run and its Inbox review                                                          | merge; deviate from a plan without saying so; invent a reason for a comment; ask about merging before green | the build-stage message, then a wait for `/tk-merge` |
+| 2. Plan  | `/tk-plan`                                   | the GitHub issues that do not exist yet, one plan per issue that passes the step check, the review of all of them, and on approval `Status: approved` in each                  | touch code, tests, config or any tracked file; branch; commit                                               | the plan-stage message, then a wait for `/tk-build`  |
+| 3. Build | `/tk-build`                                  | per issue: the branch, the plan's commits, the comment checks (the step check, `/doc-read`, `/doc-audit`), the push, the PR, its CI run and its Inbox review                   | merge; deviate from a plan without saying so; invent a reason for a comment; ask about merging before green | the build-stage message, then a wait for `/tk-merge` |
 | 4. Merge | `/tk-merge`                                  | per PR in dependency order: the fast-forward, the push of `master`, the branch deletion, the issue closed, the plan deleted, and the milestone closed when the PR completed it | merge a head that is not the reviewed, green head; merge without the owner having invoked `/tk-merge`       | one line per merged PR                               |
 
 A session may begin at any stage from the tree, the plans and GitHub.

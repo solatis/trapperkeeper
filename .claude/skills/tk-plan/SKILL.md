@@ -54,7 +54,8 @@ unit is already through this stage: say so and leave it out.
    `Depends on #<n>` for a stacked issue. `-m` is set when the unit serves
    the active milestone. Note each new issue's number.
 
-2. `/doc-discipline read`.
+2. Load the doc-discipline skill, and read its `narrative.md` and
+   `placement.md`.
 3. Read `plan-shape.md` and write one plan per issue,
    `.plans/<slug>-plan.md`, in that shape, with `Status: draft`. Create
    `.plans/` if it is missing; it is gitignored, so nothing here shows in
@@ -73,6 +74,20 @@ unit is already through this stage: say so and leave it out.
    other plan's slug, and its commits assume only what the other plan's
    commits deliver.
 
+   Run the step check on each plan:
+
+   ```
+   python3 .claude/skills/doc-discipline/scripts/check_steps.py --markdown .plans/<slug>-plan.md
+   ```
+
+   Fix every finding in the sketches, and run the check again until its
+   last line reports 0 findings. Keep that last line of each plan for
+   step 5. Then read every sketch whose style line says `bare`. Its
+   `because:` line says why none of the function's lines makes the reader
+   stop. When a sketch lacks that reason, write it if it holds for every
+   line of the function. Otherwise sketch the notes or the walkthrough the
+   function needs and change its style line.
+
 5. Put all of the unit's draft plans to the owner in one Inbox message,
    with `send_message` in the unit's thread, as `/tk-workflow`, The Inbox,
    says. `attachments` lists the plans in landing order. The message
@@ -80,7 +95,8 @@ unit is already through this stage: say so and leave it out.
    end your turn.
 
    The body, per plan in landing order: one line saying what the issue
-   delivers, then two labeled lists built from the plan's Rationale rows,
+   delivers, one line with the last line of the plan's step check from
+   step 4, then two labeled lists built from the plan's Rationale rows,
    every row in exactly one of them. "Settled by you:" one line per owner
    row, the decision and the date, nothing else. "Proposed here:" one line
    per proposal row, the decision, the alternative that lost and why, so
@@ -97,8 +113,10 @@ unit is already through this stage: say so and leave it out.
    - A reply: the owner's redirect, also when its words sound like a yes.
      Fold every annotation and every point of the reply into the plan it
      concerns, and send all of the unit's plans again from step 5, with
-     `reply_to` set to the reply's id. Never start code on a plan the
-     owner redirected.
+     `reply_to` set to the reply's id. A remark about comments rewrites
+     every sketch it concerns, as `plan-shape.md`, Design, says, and the
+     step check of step 4 runs again on the plans it changed. Never start
+     code on a plan the owner redirected.
    - The thread resolved without a "Looks good": stop and report. The owner decides
      in the conversation.
 
@@ -109,7 +127,7 @@ questions the plans recorded, each with the recommendation the approval has
 now settled; one line saying the build waits for `/tk-build`. The message
 goes to the conversation, not to the Inbox thread.
 
-Correct: you create issue #14 for the one new issue, read doc-discipline,
+Correct: you create issue #14 for the one new issue, load doc-discipline,
 write `.plans/server-logging-plan.md` and `.plans/metrics-endpoint-plan.md`,
 check them, send both to the Inbox in one message and end your turn. The
 owner marks it "Looks good"; you set both statuses, post the message and wait; the

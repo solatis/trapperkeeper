@@ -41,12 +41,20 @@ CI workflows in the tree (empty means no CI):
 
 !`ls .github/workflows/ 2>/dev/null || true`
 
+Step check of each open pull request's head branch against its base branch,
+the last line per branch (0 findings means clean):
+
+!`if prs=$(gh pr list --state open --json headRefName,baseRefName --jq '.[] | "\(.baseRefName) \(.headRefName)"' 2>&1); then printf '%s\n' "$prs" | while read -r b h; do [ -n "$h" ] && echo "$h: $(python3 .claude/skills/doc-discipline/scripts/check_steps.py --deny 'doc/adr/' --deny '\(owner,' --git-range "origin/$b...origin/$h" --markdown-too 2>&1 | tail -n 1)"; done; else echo "$prs"; fi || true`
+
 The tree is clean, master is in sync with origin, and for each PR to merge:
 it is open; its head SHA on GitHub is the local branch's head (`git
 rev-parse <slug>`); and with CI in the tree, every check on that head is
-`SUCCESS`, `SKIPPED` or `NEUTRAL`. The checks are read from the list above
-or from `gh-watch.sh <sha>` (exit 0), never from the conversation: a
-build-stage message that says green is a claim, and GitHub is the evidence.
+`SUCCESS`, `SKIPPED` or `NEUTRAL`. A step-check finding on a pull
+request's branch, or a step check that did not run for it, is a stop for
+that pull request and for every pull request stacked on it. The checks are
+read from the list above or from `gh-watch.sh <sha>` (exit 0), never from
+the conversation: a build-stage message that says green is a claim, and
+GitHub is the evidence.
 Anything else (a dirty tree, a head that differs, a check `IN_PROGRESS`,
 `QUEUED` or `FAILURE`, a PR whose base is a branch not being merged in this
 run) is a stop for that PR and for every PR stacked on it; say which, and
@@ -85,8 +93,16 @@ to):
 5. Delete the branch locally and on origin: `git branch -d <slug> && git
 push origin --delete <slug>`.
 6. Close the issue: `gh issue close <issue> -c "Landed in #<n>"`.
-7. Delete the plan: `rm .plans/<slug>-plan.md`. Every reason it carried is
-   in the code or the documents; the build stage's check made sure of that.
+7. Delete the plan and the files of the build's comment checks:
+
+   ```
+   rm -f .plans/<slug>-plan.md .plans/<slug>-read-1.md \
+     .plans/<slug>-read-2.md .plans/<slug>-audit.md
+   ```
+
+   Every reason the plan carried is in the code or the documents. The build
+   stage's `/doc-audit` run made sure of that.
+
 8. Close the milestone this PR completed. Read the issue's milestone with
    `gh issue view <issue> --json milestone -q .milestone.number`, and skip
    this step when it has none. When `gh api
