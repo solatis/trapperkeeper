@@ -10,17 +10,19 @@ the crate does not implement that yet.
 
 **Map**:
 
-| File              | What                                                                                   | When to read                                                                                 |
-| ----------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `Cargo.toml`      | the package name; the dependencies and their features                                  | changing a dependency; why floats parse exactly; why no UUID generator                       |
-| `src/lib.rs`      | the modules and what the crate exports                                                 | what a user of the crate can reach                                                           |
-| `src/expr.rs`     | the expression tree, a path segment and the type names                                 | the JSON key of a kind of node; adding a function or a method                                |
-| `src/path.rs`     | the field path and its segments                                                        | how a condition names a field; the JSON of a key, an index and the wildcard                  |
-| `src/rule.rs`     | the rule, group, condition, value, operator, policy, field type and action types       | the JSON form of a rule; a default; adding a field or an operator                            |
-| `src/limits.rs`   | the limits as constants, each with where its number came from                          | how deep a path, how long a list, how many conditions or scope tags                          |
-| `src/validate.rs` | `validate`, the refusal reasons and the JSON pointer of a refusal                      | which operator fits which type; why a rule was refused; adding a shape rule                  |
-| `tests/format.rs` | one literal rule document that pins the names and the order of the JSON form           | what a rule looks like in JSON; a renamed property                                           |
-| `tests/model.rs`  | the strategies for valid rules, the defects, and the round-trip and refusal properties | how validation is tested; adding a refusal reason and its defect; generating rules elsewhere |
+| File                  | What                                                                                   | When to read                                                                                 |
+| --------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `Cargo.toml`          | the package name; the dependencies and their features                                  | changing a dependency; why floats parse exactly; why no UUID generator                       |
+| `src/lib.rs`          | the modules and what the crate exports                                                 | what a user of the crate can reach                                                           |
+| `src/expr.rs`         | the expression tree, a path segment and the type names                                 | the JSON key of a kind of node; adding a function or a method                                |
+| `src/path.rs`         | the field path and its segments                                                        | how a condition names a field; the JSON of a key, an index and the wildcard                  |
+| `src/rule.rs`         | the rule, group, condition, value, operator, policy, field type and action types       | the JSON form of a rule; a default; adding a field or an operator                            |
+| `src/limits.rs`       | the limits as constants, each with where its number came from                          | how deep a path, how long a list, how many conditions or scope tags                          |
+| `src/validate.rs`     | `validate`, the refusal reasons and the JSON pointer of a refusal                      | which operator fits which type; why a rule was refused; adding a shape rule                  |
+| `tests/common/mod.rs` | the strategies for trees                                                               | generating trees in another test                                                             |
+| `tests/tree.rs`       | one row per kind of node, the round trip and the refusals of the tree's JSON           | what a node looks like in JSON; a renamed key                                                |
+| `tests/format.rs`     | one literal rule document that pins the names and the order of the JSON form           | what a rule looks like in JSON; a renamed property                                           |
+| `tests/model.rs`      | the strategies for valid rules, the defects, and the round-trip and refusal properties | how validation is tested; adding a refusal reason and its defect; generating rules elsewhere |
 
 **Invariants**:
 
@@ -31,6 +33,7 @@ the crate does not implement that yet.
   server, the store or HTTP breaks the milestone goal that a pipeline can
   embed the crate.
 - Every struct of the model refuses an unknown JSON property.
+- A new kind of node gets its row in `tests/tree.rs`.
 - The engine never generates a `rule_id`.
 - A new refusal reason gets a defect in `tests/model.rs`, and a valid rule
   with that one defect gets that one refusal.
