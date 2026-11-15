@@ -1,6 +1,6 @@
 # 0006. Conformance fixtures are the evaluation spec
 
-Date: 2026-11-13.
+Date: 2026-11-14.
 
 ## Context
 
@@ -17,8 +17,9 @@ the expected outcome of each (owner, 2026-11-11). An expected outcome is one
 of three: matched, not matched, or not evaluated with the fault that caused
 it (`adr/0005`).
 A rule that gives unknown counts as not matched. A second entry for the
-negated rule pins the unknown, because the negated rule matches after false
-and does not match after unknown (owner, 2026-11-14).
+negated rule pins the unknown. The negated rule matches a record on which the
+rule gives false, and it does not match one on which the rule gives unknown
+(owner, 2026-11-14).
 
 The runner runs each entry as single records and as one batch, and both give
 the same outcomes (`adr/0037`).
