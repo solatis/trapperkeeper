@@ -16,8 +16,8 @@ A fixture file covers one subject. An entry is a rule with many records and
 the expected outcome of each (owner, 2026-11-11). An expected outcome is one
 of three: matched, not matched, or not evaluated with its cause (`adr/0005`).
 A rule that gives unknown counts as not matched. A second entry for the
-negated rule, which does not match either, pins the unknown (owner,
-2026-11-14).
+negated rule pins the unknown, because the negated rule matches after false
+and does not match after unknown (owner, 2026-11-14).
 
 The runner runs each entry as single records and as one batch, and both give
 the same outcomes (`adr/0037`).
