@@ -166,7 +166,6 @@ fn canonical_in(scope: &[String], depth: u32) -> BoxedStrategy<Expr> {
             make(spliced.collect())
         })
     };
-    // `not_none` gives an operand that is not the literal `None`.
     let not_none = || one().prop_filter("the literal None", |e| !matches!(**e, Expr::None));
     // The test of a quantifier is generated with its name added to `scope`,
     // and its list without it. The parser resolves the list outside the
