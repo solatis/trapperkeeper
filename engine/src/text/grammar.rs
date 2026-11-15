@@ -465,7 +465,7 @@ fn comparison(i: &Input<'_>, p: usize) -> Reply<Expr> {
 }
 
 /// The node of a comparison from its parts, or why it is none: a chain of
-/// comparisons, or a comparison with the literal `None`.
+/// comparisons.
 fn build_comparison(
     i: &Input<'_>,
     ((left, left_at), tail): (Placed<Expr>, Option<(Tail, Chained)>),
@@ -504,40 +504,12 @@ fn build_comparison(
         });
     }
     // `is None` and `is not None` are complete nodes. A binary tail gives
-    // its parts for the check of `None` below.
-    let (make, op_at, right, right_at) = match tail {
-        Tail::IsNone(false) => return Ok(Expr::IsNone(Box::new(left))),
-        Tail::IsNone(true) => return Ok(Expr::IsNotNone(Box::new(left))),
-        Tail::Binary(make, op_at, right, right_at) => (make, op_at, right, right_at),
-    };
-    // A comparison with a missing value turns the rule off (ADR-0005), so
-    // `x == None` could never do what its author meant. The refusal gives
-    // the `is None` form of the same test, with `None` on either side.
-    // `none_test` is the operator and the form that replaces it.
-    let none_test = match text(&op_at) {
-        "==" => Some(("==", "is None")),
-        "!=" => Some(("!=", "is not None")),
-        // `x < None` is built as it is.
-        _ => None,
-    };
-    // Each flag says whether its operand is the literal `None`.
-    let (left_none, right_none) = (matches!(left, Expr::None), matches!(right, Expr::None));
-    if let Some((op, is)) = none_test.filter(|_| left_none || right_none) {
-        // The error covers the operator and the `None` beside it, and the
-        // other operand is what the rewrite tests.
-        let (at, operand) = if right_none {
-            // `x == None`: bytes 2 to 9, `== None`, and the operand `x`.
-            (op_at.start..right_at.end, &left_at)
-        } else {
-            // `None == x`: bytes 0 to 7, `None ==`, and the operand `x`.
-            (left_at.start..op_at.end, &right_at)
-        };
-        // `write` is `x is None`, or `x is not None` for `x != None`.
-        let write = format!("{} {is}", text(operand));
-        let reason = Reason::NoneComparison { op, write };
-        return Err(SyntaxError { at, reason });
+    // the builder of its node and its right operand.
+    match tail {
+        Tail::IsNone(false) => Ok(Expr::IsNone(Box::new(left))),
+        Tail::IsNone(true) => Ok(Expr::IsNotNone(Box::new(left))),
+        Tail::Binary(make, _, right, _) => Ok(make(Box::new(left), Box::new(right))),
     }
-    Ok(make(Box::new(left), Box::new(right)))
 }
 
 // The arithmetic operators of each level and the builder of each one's node.

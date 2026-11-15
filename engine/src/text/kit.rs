@@ -233,8 +233,8 @@ pub(super) fn map<T, U>(a: impl Parser<T>, f: impl Fn(T) -> U) -> impl Parser<U>
 }
 
 /// Like `map`, and `f` may refuse the value with a reason. `f` also gets
-/// the bytes the value came from. `comparison` refuses `x == None` this way:
-/// the tokens matched and their meaning is wrong.
+/// the bytes the value came from. `comparison` refuses `0 < amount < 10`
+/// this way: the tokens matched and their meaning is wrong.
 pub(super) fn try_map<T, U>(
     a: impl Parser<T>,
     f: impl Fn(&Input<'_>, T, Range<usize>) -> Result<U, SyntaxError>,
@@ -245,7 +245,7 @@ pub(super) fn try_map<T, U>(
             return Ok(None);
         };
         // The refusal stands at `q`, the index after the tokens that `a`
-        // read. In `x == None` that is index 3, the end.
+        // read. In `0 < amount < 10` that is index 5, the end.
         let value = f(i, x, i.span(p, q)).map_err(|error| Refusal { pos: q, error })?;
         Ok(Some((value, q)))
     }

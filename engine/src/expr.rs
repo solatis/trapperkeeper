@@ -59,7 +59,9 @@ pub enum Expr {
     And(Vec<Expr>),
     Or(Vec<Expr>),
 
-    // Comparisons. Each holds its left and its right operand.
+    // Comparisons. Each holds its left and its right operand. An `Eq` or an
+    // `Ne` with the literal `None` as an operand is the test for a missing
+    // value, as `IsNone` and `IsNotNone` are (ADR-0005).
     Eq(Box<Expr>, Box<Expr>),
     Ne(Box<Expr>, Box<Expr>),
     Lt(Box<Expr>, Box<Expr>),

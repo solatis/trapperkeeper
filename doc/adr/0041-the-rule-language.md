@@ -74,10 +74,13 @@ A rule may run over several lines. A number may hold underscores, and an
 integer may be hexadecimal. A membership list may hold fields (owner,
 2026-11-14). A comment is refused (owner, 2026-11-13).
 
-A text takes single or double quotes and has a raw form. `x == None` is
-refused, and its error says to write `x is None`.
+A text takes single or double quotes and has a raw form.
 
-`adr/0005` says what a rule does with a value it cannot use.
+`x == None` means `x is None`, and `x != None` means `x is not None`
+(`adr/0005`).
+
+`adr/0005` says what a rule does with a value that is not there and with an
+operation that cannot be done.
 
 ## Rejected alternatives
 
@@ -90,7 +93,8 @@ A language of our own.
 
 Declared field types and an `any` type.
 
-Python's answers where they surprise, such as `None != 5` being true.
+Python's answers for a field that holds a null, such as `x != 5` being true
+when `x` is not there. The literal `None` follows Python (`adr/0005`).
 
 Truthiness.
 

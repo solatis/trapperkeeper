@@ -43,7 +43,9 @@ const UNARY: [Unary; 18] = [
 
 /// The kinds of node with two operands that have no rule of the canonical
 /// form.
-const BINARY: [Binary; 13] = [
+const BINARY: [Binary; 15] = [
+    Expr::Eq,
+    Expr::Ne,
     Expr::Lt,
     Expr::Le,
     Expr::Gt,
@@ -160,16 +162,6 @@ fn canonical_in(scope: &[String], depth: u32) -> BoxedStrategy<Expr> {
             make(spliced.collect())
         })
     };
-    // No operand of `==` or `!=` is the literal `None`, because the parser
-    // refuses `x == None`, `None == x` and `x != None`.
-    let equality = |make: Binary| {
-        let no_none = |(l, r): &(Box<Expr>, Box<Expr>)| {
-            !matches!(**l, Expr::None) && !matches!(**r, Expr::None)
-        };
-        (one(), one())
-            .prop_filter("an operand is None", no_none)
-            .prop_map(move |(l, r)| make(l, r))
-    };
     // The test of a quantifier is generated with its name added to `scope`,
     // and its list without it. The parser resolves the list outside the
     // name, so `any(t for i in i)` reads its list `i` as a field. The test
@@ -201,8 +193,6 @@ fn canonical_in(scope: &[String], depth: u32) -> BoxedStrategy<Expr> {
         (select(BINARY.to_vec()), one(), one()).prop_map(|(make, a, b)| make(a, b)),
         chain(Expr::And),
         chain(Expr::Or),
-        equality(Expr::Eq),
-        equality(Expr::Ne),
         (one(), one(), one()).prop_map(|(test, then, otherwise)| Expr::If {
             test,
             then,
@@ -263,6 +253,13 @@ const VALID: &[(&str, &str)] = &[
         "status not in ('paid', 'shipped') or discount is not None",
         "status not in (\"paid\", \"shipped\") or discount is not None",
     ),
+    // `==` and `!=` with `None` test for a missing value, with `None` on
+    // either side.
+    ("x == None", "x == None"),
+    ("None == x", "None == x"),
+    ("x != None", "x != None"),
+    // A `None` in a membership list matches a missing value.
+    ("x in (\"paid\", None)", "x in (\"paid\", None)"),
     (
         "items[0].lines[2].sku == 'a\\'b\\n'",
         "items[0].lines[2].sku == \"a'b\\n\"",
@@ -431,15 +428,6 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
             7..9,
             foreign("<>", "!="),
             "`<>` is not an operator here; write `!=`",
-        ),
-        (
-            "x == None",
-            2..9,
-            Reason::NoneComparison {
-                op: "==",
-                write: "x is None".to_owned(),
-            },
-            "`==` does not test for a missing value; write `x is None`",
         ),
         (
             "0 < amount < 10",
@@ -813,24 +801,6 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
                 found: "\\u12".to_owned(),
             },
             "unknown escape `\\u12` in a text",
-        ),
-        (
-            "None == x",
-            0..7,
-            Reason::NoneComparison {
-                op: "==",
-                write: "x is None".to_owned(),
-            },
-            "`==` does not test for a missing value; write `x is None`",
-        ),
-        (
-            "x != None",
-            2..9,
-            Reason::NoneComparison {
-                op: "!=",
-                write: "x is not None".to_owned(),
-            },
-            "`!=` does not test for a missing value; write `x is not None`",
         ),
         (
             "a > 1 and\n  b >\n  or c",
