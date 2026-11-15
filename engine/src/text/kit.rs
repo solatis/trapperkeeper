@@ -518,30 +518,29 @@ pub(super) fn delimited<O, T, C>(
 
 /// The error the author gets, from the refusal, if any, and the log.
 pub(super) fn explain(i: &Input<'_>, refusal: Option<Refusal>) -> SyntaxError {
-    // 1. a refusal, unless a note lies further in the text
-    // 2. a bad token at the furthest note
-    // 3. the furthest notes, as "expected ..., found ..."
+    // Three cases are tested in order, and the first that applies returns:
+    // a refusal, a bad token at the furthest note, and the furthest notes
+    // as "expected ..., found ...". The refusal and the bad token have
+    // their place in the chain for a reason, which the note at each gives.
 
     // The parse is over, so nothing writes the log while `explain` reads it.
     let log = i.log.borrow();
 
-    // 1. In `record.` the refusal that `record` is the whole record stands
-    //    at `record`, and the note "a name" stands after the dot. The note
-    //    is further, and it is the mistake. In `lenn(name) > 3` no note
-    //    lies past the refusal at index 1, so the refusal is the error.
-    //    `TooComplex` wins over any note, because the parse stopped there.
+    // A refusal is the error unless a note lies further. In `record.` the
+    // note "a name" after the dot lies past the refusal at `record`, and it
+    // is the mistake. `TooComplex` wins over any note, because the parse
+    // stopped there.
     if let Some(Refusal { pos, error }) = refusal
         && (pos >= log.pos || error.reason == Reason::TooComplex)
     {
         return error;
     }
-    // 2. The error points at the token of the furthest notes. When that
-    //    token is bad, the text could not be read there at all, so the
-    //    tokenizer's reason says more than a list of what was wanted. In
-    //    `amount > 100;` the reason is the unexpected `;`.
     let token = i.tok(log.pos);
     let at = token.at.clone();
     let found = match &token.kind {
+        // The text could not be read at a bad token at all, so the
+        // tokenizer's reason says more than a list of what was wanted, as
+        // the unexpected `;` of `amount > 100;`.
         Tok::Bad(reason) => {
             let reason = reason.clone();
             return SyntaxError { at, reason };
@@ -551,9 +550,8 @@ pub(super) fn explain(i: &Input<'_>, refusal: Option<Refusal>) -> SyntaxError {
         // In `x not y` the token is `y`.
         _ => Found::Token(i.slice(&at).to_owned()),
     };
-    // 3. With no text recorded by `then_after`, the token before the place
-    //    stands in for it. In `x not y` that is `not`. The first token,
-    //    as in `in > 5`, has no token before it and gets no "after".
+    // With no text recorded by `then_after`, the token before the place
+    // stands in for it, `not` in `x not y`. The first token has none.
     let before = || (log.pos > 0).then(|| i.tok(log.pos - 1).at.clone());
     let after = log.after.clone().or_else(before);
     // `with_words` in the grammar fills `nearest` when a word is near.

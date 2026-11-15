@@ -49,44 +49,50 @@ type Quantifier = fn(String, Box<Expr>, Box<Expr>) -> Expr;
 ///
 /// The first syntax error in `text`.
 pub fn parse(text: &str) -> Result<Expr, SyntaxError> {
-    // 1. split the text into tokens
-    // 2. run the grammar over the tokens
-    // 3. on success, resolve the names
-    // 4. on failure, pick the reason
+    // Parsing splits the text into tokens, runs the grammar, and then either
+    // resolves the names of the tree or builds the error.
+    //
+    // 1. We split the text into tokens. `lex` does not fail. A text it
+    //    cannot split ends in a `Bad` token, and the grammar reports it only
+    //    when it gets there.
+    // 2. We run the grammar from the first token. It gives a tree, no match,
+    //    or a refusal such as `UnknownFunction` for `lenn(name) > 3`.
+    // 3. On a tree, we resolve the names. The grammar holds every bare name
+    //    as an element, because in `any(test for name in list)` the name
+    //    comes after the test that uses it.
+    // 4. Otherwise we build the error from the refusal and the log of the
+    //    token tests. A generic "expected" error first gets two targeted
+    //    reasons tried, and neither changes which texts are valid.
 
-    // 1. `lex` does not fail. A text it cannot split ends in a `Bad` token,
-    //    as the `;` of `amount > 100;`, and the grammar meets it there.
+    // 1. split into tokens
     let input = Input::new(text, lex(text));
-    // 2. `rule` reads from the first token. It gives a tree, no match, or a
-    //    refusal such as `UnknownFunction` for `lenn(name) > 3`.
+
+    // 2. run the grammar
     let refusal = match rule(&input, 0) {
         Ok(Some((mut tree, _))) => {
-            // 3. The grammar holds every bare name as an element, because
-            //    in `any(test for name in list)` the name comes after the
-            //    test that uses it.
+            // 3. resolve the names
             resolve(&mut tree, &mut Vec::new());
             return Ok(tree);
         }
-        // 2. No match leaves the log of the token tests as the only source
-        //    of the error, as for `a > 1 b`.
+        // Without a match, the log is the only source of the error, as for
+        // `a > 1 b`.
         Ok(None) => None,
         Err(refusal) => Some(refusal),
     };
-    // 4. `explain` builds the error from the refusal and the log. A refusal
-    //    wins unless a note lies further in the text.
+
+    // 4. build the error
     let error = explain(&input, refusal);
-    // 4. A refusal or a tokenizer's reason already says what is wrong, so it
-    //    is returned as it is. `0 < amount < 10` returns here.
+    // A refusal or a tokenizer's reason already says what is wrong, as for
+    // `0 < amount < 10`.
     if !matches!(error.reason, Reason::Expected { .. }) {
         return Err(error);
     }
-    // 4. Two targeted reasons are tried before the generic one, and neither
-    //    changes which texts are valid: a name that is a word in the wrong
-    //    case, as `AND` in `a > 1 AND b < 2`, and a Python keyword right
-    //    before the failure, as `lambda` in `lambda x: x > 1`.
+    // A word in the wrong case is tried first, as `AND` in `a > 1 AND b <
+    // 2`, and then a Python keyword right before the failure, as `lambda`
+    // in `lambda x: x > 1`.
     let targeted = miscased_word(&input).or_else(|| python_only_word(&input));
-    // 4. Without a targeted reason, the generic error gets what the grammar
-    //    knows of the name at its place, as "did you mean `and`?" for `adn`.
+    // Without a targeted reason, the generic error gets what the grammar
+    // knows of the name at its place, as "did you mean `and`?" for `adn`.
     Err(targeted.unwrap_or_else(|| with_words(&input, error)))
 }
 
@@ -1082,41 +1088,46 @@ pub(super) const FUNCTIONS: [(&str, Arguments); 8] = [
 /// Reads `len(name)`, `isinstance(price, int)` and `re.search(r"a", x)`.
 /// The name picks how the arguments are read.
 fn call(i: &Input<'_>, p: usize) -> Reply<Expr> {
-    // 1. read the name: a plain name, or `re` or `math`, a dot and a name
-    // 2. see the `(`
-    // 3. look the name up
-    // 4. read the arguments in the way the function asks for
+    // A call is a name, a `(` and arguments that the name decides how to
+    // read.
+    //
+    // 1. We read the name: a plain name, or `re` or `math`, a dot and a
+    //    name. Without one the rule does not match.
+    // 2. We look for the `(`. A plain name without it is no call, so `atom`
+    //    reads a field and `len == 1` is a rule about a field `len`.
+    // 3. We look the name up in the closed list. The lookup comes after the
+    //    `(`, so only a name that is called can be an unknown function.
+    // 4. We read the arguments in the way the function asks for. This is
+    //    the only rule that reads a name and its `(`, so no other
+    //    alternative reads the same bracket again.
 
-    // 1. `function_name` gives the name and whether it has a module: `len`
-    //    and false for `len(name)`, `re.search` and true for
-    //    `re.search(r"a", x)`. `q` is the token after the name.
+    // 1. read the name
+    // `function_name` gives the name and whether it has a module, `len` and
+    // false for `len(name)`. `q` is the token after the name.
     let Some(((function, in_module), q)) = function_name(i, p)? else {
-        // 1. No name stands here, as at the `100` of `100 > x`.
         return Ok(None);
     };
-    // 1. `at` holds the bytes of the name: `lenn` is 0 to 4 of
-    //    `lenn(name) > 3`.
+    // The bytes of the name, 0 to 4 of `lenn(name) > 3`.
     let at = i.span(p, q);
 
-    // 2. A plain name without `(` is no call. The rule does not match, and
-    //    `atom` reads a field, so `len == 1` is a rule about a field `len`.
-    //    After `re.search` the `(` must follow, so it is not hidden there.
+    // 2. look for the `(`
     let open = punct("(");
+    // After `re.search` the `(` must follow, so it is not hidden there, and
+    // `re.search == 1` gets "expected `(` after `search`".
     let seen = if in_module {
         open(i, q)?
     } else {
-        // 2. Hidden, or `amount b` would get "expected `(`, an operator, ...".
+        // Hidden, or `amount b` would get "expected `(`, an operator, ...".
         hidden(open)(i, q)?
     };
-    // 2. Without the `(` the rule does not match. The note of `open` gives
-    //    `re.search == 1` the error "expected `(` after `search`".
     if seen.is_none() {
         return Ok(None);
     }
 
-    // 3. An unknown name is refused over the bytes of the name, with the
-    //    nearest known one, as `lenn` with `len`.
+    // 3. look the name up
     let Some(&(name, arguments)) = FUNCTIONS.iter().find(|(n, _)| *n == function) else {
+        // The refusal covers the bytes of the name and gives the nearest
+        // known one, as `len` for `lenn`.
         let nearest = nearest(&function, &names(&FUNCTIONS));
         let name = function;
         let reason = Reason::UnknownFunction { name, nearest };
@@ -1124,9 +1135,9 @@ fn call(i: &Input<'_>, p: usize) -> Reply<Expr> {
         return Err(Refusal { pos: q, error });
     };
 
-    // 4. This is the only rule that reads a name and its `(`, so no other
-    //    alternative reads the same bracket again. Each arm builds its
-    //    parser of the arguments and runs it from the `(` at `q`.
+    // 4. read the arguments
+    // Each arm builds its parser of the arguments and runs it from the `(`
+    // at `q`.
     match arguments {
         Arguments::One(make) => one_argument(name, make)(i, q),
         Arguments::Quantifier(make) => quantifier_arguments(name, make)(i, q),
