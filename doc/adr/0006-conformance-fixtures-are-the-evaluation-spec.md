@@ -15,6 +15,9 @@ reviewed once and enforced in every SDK.
 A fixture file covers one subject. An entry is a rule with many records and
 the expected outcome of each (owner, 2026-11-11). An expected outcome is one
 of three: matched, not matched, or not evaluated with its cause (`adr/0005`).
+A rule that gives unknown counts as not matched. A second entry for the
+negated rule, which does not match either, pins the unknown (owner,
+2026-11-14).
 
 The runner runs each entry as single records and as one batch, and both give
 the same outcomes (`adr/0037`).
@@ -26,8 +29,9 @@ simple (owner, 2026-11-12).
 There are no fixtures for validation, because no SDK validates a rule
 (`adr/0033`).
 
-The values of a record are ints, floats, text, booleans and lists. A rule
-declares no field types (`adr/0041`).
+The values of a record are ints, floats, text, booleans and lists. A record
+may leave a key out, and a value may be a null. A rule declares no field
+types (`adr/0041`).
 
 ## Rejected alternatives
 
@@ -39,6 +43,9 @@ Entries that hold a bare condition which the runner wraps into a rule,
 because such an entry cannot express a whole rule.
 
 Fixtures for validation, because nothing would run them.
+
+A fourth outcome for unknown, because every SDK's runner would need a way to
+read unknown out of the engine.
 
 ## Consequences
 
