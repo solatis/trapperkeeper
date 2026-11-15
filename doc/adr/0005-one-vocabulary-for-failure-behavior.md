@@ -1,6 +1,6 @@
 # 0005. One vocabulary for failure behavior
 
-Date: 2026-11-14.
+Date: 2026-11-15.
 
 ## Context
 
@@ -24,7 +24,7 @@ else is "no value" (`adr/0036`). An index beyond the end of a list, a list
 that is absent under `any` or `all`, and a null element of a list are nulls
 too (owner, 2026-11-14).
 
-A rule still applies to a record that holds a null, and the null is not
+A rule applies to a record that holds a null, and the null is not
 reported. When no record has a field that a rule reads, the sensor logs no
 warning and sends no report (owner, 2026-11-14).
 
@@ -83,10 +83,10 @@ A fault is an operation that cannot be done on values that are there (owner,
 - an integer overflow
 - a value that is no boolean where a condition is expected
 
-A rule that meets a fault on a record does not apply to that record, and this
-record then calls the rule off for that record. The rule behaves as if it did
-not exist for that record, and it never raises into the pipeline (owner,
-2026-11-11). The fault is reported. The SDK logs a warning and sends
+A rule that meets a fault on a record does not apply to that record. We call
+the rule off for that record. The rule behaves as if it did not exist for
+that record, and it never raises into the pipeline (owner, 2026-11-11). The
+fault is reported. The SDK logs a warning and sends
 a report upstream, and it limits the rate of the same warning (owner,
 2026-11-13).
 
@@ -115,9 +115,9 @@ rule should say in its own text what it does.
 Semantics of our own for a null, because every reader and every host engine
 already knows SQL's.
 
-A missing value as a fault. Rules went dark and reports flowed for ordinary
-records, and `amount > 500 or status == "paid"` gave another outcome than the
-same rule with its operands the other way round.
+A missing value as a fault, because rules would go dark and reports would
+flow for ordinary records, and `amount > 500 or status == "paid"` would give
+another outcome than the same rule with its operands the other way round.
 
 Plain false for a comparison with a null, because `not (amount > 500)` would
 match every record without an amount and `amount <= 500` would not.
@@ -204,7 +204,7 @@ test is unknown. On Spark a rule is translated into a Spark expression
 `WHEN test IS NULL` arm. Each difference from SQL is held by a fixture
 (`adr/0006`).
 
-The literal `None` still parses as the right side of `in`, as an argument of
+The literal `None` parses as the right side of `in`, as an argument of
 a function and as the receiver of a method, as in `x in None`, `len(None)`
 and `None.upper()`. Such a rule gives unknown for every record and matches
 nothing in silence. The parser does not refuse these forms, because each
