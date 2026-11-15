@@ -25,8 +25,8 @@ that is absent under `any` or `all`, and a null element of a list are nulls
 too (owner, 2026-11-14).
 
 A rule still applies to a record that holds a null, and the null is not
-reported. The sensor does nothing about a field that no record has (owner,
-2026-11-14).
+reported. When no record has a field that a rule reads, the sensor logs no
+warning and sends no report (owner, 2026-11-14).
 
 A null follows SQL's three-valued logic. The places where a rule differs from
 SQL are listed below (owner, 2026-11-15).
@@ -70,8 +70,9 @@ Under `==`, under `!=` and in a membership list it tests for a null, and
 beside an ordering or an arithmetic operator the parser refuses it. SQL gives
 unknown in each of these places. The second is a conditional with an unknown
 test, which gives unknown, where SQL's `CASE` takes the else branch. The
-third is the fault. A fault turns the rule off for the record, and SQL
-engines differ on what a division by zero does.
+third is the fault. This record says which operations are faults and what a
+fault does. SQL engines have their own answers, and they differ on a division
+by zero.
 
 A fault is an operation that cannot be done on values that are there (owner,
 2026-11-13):
@@ -82,9 +83,10 @@ A fault is an operation that cannot be done on values that are there (owner,
 - an integer overflow
 - a value that is no boolean where a condition is expected
 
-A rule that meets a fault on a record does not apply to that record. It
-behaves as if it did not exist for that record, and it never raises into the
-pipeline (owner, 2026-11-11). It is reported. The SDK logs a warning and sends
+A rule that meets a fault on a record does not apply to that record, and this
+record then calls the rule off for that record. The rule behaves as if it did
+not exist for that record, and it never raises into the pipeline (owner,
+2026-11-11). The fault is reported. The SDK logs a warning and sends
 a report upstream, and it limits the rate of the same warning (owner,
 2026-11-13).
 
@@ -93,8 +95,9 @@ Python. When the left operand of `and` is false, or the left operand of `or`
 is true, the result is decided. The right operand is then skipped, and a
 fault in it does not happen, so the guard of `y != 0 and x / y > 5` works.
 When the left operand is unknown, the right one is evaluated and its fault
-counts. In a conditional the test comes first, and a fault in the branch that
-the test does not pick does not happen (owner, 2026-11-13, 2026-11-14).
+counts. In a conditional the test comes first, so a fault in the test counts.
+A fault in the branch that the test does not pick does not happen (owner,
+2026-11-13, 2026-11-14).
 
 Under `any` and `all`, an element with a fault turns the rule off for that
 record, whatever the other elements say. The order of the elements does not
@@ -138,8 +141,9 @@ record without an amount.
 
 Refusing `x == None` with a pointer to `x is None`. The owner chose Python's
 meaning, so that a Python author can write what they know (owner,
-2026-11-14). SQL's meaning for `x == None`, because the rule would parse and
-never match.
+2026-11-14).
+
+SQL's meaning for `x == None`, because the rule would parse and never match.
 
 Unknown for a `None` in a membership list, as in SQL, because that `None`
 would never match.
@@ -160,8 +164,9 @@ record would be reported.
 Turning the rule off for a whole batch when one record meets a fault, because
 a record's outcome must not depend on its batch.
 
-Under `any` and `all`, an element that decides and hides an element with a
-fault, because bad data in a list would then go unreported.
+Under `any` and `all`, an element that decides the result, as a true element
+decides `any`, and so hides an element with a fault, because bad data in a
+list would then go unreported.
 
 ## Consequences
 
@@ -172,30 +177,43 @@ it. The literal `None` and a field that holds a null differ under `==`, so
 
 Unknown needs no mask of its own. A column is an array of values with a mask
 whose set bits say which values are there (`adr/0036`), and a boolean result
-has the same form. Unknown is a boolean whose mask bit is not set. A
-comparison passes the mask of its operands on. `not` flips the values and
-keeps the mask. `and` and `or` combine two such results with a few bitwise
-operations per word. A record matches where the value and the mask are both
-set. A column without a mask gives a result without one.
+has the same form. Unknown is a boolean whose mask bit is not set. The mask
+of a comparison is the AND of the masks of its operands. `not` flips the
+values and keeps the mask. `and` and `or` combine two such results with a few
+bitwise operations per word. A record matches where the value and the mask
+are both set. A column without a mask gives a result without one.
+
+A fault is a bit per row in a bitmap of its own. Only an operation that can
+fault, such as a division, has one.
 
 The evaluator must keep three conditions, so that written order for faults
 stays a loop without a branch per row. First, an operation on a null is never
 a fault, so a fault counts only where its operands are there. Second, no loop
 runs an instruction that traps, as an integer division by zero does. A
-division therefore replaces a divisor that is zero or under a null by 1 and
-marks a fault, and the first condition drops that fault for the null. Third,
+division therefore replaces a divisor by 1 when it is zero or when its mask
+bit is not set. It marks a fault for both, and the first condition drops the
+fault where the mask bit is not set. Third,
 a skipped operand may still be computed, and its faults are dropped. These
 three are reasoned from `adr/0035` and `adr/0036`, and no code ran. They are
 measured when the evaluator exists.
 
 `any` and `all` reduce the results of their test twice per record. One
 reduction finds an element that decides, and the other finds an element whose
-test is unknown. A translation to Spark needs one more `WHEN test IS NULL`
-arm for a conditional (`adr/0040`). Each difference from SQL is held by a
-fixture (`adr/0006`).
+test is unknown. On Spark a rule is translated into a Spark expression
+(`adr/0040`), and the translation of a conditional needs one more
+`WHEN test IS NULL` arm. Each difference from SQL is held by a fixture
+(`adr/0006`).
 
-A column has one type (`adr/0036`). For dicts and maps an adapter keeps the
-rows whose value had another type in a list beside the column, so that the
-rule is off for those records alone.
+The literal `None` still parses as the right side of `in`, as an argument of
+a function and as the receiver of a method, as in `x in None`, `len(None)`
+and `None.upper()`. Such a rule gives unknown for every record and matches
+nothing in silence. The parser does not refuse these forms, because each
+needs a check of its own in another rule of the grammar. Validation of the
+expression can refuse them together.
+
+A column has one type (`adr/0036`). An adapter builds the columns from the
+records of a source. For dicts and maps it keeps the rows whose value had
+another type in a list beside the column, so that a rule that reads the
+column is off for those records alone and not for the whole batch.
 
 The fixtures and every SDK use these words. They cite this record.
