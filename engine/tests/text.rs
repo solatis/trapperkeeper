@@ -18,8 +18,8 @@ type Unary = fn(Box<Expr>) -> Expr;
 /// The builder of a node with two operands.
 type Binary = fn(Box<Expr>, Box<Expr>) -> Expr;
 
-/// The kinds of node with one operand that have no rule of the canonical
-/// form.
+/// The kinds of node with one operand that the parser builds around any
+/// operand.
 const UNARY: [Unary; 17] = [
     Expr::Not,
     Expr::IsNone,
@@ -40,8 +40,8 @@ const UNARY: [Unary; 17] = [
     Expr::IsAscii,
 ];
 
-/// The kinds of node with two operands that have no rule of the canonical
-/// form.
+/// The kinds of node with two operands that the parser builds around any
+/// two operands.
 const BINARY: [Binary; 6] = [
     Expr::Eq,
     Expr::Ne,
