@@ -62,8 +62,8 @@ pub fn parse(text: &str) -> Result<Expr, SyntaxError> {
     //    comes after the test that uses it.
     // 4. Otherwise we build the error from the refusal and from the log of
     //    the input, in which each token test that did not match noted what
-    //    it wanted. A generic "expected" error first gets two targeted
-    //    reasons tried, and neither changes which texts are valid.
+    //    it wanted. Before we return a generic "expected" error, we try two
+    //    targeted reasons, and neither changes which texts are valid.
 
     // 1. split into tokens
     let input = Input::new(text, lex(text));
@@ -540,14 +540,14 @@ fn build_comparison(
     // two pointers to one function compare equal, so the operator is told
     // by its text.
     let op = text(&op_at);
+    // Of the comparisons, the parser refuses `None` beside an ordering
+    // alone (ADR-0005). `x == None` tests for a missing value, and
+    // `x in None` parses and gives unknown.
     let ordering = matches!(op, "<" | "<=" | ">" | ">=");
     let left = (left, left_at);
     // `x < None` could never match, so an ordering refuses the literal
     // `None`. A field that holds a null is not refused, so `x < y` parses
     // and gives unknown for a record without `y`.
-    //
-    // Of the comparisons, ADR-0005 refuses the orderings alone. `x == None`
-    // tests for a missing value, and `x in None` parses and gives unknown.
     if ordering && let Some(error) = none_operand(i, &left, &op_at, &right) {
         return Err(error);
     }
@@ -564,8 +564,8 @@ fn arithmetic(
     x: impl Parser<Expr> + Copy,
     ops: &'static [(&'static str, Binary)],
 ) -> impl Parser<Expr> {
-    // The operators are hidden from expected sets, because they may follow
-    // almost any value and would bury the keywords.
+    // The operators are hidden, because they may follow almost any value
+    // and would bury the keywords in every "expected" error.
     let op = hidden(symbol(ops));
     // `rest` gives each operator with its bytes and the operand after it
     // with its bytes. An operator with no operand after it is left where it
@@ -1168,7 +1168,8 @@ fn call(i: &Input<'_>, p: usize) -> Reply<Expr> {
     let seen = if in_module {
         open(i, q)?
     } else {
-        // Hidden, or `amount b` would get "expected `(`, an operator, ...".
+        // The `(` is hidden here, or `amount b` would get "expected `(`, an
+        // operator, ...".
         hidden(open)(i, q)?
     };
     if seen.is_none() {
