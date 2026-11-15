@@ -240,7 +240,6 @@ pub(super) fn try_map<T, U>(
     f: impl Fn(&Input<'_>, T, Range<usize>) -> Result<U, SyntaxError>,
 ) -> impl Parser<U> {
     move |i: &Input<'_>, p: usize| {
-        // When `a` does not match, `f` does not run.
         let Some((x, q)) = a(i, p)? else {
             return Ok(None);
         };
@@ -530,11 +529,10 @@ pub(super) fn explain(i: &Input<'_>, refusal: Option<Refusal>) -> SyntaxError {
     // The refusal is tested before the bad token. In `0 < amount < 10;`
     // the refusal and the furthest notes both stand at index 5, the `;`,
     // and the error is the chained comparison, which the text holds first.
-    //
-    // A refusal is the error unless a note lies further, as the note "a
-    // name" after the dot of `record.` does. `TooComplex` wins over any
-    // note, because the parse stopped there.
     if let Some(Refusal { pos, error }) = refusal
+        // A refusal is the error unless a note lies further, as the note "a
+        // name" after the dot of `record.` does. `TooComplex` wins over any
+        // note, because the parse stopped there.
         && (pos >= log.pos || error.reason == Reason::TooComplex)
     {
         return error;
@@ -549,9 +547,7 @@ pub(super) fn explain(i: &Input<'_>, refusal: Option<Refusal>) -> SyntaxError {
             let reason = reason.clone();
             return SyntaxError { at, reason };
         }
-        // `amount >` ends where a value was wanted.
         Tok::End => Found::End,
-        // In `x not y` the token is `y`.
         _ => Found::Token(i.slice(&at).to_owned()),
     };
     // With no text recorded by `then_after`, the token before the place
