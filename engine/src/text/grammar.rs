@@ -60,8 +60,9 @@ pub fn parse(text: &str) -> Result<Expr, SyntaxError> {
     // 3. On a tree, we resolve the names. The grammar holds every bare name
     //    as an element, because in `any(test for name in list)` the name
     //    comes after the test that uses it.
-    // 4. Otherwise we build the error from the refusal and the log of the
-    //    token tests. A generic "expected" error first gets two targeted
+    // 4. Otherwise we build the error from the refusal and from the log of
+    //    the input, in which each token test that did not match noted what
+    //    it wanted. A generic "expected" error first gets two targeted
     //    reasons tried, and neither changes which texts are valid.
 
     // 1. split into tokens
@@ -74,8 +75,8 @@ pub fn parse(text: &str) -> Result<Expr, SyntaxError> {
             resolve(&mut tree, &mut Vec::new());
             return Ok(tree);
         }
-        // Without a match, the log is the only source of the error, as for
-        // `a > 1 b`.
+        // Without a match there is no refusal, and the error comes from the
+        // log alone, as for `a > 1 b`.
         Ok(None) => None,
         Err(refusal) => Some(refusal),
     };
@@ -474,9 +475,9 @@ fn none_operand(
     right: &Placed<Expr>,
 ) -> Option<SyntaxError> {
     let ((left, left_at), (right, right_at)) = (left, right);
-    // The left operand is tested first, so `None >= None` is refused over
-    // `None >=`. `None + 1` gives bytes 0 to 6, `None +`, and `x < None`
-    // gives bytes 2 to 8, `< None`.
+    // The left operand is tested first, so the error for `None >= None`
+    // covers `None >=`. `None + 1` gives bytes 0 to 6, `None +`, and
+    // `x < None` gives bytes 2 to 8, `< None`.
     let at = if matches!(left, Expr::None) {
         left_at.start..op_at.end
     } else if matches!(right, Expr::None) {
@@ -535,9 +536,9 @@ fn build_comparison(
         Tail::IsNone(true) => return Ok(Expr::IsNotNone(Box::new(left))),
         Tail::Binary(make, op_at, right, right_at) => (make, op_at, (right, right_at)),
     };
-    // The operator is known here by its bytes only, because `symbol` gives
-    // the builder. `==` and `!=` pass, because `x == None` is the test for
-    // a missing value (ADR-0005). `in` and `not in` are not checked.
+    // `symbol` gives the builder, so the operator is known by its bytes.
+    // `==` and `!=` pass, because `x == None` tests for a missing value
+    // (ADR-0005). `x in None` passes too and gives unknown.
     let ordering = matches!(text(&op_at), "<" | "<=" | ">" | ">=");
     let left = (left, left_at);
     // `x < None` could never match, so an ordering refuses the literal
@@ -567,8 +568,8 @@ fn arithmetic(
     // stands, so `price * > 3` gets "expected a value" at `>`.
     let rest = many(then(spanned(op), spanned(x)));
     // The last argument is the bytes of the whole chain, which `try_map`
-    // passes. It is dropped, because the error needs the bytes of one
-    // operator.
+    // passes. It is dropped, because an error covers one operator and the
+    // `None` beside it.
     try_map(then(spanned(x), rest), |i, (first, rest), _| {
         // Each round refuses a `None` beside its operator and then joins
         // the pair: `a - b`, then `(a - b) + 1`. After the first round the
