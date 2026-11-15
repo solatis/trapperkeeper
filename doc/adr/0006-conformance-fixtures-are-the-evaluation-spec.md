@@ -14,7 +14,8 @@ reviewed once and enforced in every SDK.
 
 A fixture file covers one subject. An entry is a rule with many records and
 the expected outcome of each (owner, 2026-11-11). An expected outcome is one
-of three: matched, not matched, or not evaluated with its cause (`adr/0005`).
+of three: matched, not matched, or not evaluated with the fault that caused
+it (`adr/0005`).
 A rule that gives unknown counts as not matched. A second entry for the
 negated rule pins the unknown, because the negated rule matches after false
 and does not match after unknown (owner, 2026-11-14).
