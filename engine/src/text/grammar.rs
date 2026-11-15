@@ -539,7 +539,8 @@ fn build_comparison(
     // The builder is a function pointer, and Rust does not promise that
     // two pointers to one function compare equal, so the operator is told
     // by its text.
-    let ordering = matches!(text(&op_at), "<" | "<=" | ">" | ">=");
+    let op = text(&op_at);
+    let ordering = matches!(op, "<" | "<=" | ">" | ">=");
     let left = (left, left_at);
     // `x < None` could never match, so an ordering refuses the literal
     // `None`. A field that holds a null is not refused, so `x < y` parses
