@@ -527,8 +527,9 @@ pub(super) fn explain(i: &Input<'_>, refusal: Option<Refusal>) -> SyntaxError {
     // The parse is over, so nothing writes the log while `explain` reads it.
     let log = i.log.borrow();
 
-    // The refusal is tested before the bad token, so `0 < amount < 10;`
-    // gets the chained comparison, which stands before the `;`.
+    // The refusal is tested before the bad token. In `0 < amount < 10;`
+    // the refusal and the furthest notes both stand at index 5, the `;`,
+    // and the error is the chained comparison, which the text holds first.
     //
     // A refusal is the error unless a note lies further, as the note "a
     // name" after the dot of `record.` does. `TooComplex` wins over any
