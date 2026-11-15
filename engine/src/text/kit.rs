@@ -521,16 +521,18 @@ pub(super) fn delimited<O, T, C>(
 pub(super) fn explain(i: &Input<'_>, refusal: Option<Refusal>) -> SyntaxError {
     // Three cases are tested in order, and the first that applies returns:
     // a refusal, a bad token at the furthest note, and the furthest notes
-    // as "expected ..., found ...". The refusal and the bad token have
-    // their place in the chain for a reason, which the note at each gives.
+    // as "expected ..., found ...". The note at each of the first two says
+    // why it is tested before the next.
 
     // The parse is over, so nothing writes the log while `explain` reads it.
     let log = i.log.borrow();
 
-    // A refusal is the error unless a note lies further. In `record.` the
-    // note "a name" after the dot lies past the refusal at `record`, and it
-    // is the mistake. `TooComplex` wins over any note, because the parse
-    // stopped there.
+    // The refusal is tested before the bad token, so `0 < amount < 10;`
+    // gets the chained comparison, which stands before the `;`.
+    //
+    // A refusal is the error unless a note lies further, as the note "a
+    // name" after the dot of `record.` does. `TooComplex` wins over any
+    // note, because the parse stopped there.
     if let Some(Refusal { pos, error }) = refusal
         && (pos >= log.pos || error.reason == Reason::TooComplex)
     {
