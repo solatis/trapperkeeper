@@ -112,6 +112,11 @@ pub enum Reason {
     ChainedComparison {
         write: Option<String>,
     },
+    // The `< None` of `x < None`. `op` is the operator beside the `None`,
+    // also the minus of `-None`.
+    NoneOperand {
+        op: String,
+    },
     // The second text of `"abc" "def" == name`, which Python would join.
     AdjacentTexts,
     // The `lenn` of `lenn(name) > 3`. `nearest` is the known name nearest
@@ -310,6 +315,10 @@ impl fmt::Display for Reason {
                 write!(f, "chained comparisons are not supported")?;
                 write.iter().try_for_each(|w| write!(f, "; write `{w}`"))
             }
+            Reason::NoneOperand { op } => write!(
+                f,
+                "`{op}` cannot take `None`; to test for a missing value, write `is None`"
+            ),
             Reason::AdjacentTexts => {
                 write!(f, "two texts side by side are not joined; write one text")
             }

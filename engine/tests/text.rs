@@ -20,11 +20,10 @@ type Binary = fn(Box<Expr>, Box<Expr>) -> Expr;
 
 /// The kinds of node with one operand that have no rule of the canonical
 /// form.
-const UNARY: [Unary; 18] = [
+const UNARY: [Unary; 17] = [
     Expr::Not,
     Expr::IsNone,
     Expr::IsNotNone,
-    Expr::Neg,
     Expr::Len,
     Expr::IsNan,
     Expr::Upper,
@@ -43,22 +42,27 @@ const UNARY: [Unary; 18] = [
 
 /// The kinds of node with two operands that have no rule of the canonical
 /// form.
-const BINARY: [Binary; 15] = [
+const BINARY: [Binary; 6] = [
     Expr::Eq,
     Expr::Ne,
+    Expr::In,
+    Expr::NotIn,
+    Expr::StartsWith,
+    Expr::EndsWith,
+];
+
+/// The kinds of node with two operands that refuse the literal `None` as an
+/// operand: the orderings and the arithmetic.
+const NUMERIC: [Binary; 9] = [
     Expr::Lt,
     Expr::Le,
     Expr::Gt,
     Expr::Ge,
-    Expr::In,
-    Expr::NotIn,
     Expr::Add,
     Expr::Sub,
     Expr::Mul,
     Expr::Div,
     Expr::Mod,
-    Expr::StartsWith,
-    Expr::EndsWith,
 ];
 
 const TYPES: [TypeName; 5] = [
@@ -162,6 +166,8 @@ fn canonical_in(scope: &[String], depth: u32) -> BoxedStrategy<Expr> {
             make(spliced.collect())
         })
     };
+    // `not_none` gives an operand that is not the literal `None`.
+    let not_none = || one().prop_filter("the literal None", |e| !matches!(**e, Expr::None));
     // The test of a quantifier is generated with its name added to `scope`,
     // and its list without it. The parser resolves the list outside the
     // name, so `any(t for i in i)` reads its list `i` as a field. The test
@@ -191,6 +197,12 @@ fn canonical_in(scope: &[String], depth: u32) -> BoxedStrategy<Expr> {
         vec(sub.clone(), 0..=3).prop_map(Expr::List),
         (select(UNARY.to_vec()), one()).prop_map(|(make, a)| make(a)),
         (select(BINARY.to_vec()), one(), one()).prop_map(|(make, a, b)| make(a, b)),
+        // No operand is the literal `None`, because the parser refuses
+        // `x < None` and `None + 1`.
+        (select(NUMERIC.to_vec()), not_none(), not_none()).prop_map(|(make, a, b)| make(a, b)),
+        // The operand is not the literal `None`, because the parser refuses
+        // `-None`.
+        not_none().prop_map(Expr::Neg),
         chain(Expr::And),
         chain(Expr::Or),
         (one(), one(), one()).prop_map(|(test, then, otherwise)| Expr::If {
@@ -386,6 +398,7 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
         "the end of the rule",
     ];
     let count = |name, takes, given| Reason::WrongArgumentCount { name, takes, given };
+    let none_operand = |op: &str| Reason::NoneOperand { op: op.to_owned() };
     vec![
         (
             "",
@@ -428,6 +441,37 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
             7..9,
             foreign("<>", "!="),
             "`<>` is not an operator here; write `!=`",
+        ),
+        (
+            "x < None",
+            2..8,
+            none_operand("<"),
+            "`<` cannot take `None`; to test for a missing value, write `is None`",
+        ),
+        // With `None` on both sides the error names the left one.
+        (
+            "None >= None",
+            0..7,
+            none_operand(">="),
+            "`>=` cannot take `None`; to test for a missing value, write `is None`",
+        ),
+        (
+            "None + 1",
+            0..6,
+            none_operand("+"),
+            "`+` cannot take `None`; to test for a missing value, write `is None`",
+        ),
+        (
+            "x * None",
+            2..8,
+            none_operand("*"),
+            "`*` cannot take `None`; to test for a missing value, write `is None`",
+        ),
+        (
+            "-None > 1",
+            0..5,
+            none_operand("-"),
+            "`-` cannot take `None`; to test for a missing value, write `is None`",
         ),
         (
             "0 < amount < 10",

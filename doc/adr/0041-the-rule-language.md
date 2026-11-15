@@ -77,7 +77,8 @@ integer may be hexadecimal. A membership list may hold fields (owner,
 A text takes single or double quotes and has a raw form.
 
 `x == None` means `x is None`, and `x != None` means `x is not None`
-(`adr/0005`).
+(`adr/0005`). The literal `None` beside an ordering or an arithmetic operator
+is refused, and a field that holds a null there is data (`adr/0005`).
 
 `adr/0005` says what a rule does with a value that is not there and with an
 operation that cannot be done.

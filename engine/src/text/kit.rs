@@ -356,8 +356,9 @@ macro_rules! choice {
 }
 pub(super) use choice;
 
-/// `x (op x)*`, folded to the left with `f`: `a - b - c` as `(a - b) - c`.
-/// An operator with no operand after it is left where it stands.
+/// `x (op x)*`, folded to the left with `f`: `a or b or c` as
+/// `(a or b) or c`. An operator with no operand after it is left where it
+/// stands.
 pub(super) fn chain_left<T, O>(
     x: impl Parser<T>,
     op: impl Parser<O>,
@@ -368,11 +369,11 @@ pub(super) fn chain_left<T, O>(
             return Ok(None);
         };
         // Each round reads an operator and the operand after it, and folds
-        // both into the value so far: `a - b`, then `(a - b) - c`.
+        // both into the value so far: `a or b`, then `(a or b) or c`.
         while let Some((o, q)) = op(i, pos)? {
-            // In `price * > 3` the `*` matches and no operand follows it.
-            // The reply ends before the `*`, and the note "a value" at `>`
-            // lies furthest and becomes the error.
+            // In `a and or b` the `and` matches and no operand follows it.
+            // The reply ends before the `and`, and the note "a value" at
+            // `or` lies furthest and becomes the error.
             let Some((right, r)) = x(i, q)? else {
                 break;
             };
