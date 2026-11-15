@@ -5,10 +5,11 @@ Trade-offs we resolve the same way every time. Each lists what we give up.
 ## 1. Least intrusive by default
 
 An observability tool must be invisible when it works and harmless when it
-breaks. Every default degrades toward pass-through. A rule that cannot be
-evaluated on a record does not apply to that record and is reported
-(`adr/0005`). When the server is unreachable, the rules are off and records
-flow. Strictness is opt-in per sensor.
+breaks. Every default degrades toward pass-through. A value that is not there
+is data and switches nothing off. A rule that meets a fault on a record does
+not apply to that record and is reported (`adr/0005`). When the server is
+unreachable, the rules are off and records flow. Strictness is opt-in per
+sensor.
 
 Cost: events can be lost.
 
@@ -18,8 +19,8 @@ The server never learns the shape of user data. Rules reference field paths
 that are resolved against the actual record at evaluation time. Schema drift
 needs no coordination.
 
-Cost: a typo in a field path is found only when a sensor reports that the
-rule could not be evaluated (`adr/0005`).
+Cost: a typo in a field path matches nothing, and nothing reports it
+(`adr/0005`).
 Mitigation belongs in tooling (event-informed suggestions), not in a registry.
 
 ## 3. Ephemeral sensors

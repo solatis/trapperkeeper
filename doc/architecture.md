@@ -129,8 +129,8 @@ retries sync at a fixed interval. Unreported events beyond the buffer are lost.
   storage and on the wire; local time only at presentation. Both sensor and
   server timestamps are kept.
 - **Validation.** Strict for our own schemas (rules, config, API requests);
-  best-effort for user data: a rule that cannot be evaluated on a record does
-  not apply to it (`adr/0005`).
+  best-effort for user data: a missing value is data, and a rule that meets a
+  fault on a record does not apply to it (`adr/0005`).
 - **Operations.** One distributable with subcommands per role; the first
   serve on an empty database migrates it, and services refuse to start on
   pending migrations, which an explicit migration step applies; config

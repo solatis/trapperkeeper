@@ -37,8 +37,8 @@ database can store the text, the tree or both. Decide with the milestone
 ## What an event carries
 
 An adapter is asked only for the fields the rules read (`adr/0035`), so an
-event can carry the whole record or those fields. A rule that could not be
-evaluated on a record is reported upstream with a rate limit in the SDK
+event can carry the whole record or those fields. A rule that met a fault on
+a record is reported upstream with a rate limit in the SDK
 (`adr/0005`), and the form of that report and of its limit is open too.
 Decide with the milestones "Sensor events are ingested" and "A Rust pipeline
 reports matches".
