@@ -536,14 +536,17 @@ fn build_comparison(
         Tail::IsNone(true) => return Ok(Expr::IsNotNone(Box::new(left))),
         Tail::Binary(make, op_at, right, right_at) => (make, op_at, (right, right_at)),
     };
-    // `symbol` gives the builder, so the operator is known by its bytes.
-    // `==` and `!=` pass, because `x == None` tests for a missing value
-    // (ADR-0005). `x in None` passes too and gives unknown.
+    // The builder is a function pointer, and Rust does not promise that
+    // two pointers to one function compare equal, so the operator is told
+    // by its text.
     let ordering = matches!(text(&op_at), "<" | "<=" | ">" | ">=");
     let left = (left, left_at);
     // `x < None` could never match, so an ordering refuses the literal
-    // `None` (ADR-0005). A field that holds a null is not refused, so
-    // `x < y` parses and gives unknown for a record without `y`.
+    // `None`. A field that holds a null is not refused, so `x < y` parses
+    // and gives unknown for a record without `y`.
+    //
+    // Of the comparisons, ADR-0005 refuses the orderings alone. `x == None`
+    // tests for a missing value, and `x in None` parses and gives unknown.
     if ordering && let Some(error) = none_operand(i, &left, &op_at, &right) {
         return Err(error);
     }
