@@ -12,7 +12,7 @@ still open (see `doc/decisions.md`).
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | `audit.rs`                   | appending to and paging the audit trail                                                                                                     | the trail's columns, the cursor, the user join                                                                         |
 | `mod.rs`                     | choosing the backend, opening the store, transactions                                                                                       | which URL schemes work; whether a database exists; creating a missing database; `Tx`; placeholders; the timestamp form |
-| `installation.rs`            | the installation's facts that belong to no tenant: its signing salt                                                                         | the signing salt, the installation table                                                                               |
+| `installation.rs`            | the installation's facts that belong to no tenant: the salt with which the server stretches its token signing keys                          | the signing salt, the installation table                                                                               |
 | `migrate.rs`                 | the embedded migrations: apply, check                                                                                                       | what makes serve refuse, what each refusal means, what an empty database is                                            |
 | `tenants.rs`                 | tenants and their roles; finding a tenant by name; whether a tenant holds a role                                                            | creating a tenant with its roles, listing tenants                                                                      |
 | `users.rs`                   | creating, listing, finding, re-roling and deleting a user; counting a tenant's live admins; revoking a user's tokens and setting a password | the users table, the role subselect, the soft delete                                                                   |
@@ -47,7 +47,7 @@ still open (see `doc/decisions.md`).
 - The server generates an entity's `_id`, a version 7 UUID, which is stored
   as 36-character text. Its `_name` is lowercase and unique in its scope,
   which is the installation for a tenant and the tenant for a role or a
-  user. Constraints in the table enforce both. A display name is a `_title` column,
+  user. Constraints in the table enforce the lowercase and the uniqueness. A display name is a `_title` column,
   which keeps its case (`doc/adr/0020`).
 - Timestamps are integer epoch microseconds in UTC (`doc/adr/0019`).
 - No query uses `RETURNING` or an upsert (`doc/adr/0019`).
