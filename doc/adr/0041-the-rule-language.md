@@ -4,14 +4,15 @@ Date: 2026-11-14.
 
 ## Context
 
-People write rules. The owner wants no new language, and the people who
-write rules should find the syntax familiar (owner, 2026-11-13).
+People write rules. The owner wants no new language. The people who write
+rules should find the syntax familiar (owner, 2026-11-13).
 
 ## Decision
 
 A rule's text is one expression in Python-style syntax that gives a boolean.
-The syntax is borrowed for familiarity, and the semantics are ours where
-Python's differ (owner, 2026-11-13).
+The language borrows Python's syntax so that rule authors find it familiar.
+Where Python's semantics differ from the semantics that this record and
+`adr/0005` define, the language follows the records (owner, 2026-11-13).
 
 The language has these kinds of expression (owner, 2026-11-12, 2026-11-13):
 
@@ -32,22 +33,23 @@ Functions and methods come from a closed list. The functions are `len`,
 `endswith`, `upper`, `lower`, `strip`, `lstrip`, `rstrip`, `isdigit`,
 `isalpha`, `isalnum`, `isspace`, `isupper`, `islower` and `isascii` (owner,
 2026-11-13, 2026-11-14). `isinstance` tests for `int`, `float`, `str`, `bool`
-and `list` (owner, 2026-11-14). The pattern of a pattern function is a
-literal.
+and `list` (owner, 2026-11-14). The pattern of `re.search`, `re.match` and
+`re.fullmatch` is a text literal.
 
 A comparison needs two values of compatible types, in every operator. An int
 widens to a float, and nothing else converts. Ordering is for numbers only
 (owner, 2026-11-11, 2026-11-13).
 
-A rule declares no types. A literal or an operator fixes the type, and in
-`a == b` the data decides (owner, 2026-11-13).
+A rule declares no types. A literal or an operator fixes the type of the
+field it meets. In `a == b`, where both operands are fields, the values in the
+data decide the type (owner, 2026-11-13).
 
 There is no truthiness (owner, 2026-11-13).
 
 `any` over an empty list is false, and `all` over an empty list is true
 (owner, 2026-11-13).
 
-A NaN that the source treats as a value compares as in IEEE. Every comparison
+A NaN that the source treats as a value compares as IEEE 754 defines. Every comparison
 with it is false, except `!=`, which is true. An infinity is an ordinary
 number (owner, 2026-11-13).
 
@@ -55,30 +57,26 @@ Patterns follow the linear-time dialect of Rust's `regex` crate, which has no
 lookaround and no backreferences. The server refuses a pattern outside it
 (owner, 2026-11-13).
 
-Text is UTF-8, and its encoding is the SDK's responsibility (owner,
-2026-11-12).
+The engine reads all text as UTF-8. The SDK hands the engine its text as
+UTF-8 (owner, 2026-11-12).
 
 A bare name is a field of the record. A key that cannot be a bare name is
-written with the word `record` and brackets, as in `record["unit price"]`,
-and a text in brackets works at every step of a path (owner, 2026-11-13,
+written with the word `record` and brackets, as in `record["unit price"]`. A
+text in brackets works at every step of a path (owner, 2026-11-13,
 2026-11-14).
 
-Twelve words are reserved: `and`, `or`, `not`, `in`, `is`, `if`, `else`,
-`for`, `None`, `True`, `False` and `record`. Python's other keywords are
-names (owner, 2026-11-14). `re` and `math` are reserved too, as the names of
-the two modules. A lowercase `null`, `true` or `false` is a name
-like any other (owner, 2026-11-14). A word of the language never stands after
-a dot (owner, 2026-11-14).
+Twelve words are reserved: `and`, `or`, `not`, `in`, `is`, `if`, `else`, `for`,
+`None`, `True`, `False` and `record`. Python's other keywords are names (owner,
+2026-11-14). `re` and `math` are reserved too, as the names of the two modules.
+A lowercase `null`, `true` or `false` is a name like any other (owner,
+2026-11-14). A word of the language never stands after a dot (owner,
+2026-11-14).
 
-A rule may run over several lines. A number may hold underscores, and an
-integer may be hexadecimal. A membership list may hold fields (owner,
-2026-11-14). A comment is refused (owner, 2026-11-13).
+A rule may run over several lines. A number may hold underscores, and an integer
+may be hexadecimal. A membership list may hold fields (owner,
+2026-11-14). The parser refuses a comment (owner, 2026-11-13).
 
 A text takes single or double quotes and has a raw form.
-
-`x == None` means `x is None`, and `x != None` means `x is not None`
-(`adr/0005`). The literal `None` beside an ordering or an arithmetic operator
-is refused, and a field that holds a null there is data (`adr/0005`).
 
 `adr/0005` says what a rule does with a value that is not there and with an
 operation that cannot be done.
@@ -90,14 +88,17 @@ awkwardly and has no standard form for "some element of a list".
 
 CEL, because few data people know it.
 
-A language of our own.
+A language of our own, because the owner wants no new language.
 
-Declared field types and an `any` type.
+Declared field types and an `any` type, because a literal or an operator
+already fixes the type, and in `a == b` the data decides. `any` was a declared
+field type, so it goes together with the declarations.
 
 Python's answers for a field that holds a null, such as `x != 5` being true
 when `x` is not there. The literal `None` follows Python (`adr/0005`).
 
-Truthiness.
+Truthiness, because it would give a value that is not a boolean a hidden
+meaning as a condition. A condition must be a boolean.
 
 Python's full pattern dialect, because a pattern could stall a pipeline.
 
@@ -106,23 +107,25 @@ conditions.
 
 Chained comparisons and negative indexes, for now.
 
-The word `row` for the record. Quoted names in backticks, which need no word
-for the record and are not Python syntax.
+The word `row` for the record, because the documents, the events and the API
+call it a record, and a dataframe row is one kind of record. Quoted names in
+backticks, which need no word for the record and are not Python syntax.
 
 Reserving all of Python's keywords, because a column named `from` would need
 a special form.
 
-`re` and `math` as ordinary names, because a call would then need four tokens
-to tell from a field.
+`re` and `math` as ordinary names, because the parser would then need four
+tokens to tell a call such as `re.search(` from a field `re.search`.
 
-Refusing a lowercase `null` or `true`, because fields are compared with
-fields.
+Refusing a lowercase `null` or `true` beside a comparison, because a rule may
+compare two fields and a real field may be named `null`. The parser cannot
+tell `status == null` written by mistake from a comparison of two fields.
 
-Any word after a dot as a key, because a typo such as `customer. and x > 1`
-would read `and` as a key.
+Any word after a dot as a key, because the parser would then read the `and`
+of the typo `customer. and x > 1` as a key.
 
-Accepting and dropping a comment, because the tree cannot carry it and it
-would disappear if the database keeps the tree alone.
+Accepting and dropping a comment, because the tree cannot carry a comment, so
+the comment would disappear if the database keeps only the tree.
 
 `abs`, for now.
 
@@ -133,5 +136,5 @@ All of Python's tests of a text's characters, because `isdecimal` and
 
 ## Consequences
 
-Timestamps wait (`decisions.md`). A translator for a host engine walks the
-same tree (`adr/0040`).
+The language has no timestamp type. `decisions.md` holds the open decision on
+one. A translator for a host engine walks the same tree (`adr/0040`).
