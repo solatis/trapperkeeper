@@ -19,7 +19,8 @@ pub fn tenant_name(name: &str) -> Result<String, Refused> {
     let valid = (1..=64).contains(&name.len())
         && name
             .chars()
-            // These fit in a URL path as they are, and `$` is outside them.
+            // These can be typed anywhere and fit in a URL path as they are,
+            // and `$` is outside them.
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || ".-_".contains(c));
     if valid {
         Ok(name)
@@ -38,9 +39,9 @@ pub fn tenant_name(name: &str) -> Result<String, Refused> {
 /// `Refused` when the lowercased name breaks the rule.
 pub fn user_name(name: &str) -> Result<String, Refused> {
     let name = name.to_lowercase();
-    // Only the shape is checked, because the server sends no mail. 254 bytes
-    // is the longest address SMTP carries (RFC 5321, 4.5.3.1.3), and 3 is
-    // `a@b`, the shortest that the `@` check accepts.
+    // The function checks only the shape, because the server sends no mail.
+    // 254 bytes is the longest address SMTP carries (RFC 5321, 4.5.3.1.3),
+    // and 3 is `a@b`, the shortest that the `@` check accepts.
     let shaped = (3..=254).contains(&name.len())
         && !name.chars().any(char::is_whitespace)
         && name.split_once('@').is_some_and(|(local, domain)| {
