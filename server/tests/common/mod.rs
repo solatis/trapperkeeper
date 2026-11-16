@@ -299,8 +299,8 @@ pub(crate) use on_pool;
 /// `statement` unchanged on SQLite and Postgres, and with each of `$1` to
 /// `$9` replaced by `?` on MariaDB. MariaDB binds `?` by position, so the
 /// caller writes each placeholder once, numbers them in ascending order of
-/// appearance, and stops at `$9`. Only a literal can be `statement`, so the
-/// callers may pass the result to `AssertSqlSafe`.
+/// appearance, and stops at `$9`. The callers pass literals, so they may pass
+/// the result to `AssertSqlSafe`.
 pub fn placeholders(backend: Backend, statement: &'static str) -> String {
     match backend {
         // Up to `$9` only, because the fold would turn a `$10` into `?0`.
@@ -336,8 +336,9 @@ impl InProcess {
 impl Drop for InProcess {
     fn drop(&mut self) {
         // `abort` does not wait for the server's request tasks, which may
-        // still hold pool connections. Closing the pool waits for each, so
-        // none is open when the `database` field drops.
+        // still hold connections of the pool that they share with this store.
+        // Closing the pool waits for each, so none is open when the
+        // `database` field drops.
         self.server.abort();
         block_on(async {
             match &self.store {
