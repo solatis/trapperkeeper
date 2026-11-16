@@ -24,4 +24,5 @@ Go, as a garbage-collected language less suited to FFI-style use.
 ## Consequences
 
 The SDK languages are a separate decision, which `adr/0038` records.
-`overview.md`, Integration surface, states the order of the SDKs. The server crate cites this record.
+`overview.md`, Integration surface, states the order of the SDKs. The server
+crate cites this record.
