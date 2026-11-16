@@ -106,8 +106,9 @@ fn write_expr(
         // holds for the smallest integer, `-9223372036854775808`.
         Expr::Int(v) => write!(f, "{v}"),
         // `{:?}` gives the shortest text that parses back to the same value.
-        // A float in a tree is finite, and for a finite value that text
-        // always has a `.` or an `e`, so it reads back as a float.
+        // A float in a tree must be finite, as `Expr::Float` says, and for a
+        // finite value that text always has a `.` or an `e`, so it reads
+        // back as a float.
         Expr::Float(v) => write!(f, "{v:?}"),
         Expr::Text(s) => write_text(s, f),
         Expr::List(items) => {
