@@ -4,13 +4,13 @@ Date: 2026-11-09.
 
 ## Context
 
-The server stores and reads back through a database and a router, and the
-rule engine to come is pure logic over records. The two need different tests,
-and this record fixes the vocabulary before the engine's tests are written
-(owner, 2026-11-09).
+The server stores records and reads them back through a database and a
+router. The rule engine is pure logic over records. The two need different
+kinds of test. This record fixed the vocabulary before the engine's tests were
+written (owner, 2026-11-09).
 
-Tests are maintained code and a risk of technical debt, so which kinds exist
-and what each covers is a decision.
+Tests are maintained code and a risk of technical debt. For that reason the
+project decides which kinds of test exist and what each kind covers.
 
 ## Decision
 
@@ -35,24 +35,23 @@ that one case through a question and its answer. Overriding one function to
 force an error path in one integration test is allowed where nothing else
 reaches the path (owner, 2026-11-09).
 
-A behavior may be covered by a unit test and an integration test, but that
-overlap is avoided: a component's unit tests are its exhaustive ones, and an
-integration test of a component that uses it checks the integration, not the
-used component's surface (owner, 2026-11-09).
+The test suite avoids covering one behavior with both a unit test and an
+integration test. The unit tests of a component are its exhaustive tests. An
+integration test of a component that uses another component checks how the
+two work together, and it does not test the surface of the component it uses
+(owner, 2026-11-09).
 
 Property, behavioral and data-driven tests are preferred. A complicated or
 important edge case may have a dedicated test. Tests are designed and
 commented with the same care as the code they test (owner, 2026-11-09).
 
-Tests cover this repository's code. No test checks what a library already
-guarantees, and code is not bent for a test: a path that only test-only code
-could reach stays untested (owner, 2026-11-02).
+Tests cover the code of this repository. No test checks what a library
+already guarantees. The authors do not change code to make it testable. A path
+that only test-only code could reach stays untested (owner, 2026-11-02).
 
-What only a process shows is untested at this point: the exit status, clap's
-usage text, JSON under a pipe against the compact format on a terminal, the
-signing-key check running before the database is touched, and the signal
-handlers. An end-to-end layer may come later, and the SDKs' integration tests,
-which run the real binaries, are a likely place for it (owner, 2026-11-09).
+What only a process shows stays untested. An end-to-end layer may come later,
+and the integration tests of the SDKs, which run the real binaries, are a
+likely place for it (owner, 2026-11-09).
 
 ## Rejected alternatives
 
@@ -71,16 +70,16 @@ today.
 
 ## Consequences
 
-The server crate is a library the tests drive: the commands' open and set-up
-of the database, the settings loader, the flag overrides and the JSON
-subscriber are exported for them.
+The tests drive the server crate as a library. The crate exports what the
+integration tests need, and `server/src/lib.rs` says which items those are.
 
-Untested: exit codes, usage text, terminal detection, the signing-key check's
-place before the database, the signal handlers, sqlx's own refusals of a
-database, such as a migration that failed half way, and the 503 answer of
-readiness, because a test would have to break a live store.
+No test covers exit codes, the usage text, terminal detection (JSON under a
+pipe against the compact format on a terminal), the place of the signing-key
+check before the database, the signal handlers, sqlx's own refusals of a
+database such as a half-applied migration, or the 503 answer of readiness. A
+test of the 503 would have to break a live store.
 
 proptest and figment's `test` feature are development dependencies.
 
-An SDK's tests are expected to run against a real server; the choice is
-recorded per SDK.
+The tests of an SDK are expected to run against a real server. Each SDK
+records this choice for itself.

@@ -11,14 +11,19 @@ unique ids for all entities.
 ## Decision
 
 An entity's `<entity>_id` column, such as `tenant_id` or `user_id`, holds a
-time-ordered UUID that the server generates. The id is internal. Logs and
-references use it, and a person never types or reads it (owner, 2026-11-02).
+time-ordered UUID that the server generates. The id is internal, and logs and
+references use it (owner, 2026-11-02). People type and read names in the UI, at
+login and in the paths of routes, and routes address tenants and users by name.
+A response of the management API may carry an id, such as the tenant id in the
+user rows (owner, 2026-11-07).
 
 An entity that people address has a `<entity>_name` column, such as
 `tenant_name` or `user_name`. People log in with the name, and the UI shows it
-(owner, 2026-11-02). A tenant name is unique, and a user name is unique within
-its tenant. A constraint in the database enforces each name's uniqueness, so
-an id never makes a duplicate name possible (owner, 2026-11-02).
+(owner, 2026-11-02). A tenant name is unique among the live tenants, and a user
+name is unique among the live users of its tenant. A unique constraint in the
+database enforces each name, over the live rows that `doc/adr/0024` describes.
+Two rows therefore cannot share a name, even though their ids differ (owner,
+2026-11-02).
 
 The server converts names and other alphanumerical identifiers to lowercase
 before it stores them (owner, 2026-11-02). A `CHECK` constraint on each name
@@ -41,7 +46,7 @@ case-insensitive collations, which differ per backend (owner, 2026-11-02).
 
 ## Consequences
 
-Every table that names an entity has a unique constraint on the name in its
-scope and a lowercase `CHECK` on it. A name always reads lowercase, and an
-entity that needs a display form gets a `_title` column. The store component
-cites this record.
+Every table that names an entity has a unique constraint on the name among
+the live rows of its scope, and a lowercase `CHECK` on the name. A name always
+reads lowercase. An entity that needs a display form gets a `_title` column.
+The store component cites this record.

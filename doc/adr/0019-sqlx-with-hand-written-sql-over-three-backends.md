@@ -24,10 +24,10 @@ microseconds in UTC, so the three backends bind them the same way (owner,
 
 Each backend has its own migration directory of numbered SQL files. `migrate!`
 embeds the files in the binary, and sqlx records each applied file with its
-checksum in `_sqlx_migrations`. There are no down files, because deployments
-are rebuilt rather than migrated backwards (owner, 2026-11-02;
-`doc/principles.md` 8). `serve` refuses a database whose applied migrations do
-not match the binary's.
+checksum in `_sqlx_migrations`. There are no down files, because deployments are
+rebuilt rather than migrated backwards (owner, 2026-11-02; `doc/principles.md`
+8). `serve` sets up an empty database, and it refuses a database whose applied
+migrations otherwise differ from the migrations embedded in the binary.
 
 The database setting is a URL in the form sqlx accepts as is, so the project
 defines no connection format of its own (owner, 2026-11-02). The default is
@@ -48,16 +48,16 @@ sqlx-cli and a `.sqlx` cache in the build loop.
 One migration tree for all three backends, because MariaDB needs `VARCHAR`
 keys and has no transactional DDL. One schema file with a hash, and numbered
 files without checksums, because both let an edited file pass. refinery,
-because it brings a second driver stack, and its rusqlite conflicts with sqlx
-over the libsqlite3-sys link: sqlx-sqlite 0.9.0 needs a version below 0.38,
-and rusqlite 0.41 needs 0.39.
+because it brings a second driver stack and because its rusqlite conflicts with
+sqlx over the libsqlite3-sys link. sqlx-sqlite 0.9.0 needs a libsqlite3-sys
+below 0.38, and rusqlite 0.41 needs 0.39.
 
 MySQL as the third backend, because the owner chose MariaDB.
 
 ## Consequences
 
 Nothing checks the SQL at compile time. SQLite binds NULL for a missing bind,
-so the Postgres and MariaDB test runs are what catch arity and type mistakes.
+so only the Postgres and MariaDB test runs catch arity and type mistakes.
 
 The three migration directories change together, and CI on every backend
 catches a directory that drifts. An edited migration that a database has

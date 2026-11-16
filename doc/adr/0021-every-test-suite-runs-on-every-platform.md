@@ -4,9 +4,9 @@ Date: 2026-11-02.
 
 ## Context
 
-The store gained Postgres and MariaDB, and the CI runners do not offer their
-servers the same way: GitHub runs service containers on Linux runners only,
-the macOS runner has neither database nor Docker, and the Windows ARM64 runner
+The store gained Postgres and MariaDB. The CI runners differ in how a job can
+get a database server. GitHub runs service containers on Linux runners only.
+The macOS runner has neither a database nor Docker. The Windows aarch64 runner
 has no Docker. The owner stated the rule while the backends were planned
 (owner, 2026-11-02).
 
@@ -30,9 +30,9 @@ the LTS.
 
 ## Consequences
 
-CI provisions each database per platform: containers on Linux, the package
-manager elsewhere. The macOS and Windows runs are slower. Windows aarch64 runs
-SQLite only, because neither Postgres nor MariaDB ships a build for it and the
-runner has no Docker. A new major can turn CI red without a commit. A test
-helper fails a CI run in which an expected database is absent, because a
-skipped test passes.
+CI starts each database in a container on Linux, and it installs each database
+with Homebrew on macOS and with Chocolatey on Windows amd64. The macOS and
+Windows runs are slower. Windows aarch64 runs SQLite only, because neither
+Postgres nor MariaDB ships a build for it and the runner has no Docker. A new
+major can turn CI red without a commit. A test helper fails a CI run in which an
+expected database is absent, because a skipped test passes.
