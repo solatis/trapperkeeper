@@ -5,25 +5,28 @@ Date: 2026-11-13.
 ## Context
 
 Looking a field up is the most expensive part of evaluating a rule on
-objects, and frameworks hold columns in different layouts.
+objects. Frameworks hold columns in different layouts.
 
 ## Decision
 
-The executor reads a view. An adapter builds the view. It looks the fields up
-in the cheapest way its framework allows and presents the values as
-continuous arrays (owner, 2026-11-13). A view is zero-copy as far as possible
-(owner, 2026-11-13).
+The executor reads a view. An adapter builds the view. It looks the fields up in
+the cheapest way its framework allows and presents the values as continuous
+arrays (owner, 2026-11-13). The executor walks each leaf column as an array of
+values, and the values need not be contiguous, because the column description
+records how far apart they are. A view is zero-copy as far as possible (owner,
+2026-11-13).
 
 A view describes each column in our own column description. The description
-gives the value type and width, where the values are and how far apart, and
-how "no value" is marked: never, by a bitmap, by a byte mask or by NaN. Arrow
-is one case of it (owner, 2026-11-13).
+gives the value type and width, where the values are and how far apart they are,
+and how "no value" is marked: never, by a bitmap, by a byte mask or by NaN.
+Arrow is one case of it (owner, 2026-11-13).
 
-A source says what "no value" is. A NaN is missing in a pandas float column
-and a value in a Polars or Arrow column (owner, 2026-11-13).
+A source says what "no value" is. In a pandas float column a NaN means that
+the value is missing. In a Polars or an Arrow column a NaN is a value (owner,
+2026-11-13).
 
-A column has one type, and a value is there or it is not (owner,
-2026-11-12).
+A column has one type. Each value of a column is either present or missing,
+with no third state (owner, 2026-11-12).
 
 An adapter borrows memory where the framework has it, and fills arrays where
 it has none. For dicts and maps an adapter also keeps the rows whose value
@@ -32,9 +35,9 @@ had the wrong type, beside the column (owner, 2026-11-13).
 An adapter is compiled against the core's traits, in our SDK crates and in a
 Rust user's crate, so it can read memory in its own way (owner, 2026-11-13).
 
-arrow-rs serves the Arrow case. It imports Arrow data, validates it, gives
-typed access, and is the type a Rust user passes (owner, 2026-11-12,
-2026-11-13).
+The arrow-rs crate serves the Arrow case. arrow-rs imports Arrow data,
+validates it and gives typed access to it. A Rust user passes arrow-rs arrays
+(owner, 2026-11-12, 2026-11-13).
 
 The column types and the loops are our own. A loop reads a source's memory in
 place, with no intermediate column format between the two (owner,
@@ -42,8 +45,8 @@ place, with no intermediate column format between the two (owner,
 
 ## Rejected alternatives
 
-Arrow layouts only, because a numpy boolean, a masked array's mask, a column
-with a stride and NaN as null each need a pass over the data.
+Arrow layouts only, because a numpy boolean array, a masked array's mask, a
+column with a stride and NaN as null each need a pass over the data.
 
 arrow-rs arrays as the executor's column type, because owning the
 implementation gives more flexibility, and arrow-rs has no stride, no byte
@@ -75,4 +78,5 @@ measured about 3 times the contiguous cost.
 In Java and Go, host code reads objects and fills arrays, because Rust cannot
 walk them cheaply.
 
-The cases of the description are fixed when the description is built.
+The core owns a closed list of cases, and no adapter extends it. The exact
+cases are chosen when the description is built (owner, 2026-11-13).
