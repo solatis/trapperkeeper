@@ -27,9 +27,10 @@ use crate::store::audit::{self, Record, Row};
 use crate::store::users;
 
 /// Who a request turned out to be from, and which tenant it acted on.
-/// `Caller`, `AtLeast` and the refresh handler set the caller with its user,
-/// and the login handler sets a tenant with no user. `scope::tenant` and the
-/// mint handler set the tenant acted on. The first setter of each wins.
+/// `Caller`, `AtLeast` and the refresh handler set the caller with its user.
+/// The login handler sets the tenant alone, because a login is recorded
+/// without the name it tried (ADR-0031). `scope::tenant` and the mint handler
+/// set the tenant acted on. The first setter of each wins.
 #[derive(Clone, Default)]
 pub struct Identity {
     /// The caller's tenant, and its user id when the setter gave one.
@@ -84,7 +85,8 @@ pub async fn record(
     // changing request under `/api/v1`.
     //
     // 1. We record only a matched route under `/api/v1` with a method other
-    //    than GET. The prefix keeps out the probes and `/openapi.json`.
+    //    than GET. The prefix keeps out `/healthz`, `/readyz` and
+    //    `/openapi.json`.
     // 2. We read the method, X-Forwarded-For and the path parameters, never a
     //    body or a query string. The handler takes the request in step 4.
     // 3. We put an empty identity cell into the request. Its clones share it,
@@ -139,8 +141,8 @@ pub async fn record(
     let user_id = caller.and_then(|(_, user_id)| user_id.as_deref());
     // The port names one TCP connection, and the row records the host.
     let peer_address = peer.ip().to_string();
-    // One proxy is assumed, so a chain such as `a, b` is stored whole
-    // (ADR-0031).
+    // ADR-0031 assumes one proxy and leaves chains out of scope, so the
+    // header is stored as received.
     let client_address = forwarded.as_deref().unwrap_or(&peer_address);
     let record = Record {
         tenant_id: tenant_id.map(String::as_str),
@@ -186,11 +188,10 @@ pub struct AuditView {
     id: String,
     /// Epoch microseconds in UTC.
     recorded_at: i64,
-    /// The name of the user who made the request. Null for a login and for a
-    /// request refused before authentication.
+    /// The name of the user who made the request. Null for a login.
     user: Option<String>,
-    /// The user's own tenant, which is `$tk` when the superadmin acted on
-    /// this tenant. It is null whenever `user` is null.
+    /// The user's own tenant, which is the system tenant `$tk` when the
+    /// superadmin acted on this tenant. Null whenever `user` is null.
     user_tenant: Option<String>,
     method: String,
     /// The matched route template.
