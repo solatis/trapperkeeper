@@ -178,8 +178,9 @@ def tracked_files(paths):
 
     Raises as `git` does, also for a path that names no tracked file.
     """
-    # git lists the files in path order whatever the order of the arguments, so
-    # a part number means the same in the list call and in the reader's call.
+    # One run of the script lists the parts, and `/doc-read` runs it again for
+    # the spans of one part. git lists the files in path order whatever the
+    # order of the arguments, so a part number means the same in both runs.
     names = git([
         # A directory stands for the tracked files under it, so build output
         # and ignored files are left out.
@@ -199,8 +200,9 @@ def disk_lines(path):
     """Return the lines of the file on disk, or None for a binary file. Raises as `open` does."""
     with open(path, "rb") as f:
         data = f.read()
-    # git also takes a file with a NUL byte for binary, and a range leaves
-    # binary files out.
+    # A NUL byte marks a binary file, and a range leaves binary files out. git
+    # looks for the byte in the first 8000 bytes of a file alone, so this test
+    # also leaves out a file whose first NUL byte comes later.
     if b"\0" in data:
         return None
     # The bytes are read as UTF-8 with replacement, as `file_lines` reads them,
@@ -296,6 +298,7 @@ def parse_args(argv):
     args.parsed = args.paths = None
     # A word with two dots in a row is a range, so a mistyped range such as
     # "a..b" is reported as a malformed range and is not looked up as a path.
+    # A path that holds two dots in a row, such as "../x", cannot be given.
     if ".." in args.source:
         args.parsed = parse_range(args.source)
         if args.parsed is None:
@@ -322,8 +325,9 @@ def main(argv=None):
             tracked = tracked_files(args.paths)
             try:
                 parts, counted, files = path_parts(tracked, args.size)
-            # A tracked file that is missing from disk is reported as one line
-            # that names the file. The handler for OSError below words its
+            # A tracked path that `open` cannot read, such as a file that is
+            # missing from disk or the directory of a submodule, is reported as
+            # one line that names it. The handler for OSError below words its
             # message for a git that cannot be run.
             except OSError as e:
                 print("change_parts: cannot read %s: %s" % (e.filename, e.strerror),
