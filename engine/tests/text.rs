@@ -137,7 +137,7 @@ fn canonical_in(scope: &[String], depth: u32) -> BoxedStrategy<Expr> {
     }
     let leaf = proptest::strategy::Union::new(leaves);
     // At depth 0 there are only leaves, so the recursion ends.
-    let Some(depth) = depth.checked_sub(1) else {
+    let Some(below) = depth.checked_sub(1) else {
         return leaf.boxed();
     };
 
@@ -145,7 +145,7 @@ fn canonical_in(scope: &[String], depth: u32) -> BoxedStrategy<Expr> {
     // eight characters, and a tree at most three levels. That is at most 27
     // leaves, so a printed tree stays far under the caps of the parser.
     // `sub` gives the operands, one level less deep, and `one` boxes one.
-    let sub = canonical_in(scope, depth);
+    let sub = canonical_in(scope, below);
     let one = || sub.clone().prop_map(Box::new);
     // `and` and `or` take two or three operands, and an operand of the same
     // kind is spliced in, as the parser does: `(a and b) and c` reads back
@@ -172,7 +172,7 @@ fn canonical_in(scope: &[String], depth: u32) -> BoxedStrategy<Expr> {
         let (scope, list) = (scope.to_vec(), sub.clone());
         name().prop_flat_map(move |name| {
             let inner: Vec<String> = scope.iter().cloned().chain([name.clone()]).collect();
-            let test = canonical_in(&inner, depth);
+            let test = canonical_in(&inner, below);
             (Just(name), list.clone(), test).prop_map(move |(name, list, test)| {
                 let (list, test) = (Box::new(list), Box::new(test));
                 if all {
