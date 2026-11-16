@@ -57,7 +57,8 @@ fn superadmin_mints_a_session_that_acts_as_the_user() {
         assert_eq!(response.status, 200, "{} on {backend}", response.body);
         // The mint sets no cookie, so the superadmin's own browser session
         // stays and the client decides what to do with the tokens (ADR-0030).
-        assert_eq!(response.header_values("set-cookie"), [] as [&str; 0]);
+        let set_cookie = response.header_values("set-cookie");
+        assert!(set_cookie.is_empty(), "{set_cookie:?} on {backend}");
         let minted: Value = serde_json::from_str(&response.body).expect("a JSON body");
         assert_eq!(minted["token_type"], "Bearer");
         // The admin has not changed her generated password, and the mint
