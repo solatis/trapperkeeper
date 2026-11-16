@@ -269,10 +269,11 @@ pub async fn delete(
         // 2. The target is found before the permission is checked, so a
         //    non-admin probing another user's name gets 403 whether or not the
         //    name exists; the 404 goes only to callers allowed to delete anyone.
-        let any_user = Rank::of(&caller.user.role_name).is_some_and(|rank| rank >= Rank::Admin);
+        let deletes_anyone =
+            Rank::of(&caller.user.role_name).is_some_and(|rank| rank >= Rank::Admin);
         let target = match found {
-            Some(target) if any_user || target.id == caller.user.id => target,
-            None if any_user => return Err(Refused::NoSuchUser),
+            Some(target) if deletes_anyone || target.id == caller.user.id => target,
+            None if deletes_anyone => return Err(Refused::NoSuchUser),
             _ => return Err(Refused::Forbidden),
         };
 
