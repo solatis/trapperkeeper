@@ -22,8 +22,8 @@ An entity that people address has a `<entity>_name` column, such as
 (owner, 2026-11-02). A tenant name is unique among the live tenants, and a user
 name is unique among the live users of its tenant. A unique constraint in the
 database enforces each name, over the live rows that `doc/adr/0024` describes.
-Two rows therefore cannot share a name, even though their ids differ (owner,
-2026-11-02).
+Two live rows therefore cannot share a name, even though their ids differ
+(owner, 2026-11-02).
 
 The server converts names and other alphanumerical identifiers to lowercase
 before it stores them (owner, 2026-11-02). A `CHECK` constraint on each name
