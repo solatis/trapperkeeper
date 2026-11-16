@@ -193,15 +193,33 @@ const DEFECTS: [Defect; 5] = [
     Defect::DeletedUser,
 ];
 
-/// The signature part with its last character changed to another base64url
-/// character.
+/// `token` with the last character of its signature changed to another that
+/// is valid there, so the signature still decodes and the server refuses the
+/// token because the HMAC does not match.
 fn flip_signature(token: &str) -> String {
     let (head, signature) = token.rsplit_once('.').expect("a signed token");
     let mut flipped = signature.to_owned();
     let last = flipped.pop().expect("a signature");
-    let other = if last == 'A' { 'B' } else { 'A' };
+    // The last of the 43 characters of an HS256 signature carries 4 data bits
+    // and 2 zero bits. `A` and `E` both end in zero bits and differ in a data
+    // bit.
+    let other = if last == 'A' { 'E' } else { 'A' };
     flipped.push(other);
     format!("{head}.{flipped}")
+}
+
+/// `flip_signature` puts a last character in the signature that differs from
+/// the old one and has its two low bits zero, as the last of 43 base64url
+/// characters must.
+#[test]
+fn flip_signature_keeps_a_valid_last_character() {
+    for last in ['A', 'w'] {
+        let token = format!("h.p.{}{last}", "a".repeat(42));
+        let new = flip_signature(&token).chars().last().expect("a character");
+        assert_ne!(new, last);
+        // The base64url characters whose values are multiples of 4.
+        assert!("AEIMQUYcgkosw048".contains(new), "{new:?} after {last:?}");
+    }
 }
 
 /// The admin's user id, read beside the server.
