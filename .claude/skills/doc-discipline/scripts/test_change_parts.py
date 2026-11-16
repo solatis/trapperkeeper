@@ -362,6 +362,8 @@ class Paths(unittest.TestCase):
                                       "part 2/2: 4 lines: dir/b.py:1-4"])
 
     def test_spans_of_one_part(self):
+        # The second piece of long.py has 30 lines, and the 2 lines of tail.py
+        # would take the part over the size of 31, so tail.py is part 3.
         status, lines, _ = self.run_main("long.py,tail.py", "2", "--size", "31")
         self.assertEqual((status, lines), (0, ["long.py:32-61"]))
 
@@ -376,6 +378,17 @@ class Paths(unittest.TestCase):
         status, lines, err = self.run_main("tail.py")
         self.assertEqual((status, lines), (2, []))
         self.assertTrue(err.startswith("change_parts: cannot read tail.py: "), err)
+        self.assertEqual(err.count("\n"), 1)
+
+    def test_tracked_directory(self):
+        # git lists the path of a submodule as one tracked name, and `open`
+        # refuses the directory behind it.
+        os.mkdir(os.path.join(self.repo, "sub"))
+        git_in(self.repo, "update-index", "--add", "--cacheinfo",
+               "160000," + git_in(self.repo, "rev-parse", "HEAD") + ",sub")
+        status, lines, err = self.run_main("sub")
+        self.assertEqual((status, lines), (2, []))
+        self.assertTrue(err.startswith("change_parts: cannot read sub: "), err)
         self.assertEqual(err.count("\n"), 1)
 
     def test_empty_path(self):
