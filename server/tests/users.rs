@@ -1,5 +1,5 @@
 //! The admin's user routes on the router served in this process, on each
-//! backend: a scenario, the superadmin's access without a minted session, the
+//! backend: a scenario, the superadmin's access to a tenant's users, the
 //! refusals, and the tenant scope.
 
 mod common;
@@ -38,9 +38,9 @@ fn me_status(server: &InProcess, token: &str) -> u16 {
 }
 
 /// An admin creates, lists, changes the role of, deletes and resets the
-/// password of the users of its own tenant. The last live admin cannot delete
-/// itself, and the token of a deleted user or from before a password reset
-/// gets 401.
+/// password of the users of its own tenant. The last admin who is not deleted
+/// cannot delete itself, and the token of a deleted user or from before a
+/// password reset gets 401.
 #[test]
 fn admin_manages_the_users_of_its_tenant() {
     // The test runs one tenant through the user routes, and each step uses the
@@ -160,7 +160,9 @@ fn admin_manages_the_users_of_its_tenant() {
         assert_eq!(response.status, 200, "{} on {backend}", response.body);
         let reset: Value = serde_json::from_str(&response.body).expect("a JSON body");
         assert_eq!(reset["name"], "eve@example.com");
-        // The reset moves eve's cutoff past the token's issue time (ADR-0025).
+        // The reset hashes a new password and then moves eve's cutoff, the
+        // time before which her tokens are refused, past this token
+        // (ADR-0025).
         assert_eq!(me_status(&server, &eve_before), 401);
         let (_, must_change) = log_in(
             &server,
@@ -174,8 +176,9 @@ fn admin_manages_the_users_of_its_tenant() {
 
 /// The superadmin creates and lists the users of a tenant it does not belong
 /// to, without a session minted as one of its users. Every user route on the
-/// system tenant `$tk` answers 404 to the superadmin, so no user route lists
-/// or changes the superadmin.
+/// system tenant `$tk` answers 404 to the superadmin, as for an unknown
+/// tenant, because `$tk` is no customer (ADR-0028). So no user route lists or
+/// changes the superadmin.
 #[test]
 fn superadmin_manages_any_tenants_users() {
     on_each_backend(|backend| {
@@ -211,7 +214,7 @@ fn superadmin_manages_any_tenants_users() {
                 response.body
             );
         }
-        // The superadmin is still live, so the 404s changed nothing.
+        // The superadmin is still live after the delete aimed at it.
         assert_eq!(me_status(&server, &token), 200);
     });
 }
@@ -308,7 +311,8 @@ fn user_routes_refuse_bad_names_roles_and_other_users() {
 }
 
 /// An admin of tenant `a` gets 403 on every user route of tenant `b`, and 404
-/// on a tenant that does not exist (ADR-0003).
+/// on a tenant that does not exist. The routes check the tenant in the path
+/// before the user, so the 404 is for the missing tenant.
 #[test]
 fn user_routes_scope_to_the_tenant_in_the_path() {
     on_each_backend(|backend| {
@@ -326,6 +330,7 @@ fn user_routes_scope_to_the_tenant_in_the_path() {
             // `bea@example.com` is the admin of `b`.
             ("DELETE", "users/bea@example.com", None),
             ("PUT", "users/bea@example.com/role", Some(&change)),
+            // A reset generates the new password, so it takes no body.
             ("POST", "users/bea@example.com/password", None),
         ];
         for (tenant, status) in [("b", 403), ("nobody", 404)] {
