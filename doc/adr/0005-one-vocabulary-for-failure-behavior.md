@@ -57,8 +57,10 @@ Five tests are never unknown: `is None`, `is not None`, `x == None`,
 
 `x == None` means `x is None`, and `x != None` means `x is not None`. A
 `None` in a membership list matches a null, so `x in ("paid", None)` means
-`x == "paid" or x == None` (owner, 2026-11-14). Only the literal `None` has
-this meaning. `a == b` on two fields that both hold a null gives unknown.
+`x == "paid" or x == None` (owner, 2026-11-14). With the literal on the left
+of `in`, as in `None in tags`, the test is true when the list `tags` holds a
+null element (owner, 2026-11-16). Only the literal `None` has this meaning.
+`a == b` on two fields that both hold a null gives unknown.
 
 The parser refuses the literal `None` beside an ordering or an arithmetic
 operator, and after `in` and `not in`, because such a rule could never match.
@@ -67,13 +69,13 @@ unknown (owner, 2026-11-14). `x in y` gives unknown only when `y` is a field
 that should hold a list and holds a null (owner, 2026-11-16).
 
 A rule differs from SQL in three places. The first is the literal `None`.
-Under `==`, under `!=` and in a membership list it tests for a null, and
-beside an ordering or an arithmetic operator the parser refuses it. SQL gives
-unknown in each of these places. The second is a conditional with an unknown
-test, which gives unknown, where SQL's `CASE` takes the else branch. The
-third is the fault. This record says which operations are faults and what a
-fault does. SQL engines have their own answers, and they differ on a division
-by zero.
+Under `==`, under `!=`, in a membership list and on the left of `in` it tests
+for a null, and beside an ordering or an arithmetic operator the parser
+refuses it. SQL gives unknown in each of these places. The second is a
+conditional with an unknown test, which gives unknown, where SQL's `CASE`
+takes the else branch. The third is the fault. This record says which
+operations are faults and what a fault does. SQL engines have their own
+answers, and they differ on a division by zero.
 
 A fault is an operation that cannot be done on values that are there (owner,
 2026-11-13):
