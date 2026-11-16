@@ -40,8 +40,8 @@ type StoredRow = (
 /// The rows of `tenant_id`'s trail in time order, read from the store, or
 /// every row without a tenant when `tenant_id` is `None`.
 fn stored_rows(server: &InProcess, tenant_id: Option<&str>) -> Vec<StoredRow> {
-    // An audit id is a version 7 UUID, so the order of the ids is the order
-    // of the writes.
+    // The server makes each audit id with `Uuid::now_v7`, which orders the
+    // ids of one process by their creation.
     let select = if tenant_id.is_some() {
         "SELECT method, route, status, user_id, tenant_id, path_params, peer_address, client_address \
          FROM audit WHERE tenant_id = $1 ORDER BY audit_id"
@@ -73,9 +73,9 @@ fn trail(server: &InProcess, token: &str, tenant: &str, query: &str) -> Vec<Valu
 }
 
 /// Each changing request leaves one row with its method, route, status,
-/// caller, tenant, peer and client, and a GET leaves none. A login and the
-/// superadmin's mint of a session are filed under the tenant of the user they
-/// name.
+/// caller, tenant, peer and client, and a GET leaves none. A row is filed
+/// under the tenant that the path names, or else under the caller's tenant,
+/// and a login under the tenant of the user it names (ADR-0031).
 #[test]
 fn changing_requests_leave_rows_and_reads_do_not() {
     // The test sends requests as the superadmin and as anonymous callers, and
@@ -83,14 +83,14 @@ fn changing_requests_leave_rows_and_reads_do_not() {
     //
     // 1. We log in as the superadmin, create `acme` and list the tenants. The
     //    login and the create leave rows under `$tk`, and the GET none.
-    // 2. We read the rows of `$tk` from the store, because the list route
+    // 2. We read the rows of `$tk` from the store, because the audit route
     //    answers `$tk` as an unknown tenant.
     // 3. We repeat the create with `X-Forwarded-For`. Its 409 still leaves a
-    //    row, whose client is the header's address, as the middleware assumes
-    //    one proxy (ADR-0031).
-    // 4. We fail a login for ada and one for an unknown user. Only the
-    //    unknown user's row has no tenant, so the test reads it from the
-    //    store.
+    //    row, whose client is the header as received, because the server
+    //    assumes one proxy in front of it (ADR-0031).
+    // 4. We fail a login for ada and one for an unknown user. A login notes
+    //    the tenant of the user it found, so only the unknown user's row has
+    //    no tenant, and the test reads it from the store.
     // 5. We mint a session for ada, which is filed under her tenant.
     // 6. We read the trail of `acme` through the route.
     on_each_backend(|backend| {
@@ -250,7 +250,7 @@ fn the_trail_pages_newest_first() {
             .iter()
             .map(|r| r["id"].as_str().expect("an id"))
             .collect();
-        // The text of a version 7 UUID sorts by time, so descending ids run
+        // `Uuid::now_v7` orders the ids by creation, so descending ids run
         // from newest to oldest.
         assert!(ids.windows(2).all(|w| w[0] > w[1]), "{ids:?} on {backend}");
         assert_eq!(first[0]["route"], "/api/v1/tenants/{tenant}/users");
@@ -276,19 +276,20 @@ fn the_trail_pages_newest_first() {
     });
 }
 
-/// A row of a user deleted since still names that user, and the user filter
-/// still finds the deleted user.
+/// A row whose user was deleted after the row was written still names that
+/// user, and the user filter still finds the deleted user.
 #[test]
 fn the_trail_names_a_deleted_user() {
-    // The test has a user act once, deletes the user, and reads the trail
-    // narrowed to that user.
+    // The test has a user log in and out, deletes the user, and reads the
+    // trail narrowed to that user.
     //
     // 1. We create `acme`, log ada in, and create bob.
     // 2. Bob logs in and out. The logout is the only row that names bob,
     //    because a login row names no user.
     // 3. Ada deletes bob, which keeps his row in the users table.
     // 4. We narrow the trail to bob, which must hold the logout with his name
-    //    and tenant, because the trail joins the users table on the id alone.
+    //    and tenant, because the trail joins the users table on the id and
+    //    does not leave out deleted users.
     on_each_backend(|backend| {
         // 1. create acme, ada and bob
         let server = serve_in_process(backend);
