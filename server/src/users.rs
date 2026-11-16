@@ -26,7 +26,8 @@ use crate::superadmin;
 /// Why a user route refused a request or failed. It converts into the
 /// response the caller gets.
 enum Refused {
-    /// The tenant in the path failed the tenant rule: 404, 403 or 500.
+    /// `scope::tenant` refused the tenant in the path: 404 for an unknown
+    /// tenant, 403 for one the caller may not act on, or 500.
     Scope(scope::Refused),
     /// The request's content breaks a rule: 400 with the rule.
     BadRequest(&'static str),
@@ -184,7 +185,8 @@ pub async fn create(
         Ok(name) => name,
         Err(refused) => return Refused::BadRequest(refused.0).into_response(),
     };
-    // `$tk` holds the role `superadmin` alone (ADR-0028).
+    // Only the system tenant `$tk` holds `superadmin` (ADR-0028). The role
+    // check below would refuse it too, and this check names the reason.
     if request.role == superadmin::ROLE {
         return Refused::BadRequest("no route gives the role superadmin").into_response();
     }
@@ -196,8 +198,6 @@ pub async fn create(
         if !tenants::role_exists(&mut tx, &tenant.id, &request.role).await? {
             return Err(Refused::BadRequest("the tenant does not hold this role"));
         }
-        // `accounts::create` gives the user a generated password that must be
-        // changed.
         let password = accounts::create(
             &mut tx,
             NewAccount {
@@ -213,7 +213,6 @@ pub async fn create(
     .await;
 
     match created {
-        // No other response returns the generated password (ADR-0028).
         Ok((tenant_id, password)) => (
             StatusCode::CREATED,
             Json(CreatedUser {
@@ -262,9 +261,8 @@ pub async fn delete(
     //    after the lookup, and a caller below admin gets 403 for any other
     //    name, so it cannot tell whether that name exists.
     // 3. We refuse to delete the tenant's last live admin.
-    // 4. We mark the user deleted and commit, so a refusal writes nothing.
-    //    Its tokens need no revocation, because every request reads the
-    //    user (ADR-0025).
+    // 4. We mark the user deleted and commit. Its tokens need no revocation,
+    //    because every request reads the user (ADR-0025).
 
     let deleted = async {
         // 1. resolve the tenant and the target
@@ -286,7 +284,7 @@ pub async fn delete(
 
         // 3. refuse the last admin
         // The count is a statement of its own, so two concurrent deletes on
-        // Postgres or MariaDB can both pass it.
+        // Postgres or MariaDB can both pass it and leave no live admin.
         if target.role_name == ADMIN_ROLE && users::count_admins(&mut tx, &tenant.id).await? <= 1 {
             return Err(Refused::LastAdmin);
         }
@@ -342,8 +340,8 @@ pub async fn change_role(
 ) -> Response {
     // The order of the checks decides which refusal a caller sees.
     //
-    // 1. We refuse `superadmin` before any read, because `$tk` holds that
-    //    role alone (ADR-0028).
+    // 1. We refuse `superadmin` before any read, because only the system
+    //    tenant `$tk` holds that role (ADR-0028).
     // 2. We find the user before we check the role, so an unknown name is
     //    404 whatever role the body names.
     // 3. We refuse to demote the tenant's last live admin.
@@ -358,6 +356,7 @@ pub async fn change_role(
         // 2. find the user, check the role
         let mut tx = state.store.begin().await?;
         let tenant = scope::tenant(&mut tx, &caller.user, &caller.identity, &tenant).await?;
+        // A name that fails the user-name rule matches no row, so it is 404.
         let Some(mut target) = users::find(&mut tx, &tenant.id, &name.to_lowercase()).await? else {
             return Err(Refused::NoSuchUser);
         };
@@ -414,6 +413,7 @@ pub async fn reset_password(
     let reset = async {
         let mut tx = state.store.begin().await?;
         let tenant = scope::tenant(&mut tx, &caller.user, &caller.identity, &tenant).await?;
+        // A name that fails the user-name rule matches no row, so it is 404.
         let Some(target) = users::find(&mut tx, &tenant.id, &name.to_lowercase()).await? else {
             return Err(Refused::NoSuchUser);
         };
