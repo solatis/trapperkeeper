@@ -346,7 +346,7 @@ fn join(make: fn(Vec<Expr>) -> Expr, l: Expr, r: Expr) -> Expr {
         match e {
             // A node of the same kind brings its own operands: the left side
             // `a and b` of `(a and b) and c` brings `a` and `b`.
-            Expr::And(operands) | Expr::Or(operands) if same => operands,
+            Expr::And(inner) | Expr::Or(inner) if same => inner,
             // Anything else is one operand. That includes a node of the other
             // kind, as `(c or d)` in `a and (c or d)`.
             e => vec![e],
