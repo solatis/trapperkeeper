@@ -61,9 +61,10 @@ gets, and the printer.
   and `faulty` and the properties of the `proptest!` block, all in
   `engine/tests/text.rs`.
 - Adding a method: a variant of `Expr` in `engine/src/expr.rs` with its arm
-  in `Expr::children_mut`, a row in `METHODS`, an arm in the printer, and an
-  entry in two lists of the tests. The entry goes in `UNARY` for a method
-  without an argument and in `BINARY` for a method with one. The lists of
+  in `Expr::children_mut`, a row in `METHODS`, an arm in the printer, and
+  one entry in each of the test files `engine/tests/common/mod.rs` and
+  `engine/tests/text.rs`. Each file has a list `UNARY` for a method without
+  an argument and a list `BINARY` for a method with one. The lists of
   `engine/tests/common/mod.rs` feed the strategy `expr`, which generates any
   tree for the properties of the JSON form. The lists of
   `engine/tests/text.rs` feed `canonical_in`, which generates only trees that
