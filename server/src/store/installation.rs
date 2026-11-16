@@ -44,14 +44,17 @@ pub async fn ensure_salt(tx: &mut Tx) -> Result<(), sqlx::Error> {
     });
     match inserted {
         // Another instance wrote its salt between the read and the insert,
-        // and that salt is the installation's.
+        // and that salt is the installation's. On Postgres the violation has
+        // also aborted the transaction of `tx`, so a later commit of it ends
+        // as a rollback.
         Err(sqlx::Error::Database(database)) if database.is_unique_violation() => Ok(()),
         inserted => inserted,
     }
 }
 
-/// The installation's signing salt, or `None` when `migrate::apply` has not
-/// run on this database. The migrate command and the first serve both run it.
+/// The installation's signing salt, or `None` when the installation table
+/// holds no row. That is the state between the migrations and the write of
+/// the salt, both of which `migrate::apply` does.
 ///
 /// # Errors
 ///
