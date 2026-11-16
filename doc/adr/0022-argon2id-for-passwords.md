@@ -4,11 +4,12 @@ Date: 2026-11-06.
 
 ## Context
 
-The server gets users with passwords. The superadmin, the user `admin` of `$tk`,
-gets a generated password that reaches the console once: the command that first
-migrates an empty database logs it as one INFO event, and `reset-superadmin`
-prints a new one. The owner wanted stronger parameters than the OWASP floor and
-asked for the trade-offs (owner, 2026-11-05).
+The server gets users with passwords. The superadmin, the user `admin` of the
+system tenant `$tk` (`doc/adr/0028`), gets a generated password that reaches the
+console once: the command that first migrates an empty database logs it as one
+INFO event, and `reset-superadmin` prints a new one. The owner wanted stronger
+parameters than the OWASP floor and asked for the trade-offs (owner,
+2026-11-05).
 
 ## Decision
 
@@ -35,8 +36,8 @@ because Argon2id is the current recommendation and resists both GPU and
 side-channel attacks (owner, 2026-11-05).
 
 Reading the superadmin's password from stdin or a no-echo prompt, because a
-generated password that the server shows once can be scripted (owner,
-2026-11-05).
+generated password that the server prints once works in a script, where a prompt
+needs a person (owner, 2026-11-05).
 
 ## Consequences
 
