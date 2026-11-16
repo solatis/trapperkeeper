@@ -15,9 +15,9 @@ The roles rank observer, operator, admin and superadmin, each above the one
 before. Each route names the lowest role it accepts, and a caller below it
 gets 403 (owner, 2026-11-06).
 
-A superadmin route names its rung, `Superadmin`, in the same way that other
-routes name the rung `Admin`, because the ladder ranks the superadmin at the
-top and only `$tk` holds the role (`adr/0028`).
+A route names its lowest role as a type, `AtLeast<Admin>` or
+`AtLeast<Superadmin>`. The superadmin needs no check of its own, because the
+ladder ranks it at the top and only `$tk` holds the role (`adr/0028`).
 
 A role a tenant defines later becomes a rung of the ladder plus permissions
 (owner, 2026-11-06). Until it has a rung, a role that is not on the ladder
@@ -35,7 +35,7 @@ both.
 
 ## Consequences
 
-A role off the ladder reaches only the routes of the caller's own account.
-Every new route that needs a role states its rung in its signature by taking
-`AtLeast<R>`. A route that serves the caller's own account takes `Caller` and
-names no rung.
+A role off the ladder reaches only the routes of the caller's own account, such
+as the password change. Every new route that needs a role states its rung in its
+signature by taking `AtLeast<R>`. A route that serves the caller's own account
+takes `Caller` and names no rung.
