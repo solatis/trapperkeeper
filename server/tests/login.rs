@@ -197,9 +197,9 @@ const DEFECTS: [Defect; 5] = [
 /// character.
 fn flip_signature(token: &str) -> String {
     let (head, signature) = token.rsplit_once('.').expect("a signed token");
-    let last = signature.chars().last().expect("a signature");
+    let mut flipped = signature.to_owned();
+    let last = flipped.pop().expect("a signature");
     let other = if last == 'A' { 'B' } else { 'A' };
-    let mut flipped: String = signature.chars().take(signature.len() - 1).collect();
     flipped.push(other);
     format!("{head}.{flipped}")
 }
