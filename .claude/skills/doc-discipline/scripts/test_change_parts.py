@@ -392,8 +392,9 @@ class Paths(unittest.TestCase):
         # git lists the path of a submodule as one tracked name, and `open`
         # refuses the directory behind it.
         os.mkdir(os.path.join(self.repo, "sub"))
-        git_in(self.repo, "update-index", "--add", "--cacheinfo",
-               "160000," + git_in(self.repo, "rev-parse", "HEAD") + ",sub")
+        # Mode 160000 makes the entry a submodule. git does not look up the
+        # commit of such an entry, so any id of 40 digits serves.
+        git_in(self.repo, "update-index", "--add", "--cacheinfo", "160000," + "1" * 40 + ",sub")
         status, lines, err = self.run_main("sub")
         self.assertEqual((status, lines), (2, []))
         self.assertTrue(err.startswith("change_parts: cannot read sub: "), err)
