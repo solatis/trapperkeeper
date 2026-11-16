@@ -27,8 +27,7 @@ ranks below every route.
 
 Permissions stored as rows, because they would need a table and seed rows before
 any tenant defines a role of its own. A list of roles per route, because it
-repeats role names and has no order (owner,
-2026-11-06).
+repeats role names and has no order (owner, 2026-11-06).
 
 A separate superadmin check beside the ladder, because one mechanism covers
 both.
