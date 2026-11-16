@@ -39,9 +39,8 @@ impl Kind {
     /// How long a token of this kind lives.
     #[must_use]
     pub fn lifetime(self) -> Duration {
-        // ADR-0025 sets both lifetimes. The refresh route issues no new
-        // refresh token, so 7 days is also how long a login lasts, and how
-        // long an operator leaves the previous key set after a rotation.
+        // ADR-0025 sets both. 7 days is also how long a login lasts and how
+        // long the previous key stays set after a rotation.
         match self {
             Self::Access => Duration::from_hours(1),
             Self::Refresh => Duration::from_hours(7 * 24),
@@ -56,10 +55,8 @@ pub struct Claims {
     pub sub: String,
     /// The user's tenant id.
     pub tid: String,
-    /// The issue time in seconds since the Unix epoch, with a microsecond
-    /// fraction, which a `NumericDate` allows (RFC 7519, 2). The fraction
-    /// lets the check of a caller compare the issue time exactly with the
-    /// user's `tokens_valid_after`, the cutoff that revokes earlier tokens.
+    /// The issue time in epoch seconds with a microsecond fraction (RFC 7519,
+    /// 2), so it compares exactly with the user's cutoff.
     pub iat: f64,
     /// The expiry in whole seconds since the Unix epoch.
     pub exp: u64,
@@ -84,9 +81,8 @@ pub enum Refused {
     UnknownKey,
     /// The `typ` is not the asked kind's.
     WrongKind,
-    /// jsonwebtoken refused the token: a header or body that it cannot parse,
-    /// a signature that does not verify, an algorithm other than HS256, or an
-    /// expiry that has passed.
+    /// jsonwebtoken refused the token: its form, signature, algorithm or
+    /// expiry.
     Invalid(jsonwebtoken::errors::Error),
 }
 
@@ -145,10 +141,8 @@ impl Keyring {
         signing: &str,
         previous: Option<&str>,
     ) -> Result<Self, KeyringError> {
-        // `installation::salt` takes a transaction, so `from_store` opens one
-        // for this read alone. The block drops it at its end, which rolls the
-        // read back and changes nothing, so no connection is held while the
-        // two derivations run.
+        // The transaction ends with the block, so no connection is held
+        // while the keys are derived.
         let salt = {
             let mut tx = store.begin().await?;
             installation::salt(&mut tx).await?
@@ -157,13 +151,11 @@ impl Keyring {
 
         let (signing_kid, signing_key) = derive(signing.to_owned(), salt.clone()).await;
         let mut checking = HashMap::new();
-        // The signing key also goes into the checking keys under its id,
-        // because it checks the tokens that it signs.
+        // The signing key also checks the tokens it signs.
         checking.insert(signing_kid.clone(), DecodingKey::from_secret(&signing_key));
 
-        // The previous key goes into the checking keys alone, so the tokens
-        // that it signed before a rotation keep passing `check` while it is
-        // set.
+        // The previous key only checks, so tokens signed before a rotation
+        // stay valid while it is set.
         if let Some(previous) = previous {
             let (kid, key) = derive(previous.to_owned(), salt).await;
             checking.insert(kid, DecodingKey::from_secret(&key));
@@ -171,8 +163,7 @@ impl Keyring {
 
         Ok(Self {
             signing_kid,
-            // The bytes of the signing key make the encoding key here and its
-            // decoding key above, because HS256 is symmetric.
+            // HS256 is symmetric, so the same bytes encode and decode.
             signing: EncodingKey::from_secret(&signing_key),
             checking,
         })
@@ -183,9 +174,8 @@ impl Keyring {
     ///
     /// # Panics
     ///
-    /// `issue` does not panic in practice, because the claims hold only
-    /// strings and numbers, which `serde_json` always serializes, and HS256
-    /// signs any input.
+    /// Not in practice: the claims are strings and numbers, and HS256 signs
+    /// any input.
     #[must_use]
     pub fn issue(&self, kind: Kind, sub: &str, tid: &str, now: SystemTime) -> String {
         // A clock before 1970 reads as the epoch itself.
@@ -193,8 +183,6 @@ impl Keyring {
         let claims = Claims {
             sub: sub.to_owned(),
             tid: tid.to_owned(),
-            // The division gives the seconds with the microsecond fraction
-            // that `Claims::iat` describes.
             #[allow(clippy::cast_precision_loss)]
             iat: since_epoch.as_micros() as f64 / 1e6,
             exp: (since_epoch + kind.lifetime()).as_secs(),
@@ -217,9 +205,7 @@ impl Keyring {
     /// or whose expiry passed more than 60 seconds ago.
     pub fn check(&self, kind: Kind, token: &str) -> Result<Claims, Refused> {
         let header = jsonwebtoken::decode_header(token).map_err(Refused::Invalid)?;
-        // `check` verifies each token with the key that its `kid` names, so a
-        // token signed by a key that has left the ring fails, and a token
-        // signed by either key of the ring passes.
+        // The key the token names, so a token of a removed key fails.
         let key = header
             .kid
             .as_deref()
@@ -243,27 +229,19 @@ impl Keyring {
 /// Stretches `passphrase` under `salt` into a 32-byte key and its id, the
 /// first 16 hex characters of the key's SHA-256.
 async fn derive(passphrase: String, salt: String) -> (String, [u8; 32]) {
-    // Each derivation runs one Argon2id hash with 64 MiB of memory, which
-    // must not block the runtime, so it runs on the blocking pool (ADR-0014).
-    // The derivations take no permit. The hashing limit guards against a
-    // flood of logins (ADR-0022), and serve runs the derivations once, one
-    // after the other, before it accepts a request.
+    // A 64 MiB Argon2id hash, so off the runtime (ADR-0014). It takes no
+    // hashing permit: serve derives once, before it accepts a request.
     task::spawn_blocking(move || {
         let mut key = [0_u8; 32];
-        // The derivation uses the parameters of the password hasher
-        // (ADR-0022). The stretching makes each offline guess at a passphrase
-        // cost one Argon2id run (ADR-0025).
+        // Each offline guess at a passphrase then costs one Argon2id run
+        // (ADR-0025).
         password::hasher()
-            // The salt is the 32 hex characters that
-            // `installation::ensure_salt` wrote, which is above argon2's
-            // minimum of 8 bytes.
+            // The salt is 32 hex characters, above argon2's minimum of 8.
             .hash_password_into(passphrase.as_bytes(), salt.as_bytes(), &mut key)
             .expect("the salt and the output length are within argon2's bounds");
-        // The id is a fingerprint of the derived key, so nobody types one
-        // (ADR-0025). It is a hash, so the `kid` in the header of a token
-        // shows no byte of the key.
+        // A fingerprint, so nobody types an id and the header shows no byte
+        // of the key. Its length is a choice no measurement backs.
         let fingerprint = Sha256::digest(key);
-        // The length of the id is a choice that no measurement backs.
         let kid = fingerprint
             .iter()
             .take(8)
