@@ -64,8 +64,8 @@ impl Rung for Superadmin {
 }
 
 /// Proof that the caller of a route holds at least the role `R`. It carries
-/// the caller's user and the identity cell that `Caller` carries, which
-/// `scope::tenant` takes to resolve the tenant of a path, so a route needs no
+/// the caller's user and the same identity cell as `Caller`. `scope::tenant`
+/// takes that cell to resolve the tenant of a path, so a route needs no
 /// second extractor. The extraction fails with `Refusal::Forbidden` (403)
 /// when the caller's role ranks below `R` or is off the ladder, and with the
 /// refusals of `Caller` when the token check fails.
