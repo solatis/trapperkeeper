@@ -85,12 +85,12 @@ pub async fn record(
     // changing request under `/api/v1`.
     //
     // 1. We record only a matched route under `/api/v1` with a method other
-    //    than GET. The prefix keeps out `/healthz`, `/readyz` and
-    //    `/openapi.json`.
+    //    than GET. An unmatched request has no template, and the prefix keeps
+    //    out `/healthz`, `/readyz` and `/openapi.json`, which match any method.
     // 2. We read the method, X-Forwarded-For and the path parameters, never a
     //    body or a query string. The handler takes the request in step 4.
-    // 3. We put an empty identity cell into the request. Its clones share it,
-    //    so what extractors and handlers set in step 4 is visible afterwards.
+    // 3. We put an empty identity cell into the request. Clones of `Identity`
+    //    share the cell, so what the handler sets in step 4 shows here after.
     // 4. We run the handler, which commits its own transaction.
     // 5. We build the row. Its tenant is the one the route resolved, else the
     //    caller's, so a tenant's admins see what the superadmin did there.
@@ -115,10 +115,10 @@ pub async fn record(
         // A value that is not visible ASCII counts as absent.
         .and_then(|value| value.to_str().ok())
         .map(|value| value.trim().to_owned());
-    // As a middleware argument, `RawPathParams` would answer the request when
-    // it fails. Here it fails only on a parameter that is not UTF-8, which
-    // `.ok()` records as `{}`.
     let (mut parts, body) = request.into_parts();
+    // `RawPathParams` has no optional form, and as a middleware argument it
+    // would answer the request when it fails. It fails only on a parameter
+    // that is not UTF-8, which `.ok()` records as `{}`.
     let params = RawPathParams::from_request_parts(&mut parts, &())
         .await
         .ok();
@@ -141,8 +141,7 @@ pub async fn record(
     let user_id = caller.and_then(|(_, user_id)| user_id.as_deref());
     // The port names one TCP connection, and the row records the host.
     let peer_address = peer.ip().to_string();
-    // ADR-0031 assumes one proxy and leaves chains out of scope, so the
-    // header is stored as received.
+    // ADR-0031 assumes one proxy, so a chain in the header is stored whole.
     let client_address = forwarded.as_deref().unwrap_or(&peer_address);
     let record = Record {
         tenant_id: tenant_id.map(String::as_str),
@@ -196,7 +195,8 @@ pub struct AuditView {
     method: String,
     /// The matched route template.
     route: String,
-    /// Each parameter of the route template with its value from the path.
+    /// Each parameter of the route template with its value from the path,
+    /// and `{}` when the route has none.
     path_params: Value,
     status: i32,
     /// The IP address of the TCP peer, without its port.
@@ -256,8 +256,8 @@ pub async fn list(
     Path(tenant): Path<String>,
     Query(page): Query<Page>,
 ) -> Response {
-    // A client that wants more rows pages with `before`. Both values are
-    // choices that no measurement backs.
+    // The cap bounds one response, and a client pages with `before`. Both
+    // values are choices that no measurement backs.
     let limit = page.limit.unwrap_or(100).min(1000);
     let listed = async {
         let mut tx = state.store.begin().await?;
