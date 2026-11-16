@@ -336,6 +336,14 @@ class Paths(unittest.TestCase):
             "part 1/1: 2 lines: tail.py:1-2",
             "change_parts: 1 parts, 2 lines in 1 files"]))
 
+    def test_nul_byte_past_the_start(self):
+        # git reads this file as text, because its NUL byte comes after the
+        # 8000 bytes in which git looks for one.
+        write(self.repo, "late.txt", "a" * 8000 + "\0b\n")
+        git_in(self.repo, "add", "late.txt")
+        status, lines, _ = self.run_main("late.txt", "1")
+        self.assertEqual((status, lines), (0, ["late.txt:1-1"]))
+
     def test_file_without_a_last_newline(self):
         # The file holds "a\nb", so its second line counts although no newline ends it.
         status, lines, _ = self.run_main("tail.py", "1")

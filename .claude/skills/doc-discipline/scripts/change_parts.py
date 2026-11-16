@@ -42,6 +42,9 @@ CUT_WINDOW = 40
 # output and vendored code.
 SKIP_DIRS = {".git", "target", "node_modules", "vendor", "thirdparty",
              "third_party", "build", "dist"}
+# git takes a file for binary when one of its first 8000 bytes is a NUL byte.
+# The number is FIRST_FEW_BYTES in git's xdiff-interface.c.
+BINARY_HEAD = 8000
 
 # The new side of a hunk header, such as "@@ -10,2 +12,3 @@ fn f()" with groups 12 and 3.
 HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
@@ -200,10 +203,9 @@ def disk_lines(path):
     """Return the lines of the file on disk, or None for a binary file. Raises as `open` does."""
     with open(path, "rb") as f:
         data = f.read()
-    # A NUL byte marks a binary file, and a range leaves binary files out. git
-    # looks for the byte in the first 8000 bytes of a file alone, so this test
-    # also leaves out a file whose first NUL byte comes later.
-    if b"\0" in data:
+    # This is git's test for a binary file, so the path form leaves out the
+    # files that a range leaves out.
+    if b"\0" in data[:BINARY_HEAD]:
         return None
     # The bytes are read as UTF-8 with replacement, as `file_lines` reads them,
     # so a file that is not UTF-8 does not fail the call.
