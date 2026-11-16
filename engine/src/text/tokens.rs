@@ -309,7 +309,7 @@ fn number(text: &str, at: usize) -> Result<Token, SyntaxError> {
 // `at` and `open` differ by the prefix: for `r"\d"` they are the bytes of
 // the `r` and of the quote, and for `"paid"` both are the quote.
 fn quoted_text(text: &str, at: usize, open: usize, raw: bool) -> Result<Token, SyntaxError> {
-    let refuse = |at: Range<usize>, reason| Err(SyntaxError { at, reason });
+    let refuse = |span: Range<usize>, reason| Err(SyntaxError { at: span, reason });
     // The quote that opens the text also closes it, so `"it's"` holds an
     // apostrophe.
     let quote = char::from(text.as_bytes()[open]);
