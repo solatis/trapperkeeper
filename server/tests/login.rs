@@ -9,7 +9,7 @@ mod common;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use common::{
-    ADMIN, SYSTEM_TENANT, SYSTEM_TENANT_ID, TEST_KEY, TEST_PREVIOUS_KEY, backends, block_on,
+    ADMIN, SYSTEM_TENANT, SYSTEM_TENANT_ID, TEST_KEY, TEST_PREVIOUS_KEY, backends, block_on, call,
     on_each_backend, on_pool, placeholders, request, serve_in_process,
 };
 use proptest::prelude::*;
@@ -108,18 +108,11 @@ fn login_then_me() {
         assert_eq!(response.status, 401);
         assert_eq!(response.header_values("www-authenticate"), ["Bearer"]);
 
-        // 6. A second tenant, inserted through sqlx because no route creates
-        //    tenants, so the superadmin's credentials are refused under its
-        //    name.
-        on_pool!(server.database(), |pool| {
-            sqlx::query(
-                "INSERT INTO tenants (tenant_id, tenant_name, tenant_title) \
-                 VALUES ('00000000-0000-7000-8000-0000000000ff', 'other', 'Other')",
-            )
-            .execute(&pool)
-            .await
-            .expect("the tenant is inserted");
-        });
+        // 6. A second tenant, so the superadmin's credentials are refused
+        //    under its name.
+        let other = json!({ "name": "other", "title": "Other", "admin": "boss@other" });
+        let response = call(&server, token, "POST", "/api/v1/tenants", Some(&other));
+        assert_eq!(response.status, 201, "{}", response.body);
         // An unknown tenant, another tenant, a wrong password and an unknown
         // name. All four get the same body, so a response does not say which
         // part was wrong.
