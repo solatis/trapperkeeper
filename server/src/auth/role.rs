@@ -13,7 +13,8 @@ use crate::auth::caller::{Caller, Refusal};
 use crate::http::AppState;
 use crate::store::users::User;
 
-/// A rung of the ladder. The order of the variants is the ranking.
+/// A rung of the ladder. The derived `Ord` ranks the variants in declaration
+/// order, so `Observer` ranks lowest and `Superadmin` highest.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Rank {
     Observer,
@@ -26,6 +27,10 @@ impl Rank {
     /// The rank of the role named `role_name`, or `None` for a role that is
     /// not on the ladder.
     pub fn of(role_name: &str) -> Option<Self> {
+        // The names are the `role_name` values that every created tenant is
+        // seeded with, `admin`, `operator` and `observer`, and the
+        // `superadmin` role that the roles migration seeds in the system
+        // tenant.
         match role_name {
             "observer" => Some(Self::Observer),
             "operator" => Some(Self::Operator),
@@ -37,9 +42,9 @@ impl Rank {
 }
 
 /// A minimum role, as a type, so a handler states it in its signature.
-// A marker type with a constant, because a const generic over an enum
-// (`AtLeast<{ Rank::Admin }>`) is unstable, and the toolchain is stable
-// (ADR-0009).
+// Each rung is a marker type with a constant, because a const generic over
+// an enum (`AtLeast<{ Rank::Admin }>`) is unstable, and the toolchain is
+// stable (ADR-0009).
 pub trait Rung {
     const RANK: Rank;
 }
@@ -60,10 +65,15 @@ impl Rung for Superadmin {
 
 /// Proof that the caller of a route holds at least the role `R`, with the
 /// caller's user and identity cell, so a route scopes to a tenant without a
-/// second extractor.
+/// second extractor. The extraction fails with `Refusal::Forbidden` (403)
+/// when the caller's role ranks below `R` or is off the ladder, and with the
+/// refusals of `Caller` when the token check fails.
 pub struct AtLeast<R: Rung> {
     pub user: User,
     pub identity: Identity,
+    // The field is private, so code outside this module cannot build an
+    // `AtLeast`. The extractor is then the only way to get one, which makes
+    // the type proof of the role.
     rung: PhantomData<R>,
 }
 
@@ -76,8 +86,11 @@ where
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Refusal> {
         let caller = Caller::from_request_parts(parts, state).await?;
-        // A role that is not on the ladder ranks below every route, so it
-        // reaches only the routes of the caller's own account.
+        // A role that is not on the ladder ranks below every `AtLeast` route.
+        // It reaches only the routes of the caller's own account, which take
+        // `Caller` and do not consult the ladder. A role that a tenant
+        // defines later therefore reaches no `AtLeast` route until `Rank`
+        // gets a rung for it (ADR-0029).
         if Rank::of(&caller.user.role_name).is_none_or(|rank| rank < R::RANK) {
             return Err(Refusal::Forbidden);
         }
