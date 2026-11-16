@@ -1,8 +1,6 @@
 //! The superadmin, the user `admin` of the system tenant `$tk` (ADR-0028).
-//! The set-up creates it when it is missing: serve runs the set-up on an
-//! empty database, and migrate runs it on every run. reset-superadmin gives
-//! it a new one-time password from the console and creates it when it is
-//! missing.
+//! The set-up of serve and migrate creates it when it is missing, and
+//! reset-superadmin gives it a new password from the console.
 
 use crate::accounts::{self, NewAccount};
 use crate::store::users::{self, CreateError};
@@ -33,8 +31,7 @@ fn account() -> NewAccount<'static> {
 /// Fails when the database cannot be read or written.
 pub async fn ensure(store: &Store) -> Result<Option<String>, sqlx::Error> {
     let mut tx = store.begin().await?;
-    // An existing superadmin returns here, before `accounts::create`
-    // generates and hashes a password.
+    // The lookup spares an existing superadmin a password hash.
     if users::find(&mut tx, SYSTEM_TENANT_ID, NAME)
         .await?
         .is_some()
