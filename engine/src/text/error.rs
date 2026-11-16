@@ -9,7 +9,7 @@ use super::grammar::{FUNCTIONS, METHODS, TYPES, names};
 /// Why a text is no rule. Each case holds what its sentence needs, and
 /// `Display` writes the sentence. A sentence names the mistake first. Where
 /// a reason knows what the author of the rule should write instead, its
-/// sentence says that next, in the author's words.
+/// sentence says that next, as the text that the author would type.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Reason {
     // Found by the tokenizer.
@@ -39,7 +39,8 @@ pub enum Reason {
     MalformedNumber,
     /// The tokenizer refuses `99999999999999999999`, which no u64 holds. The
     /// grammar refuses `9223372036854775808` without a minus before it,
-    /// which no i64 holds.
+    /// which no i64 holds. The tokenizer reads the magnitude alone, and only
+    /// the grammar knows whether a minus stands before it.
     IntTooLarge,
     /// The `1e999` of `amount > 1e999`, which no f64 holds.
     FloatTooLarge,
@@ -48,11 +49,13 @@ pub enum Reason {
     /// The empty text, or a text of spaces.
     Empty,
     /// What could have stood at the place, what stands there, and the text
+    /// that the place comes after, which is the expression or the token
     /// before it. `nearest` is the word of the language nearest to the name
-    /// at the place. It is chosen from every word that some token test
-    /// wanted there, so the error may not list it, as `is` for `x iss None`.
-    /// It is set only when the word is near enough to be a typo, and it is
-    /// not set when the name is itself a word of the language.
+    /// at the place. It is chosen from every word that the parser could have
+    /// read there. The error may not list that word, because it lists some
+    /// words under one name, as "an operator" for `is` in `x iss None`.
+    /// `nearest` is set only when the word is near enough to be a typo, and
+    /// it is not set when the name is itself a word of the language.
     Expected {
         expected: Vec<String>,
         found: Found,
@@ -66,8 +69,6 @@ pub enum Reason {
     /// grammar in which two alternatives read the same bracketed text
     /// reaches that cap, so no text an author writes should get this reason.
     TooComplex,
-
-    // Found by the grammar.
     /// The `(` of `(a > 1 and b < 2`, when the text ends inside it.
     NeverClosed { open: char },
     /// The `)` of `a > 1) and b`.
@@ -96,8 +97,9 @@ pub enum Reason {
     NegativeIndex,
     /// A second comparison operator after a comparison, as the second `<` of
     /// `0 < amount < 10`. `write` is the two comparisons joined with `and`,
-    /// `0 < amount and amount < 10`. It is `None` after `is None` and when
-    /// the third operand is missing, as in `a < b <`.
+    /// `0 < amount and amount < 10`. It is `None` when the first comparison
+    /// is `is None`, which has no right operand to write twice, and when the
+    /// third operand is missing, as in `a < b <`.
     ChainedComparison { write: Option<String> },
     /// The `< None` of `x < None` and the `in None` of `x in None`. `op` is
     /// the operator beside the `None`, and for `-None` it is the minus.
@@ -157,7 +159,9 @@ impl fmt::Display for Found {
     }
 }
 
-/// One syntax error: the bytes of the text it is about, and why.
+/// One syntax error: the bytes of the text it is about, and why. `Display`
+/// writes the sentence of the reason alone, and whoever shows the error works
+/// out the line and the column from `at` (ADR-0042).
 #[derive(Debug, Clone, PartialEq)]
 pub struct SyntaxError {
     pub at: Range<usize>,
@@ -238,8 +242,9 @@ impl fmt::Display for Reason {
             } => {
                 let after = after.as_ref().map(|a| format!(" after `{a}`"));
                 let after = after.unwrap_or_default();
-                // With no note left at the place, as when `hidden` dropped
-                // them all, the sentence names only what stands there.
+                // When the error lists nothing that could stand at the place,
+                // the sentence names only what stands there. `hidden` in
+                // `kit.rs` can take every test out of the list.
                 if expected.is_empty() {
                     write!(f, "unexpected {found}{after}")?;
                 } else {
