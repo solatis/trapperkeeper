@@ -61,8 +61,8 @@ fn request_is_logged_as_json_lines() {
 
     // 1. install the subscriber
     let buffer = Buffer::default();
-    // The filter that `logging::init` builds at `info`, the default of the
-    // `log.level` setting.
+    // The filter that `logging::init` builds without `RUST_LOG`, at `info`,
+    // the default of the `log.level` setting.
     let filter = EnvFilter::default().add_directive(LevelFilter::INFO.into());
     let writer = buffer.clone();
     // Each event gets a clone of the buffer as its writer.
