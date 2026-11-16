@@ -1,5 +1,6 @@
-//! The JSON form of the tree, held by properties over generated trees: a
-//! tree round-trips, and a node that is not of the form is refused.
+//! The properties in this file check the JSON form of the tree over
+//! generated trees. A tree round-trips, and a node that is not of the form is
+//! refused.
 
 mod common;
 
@@ -10,8 +11,9 @@ use trapperkeeper_engine::expr::Expr;
 use common::expr;
 
 proptest! {
-    // No regression file, so a failure leaves nothing untracked in the tree.
-    // The failing seed is in the output.
+    // `failure_persistence: None` turns off proptest's regression file, so a
+    // failing run writes no untracked file into the working tree. The failure
+    // output shows the shrunk failing input.
     #![proptest_config(ProptestConfig {
         failure_persistence: None,
         .. ProptestConfig::default()
@@ -22,8 +24,8 @@ proptest! {
     fn a_tree_round_trips_through_json(tree in expr()) {
         let json = serde_json::to_string(&tree).expect("a tree serializes");
         let back: Expr = serde_json::from_str(&json).expect("the JSON parses");
-        // The floats compare exactly: serde_json prints the shortest text
-        // that names the f64, and its float_roundtrip feature parses that
+        // The floats compare exactly, because serde_json prints the shortest
+        // text that names an f64, and its float_roundtrip feature parses that
         // text to the nearest f64.
         prop_assert_eq!(back, tree);
     }
@@ -44,8 +46,8 @@ proptest! {
         let (test, then, otherwise) = (Box::new(test), Box::new(then), Box::new(otherwise));
         let conditional = Expr::If { test, then, otherwise };
         let mut node = serde_json::to_value(conditional).expect("a tree serializes");
-        // The enum denies unknown properties. Without that attribute serde
-        // would skip the fourth property of this `if`.
+        // `deny_unknown_fields` on `Expr` makes serde refuse the property.
+        // Without it serde would skip the fourth property of this `if`.
         node["if"]["extra"] = Value::Null;
         prop_assert!(serde_json::from_value::<Expr>(node).is_err());
     }
