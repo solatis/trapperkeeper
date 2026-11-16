@@ -118,11 +118,14 @@ where
 {
     // `Migrator::run` reports no count. A successful run applies every
     // migration that was pending before it, so the list taken before the run
-    // gives the count.
+    // gives the count, unless another process migrates the database between
+    // the two.
     let applied = tracked(migrator, pool)
         .await?
         .list_applied_migrations(&migrator.table_name)
         .await?;
+    // The connection of `tracked` was a temporary of the statement above, so
+    // the pool has it back before `run` takes one.
     migrator.run(pool).await?;
     Ok(pending(migrator, &applied).len())
 }
@@ -158,13 +161,15 @@ where
     // An empty table means a new database, which the first serve sets up, so
     // `Empty` is reported where `Pending` would name every migration. With
     // no applied row, the checks for `Unknown` and `Edited` below could find
-    // nothing.
+    // nothing. The check reads the tracking table alone, so a database that
+    // holds other tables beside an empty tracking table counts as new too.
     if applied.is_empty() {
         return Ok(Some(Mismatch::Empty));
     }
 
     // A version that the binary lacks means that a newer binary or another
-    // build made this database.
+    // build made this database. `version_exists` also counts a down file,
+    // and the migration directories hold none (ADR-0019).
     let unknown: Vec<i64> = applied
         .iter()
         .filter(|a| !migrator.version_exists(a.version))
