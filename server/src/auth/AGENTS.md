@@ -1,39 +1,31 @@
 # server/src/auth/
 
 **What**: authentication of people: password hashing and generated
-passwords, the signed tokens and the keys that sign them, the login route,
-the caller of a management route, and the role ladder that holds a route to
-a minimum role.
+passwords, the signed tokens and the keys that sign them, the login, refresh,
+logout, password and me routes, the `Caller` extractor, which authenticates
+the caller of a management route, the role ladder, which ranks the roles, and
+the `AtLeast<R>` extractor, which holds a route to a minimum role.
 
 **Map**:
 
-| File          | What                                                                                                                                                   | When to read                                                                               |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| `password.rs` | Argon2id hashing as PHC strings, generated passwords                                                                                                   | the hash parameters, the concurrency limit                                                 |
-| `token.rs`    | the token kinds, their claims, the keyring: derive, issue, check                                                                                       | how a token is signed and checked, key rotation                                            |
-| `login.rs`    | the login route, which takes a tenant name, a name and a password; the refresh, logout, password and me routes; the token cookies; the uniform refusal | what the routes hand out and refuse, the cookies' attributes, how a login names its tenant |
-| `caller.rs`   | the `Caller` extractor and the token check behind it: key, kind, user read, cutoff                                                                     | what a management route checks before it runs                                              |
-| `role.rs`     | the ladder, `AtLeast<R>` and the rungs `Admin` and `Superadmin`                                                                                        | which role a route needs, how a 403 comes about                                            |
+| File          | What                                                                                                                                                                                                                                | When to read                                                                                                                                                                                                          |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mod.rs`      | the module header and the declarations of the five submodules                                                                                                                                                                       | adding a file to the module                                                                                                                                                                                           |
+| `password.rs` | Argon2id hashing as PHC strings, generated passwords                                                                                                                                                                                | the hash parameters, the concurrency limit                                                                                                                                                                            |
+| `token.rs`    | the token kinds, their claims, the keyring: derive, issue, check                                                                                                                                                                    | how a token is signed and checked, key rotation                                                                                                                                                                       |
+| `login.rs`    | the login, refresh, logout, password and me routes; the token cookies; the login body; the 401 without `WWW-Authenticate` that a login, a refresh without a token and a wrong current password get; the 500 for a store that failed | what the routes hand out and refuse, the cookies' attributes, how a login names its tenant, how a store failure becomes a 500 (`database_error`), the login body that a minted session reuses (`login_body`, `Login`) |
+| `caller.rs`   | the `Caller` extractor and the token check behind it: key, kind, user read, cutoff                                                                                                                                                  | what a management route checks before it runs, the 401 and the 403 that a refused request gets                                                                                                                        |
+| `role.rs`     | the ladder, `AtLeast<R>` and the rungs `Admin` and `Superadmin`                                                                                                                                                                     | which role a route needs, how a 403 comes about, what a role off the ladder reaches                                                                                                                                   |
 
 **Invariants**:
 
 - A password is stored only as its PHC string, which carries its own salt
   and parameters.
-- Hashing runs on a blocking thread, and at most as many hashes run at once
-  as the host has CPUs.
-- HS256 is fixed by the server. A token is checked with the key its `kid`
-  names and against the `typ` of its kind.
 - Every request with a token, of either kind, reads the user and checks the
   token's issue time against the user's `tokens_valid_after`, so a logout or
   a password change takes effect at the next request.
 - A route that needs a role takes `AtLeast<R>`. A route that serves the
   caller's own account takes `Caller`.
-- `AtLeast<R>` carries the caller's user, so a route scopes to a tenant
-  without a second extractor.
-- A role that is not on the ladder ranks below every `AtLeast` route, so a
-  role a tenant defines later opens no route until it gets a rung.
-- A refresh hands out an access token and keeps the refresh token, so a
-  login never extends past the refresh token's 7 days.
 
 **Why**:
 
