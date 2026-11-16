@@ -66,13 +66,14 @@ pub async fn tenant(
     let Some(tenant) = found.filter(|t| t.id != SYSTEM_TENANT_ID) else {
         return Err(Refused::NotFound);
     };
-    // The superadmin's rank, not its tenant, opens every customer tenant, so
-    // the superadmin needs no session as one of its users (ADR-0029).
+    // The superadmin's rank, not its tenant, opens every customer tenant
+    // (ADR-0029), so it needs no session minted as one of the tenant's users
+    // (ADR-0030).
     let superadmin = Rank::of(&caller.role_name) == Some(Rank::Superadmin);
     if tenant.id != caller.tenant_id && !superadmin {
         return Err(Refused::Forbidden);
     }
-    // The audit row of the request is then filed under the tenant acted on
+    // The audit middleware then files the row under the tenant acted on
     // rather than the caller's own.
     identity.set_scope(&tenant.id);
     Ok(tenant)
