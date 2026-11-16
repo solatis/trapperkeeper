@@ -152,8 +152,8 @@ pub fn on_each_backend(body: impl Fn(Backend)) {
 static DATABASE: AtomicU32 = AtomicU32::new(0);
 
 /// A database URL of its own for one test, on one backend. Nothing exists at
-/// the URL until migrate or serve creates it, and whatever exists is dropped
-/// with the value.
+/// the URL until `setup::create` or `setup::open_or_set_up` creates it, and
+/// whatever exists is dropped with the value.
 pub struct TestDatabase {
     pub backend: Backend,
     pub url: String,
@@ -223,7 +223,8 @@ impl Drop for TestDatabase {
                 // directory.
                 Backend::Sqlite => Ok(()),
                 // Postgres drops by force, because the connections of a stopped
-                // server may not have closed yet.
+                // server may not have closed yet. sqlx offers no forced drop
+                // for MariaDB.
                 Backend::Postgres => Postgres::force_drop_database(url).await,
                 Backend::MariaDb => MySql::drop_database(url).await,
             }
@@ -298,7 +299,8 @@ pub(crate) use on_pool;
 /// `statement` unchanged on SQLite and Postgres, and with each of `$1` to
 /// `$9` replaced by `?` on MariaDB. MariaDB binds `?` by position, so the
 /// caller writes each placeholder once, numbers them in ascending order of
-/// appearance, and stops at `$9`.
+/// appearance, and stops at `$9`. Only a literal can be `statement`, so the
+/// callers may pass the result to `AssertSqlSafe`.
 pub fn placeholders(backend: Backend, statement: &'static str) -> String {
     match backend {
         // Up to `$9` only, because the fold would turn a `$10` into `?0`.
@@ -317,9 +319,8 @@ pub struct InProcess {
     pub addr: SocketAddr,
     /// The generated password of `ADMIN`.
     pub admin_password: String,
-    /// The store the server runs on. A test uses it to call the library on
-    /// the server's database, as to derive key rings of its own or to create
-    /// users of a given role in a transaction.
+    /// The store the server runs on, for a test that calls the library on the
+    /// server's database, for example to derive key rings of its own.
     pub store: Store,
     server: tokio::task::JoinHandle<io::Result<()>>,
     database: TestDatabase,
@@ -334,8 +335,9 @@ impl InProcess {
 
 impl Drop for InProcess {
     fn drop(&mut self) {
-        // `abort` does not wait for the server's open connections, and closing
-        // the pool does, so none is open when the `database` field drops.
+        // `abort` does not wait for the server's request tasks, which may
+        // still hold pool connections. Closing the pool waits for each, so
+        // none is open when the `database` field drops.
         self.server.abort();
         block_on(async {
             match &self.store {
@@ -371,8 +373,8 @@ pub fn serve_store(database: TestDatabase, store: Store, admin_password: String)
         keyring: std::sync::Arc::new(keyring),
     };
 
-    // The test keeps the listener it bound until it ends, so it knows its
-    // address (ADR-0032). Connections queue from the bind on, so no wait.
+    // The test binds port 0 itself and hands the listener to the server, so
+    // it knows the address (ADR-0032). Connections queue from the bind on.
     let listener = TcpListener::bind("127.0.0.1:0").expect("a loopback listener");
     let addr = listener.local_addr().expect("the bound address");
 
@@ -413,8 +415,8 @@ pub fn serve_in_process(backend: Backend) -> InProcess {
     serve_store(database, store, admin_password)
 }
 
-/// One response: the status code, the headers with the names and in the
-/// order the server sent them and each value trimmed, and the body.
+/// One response: the status code, the headers in the order the server sent
+/// them, with their names as sent and their values trimmed, and the body.
 pub struct Response {
     pub status: u16,
     pub headers: Vec<(String, String)>,
@@ -507,7 +509,8 @@ pub fn request(
         .map(|(name, value)| (name.to_owned(), value.trim().to_owned()))
         .collect();
     // 4. read the body by its length
-    // Each body is a literal or one JSON document, so a length is announced.
+    // Every route answers with a whole body, a literal or one JSON document,
+    // which axum sends with its length.
     let length = header(&head, "content-length")
         .expect("an announced content length")
         .parse()
@@ -530,7 +533,8 @@ fn header<'a>(head: &'a str, name: &str) -> Option<&'a str> {
 }
 
 /// Logs in to `tenant` as `name` with `password`, and returns the access
-/// token and whether the password must change. Panics when the login fails.
+/// token and whether the password must change. The flag restricts no route.
+/// Panics when the login fails.
 pub fn log_in(server: &InProcess, tenant: &str, name: &str, password: &str) -> (String, bool) {
     let credentials = json!({ "tenant": tenant, "name": name, "password": password });
     let response = request(
