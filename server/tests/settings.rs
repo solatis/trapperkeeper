@@ -174,13 +174,10 @@ fn a_secret_flag_is_reported() {
 }
 
 /// A `--config` path that does not exist is refused, and the message names
-/// the path. figment reads a missing file as an empty layer, so the refusal
-/// comes from the loader's own check, which this test covers.
+/// the path.
 #[test]
 fn a_missing_config_file_is_refused() {
     let path = Path::new("no-such-directory/trapperkeeper.toml");
-    // The loader refuses the missing file before it reads the environment,
-    // so the test needs no jail.
     let error = load_settings(Some(path), Overrides::default()).err();
     let message = error.expect("a missing file is refused").to_string();
     assert!(
