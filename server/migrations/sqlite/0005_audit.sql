@@ -13,7 +13,7 @@ CREATE TABLE audit (
     -- a wrong password, is anonymous and names a user, and its row is filed
     -- under that user's tenant. The column is NULL for an anonymous request
     -- that names no live user.
-    tenant_id      TEXT,
+    tenant_id      TEXT REFERENCES tenants (tenant_id),
     -- Who did it. By id alone, without the tenant, because the actor may be
     -- the superadmin of $tk acting on a customer tenant. NULL for an
     -- anonymous request.

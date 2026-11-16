@@ -5,7 +5,7 @@
 -- serves the uniqueness of a name, which an audit row does not have.
 CREATE TABLE audit (
     audit_id       VARCHAR(36)  PRIMARY KEY,
-    tenant_id      VARCHAR(36),
+    tenant_id      VARCHAR(36)  REFERENCES tenants (tenant_id),
     user_id        VARCHAR(36)  REFERENCES users (user_id),
     method         VARCHAR(16)  NOT NULL,
     route          VARCHAR(255) NOT NULL,

@@ -2,7 +2,7 @@
 -- comments explain them.
 CREATE TABLE audit (
     audit_id       TEXT PRIMARY KEY,
-    tenant_id      TEXT,
+    tenant_id      TEXT REFERENCES tenants (tenant_id),
     user_id        TEXT REFERENCES users (user_id),
     method         TEXT NOT NULL,
     route          TEXT NOT NULL,
