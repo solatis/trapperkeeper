@@ -300,7 +300,9 @@ def parse_args(argv):
     args.parsed = args.paths = None
     # A word with two dots in a row is a range, so a mistyped range such as
     # "a..b" is reported as a malformed range and is not looked up as a path.
-    # A path that holds two dots in a row, such as "../x", cannot be given.
+    # A path that holds two dots in a row, such as "../x", cannot be given,
+    # and none needs to be, because the paths are relative to the working
+    # directory.
     if ".." in args.source:
         args.parsed = parse_range(args.source)
         if args.parsed is None:
