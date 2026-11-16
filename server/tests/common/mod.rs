@@ -179,8 +179,9 @@ impl TestDatabase {
         };
         let admin = env::var(var).expect("the admin URL is set");
         let mut url = Url::parse(&admin).expect("the admin URL parses");
-        // The path names the database. The process id and the counter keep
-        // parallel tests apart, and `tk_test_` marks a database left behind.
+        // The path names the database, so the URL keeps the admin's user,
+        // host and port. The process id and the counter keep parallel tests
+        // apart, and `tk_test_` marks a database left behind.
         url.set_path(&format!(
             "tk_test_{}_{}",
             std::process::id(),
@@ -239,8 +240,8 @@ pub fn runtime() -> &'static tokio::runtime::Runtime {
     // a test opens a store in one `block_on` and uses it in the next.
     static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
     RUNTIME.get_or_init(|| {
-        // Several threads, so an in-process server keeps running while its
-        // test blocks in a request.
+        // The runtime has several threads, so an in-process server keeps
+        // running while its test blocks in a request.
         tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
@@ -262,8 +263,9 @@ macro_rules! on_pool {
     ($database:expr, |$pool:ident| $body:expr) => {{
         let url = $database.url.as_str();
         $crate::common::block_on(async {
-            // Each arm repeats `$body`, because each pool is a type of its own,
-            // which a generic function could not take as one body.
+            // Each arm repeats `$body`, because each pool is a type of its own
+            // and the compiler checks `$body` once per pool type. A generic
+            // function over the pool could not take such a body.
             match $database.backend {
                 $crate::common::Backend::Sqlite => {
                     let $pool = ::sqlx::sqlite::SqlitePool::connect(url)
@@ -303,7 +305,8 @@ pub(crate) use on_pool;
 /// the result to `AssertSqlSafe`.
 pub fn placeholders(backend: Backend, statement: &'static str) -> String {
     match backend {
-        // Up to `$9` only, because the fold would turn a `$10` into `?0`.
+        // The fold replaces in ascending order, so it stops at `$9`, or it
+        // would turn a `$10` into `?0`.
         Backend::MariaDb => (1..=9).fold(statement.to_owned(), |s, n| {
             s.replace(&format!("${n}"), "?")
         }),
@@ -387,8 +390,8 @@ pub fn serve_store(database: TestDatabase, store: Store, admin_password: String)
         let _context = runtime().enter();
         tokio::net::TcpListener::from_std(listener).expect("tokio adopts the listener")
     };
-    // With connect info, as serve does, because the audit trail records the
-    // peer's address.
+    // The router gets connect info, as serve gives it, because the audit
+    // trail records the peer's address.
     let server = runtime().spawn(
         axum::serve(
             listener,
@@ -462,8 +465,8 @@ pub fn request(
     // 2. We read the head up to its blank line.
     // 3. We take the status code and the headers from the head.
     // 4. We read as many body bytes as `Content-Length` announces. Reading to
-    //    the end of the stream failed with "connection reset by peer" after
-    //    the whole response had arrived.
+    //    the end of the stream can fail with "connection reset by peer" after
+    //    the whole response has arrived, which says nothing about the server.
 
     // 1. write the request
     let mut stream = TcpStream::connect(addr).expect("the server accepts");
@@ -488,7 +491,8 @@ pub fn request(
     loop {
         let mut line = String::new();
         reader.read_line(&mut line).expect("the head is read");
-        // An empty line is the end of the stream, before a blank line came.
+        // `read_line` leaves `line` empty only at the end of the stream, so
+        // the loop also ends when the server closes before the blank line.
         if line == "\r\n" || line.is_empty() {
             break;
         }
