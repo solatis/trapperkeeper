@@ -108,9 +108,10 @@ One reader over a whole change. On a file of 1070 lines, one reader finds 9
 to 11 of the 16 places the owner marked and reports almost nothing in its last
 150 lines. Three readers on a third each find 15.
 
-A cold read of a repair by its range alone. A function that the audit judges
-fine is then read only by the auditor, which has read the rules and the whole
-module.
+A cold read of a repair by its range alone. The range holds only the lines
+that the repair changed. A function that the audit judges fine has no changed
+line, so only the auditor reads it, and the auditor has read the rules and the
+whole module.
 
 One doc-discipline skill invoked with mode words for each check. The harness
 loads a skill as text, and a second invocation of a loaded skill adds only a
