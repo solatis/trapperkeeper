@@ -3,8 +3,8 @@
 **What**: this directory holds the relational store, and the store keeps the
 control-plane data in SQLite, Postgres or MariaDB. That data is the tenants,
 the roles, the users, the installation's facts and the audit trail. The
-scheme of the database URL chooses the backend. The event log is a separate store, whose engine is
-still open (see `doc/decisions.md`).
+scheme of the database URL chooses the backend. The event log is a separate
+store, whose engine is still open (see `doc/decisions.md`).
 
 **Map**:
 
@@ -47,8 +47,8 @@ still open (see `doc/decisions.md`).
 - The server generates an entity's `_id`, a version 7 UUID, which is stored
   as 36-character text. Its `_name` is lowercase and unique in its scope,
   which is the installation for a tenant and the tenant for a role or a
-  user. Constraints in the table enforce the lowercase and the uniqueness. A display name is a `_title` column,
-  which keeps its case (`doc/adr/0020`).
+  user. Constraints in the table enforce the lowercase and the uniqueness. A
+  display name is a `_title` column, which keeps its case (`doc/adr/0020`).
 - Timestamps are integer epoch microseconds in UTC (`doc/adr/0019`).
 - No query uses `RETURNING` or an upsert (`doc/adr/0019`).
 - Every migration version exists in all three migration directories
