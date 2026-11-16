@@ -91,7 +91,9 @@ const MOST_FIELD_STEPS: usize = 2;
 
 /// A name that an author can write bare: a letter or `_`, then letters,
 /// digits or `_`, and no word of the language. A Python keyword such as
-/// `class` and a miscased word such as `AND` are names too.
+/// `class` and a miscased word such as `AND` are names too. The rows
+/// `a > 1 AND b < 2` and `class x` of `faulty` are refused because the parse
+/// fails at such a name or right after it.
 fn name() -> impl Strategy<Value = String> {
     "[a-zA-Z_][a-zA-Z0-9_]{0,7}"
         .prop_filter("a word of the language", |n| !WORDS.contains(&n.as_str()))
@@ -381,8 +383,9 @@ const VALID: &[(&str, &str)] = &[
     ),
     // The smallest integer.
     ("-9223372036854775808 < x", "-9223372036854775808 < x"),
-    // A minus directly before a number is part of the literal, as in `-5`.
-    // Any other minus is a `Neg`, also the one before `(5)`.
+    // Where a value starts, a minus directly before a number is part of the
+    // literal, as the second minus of `a - -5`. Any other minus there is a
+    // `Neg`, also the one before `(5)`. A minus after a value subtracts.
     (
         "a - -5 > -(5) and -a * b > 0",
         "a - -5 > -(5) and -a * b > 0",
@@ -670,8 +673,8 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
             "`record` is the whole record; name a field, as in `record[\"key\"]`",
         ),
         // After a whole condition the error names the condition it follows,
-        // because the grammar records that text there. In the other rows the
-        // error names the token before the place.
+        // as `a > 1` here. In the other rows the error names the token
+        // before the place.
         (
             "a > 1 b < 2",
             6..7,
@@ -699,9 +702,9 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
             },
             "unknown function `lenn`; did you mean `len`?",
         ),
-        // `abs` is two edits from `all` and `any`, over the limit of one edit
-        // for a name of three characters, so the error lists the functions
-        // and makes no guess.
+        // `abs` is two edits from `all` and `any`. `nearest` in `grammar.rs`
+        // allows one edit per four characters of the name, and at least one,
+        // so the error lists the functions and makes no guess.
         (
             "abs(a - b) > 1",
             0..3,
@@ -1122,11 +1125,13 @@ fn a_faulty_text_is_refused_at_its_place_with_its_reason() {
 fn the_limits_hold_at_their_edges() {
     // The test builds a rule of 401 conditions and pads it with spaces to
     // `MAX_TEXT_LENGTH` characters. The 401 conditions take 4005 characters,
-    // and the spaces fill the rest.
+    // and the spaces fill the rest. The text holds about 1600 tokens, so the
+    // first assertion also shows that a long text of many tokens parses
+    // within `MAX_PARSE_STEPS`.
     let conditions = format!("a > 1{}", " and a > 1".repeat(400));
     let longest = format!("{conditions:<MAX_TEXT_LENGTH$}");
-    // The rows of `faulty` hold the refused side of each cap. This
-    // assertion and the one for `MAX_NESTING` below hold the accepted side.
+    // A text at the cap parses, and the text one character longer is
+    // refused below. The rows of `faulty` hold only refused texts.
     assert!(parse(&longest).is_ok());
     // One more space is the first character past the cap. The text is
     // ASCII, so each character takes one byte, and that character starts at
