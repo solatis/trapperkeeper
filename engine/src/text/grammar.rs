@@ -1,9 +1,9 @@
 //! The grammar of the rule language, written with the kit, which is the set
 //! of parser combinators in `kit.rs`. That file says what a note, a refusal,
-//! `label` and `hidden` are. This file holds `parse`, which tries the reasons
-//! `KeywordCase` and `NotInLanguage` before it returns an `Expected` error,
-//! the token tests, and the rules of the grammar. ADR-0041 lists the kinds of
-//! expression that the grammar reads.
+//! `label` and `hidden` are. This file holds `parse`, the token tests and the
+//! rules of the grammar. `parse` tries the reasons `KeywordCase` and
+//! `NotInLanguage` before it returns an `Expected` error. ADR-0041 lists the
+//! kinds of expression that the grammar reads.
 
 use std::mem;
 use std::ops::Range;
@@ -28,9 +28,8 @@ pub(super) const WORDS: [&str; 14] = [
 // ADR-0041 reserves `re` and `math` as the names of the two modules. Its
 // reason is that a call would otherwise need four tokens to tell it from a
 // field: `re.search(` and the field `re.search` differ at the `(`.
-// `function_name`
-// reads one only as the start of a call such as `re.search`, and a bare `re`
-// is refused with `ModuleAlone`.
+// `function_name` reads one only as the start of a call such as `re.search`,
+// and a bare `re` is refused with `ModuleAlone`.
 const MODULES: [&str; 2] = ["re", "math"];
 
 // Python's keywords (`keyword.kwlist`) less those that are words of the
@@ -103,10 +102,9 @@ pub fn parse(text: &str) -> Result<Expr, SyntaxError> {
         return Err(error);
     }
     // `KeywordCase` for the word at the failure is tried before
-    // `NotInLanguage` for the word before it, because the word at the failure
-    // is the word the author has to edit. `AND` in `a > 1 AND b < 2` gets the
-    // first, and `lambda` in `lambda x: x > 1` the second. In `lambda AND b`
-    // both apply, and the order picks `KeywordCase`.
+    // `NotInLanguage` for the word before it, because the author has to edit
+    // the word at the failure. `AND` in `a > 1 AND b < 2` gets the first and
+    // `lambda` in `lambda x: x > 1` the second, and `lambda AND b` the first.
     let targeted = miscased_word(&input).or_else(|| python_only_word(&input));
     // When neither applies, the `Expected` error gets what the grammar knows
     // of the name at its place, as "did you mean `and`?" for `adn`.
@@ -137,10 +135,9 @@ fn miscased_word(i: &Input<'_>) -> Option<SyntaxError> {
         keyword,
     };
     let at = token.at.clone();
-    // The word must be one that a test wanted at this place. A test notes a
-    // word in backticks, as `word` names it. In `a > 1 Record b` no test
-    // wanted `record`, so the function returns `None`, and `parse` goes on to
-    // `python_only_word` and then to the `Expected` error.
+    // The word must be one that a test wanted here, and `word` notes a word
+    // in backticks. In `a > 1 Record b` no test wanted `record`, so `parse`
+    // goes on to `python_only_word` and then to the `Expected` error.
     wanted
         .contains(&format!("`{keyword}`"))
         .then_some(SyntaxError { at, reason })
@@ -173,11 +170,10 @@ fn python_only_word(i: &Input<'_>) -> Option<SyntaxError> {
 /// there. Any other error comes back unchanged.
 fn with_words(i: &Input<'_>, error: SyntaxError) -> SyntaxError {
     let (pos, wanted) = i.furthest();
-    // Only a name token at the place gets a word or a guess, and `parse`
-    // passes only an `Expected` error, so the second half of the pattern
-    // always matches. `explain` builds that error at the furthest place, so
-    // the token at `pos` is the one it reports. `a > )` returns the error as
-    // it is.
+    // Only a name token at the place gets a word or a guess, so `a > )`
+    // returns its error as it is. `parse` passes only an `Expected` error,
+    // which `explain` built at the token at `pos`, so the second half of the
+    // pattern always matches.
     let (
         Tok::Name(name),
         Reason::Expected {
@@ -482,9 +478,8 @@ fn comparison(i: &Input<'_>, p: usize) -> Reply<Expr> {
     let again = hidden(or(map(compare_op, |_| ()), map(word("is"), |_| ())));
     // The second operator is read so that `build_comparison` refuses every
     // chain with `ChainedComparison`, because the language has no chained
-    // comparisons (ADR-0041). It offers a rewrite only when it can write
-    // one. The third operand is optional, so that `a < b <` is still refused
-    // as a chain, at its second `<`.
+    // comparisons (ADR-0041). The third operand is optional, so that
+    // `a < b <` is still refused as a chain, at its second `<`.
     let chained = opt(then(spanned(again), opt(spanned(additive))));
     // `tail` reads what follows the first operand: `< amount` and the chain
     // after it. In `amount and x` nothing follows.
@@ -540,11 +535,10 @@ fn build_comparison(
     let Some((tail, chained)) = tail else {
         return Ok(left);
     };
-    // A second operator stood after the comparison. `again_at` is its bytes,
-    // and `third` is the optional third operand with its bytes, `10` in
-    // `0 < amount < 10`. This case comes before the `is None` arms, because
-    // those arms return a complete node, and `x is None is None` would
-    // otherwise parse as `IsNone` and drop its second `is`.
+    // A second operator stood at `again_at`, and `third` is the optional
+    // third operand with its bytes. This case comes before the `is None`
+    // arms, which return a complete node, or `x is None is None` would parse
+    // as `IsNone` and drop its second `is`.
     if let Some((((), again_at), third)) = chained {
         // The rewrite needs two comparisons of two operands each.
         let write = match (&tail, third) {
@@ -576,24 +570,23 @@ fn build_comparison(
     // two pointers to one function compare equal, so the operator is told
     // by its text.
     let op = text(&op_at);
-    // `<`, `<=`, `>` and `>=` are the orderings. The parser refuses the
-    // literal `None` beside an ordering and as the right operand of `in` and
-    // `not in`. `x == None` means `x is None`, and a `None` inside a
-    // membership list, as in `x in ("paid", None)`, still matches a null.
+    // `<`, `<=`, `>` and `>=` are the orderings.
     let ordering = matches!(op, "<" | "<=" | ">" | ">=");
     // `not` and `in` may stand apart by any spaces, so the words of the
     // operator's text are compared.
     let words: Vec<&str> = op.split_whitespace().collect();
     let membership = matches!(words[..], ["in"] | ["not", "in"]);
     let left = (left, left_at);
-    // `x < None` could never match, and `x in None` could never match either
-    // (ADR-0005). A field that holds a null is not refused. `x < y` parses
-    // and gives unknown for a record without `y`, and `x in y` gives unknown
-    // when `y` holds a null in place of a list.
+    // The literal `None` beside an ordering is refused, because `x < None`
+    // could never match (ADR-0005). `x == None` means `x is None`. A field
+    // that holds a null is not refused: `x < y` gives unknown without `y`.
     if ordering && let Some(error) = none_operand(i, &left, &op_at, &right) {
         return Err(error);
     }
-    // Only the right operand is tested, so `None in x` parses.
+    // `x in None` could never match either. Only the right operand is
+    // tested, so `None in x` parses. A `None` in a list, as in
+    // `x in ("paid", None)`, still matches a null, and `x in y` gives
+    // unknown when `y` holds a null in place of a list.
     if membership && matches!(right.0, Expr::None) {
         // The error covers the operator and the `None`: bytes 2 to 9 of
         // `x in None`.
@@ -616,6 +609,8 @@ const TERM: [(&str, Binary); 3] = [("*", Expr::Mul), ("/", Expr::Div), ("%", Exp
 /// `x (op x)*` for the operators of `ops`, grouped to the left: `a - b + 1`
 /// as `(a - b) + 1`. Refuses the literal `None` as an operand.
 fn arithmetic(
+    // The body uses `x` twice, and a combinator takes its parser by value,
+    // hence the `Copy` bound.
     x: impl Parser<Expr> + Copy,
     ops: &'static [(&'static str, Binary)],
 ) -> impl Parser<Expr> {
@@ -624,9 +619,7 @@ fn arithmetic(
     let op = hidden(symbol(ops));
     // `rest` gives each operator with its bytes and the operand after it
     // with its bytes. An operator with no operand after it is left where it
-    // stands, so `price * > 3` gets "expected a value" at `>`. `x` is used
-    // here and for the first operand below, and a combinator takes its parser
-    // by value, hence the `Copy` bound.
+    // stands, so `price * > 3` gets "expected a value" at `>`.
     let rest = many(then(spanned(op), spanned(x)));
     // The last argument is the bytes of the whole chain, which `try_map`
     // passes. It is dropped, because an error covers one operator and the
@@ -684,11 +677,10 @@ fn unary(i: &Input<'_>, p: usize) -> Reply<Expr> {
     // takes the first that matches, and `- unary` would read `-5` as `Neg` of
     // `5`.
     let minus_or_postfix = choice!(
-        // `-5`. The minus folds only into a number token and never into a
-        // parsed operand, so `-(5)` stays a `Neg` and a printed tree parses
-        // back to itself. The number is hidden, or `- )` would get "expected
-        // a number or a value". No step is read after such a literal, so
-        // `-5[0]` is refused at the `[`.
+        // `-5`. The minus folds only into a number token, so `-(5)` stays a
+        // `Neg` and a printed tree parses back to itself. The number is
+        // hidden, or `- )` would get "expected a number or a value". No step
+        // is read after such a literal, so `-5[0]` is refused at the `[`.
         try_map(right(punct("-"), hidden(int)), |_, v, at| {
             let reason = Reason::IntTooLarge;
             // Subtracting the magnitude from 0 fails above 2^63, so the
@@ -821,9 +813,9 @@ fn apply_postfixes(
     for (post, at) in posts {
         e = match (post, e) {
             // `record[0]`: the record is an object, so its first step is a
-            // key. This arm comes before the next one, because a bare
-            // `record` is an `Expr::Field` with an empty path, and the next
-            // arm would push the index onto it.
+            // key. This arm comes first, because a bare `record` is an
+            // `Expr::Field` with an empty path, and the next arm would push
+            // the index onto it.
             (Post::Step(Segment::Index(_)), e) if bare_record(&e) => {
                 // The error covers `record[0]`, bytes 0 to 9.
                 return refuse(atom_at.start..at.end, Reason::BareRecord);
@@ -850,12 +842,11 @@ fn apply_postfixes(
             // far, so `"abc".in` is told to write `"abc"["in"]`, which the
             // parser refuses as a key on a value.
             (Post::Word(word, word_at), _) => {
-                // The bracket form of the same key, built from the text
-                // before the dot: `flows`, then `flows["in"]`. `at` starts at
-                // the dot of this step, so that text holds the earlier steps
-                // too, as `flows.x` in `flows.x.in`. `trim_end` drops the
-                // space of `flows .in`.
+                // `at` starts at the dot of this step, so `before` holds the
+                // atom and the earlier steps, as `flows.x` in `flows.x.in`.
+                // `trim_end` drops the space of `flows .in`.
                 let before = i.slice(&(atom_at.start..at.start)).trim_end();
+                // The bracket form of the same key, as `flows["in"]`.
                 let write = format!("{before}[\"{word}\"]");
                 return refuse(word_at, Reason::WordAfterDot { word, write });
             }
@@ -1148,9 +1139,8 @@ fn items(i: &Input<'_>, p: usize) -> Reply<(Vec<Expr>, bool)> {
 fn parenthesized(i: &Input<'_>, p: usize) -> Reply<Expr> {
     // `inside` reads the items between `(` and `)`, one level of nesting
     // deeper. `delimited` refuses at the `(` only when the items matched and
-    // the text ends where the `)` should stand, as in `(a > 1 and b < 2`. Any
-    // other token in place of the `)` gives no match, and the error is an
-    // ordinary "expected" error at that token.
+    // the text ends where the `)` should stand, as in `(a > 1 and b < 2`.
+    // Any other token there gives an ordinary "expected" error.
     let inside = delimited(punct("("), items, punct(")"));
     // `pop` takes the last item off, so the arms can tell one item from
     // several.
@@ -1361,8 +1351,8 @@ fn function_name(i: &Input<'_>, p: usize) -> Reply<(String, bool)> {
 /// Reads the `(name)` of `len(name)`, and `len(name,)` reads as `len(name)`.
 /// Any other number of arguments is refused.
 fn one_argument(name: &'static str, make: Unary) -> impl Parser<Expr> {
-    // `at` is the bytes of the arguments with their brackets, `(a, b)` at 3
-    // to 9 in `len(a, b) > 1`.
+    // `at` is the bytes of the arguments with their brackets, `(a, b)` in
+    // `len(a, b) > 1`.
     try_map(args, move |_, mut args, at| {
         // `given` counts the arguments before `pop` takes the last one off,
         // so the count in the error includes it.
@@ -1409,10 +1399,9 @@ fn quantifier_arguments(function: &'static str, make: Quantifier) -> impl Parser
 /// Reads the `(price, (int, float))` of `isinstance(price, (int, float))`.
 fn isinstance_arguments(i: &Input<'_>, p: usize) -> Reply<Expr> {
     // `after_value` reads `, (int, float)` after the value, and a comma at
-    // the end. The types are optional, so that `isinstance(x)` matches and
-    // reaches the refusal `WrongArgumentCount` below, which says that one
-    // argument was given. A missing `,` would otherwise give an "expected"
-    // error.
+    // the end. The types are optional, so that `isinstance(x)` gets
+    // `WrongArgumentCount` below, with one argument given, where a missing
+    // `,` would otherwise give an "expected" error.
     let after_value = opt(right(punct(","), left(types, opt(punct(",")))));
     let inside = delimited(punct("("), then(expr, after_value), punct(")"));
     // `at` is the bytes of the arguments with their brackets.
@@ -1446,8 +1435,7 @@ pub(super) const TYPES: [(&str, TypeName); 5] = [
 /// with the nearest known type when one is near enough to be a typo.
 fn type_name(i: &Input<'_>, p: usize) -> Reply<TypeName> {
     // Any name token is read, so a word such as `None` is an unknown type
-    // too. `isinstance(price, number)` is refused at `number`, bytes 18 to
-    // 24.
+    // too. `isinstance(price, number)` is refused at `number`.
     try_map(any_name, |_, name, at| {
         let known = TYPES.iter().find(|(n, _)| *n == name);
         known.map(|(_, t)| *t).ok_or_else(|| {
