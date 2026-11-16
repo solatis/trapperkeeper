@@ -81,8 +81,9 @@ pub async fn run() -> ExitCode {
     for flag in cli.overrides.secrets() {
         tracing::warn!(flag, "a secret setting was given on the command line");
     }
-    // A log collector parses one JSON string, which it cannot do with Debug
-    // text. Each value is a string, a table or a null, so this cannot fail.
+    // The settings field holds JSON, which a reader can parse, where Debug
+    // text is Rust syntax. Each value is a string, a table or a null, so the
+    // serialization cannot fail.
     let json = serde_json::to_string(&settings).expect("the settings serialize");
     tracing::debug!(settings = %json, "settings resolved");
 
@@ -201,9 +202,9 @@ async fn migrate(settings: &Settings) -> ExitCode {
 async fn reset_superadmin_command(settings: &Settings) -> ExitCode {
     let store = match setup::open_checked(settings.database.url.expose()).await {
         Ok(store) => store,
-        // The hint stays out of `setup::Error`. serve prints the same text
-        // when it cannot tell whether the database exists, and it creates a
-        // missing database itself.
+        // The hint stays out of `setup::Error`. serve prints the `Display` of
+        // `Open` when it cannot tell whether the database exists, and it
+        // creates a missing database itself.
         Err(error @ setup::Error::Open(_)) => {
             eprintln!(
                 "{error}\nthe database does not open; when it does not exist, \
