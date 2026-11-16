@@ -122,8 +122,8 @@ note. An agent then carries out a mode in its head and leaves no output.
 ## Consequences
 
 A file that does not follow these rules stays as it is until a branch changes
-it. A branch that changes such a file brings the whole file under the rules,
-because the step check covers every file a branch changed.
+it. A branch that changes such a file brings the whole file under the numbering
+rules, because the step check covers every file a branch changed.
 
 The build stage starts one subagent per part in each reader round and one for
 the audit, and its questions to the owner go out as one Inbox message per
