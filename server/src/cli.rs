@@ -79,8 +79,9 @@ pub struct DatabaseOverrides {
     /// `mariadb://...`.
     #[arg(long = "database-url", global = true, value_name = "URL")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    // A `String` and not a `DatabaseUrl`, whose serialization masks the
-    // password, because the merged flags become the URL that the server opens.
+    // The field is a `String`, because a `DatabaseUrl` serializes with its
+    // password masked, and the merged flags become the URL that the server
+    // opens.
     pub url: Option<String>,
 }
 
