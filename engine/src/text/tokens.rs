@@ -134,11 +134,9 @@ fn next_token(text: &str, at: usize) -> Result<Token, SyntaxError> {
         let end = at + rest.find(|c| !is_name_char(c)).unwrap_or(rest.len());
         let word = &text[at..end];
         let quoted = text[end..].starts_with(['"', '\'']);
-        // A word of at most two letters, each of `r`, `b`, `u` or `f` in
-        // either case, counts as a prefix when a quote follows it directly.
-        // Python's prefixes, such as `rb` and `f`, have at most two letters.
-        // The test also admits combinations that Python does not have, such
-        // as `uu`, which this case then refuses as a text prefix.
+        // One or two letters of `r`, `b`, `u` and `f`, in either case, are a
+        // prefix when a quote follows them directly, as Python's `rb` and
+        // `f` are. A pair that Python lacks, such as `uu`, is refused below.
         let prefixed = quoted && word.len() <= 2 && word.chars().all(|c| "rbufRBUF".contains(c));
         // Any other word before a quote is a name, so `x in"a"` reads as it
         // does in Python.
@@ -146,10 +144,9 @@ fn next_token(text: &str, at: usize) -> Result<Token, SyntaxError> {
             let kind = Tok::Name(word.to_owned());
             return Ok(Token { kind, at: at..end });
         }
-        // The literal is read with `raw` set whatever the prefix, so a bad
-        // escape such as the `\q` of `b"\q"` cannot fail it before the
-        // prefix is refused. A literal that cannot be read even raw, such as
-        // one that is never closed, returns its own error through the `?`.
+        // The literal is read raw whatever the prefix, so the `\q` of
+        // `b"\q"` cannot fail it before the prefix is refused. A literal that
+        // is never closed returns its own error through the `?`.
         let literal = quoted_text(text, at, end, true)?;
         // `r` and `R` start a raw text, and every other prefix is refused.
         // `r"\d"` is one token, from the `r` to the closing quote.
@@ -231,7 +228,6 @@ fn number(text: &str, at: usize) -> Result<Token, SyntaxError> {
     //    and an optional exponent, which needs a digit. `float` records
     //    whether a fraction or an exponent was read.
     // 2. We refuse the number as malformed when a name character follows it.
-    //    The error covers the whole word.
     // 3. We check the digits. Every underscore stands between two digits, a
     //    `0x` has digits after it, and a decimal number has no leading zero
     //    that a digit follows.
