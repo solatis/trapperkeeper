@@ -74,6 +74,8 @@ Report also:
   told you how its steps work together or why they come in their order. A
   list of step names that does not say this counts as no comment.
 - a comment or a sentence that told you nothing
+- a walkthrough item that repeats what the code of its step shows, such as
+  the values it checks or the calls it makes
 - a statement you believe false, with the line that contradicts it
 
 Read a changed Markdown file as a newcomer to the repository. Report a
@@ -97,6 +99,7 @@ read $0 part $1: <files> files, <functions> functions, <sections> sections, <row
 <path>:<line> | stop | <the question>
 <path>:<line> | plan | <the question the function's top should have answered>
 <path>:<line> | empty | <the first words of the comment>
+<path>:<line> | repeats | <the first words of the item>
 <path>:<line> | false | <the statement>, contradicted by <path>:<line>
 <path>:<line> | term | <the term> in <the sentence>
 <path>:<line> | unmatched | <the statement about the code>

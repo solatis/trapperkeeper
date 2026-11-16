@@ -51,8 +51,9 @@ none of the conversation, and its last message comes back to the caller.
   of about 300 lines. One reader reads each part. A reader who has not seen
   the change reads the files as they are on disk. It returns one row for each
   line where it stopped, each function whose plan it had to rebuild, each
-  comment that told it nothing, each statement it believes false, and each
-  term or statement in a document it could not place.
+  comment that told it nothing, each walkthrough item that repeats its code,
+  each statement it believes false, and each term or statement in a document
+  it could not place.
 - `/doc-audit <scope> [plan: <plan>] [focus: ...] [also: ...]` takes a range
   or paths. It may also take a plan to reconcile against, a focus that limits
   the checks, and the paths of documents that belong to the task. It returns

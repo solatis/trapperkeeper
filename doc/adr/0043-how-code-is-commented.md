@@ -67,7 +67,8 @@ The session that owns a change writes its comments and documents, from evidence
 it can name, and it asks the owner where it has none. After its last code
 commit, the build stage runs the step check. Then `/doc-read` gives each part of
 the change to a reader that has seen neither the plan nor the conversation, and
-the reader lists where it had to stop. The session closes each stop with a
+the reader lists where it had to stop and each walkthrough item that repeats the
+code of its step (owner, 2026-11-16). The session closes each stop with a
 rename, a comment from evidence, a question to the owner, or a decline with its
 reason. A second round of `/doc-read` reads what the session changed to close
 the stops. Then `/doc-audit` checks the change against the policy and reconciles
@@ -102,6 +103,12 @@ A cap on the length of a walkthrough item, such as one sentence at most. The
 walkthrough of `parse` needs several facts per step that the code does not
 show, and the owner took it as the model (owner, 2026-11-14). An item grows by
 one sentence for each such fact instead.
+
+Dropping the reader's stop at a value that it had to leave the function to find
+out about, so that fewer stops ask for values. The notes at dense lines rest on
+that stop, and the owner asked for more of them three times (owner, 2026-11-06
+and 2026-11-14). The reader reports a walkthrough item that repeats its code
+instead.
 
 A comment only where a line raises "why?". Most places where a reader stops
 raise "what does this do?": a closure, a destructured tuple, a chain of

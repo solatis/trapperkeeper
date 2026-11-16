@@ -31,9 +31,9 @@ says. `<base>` is the revision the change started from.
    4. a decline with its reason, when the question asks what the language
       or its standard library does, or when the line already answers it
 
-   Rewrite or delete a comment that the reader said told it nothing. Check a
-   statement that the reader believed false against the code, and correct
-   the statement or the code.
+   Rewrite or delete a comment that the reader said told it nothing or
+   repeated its code. Check a statement that the reader believed false
+   against the code, and correct the statement or the code.
 
 4. When step 3 changed a comment, a document or the code, run a second
    round. In it, list the parts of `<head>...HEAD` with the head you noted in
