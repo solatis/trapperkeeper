@@ -1,48 +1,53 @@
 # engine/src/text/
 
-**What**: the module turns the text of a rule into the expression tree and
-prints a tree back as rule text. It holds the tokenizer, the kit of parser
+**What**: the module turns the text of a rule into the expression tree, `Expr` in
+`engine/src/expr.rs`, and prints a tree back as rule text. It holds the tokenizer, the kit of parser
 combinators, the grammar written with the kit, the error that a faulty text
 gets, and the printer.
 
 **Map**:
 
-| File         | What                                                                                                                    | When to read                                                                                                                                                                                           |
-| ------------ | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `mod.rs`     | the files of the module and what it exports                                                                             | what the crate can reach of the parser                                                                                                                                                                 |
-| `error.rs`   | the syntax error, its reasons and their sentences                                                                       | why a text was refused; adding a reason; the wording of an error                                                                                                                                       |
-| `tokens.rs`  | the tokenizer and the kinds of token                                                                                    | what a number, a text or an operator looks like; an error about one character                                                                                                                          |
-| `kit.rs`     | the parser combinators, the log of what was wanted and `explain`                                                        | how a choice picks the error it reports; adding a combinator; where the caps on parse steps and nesting refuse a text                                                                                  |
-| `grammar.rs` | `parse`, the rules of the grammar, one per level of precedence, and the closed lists `FUNCTIONS`, `METHODS` and `TYPES` | the precedence of an operator; adding a function, a method or a keyword; an error for one named mistake; the "did you mean" guess for a misspelled name; how a bare name becomes a field or an element |
-| `print.rs`   | `Display` for a tree, which writes it as rule text                                                                      | where a printed rule gets parentheses or brackets                                                                                                                                                      |
+| File         | What                                                                                                                    | When to read                                                                                                                                                                                                                          |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mod.rs`     | the files of the module and what it exports                                                                             | which items of the module a user of the crate can name                                                                                                                                                                                |
+| `error.rs`   | the syntax error, its reasons and their sentences                                                                       | why a text was refused; adding a reason; the wording of an error                                                                                                                                                                      |
+| `tokens.rs`  | the tokenizer and the kinds of token                                                                                    | what a number, a text or an operator looks like; an error about one character                                                                                                                                                         |
+| `kit.rs`     | the parser combinators, the log of what was wanted and `explain`                                                        | how a choice picks the error it reports; adding a combinator; where the caps on parse steps and nesting refuse a text                                                                                                                 |
+| `grammar.rs` | `parse`, the rules of the grammar, one per level of precedence, and the closed lists `FUNCTIONS`, `METHODS` and `TYPES` | the precedence of an operator; adding a function, a method or a keyword; an error for one named mistake; the "did you mean" guess for a misspelled name; how a bare name becomes a field of the record or the element of a quantifier |
+| `print.rs`   | `Display` for a tree, which writes it as rule text                                                                      | where a printed rule gets parentheses or brackets                                                                                                                                                                                     |
 
 **Invariants**:
 
-- The tokenizer does not fail. Its error is the last token, and the parser
-  reports it only when it gets there.
+- The tokenizer does not fail. Its error is the last token, a `Bad` token
+  that holds the reason, and the parser reports it only when it gets there.
 - No two alternatives of a choice read the same bracketed text, or the
-  parser's time doubles per level of nesting. Among the alternatives of
+  parser's time doubles per level of nesting. Each level would then read its
+  inside twice, and the inside holds the next level. Among the alternatives of
   `atom`, `call` is the only one that reads a name and its `(`. The test
   `a_deep_faulty_text_is_refused_for_its_own_mistake` in
   `engine/tests/text.rs` fails when two alternatives read the same bracket,
   because the doubled work reaches `MAX_PARSE_STEPS` and the error becomes
   `TooComplex` in place of the mistake.
-- A token that may follow almost any value is `hidden`, or it shows up in
-  every "expected" error.
+- A token that may follow almost any value is read through `hidden`, the
+  combinator of `kit.rs` that keeps a token test out of errors, or it shows
+  up in every "expected" error.
 - Every form that makes the grammar call itself goes through `nested` or
-  `delimited`. `nested` checks `MAX_NESTING` before it runs the body, and
+  `delimited`: a bracketed form, the operand of `not` or of a minus, and the
+  branch after `else`. `nested` checks `MAX_NESTING` before it runs the body, and
   `delimited` goes through `nested`. A form that bypasses both escapes
   `MAX_NESTING`.
 - Every rule of the grammar says its form and gives an example of the text it
   reads, and every alternative of a choice says which text it is for. Every
   combinator of the kit shows what it does on an example.
-- A new reason gets a faulty text with its sentence in `faulty`, in
-  `engine/tests/text.rs`. No test checks that every reason has a row in
+- A new case of `Reason` gets a row in the table `faulty` of
+  `engine/tests/text.rs`: a faulty text, the place of its error, the reason
+  and its sentence. No test checks that every reason has a row in
   `faulty`, so the sentence of a reason without a row is never run by a test.
 - A canonical tree is a tree that the parser can build, and it prints to a
-  text that parses back to the same tree. The property
+  text that parses back to the same tree. An `and` directly under an `and`
+  is a tree that the parser cannot build. The property
   `a_printed_tree_parses_back_to_itself` in `engine/tests/text.rs` checks
-  this over trees from `canonical_in`. A change to the grammar or to the
+  this over the trees that the strategy `canonical_in` generates. A change to the grammar or to the
   printer keeps that property passing.
 
 **Why**:
@@ -56,7 +61,10 @@ gets, and the printer.
   and `faulty` and the properties of the `proptest!` block, all in
   `engine/tests/text.rs`.
 - Adding a method: a variant of `Expr` in `engine/src/expr.rs` with its arm
-  in `Expr::children_mut`, an entry in `UNARY` or `BINARY` of
-  `engine/tests/common/mod.rs`, which the strategy `expr` draws from, a row
-  in `METHODS`, an arm in the printer, and an entry in `UNARY` or `BINARY` of
-  `engine/tests/text.rs`, which `canonical_in` draws from.
+  in `Expr::children_mut`, a row in `METHODS`, an arm in the printer, and an
+  entry in two lists of the tests. The entry goes in `UNARY` for a method
+  without an argument and in `BINARY` for a method with one. The lists of
+  `engine/tests/common/mod.rs` feed the strategy `expr`, which generates any
+  tree for the properties of the JSON form. The lists of
+  `engine/tests/text.rs` feed `canonical_in`, which generates only trees that
+  the parser can build.
