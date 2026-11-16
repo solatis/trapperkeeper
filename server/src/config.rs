@@ -120,8 +120,9 @@ impl DatabaseUrl {
             // An unparsed URL with an `@` is masked whole, because no one can
             // tell which part is the password.
             Err(_) if self.0.contains('@') => "***".to_owned(),
-            // A parsed URL without a password, or an unparsed URL without an
-            // `@`, which has no user information (RFC 3986, 3.2.1).
+            // The arm takes a parsed URL without a password and an unparsed
+            // URL without an `@`, which has no user information (RFC 3986,
+            // 3.2.1). Neither carries a password.
             Ok(_) | Err(_) => self.0.clone(),
         }
     }
@@ -241,8 +242,9 @@ pub type Error = Box<figment::Error>;
 /// Fails when `file` names no file, when a layer does not parse, or when a key
 /// is unknown or its type refuses the value.
 pub fn load(file: Option<&Path>, overrides: impl Serialize) -> Result<Settings, Error> {
-    // figment's `merge` takes the incoming value, so the layer merged last
-    // wins, where `join` would keep the existing value.
+    // `load` merges the layers with figment from the lowest up and extracts
+    // the result into `Settings`. `merge` takes the incoming value, so the
+    // layer merged last wins, where `join` would keep the existing value.
     //
     // 1. We start from the defaults, so a layer above may set only some keys.
     // 2. We merge the TOML file when a path was given.
