@@ -9,8 +9,9 @@ CREATE TABLE audit (
     audit_id       TEXT PRIMARY KEY,
     -- The tenant that the request acted on. The middleware takes the tenant
     -- that the route resolved from its path when there is one, and the
-    -- caller's tenant otherwise (ADR-0031). NULL for an anonymous request
-    -- that names no existing user.
+    -- caller's tenant otherwise (ADR-0031). A login attempt is anonymous and
+    -- names a user, and its row is filed under that user's tenant. NULL for
+    -- an anonymous request that names no existing user.
     tenant_id      TEXT,
     -- Who did it. By id alone, without the tenant, because the actor may be
     -- the superadmin of $tk acting on a customer tenant. NULL for an
@@ -27,12 +28,14 @@ CREATE TABLE audit (
     peer_address   TEXT NOT NULL,
     -- X-Forwarded-For as received when present, else the peer.
     client_address TEXT NOT NULL,
-    -- recorded_at holds the time of the request in epoch microseconds in UTC,
-    -- as every time column does (ADR-0019).
+    -- recorded_at holds the time at which the middleware wrote the row, in
+    -- epoch microseconds in UTC, as every time column does (ADR-0019).
     recorded_at    BIGINT NOT NULL
 );
 
--- A tenant's trail in time order.
+-- A tenant's trail in time order. No read returns the rows whose tenant_id
+-- is NULL.
 CREATE INDEX audit_tenant_time ON audit (tenant_id, audit_id);
--- What one user did: the user filter of the read route, in time order.
+-- What one user did, in time order. store::audit::page uses this index when
+-- its caller filters on a user.
 CREATE INDEX audit_tenant_user_time ON audit (tenant_id, user_id, audit_id);

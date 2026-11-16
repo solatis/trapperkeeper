@@ -1,5 +1,5 @@
--- Facts about this installation that every instance shares. One row, and no
--- tenant column, because they belong to no tenant.
+-- Facts about this installation that every server on this database shares.
+-- One row, and no tenant column, because they belong to no tenant.
 CREATE TABLE installation (
     singleton    INTEGER PRIMARY KEY CHECK (singleton = 1),
     -- The server stretches the signing keys with this salt (ADR-0025).
