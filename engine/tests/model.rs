@@ -1,5 +1,5 @@
 //! Tests of the JSON form of a rule and of `validate`, as properties over
-//! generated rules, the kind of test that ADR-0018 prefers.
+//! generated rules. ADR-0018 prefers property tests.
 
 mod common;
 
@@ -63,6 +63,9 @@ fn apply(d: Defect, rule: &mut Rule) -> (String, Reason) {
                 // `1.0 + f64::EPSILON` is the smallest f64 above 1, so the
                 // rate sits directly past the inclusive upper bound.
                 Defect::SampleRateAboveOne => 1.0 + f64::EPSILON,
+                // The outer arm admits three defects, so `_` is
+                // `SampleRateNan` here. Naming it would leave this match
+                // without the other variants of `Defect`.
                 _ => f64::NAN,
             };
             rule.sample_rate = sample_rate;
@@ -73,6 +76,7 @@ fn apply(d: Defect, rule: &mut Rule) -> (String, Reason) {
         }
         Defect::NilRuleId => {
             rule.rule_id = Uuid::nil();
+            // `get_version_num` reports 0 for the nil UUID.
             let version = 0;
             (
                 "/rule_id".to_owned(),
@@ -111,7 +115,9 @@ fn apply(d: Defect, rule: &mut Rule) -> (String, Reason) {
         Defect::TagValueTooLong => {
             // The key holds `/` and `~`, the two characters that a JSON
             // pointer escapes. RFC 6901 writes `~` as `~0` and `/` as `~1`,
-            // which gives the pointer expected below.
+            // which gives the pointer expected below. This defect carries
+            // that key, because its defect lies in the value and the key is
+            // free.
             rule.scope = one_tag("a/b~c", &"v".repeat(too_long));
             let (len, max) = (too_long, MAX_TAG_LENGTH);
             (
