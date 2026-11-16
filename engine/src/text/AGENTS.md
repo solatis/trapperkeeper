@@ -25,8 +25,8 @@ kit, the error that a faulty text gets, and the printer.
   inside twice, and the inside holds the next level. Among the alternatives of
   `atom`, `call` is the only one that reads a name and its `(`. The test
   `a_deep_faulty_text_is_refused_for_its_own_mistake` in
-  `engine/tests/text.rs` fails when two alternatives read the same bracket,
-  because the doubled work reaches `MAX_PARSE_STEPS` and the error becomes
+  `engine/tests/text.rs` fails when two alternatives read the same bracketed
+  text, because the doubled work reaches `MAX_PARSE_STEPS` and the error becomes
   `TooComplex` in place of the mistake.
 - A token that may follow almost any value is read through `hidden`, the
   combinator of `kit.rs` that keeps a token test out of errors, or it shows
