@@ -1,7 +1,9 @@
-//! Helpers for the server tests: test databases on each backend, a pool on
-//! one of them, a database set up the way migrate does, the router served in
-//! this process with its superadmin and a keyring, HTTP requests, and calls
-//! on the management routes as a logged-in user.
+//! Helpers for the server tests: the backends a run tests, which
+//! `TK_TEST_EXPECT` can require, test databases on each backend, a pool on
+//! one of them, the rewrite of numbered placeholders for MariaDB, a database
+//! set up the way migrate does, the router served in this process with its
+//! superadmin and a keyring, HTTP requests, and calls on the management routes
+//! as a logged-in user.
 
 // Each test crate compiles this module and uses only part of it.
 #![allow(dead_code, unused_imports, unused_macros)]
@@ -24,20 +26,25 @@ use sqlx::sqlite::Sqlite;
 use trapperkeeper_server::{AppState, Keyring, Store, router, setup};
 use url::Url;
 
-/// The signing passphrase of every test server, fixed so a failing run
-/// reproduces. 32 characters or more, as the setting requires.
+/// The passphrase that every in-process server derives its keys from. A test
+/// derives the same keys from the server's store with it. It has 32
+/// characters or more, as a signing key in the settings must.
 pub const TEST_KEY: &str = "the test signing passphrase of trapperkeeper";
 
 /// A second passphrase, for the rotation cases.
 pub const TEST_PREVIOUS_KEY: &str = "the previous test signing passphrase of trapperkeeper";
 
-/// The system tenant's name, which every in-process login names.
+/// The name of the system tenant, which the first migration seeds and which
+/// the superadmin logs in to. The library exports no constant for it.
 pub const SYSTEM_TENANT: &str = "$tk";
 
-/// The superadmin every in-process server seeds.
+/// The user name of the superadmin, as `superadmin::NAME` has it. The set-up
+/// of a database creates this user in the system tenant before any server
+/// runs. The library does not export the constant.
 pub const ADMIN: &str = "admin";
 
-/// The id of the system tenant, as the first migration seeds it.
+/// The id of the system tenant, as the first migration seeds it. It copies
+/// `store::SYSTEM_TENANT_ID`, which the library does not export.
 pub const SYSTEM_TENANT_ID: &str = "00000000-0000-7000-8000-000000000000";
 
 /// Numbers the scratch directories of this process.
@@ -86,6 +93,8 @@ pub enum Backend {
 
 impl fmt::Display for Backend {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // The spellings are the backend names that `TK_TEST_EXPECT` lists, and
+        // `backends` compares each name in it with them.
         f.write_str(match self {
             Self::Sqlite => "sqlite",
             Self::Postgres => "postgres",
@@ -94,12 +103,16 @@ impl fmt::Display for Backend {
     }
 }
 
-/// The variable that holds the admin URL of a server backend. The names do
-/// not start with `TRAPPERKEEPER_`, which the binary rejects as unknown
-/// settings.
+/// The name of the environment variable that holds the admin URL of a server
+/// backend, and `None` for SQLite. An admin URL names a user who may create
+/// and drop databases, and each test derives from it the URL of a database of
+/// its own.
 fn admin_url_var(backend: Backend) -> Option<&'static str> {
     match backend {
         Backend::Sqlite => None,
+        // The names avoid the prefix `TRAPPERKEEPER_`, because the settings
+        // loader reads every variable under that prefix as a setting and
+        // refuses a key it does not know.
         Backend::Postgres => Some("TK_TEST_POSTGRES_URL"),
         Backend::MariaDb => Some("TK_TEST_MARIADB_URL"),
     }
@@ -114,8 +127,8 @@ pub fn backends() -> Vec<Backend> {
         .into_iter()
         .filter(|b| admin_url_var(*b).is_none_or(|var| env::var_os(var).is_some()))
         .collect();
-    // A missing backend fails the run instead of being skipped, because a
-    // skipped test passes (ADR-0021).
+    // A backend that `TK_TEST_EXPECT` names fails the run when its admin URL
+    // is not set, because a skipped test passes (ADR-0021).
     let expected = env::var("TK_TEST_EXPECT").unwrap_or_default();
     for name in expected.split(',').map(str::trim).filter(|n| !n.is_empty()) {
         assert!(
@@ -149,9 +162,12 @@ pub struct TestDatabase {
 }
 
 impl TestDatabase {
-    /// Reserves a database on `backend`: a file in a scratch directory for
-    /// SQLite, a database named after the process and a counter on a server.
+    /// Reserves a database URL of its own on `backend` and creates nothing
+    /// there. On SQLite the URL names a file in a scratch directory. Panics
+    /// when the admin URL variable of a server backend is not set or does not
+    /// hold a URL.
     pub fn fresh(backend: Backend) -> Self {
+        // Only SQLite has no admin URL variable.
         let Some(var) = admin_url_var(backend) else {
             let scratch = Scratch::create();
             let url = scratch.sqlite_url("store.db");
@@ -163,6 +179,8 @@ impl TestDatabase {
         };
         let admin = env::var(var).expect("the admin URL is set");
         let mut url = Url::parse(&admin).expect("the admin URL parses");
+        // The path names the database. The process id and the counter keep
+        // parallel tests apart, and `tk_test_` marks a database left behind.
         url.set_path(&format!(
             "tk_test_{}_{}",
             std::process::id(),
@@ -175,7 +193,8 @@ impl TestDatabase {
         }
     }
 
-    /// Whether a database exists at the URL.
+    /// Whether a database exists at the URL. Panics when the database server
+    /// does not answer.
     pub fn exists(&self) -> bool {
         let url = self.url.as_str();
         block_on(async {
@@ -195,13 +214,16 @@ impl Drop for TestDatabase {
         if self.scratch.is_some() {
             return;
         }
-        // A server database left behind, or one that was never created, fails
-        // no test, so the result is ignored. Postgres drops by force, because
-        // a killed server's connections may not have closed yet.
         let url = self.url.as_str();
+        // A server database left behind, or one that was never created, fails
+        // no test, so the result is ignored.
         let _ = block_on(async {
             match self.backend {
+                // Never reached: SQLite returned above with its scratch
+                // directory.
                 Backend::Sqlite => Ok(()),
+                // Postgres drops by force, because the connections of a stopped
+                // server may not have closed yet.
                 Backend::Postgres => Postgres::force_drop_database(url).await,
                 Backend::MariaDb => MySql::drop_database(url).await,
             }
@@ -209,19 +231,15 @@ impl Drop for TestDatabase {
     }
 }
 
-/// The one runtime of the test process, shared by every helper and every
-/// in-process server. Panics when it cannot be built.
+/// The runtime that the whole test process shares, built on the first call.
+/// Panics when it cannot be built.
 pub fn runtime() -> &'static tokio::runtime::Runtime {
+    // A sqlx connection fails once the runtime that opened it shuts down, and
+    // a test opens a store in one `block_on` and uses it in the next.
     static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
-    // The runtime is the executor the futures run on, a thread pool with an
-    // event loop, and it holds nothing of a test: tests stay apart through
-    // their own databases, and nothing is locked here. One for the whole
-    // process, because a sqlx connection belongs to the runtime that opened
-    // it and fails once that runtime shuts down, and a store is opened in one
-    // call and used in the next. Multi-threaded, so tests that block in
-    // `block_on` at the same time run concurrently, and a server runs on its
-    // own threads while its test blocks in a request.
     RUNTIME.get_or_init(|| {
+        // Several threads, so an in-process server keeps running while its
+        // test blocks in a request.
         tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
@@ -236,12 +254,15 @@ pub fn block_on<T>(future: impl Future<Output = T>) -> T {
 }
 
 /// Evaluates `$body` with `$pool` bound to a pool on `$database`, whichever
-/// backend it is on. A macro, because each backend's pool is its own type and
-/// `$body` is checked once per type.
+/// backend it is on, and returns its value. `$body` may await. The macro
+/// closes the pool afterwards, so no test leaves connections behind for
+/// another. Panics when the database does not open.
 macro_rules! on_pool {
     ($database:expr, |$pool:ident| $body:expr) => {{
         let url = $database.url.as_str();
         $crate::common::block_on(async {
+            // Each arm repeats `$body`, because each pool is a type of its own,
+            // which a generic function could not take as one body.
             match $database.backend {
                 $crate::common::Backend::Sqlite => {
                     let $pool = ::sqlx::sqlite::SqlitePool::connect(url)
@@ -274,10 +295,13 @@ macro_rules! on_pool {
 
 pub(crate) use on_pool;
 
-/// `statement` with its numbered placeholders as `backend` spells them:
-/// MariaDB takes `?`, in the same order.
+/// `statement` unchanged on SQLite and Postgres, and with each of `$1` to
+/// `$9` replaced by `?` on MariaDB. MariaDB binds `?` by position, so the
+/// caller writes each placeholder once, numbers them in ascending order of
+/// appearance, and stops at `$9`.
 pub fn placeholders(backend: Backend, statement: &'static str) -> String {
     match backend {
+        // Up to `$9` only, because the fold would turn a `$10` into `?0`.
         Backend::MariaDb => (1..=9).fold(statement.to_owned(), |s, n| {
             s.replace(&format!("${n}"), "?")
         }),
@@ -293,7 +317,9 @@ pub struct InProcess {
     pub addr: SocketAddr,
     /// The generated password of `ADMIN`.
     pub admin_password: String,
-    /// The store the server runs on, for a test that derives keys of its own.
+    /// The store the server runs on. A test uses it to call the library on
+    /// the server's database, as to derive key rings of its own or to create
+    /// users of a given role in a transaction.
     pub store: Store,
     server: tokio::task::JoinHandle<io::Result<()>>,
     database: TestDatabase,
@@ -308,8 +334,8 @@ impl InProcess {
 
 impl Drop for InProcess {
     fn drop(&mut self) {
-        // The server stops and the pool closes before the fields drop, so no
-        // connection is open when the database is dropped.
+        // `abort` does not wait for the server's open connections, and closing
+        // the pool does, so none is open when the `database` field drops.
         self.server.abort();
         block_on(async {
             match &self.store {
@@ -335,27 +361,22 @@ pub fn set_up_database(database: &TestDatabase) -> (Store, String) {
 /// Serves the router on `store`, whose database is `database` and whose
 /// superadmin's password is `admin_password`, with the keys derived from
 /// `TEST_KEY`, and returns once the address accepts connections. Panics when
-/// the keys do not derive.
+/// the keys do not derive, when no loopback listener binds, or when tokio
+/// cannot adopt the listener.
 pub fn serve_store(database: TestDatabase, store: Store, admin_password: String) -> InProcess {
-    // 1. derive the keys
-    // 2. bind a listener on port 0 and keep it
-    // 3. serve the router on that listener
-
-    // 1.
+    // No previous passphrase, so only `TEST_KEY` signs and checks.
     let keyring = block_on(Keyring::from_store(&store, TEST_KEY, None)).expect("the keys derive");
     let state = AppState {
         store: store.clone(),
         keyring: std::sync::Arc::new(keyring),
     };
 
-    // 2. The listener stays open from the bind to the drop, so a fork on
-    //    another test thread shares it instead of holding the last copy.
+    // The test keeps the listener it bound until it ends, so it knows its
+    // address (ADR-0032). Connections queue from the bind on, so no wait.
     let listener = TcpListener::bind("127.0.0.1:0").expect("a loopback listener");
-    // Connections queue in the backlog from the bind on, so no wait is needed.
     let addr = listener.local_addr().expect("the bound address");
 
-    // 3. tokio adopts the listener only in non-blocking mode and inside a
-    //    runtime.
+    // tokio adopts only a non-blocking listener, inside a runtime context.
     listener
         .set_nonblocking(true)
         .expect("the listener turns non-blocking");
@@ -383,14 +404,17 @@ pub fn serve_store(database: TestDatabase, store: Store, admin_password: String)
 }
 
 /// The production router on a freshly set-up database of its own on
-/// `backend`, served in this process. Panics when the set-up fails.
+/// `backend`, served in this process. Panics when the admin URL of a server
+/// backend is missing or does not parse, when the set-up fails, when the keys
+/// do not derive or when no listener binds.
 pub fn serve_in_process(backend: Backend) -> InProcess {
     let database = TestDatabase::fresh(backend);
     let (store, admin_password) = set_up_database(&database);
     serve_store(database, store, admin_password)
 }
 
-/// One response: the status code, the headers as sent, and the body.
+/// One response: the status code, the headers with the names and in the
+/// order the server sent them and each value trimmed, and the body.
 pub struct Response {
     pub status: u16,
     pub headers: Vec<(String, String)>,
@@ -408,14 +432,18 @@ impl Response {
     }
 }
 
-/// One `GET` over a fresh connection; returns the status code and the body.
+/// Sends one `GET` over a fresh connection and returns the status code and
+/// the body.
 pub fn get(addr: SocketAddr, path: &str) -> (u16, String) {
     let response = request(addr, "GET", path, &[], None);
     (response.status, response.body)
 }
 
-/// One request over a fresh connection, with `headers` as given and `body`
-/// sent as JSON when there is one. Returns the response.
+/// Sends one request with `headers` over a fresh connection, with `body` as
+/// JSON when it is given and not empty, and returns the response. Panics when
+/// the server does not accept the connection, or when the response has no
+/// numeric status code, no numeric `Content-Length` or a body that is not
+/// UTF-8.
 pub fn request(
     addr: SocketAddr,
     method: &str,
@@ -423,14 +451,22 @@ pub fn request(
     headers: &[(&str, &str)],
     body: Option<&str>,
 ) -> Response {
-    // Hand-rolled HTTP/1.1, because a few small requests do not justify an
-    // HTTP client dependency.
+    // The function speaks HTTP/1.1 by hand, because a few small requests do
+    // not justify an HTTP client crate.
     //
-    // 1. One request with `Connection: close`, so the server closes once it
-    //    has answered and nothing else is ever sent on the connection.
+    // 1. We write one request with `Connection: close`, so the server closes
+    //    the connection once it has answered.
+    // 2. We read the head up to its blank line.
+    // 3. We take the status code and the headers from the head.
+    // 4. We read as many body bytes as `Content-Length` announces. Reading to
+    //    the end of the stream failed with "connection reset by peer" after
+    //    the whole response had arrived.
+
+    // 1. write the request
     let mut stream = TcpStream::connect(addr).expect("the server accepts");
     let mut head = format!("{method} {path} HTTP/1.1\r\nHost: {addr}\r\nConnection: close\r\n");
     for (name, value) in headers {
+        // Writing into a `String` cannot fail.
         let _ = write!(head, "{name}: {value}\r\n");
     }
     let body = body.unwrap_or_default();
@@ -443,34 +479,35 @@ pub fn request(
     }
     write!(stream, "{head}\r\n{body}").expect("the request is written");
 
-    // 2. Read the head up to the blank line, then exactly the announced body
-    //    length, and stop. Reading to the end of the stream instead failed on
-    //    the Linux CI runner with "connection reset by peer" after the whole
-    //    response had arrived (run 41285799929); a reset after the last
-    //    announced byte says nothing about the server. The bodies are literals
-    //    or one document, so a content length is always announced.
+    // 2. read the head
     let mut reader = BufReader::new(stream);
     let mut head = String::new();
     loop {
         let mut line = String::new();
         reader.read_line(&mut line).expect("the head is read");
+        // An empty line is the end of the stream, before a blank line came.
         if line == "\r\n" || line.is_empty() {
             break;
         }
         head.push_str(&line);
     }
+    // 3. take the status and the headers
+    // The second word of the status line, as `200` of `HTTP/1.1 200 OK`.
     let status = head
         .split_whitespace()
         .nth(1)
         .expect("a status code")
         .parse()
         .expect("a numeric status code");
+    // Every line after the status line that holds a colon.
     let headers: Vec<(String, String)> = head
         .lines()
         .skip(1)
         .filter_map(|line| line.split_once(':'))
         .map(|(name, value)| (name.to_owned(), value.trim().to_owned()))
         .collect();
+    // 4. read the body by its length
+    // Each body is a literal or one JSON document, so a length is announced.
     let length = header(&head, "content-length")
         .expect("an announced content length")
         .parse()
