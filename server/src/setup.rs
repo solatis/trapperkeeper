@@ -34,8 +34,9 @@ pub enum Error {
     Check(MigrateError),
     /// The database differs from the migrations.
     Mismatch(Mismatch),
-    /// A migration or the signing salt failed, or the applied migrations do
-    /// not match the binary's.
+    /// A migration failed, writing the signing salt from which the server
+    /// derives its token keys failed, or the applied migrations do not match
+    /// the binary's.
     Migrate(MigrateError),
     /// The superadmin could not be created.
     Superadmin(sqlx::Error),
