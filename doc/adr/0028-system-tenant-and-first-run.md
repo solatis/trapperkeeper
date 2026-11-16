@@ -1,6 +1,6 @@
 # 0028. The system tenant, the superadmin and first run
 
-Date: 2026-11-06.
+Date: 2026-11-16.
 
 ## Context
 
@@ -26,6 +26,10 @@ logs its one-time password as one INFO event. serve does this on an empty
 database, and migrate does it when an operator runs it first. A database
 with pending migrations is still refused (owner, 2026-11-06).
 
+serve and migrate create the database that the URL names when it does not
+exist yet, also on Postgres and MariaDB, so that one command sets up an
+install (owner, 2026-11-16).
+
 `reset-superadmin` recovers a lost password from the console: it gives the
 superadmin a new one-time password and prints it, and it creates the
 superadmin when it is missing (owner, 2026-11-06).
@@ -43,7 +47,8 @@ Several superadmins resetting each other's passwords (owner, 2026-11-06).
 
 ## Consequences
 
-A mistyped SQLite path starts a new install. The first password passes
-through the log stream once and must be changed at the first login.
-Recovering the superadmin needs shell access to the install. `$tk` is a
-tenant that is not a customer.
+A mistyped SQLite path starts a new install. On Postgres and MariaDB the
+database user of the first run needs the right to create databases. The
+first password passes through the log stream once and must be changed at the
+first login. Recovering the superadmin needs shell access to the install.
+`$tk` is a tenant that is not a customer.
