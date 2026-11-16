@@ -39,7 +39,7 @@ impl fmt::Display for Error {
 impl std::error::Error for Error {}
 
 /// The JSON subscriber: the events `filter` passes, each written as one JSON
-/// line to `writer`.
+/// line to `writer`. The log test installs it on a buffer.
 pub fn json_subscriber<W>(filter: EnvFilter, writer: W) -> impl Subscriber + Send + Sync + 'static
 where
     W: for<'a> MakeWriter<'a> + Send + Sync + 'static,
@@ -69,9 +69,9 @@ pub fn init(level: LevelFilter) -> Result<(), Error> {
         EnvFilter::default().add_directive(level.into())
     };
 
-    // A terminal gets the compact colored format and a pipe gets JSON lines.
-    // Detection serves both a person and a collector, so the format has no
-    // setting (ADR-0017).
+    // A person at a terminal gets the compact colored format, and a collector
+    // reading a pipe gets JSON lines, so no format setting is needed
+    // (ADR-0017).
     if io::stdout().is_terminal() {
         tracing_subscriber::fmt()
             .with_env_filter(filter)
