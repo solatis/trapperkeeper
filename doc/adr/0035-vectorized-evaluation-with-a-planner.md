@@ -15,8 +15,7 @@ the design from the start (owner, 2026-11-12).
 
 A sensor over named numpy arrays or over a Spark dataframe is as fast as
 possible. A sensor over nested JSON, row by row, is slow and works (owner,
-2026-11-12,
-2026-11-13).
+2026-11-12, 2026-11-13).
 
 The executor is a vectorized interpreter. It runs one program per rule set
 over chunks of up to 2048 rows, with one call per step per chunk (owner,
