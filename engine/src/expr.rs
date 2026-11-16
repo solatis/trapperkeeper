@@ -1,7 +1,6 @@
-//! The expression tree of the rule language and its JSON form. In JSON one
-//! key names the kind of a node, and a node refuses a key it does not know.
-//! The kinds of expression and the closed list of functions and methods are
-//! ADR-0041, and the form of the tree is ADR-0033.
+//! The expression tree of the rule language and its JSON form. ADR-0041
+//! decides the kinds of expression and the closed list of functions and
+//! methods, and ADR-0033 decides the form of the tree.
 
 use serde::{Deserialize, Serialize};
 
@@ -11,6 +10,7 @@ use serde::{Deserialize, Serialize};
 #[serde(untagged)]
 pub enum Segment {
     Key(String),
+    // The width of an index is a choice that no measurement backs.
     Index(u32),
 }
 
@@ -27,25 +27,29 @@ pub enum TypeName {
 
 /// One node of the tree. A rule's expression is the node at the top. The
 /// tree keeps the operators as the author wrote them, so `!=`, `not in` and
-/// `is not None` have kinds of their own.
+/// `is not None` have kinds of their own. A node is written as a JSON object
+/// whose one key names its kind, except `None`, which has no operand and is
+/// the bare string "none".
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+// A node with a key it does not know, or with a property its kind does not
+// have, fails the parse.
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub enum Expr {
     // Literals.
     None,
     Bool(bool),
     Int(i64),
-    // JSON has no form for a NaN or an infinity, so a float in a tree must
-    // be finite.
+    /// JSON has no form for a NaN or an infinity, so a float in a tree must
+    /// be finite.
     Float(f64),
     Text(String),
     List(Vec<Expr>),
 
     // Fields.
-    // The path starts at the record.
+    /// The path starts at the record.
     Field(Vec<Segment>),
-    // The path starts at the element that an enclosing `Any` or `All` names.
-    // An empty path is the element itself.
+    /// The path starts at the element that an enclosing `Any` or `All` names.
+    /// An empty path is the element itself.
     Element {
         name: String,
         path: Vec<Segment>,
@@ -53,15 +57,18 @@ pub enum Expr {
 
     // Logic.
     Not(Box<Expr>),
-    // `And` and `Or` hold the operands of one chain in written order, two
-    // or more. An operand of the same kind belongs in the same list, so one
-    // chain is one node however the author grouped it.
+    /// The parser builds `And` and `Or` with two or more operands in written
+    /// order, and it splices an operand of the same kind into the list, so
+    /// `(a and b) and c` is one node of three. The JSON form enforces
+    /// neither property and reads an `and` of any length.
     And(Vec<Expr>),
     Or(Vec<Expr>),
 
-    // Comparisons. Each holds its left and its right operand. An `Eq` or an
-    // `Ne` with the literal `None` as an operand is the test for a missing
-    // value, as `IsNone` and `IsNotNone` are (ADR-0005).
+    // Comparisons.
+    /// Each comparison holds its left and its right operand, except `IsNone`
+    /// and `IsNotNone`, which hold the one value they test. An `Eq` or a `Ne`
+    /// with the literal `None` as an operand tests for a missing value, as
+    /// `IsNone` and `IsNotNone` do (ADR-0005).
     Eq(Box<Expr>, Box<Expr>),
     Ne(Box<Expr>, Box<Expr>),
     Lt(Box<Expr>, Box<Expr>),
@@ -81,7 +88,7 @@ pub enum Expr {
     Mod(Box<Expr>, Box<Expr>),
     Neg(Box<Expr>),
 
-    // The conditional, `then if test else otherwise`.
+    /// The conditional, `then if test else otherwise`.
     If {
         test: Box<Expr>,
         then: Box<Expr>,
@@ -91,7 +98,7 @@ pub enum Expr {
         otherwise: Box<Expr>,
     },
 
-    // The quantifiers, `any(test for name in list)`.
+    /// The quantifiers `any` and `all`, as `any(test for name in list)`.
     Any {
         name: String,
         list: Box<Expr>,
@@ -103,16 +110,18 @@ pub enum Expr {
         test: Box<Expr>,
     },
 
-    // The functions. Each key is the name an author types, with `_` for the
-    // dot.
+    // The functions.
+    /// The JSON key of a function is the name an author types, with `_` for
+    /// the dot.
     Len(Box<Expr>),
     #[serde(rename = "isinstance")]
     IsInstance {
         value: Box<Expr>,
         types: Vec<TypeName>,
     },
-    // The pattern of the three pattern functions is a text and no
-    // expression, so it can be checked when the rule is created.
+    /// The pattern of the three pattern functions is a literal text rather
+    /// than an expression, so the server can check it when the rule is
+    /// created.
     ReSearch {
         pattern: String,
         text: Box<Expr>,
@@ -128,7 +137,8 @@ pub enum Expr {
     #[serde(rename = "math_isnan")]
     IsNan(Box<Expr>),
 
-    // The methods. The first operand is the text the method is called on.
+    // The methods.
+    /// The first operand of a method is the text the method is called on.
     #[serde(rename = "startswith")]
     StartsWith(Box<Expr>, Box<Expr>),
     #[serde(rename = "endswith")]
@@ -159,13 +169,13 @@ pub enum Expr {
 impl Expr {
     /// The nodes directly under this one, in written order.
     pub(crate) fn children_mut(&mut self) -> Vec<&mut Expr> {
-        // The arms group the kinds by how many nodes they hold. `resolve` in
-        // `text/grammar.rs` is the only caller. It resolves each child on
-        // its own and handles `Any` and `All` itself, so no result of it
-        // depends on the order.
+        // `resolve` in `text/grammar.rs` is the only caller. It resolves each
+        // child on its own and handles `Any` and `All` itself, so no result
+        // of it depends on the order.
         match self {
             // `None`, a boolean, a number and a text hold no node. A field
-            // and an element hold a path of segments, which are no nodes.
+            // and an element hold a path of segments, and a segment is not a
+            // node.
             Expr::None
             | Expr::Bool(_)
             | Expr::Int(_)
@@ -173,11 +183,10 @@ impl Expr {
             | Expr::Text(_)
             | Expr::Field(_)
             | Expr::Element { .. } => Vec::new(),
-            // A list of nodes, in written order.
             Expr::List(items) | Expr::And(items) | Expr::Or(items) => items.iter_mut().collect(),
-            // One node. The types of `IsInstance` and the pattern of a
-            // pattern function are no nodes, so only the value and the text
-            // are children.
+            // The arm holds the kinds with one child. The types of
+            // `IsInstance` and the pattern of a pattern function are not
+            // nodes, so only the value and the text are children.
             Expr::Not(x)
             | Expr::IsNone(x)
             | Expr::IsNotNone(x)
