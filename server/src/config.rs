@@ -1,7 +1,7 @@
-//! The server's settings and their resolution by `load`. ADR-0013 decides
-//! where a secret setting may come from. The database URL and the signing
-//! keys are the secret settings, and each has a type that masks it when
-//! serialized or printed.
+//! The server's settings and their resolution by `load`. The database URL and
+//! the signing keys are the secret settings, and each has a type that masks it
+//! when serialized or printed. ADR-0013 lets a secret come from the file or
+//! the environment, and `run` warns when one comes from a flag.
 
 use std::fmt;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -111,8 +111,8 @@ impl DatabaseUrl {
     fn masked(&self) -> String {
         match Url::parse(&self.0) {
             Ok(mut url) if url.password().is_some() => {
-                // A URL with a password has a host, and only a URL without one
-                // refuses a password.
+                // A URL with a password has a host, and `set_password` fails
+                // only on a URL without a host.
                 url.set_password(Some("***"))
                     .expect("a URL with a host takes a password");
                 url.to_string()
@@ -149,7 +149,8 @@ pub struct AuthSettings {
     pub signing_key: Option<SigningKey>,
     /// The passphrase that signed before the last rotation. It only checks
     /// tokens, as long as it is set. The operator removes it 7 days after the
-    /// rotation, when the tokens it signed have expired.
+    /// rotation, the lifetime of a refresh token, when the tokens it signed
+    /// have expired (ADR-0025).
     pub previous_signing_key: Option<SigningKey>,
 }
 
@@ -231,8 +232,9 @@ pub type Error = Box<figment::Error>;
 
 /// Resolves the settings from four sources: the defaults, the TOML file at
 /// `file` when one is given, the environment variables prefixed
-/// `TRAPPERKEEPER_`, and `overrides`. A later source wins. `overrides` must
-/// serialize to the tree of `Settings`, with each absent value omitted.
+/// `TRAPPERKEEPER_`, and `overrides`, which `run` passes as the command-line
+/// flags. A later source wins. `overrides` must serialize to the tree of
+/// `Settings`, with each absent value omitted and no secret masked.
 ///
 /// # Errors
 ///
