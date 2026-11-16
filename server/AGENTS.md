@@ -13,9 +13,9 @@ superadmin, the user `admin` of the system tenant `$tk`, a new one-time
 password, creating the superadmin when it is missing, and prints the
 password. The superadmin creates tenants and mints a session for any user
 through the management routes. Before a subcommand runs, the binary resolves
-its settings: the listen address, the log level, the database URL and the two
-signing keys. Each module directory that appears under `src/` gets its own
-`AGENTS.md`, and this file indexes them.
+its settings: the listen address, the readiness timeout, the log level, the
+database URL and the two signing keys. Each module directory that appears
+under `src/` gets its own `AGENTS.md`, and this file indexes them.
 
 **Map**:
 
@@ -58,8 +58,8 @@ signing keys. Each module directory that appears under `src/` gets its own
 - A new setting gets a field with a default in `config::Settings`. Its flag
   gets a field in `cli::Overrides`, nested the same way, with
   `skip_serializing_if`. The two trees then have the same shape, and an absent
-  flag changes nothing. The signing keys have no flag. serve refuses to start
-  without `auth.signing_key`.
+  flag changes nothing. The signing keys and `readiness_timeout_seconds` have
+  no flag. serve refuses to start without `auth.signing_key`.
 - A secret setting has a type that masks it when serialized or printed, as
   `config::DatabaseUrl` and `config::SigningKey` do. A secret's flag, where it
   has one, is a plain value, because the flags layer is serialized into the
