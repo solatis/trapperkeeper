@@ -61,8 +61,8 @@ pub async fn mint(
     Json(login_body(
         &state,
         &user,
-        // A password change passes `false` here. A mint passes the flag as
-        // stored, because the flag restricts no route.
+        // A mint passes the stored flag, as a login does, so the client asks
+        // for a new password when the user's own login would.
         user.password_must_change,
         SystemTime::now(),
     ))
