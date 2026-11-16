@@ -7,7 +7,8 @@ use common::{InProcess, call, log_in, on_each_backend, serve_in_process, superad
 use serde_json::{Value, json};
 
 /// With the superadmin's `token`, creates the tenant `acme` whose admin is
-/// `ada@example.com`, and returns the admin's one-time password.
+/// `ada@example.com`, and returns the admin's one-time password. Panics unless
+/// the create answers 201.
 fn create_acme(server: &InProcess, token: &str) -> String {
     let new = json!({ "name": "acme", "title": "Acme", "admin": "ada@example.com" });
     let response = call(server, token, "POST", "/api/v1/tenants", Some(&new));
@@ -83,7 +84,8 @@ fn superadmin_mints_a_session_that_acts_as_the_user() {
         let response = call(&server, access, "POST", "/api/v1/logout", None);
         assert_eq!(response.status, 200, "{} on {backend}", response.body);
         // The cutoff and the issue time compare in microseconds, and several
-        // requests lie between the admin's login and the logout.
+        // requests lie between the admin's login and the logout, so the cutoff
+        // falls after the issue time of `own`.
         assert_eq!(call(&server, &own, "GET", "/api/v1/me", None).status, 401);
         assert_eq!(call(&server, access, "GET", "/api/v1/me", None).status, 401);
     });
