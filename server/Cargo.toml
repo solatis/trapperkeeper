@@ -26,9 +26,10 @@ clap = { version = "4", features = ["derive"] }
 figment = { version = "0.10", features = ["toml", "env"] }
 serde = { version = "1", features = ["derive"] }
 # tokio is the runtime (ADR-0014). Its features are the multi-thread runtime
-# and its macro, sockets, signals for shutdown, and sync for the semaphore of
-# the password hashes and the cell of the dummy hash.
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "sync"] }
+# and its macro, sockets, signals for shutdown, sync for the semaphore of the
+# password hashes and the cell of the dummy hash, and time for the timeout of
+# the readiness probe.
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time"] }
 # axum serves HTTP (ADR-0016).
 axum = "0.8"
 # utoipa derives the API document from the annotations of the handlers

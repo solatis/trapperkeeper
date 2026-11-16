@@ -6,12 +6,14 @@
 use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::extract::{FromRef, State};
 use axum::http::StatusCode;
 use axum::routing::get;
-use axum::{Json, Router, middleware};
+use axum::{Extension, Json, Router, middleware};
 use tokio::net::TcpListener;
+use tokio::time;
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
 use tracing::Level;
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
@@ -22,7 +24,7 @@ use utoipa_axum::routes;
 use crate::audit;
 use crate::auth::login;
 use crate::auth::token::Keyring;
-use crate::config::Settings;
+use crate::config::{READINESS_TIMEOUT_SECONDS, Settings};
 use crate::sessions;
 use crate::store::{self, Store};
 use crate::tenants;
@@ -87,19 +89,40 @@ async fn healthz() -> &'static str {
     "ok"
 }
 
+/// How long `/readyz` waits for the store. `serve` adds it to the router from
+/// the settings, and a router without it waits `READINESS_TIMEOUT_SECONDS`.
+#[derive(Clone, Copy)]
+pub struct ReadinessTimeout(pub Duration);
+
 /// Readiness: the instance may receive traffic. It answers 200 with `ok`
-/// while the store answers a trivial query, and 503 with `unavailable` while
-/// it does not.
+/// while the store answers a trivial query in time, and 503 with
+/// `unavailable` while it does not.
 #[utoipa::path(
     get,
     path = "/readyz",
     responses(
         (status = OK, description = "the instance accepts traffic", body = String),
-        (status = SERVICE_UNAVAILABLE, description = "the store does not answer", body = String)
+        (status = SERVICE_UNAVAILABLE, description = "the store does not answer in time", body = String)
     )
 )]
-async fn readyz(State(store): State<Store>) -> (StatusCode, &'static str) {
-    if store::ping(&store).await {
+async fn readyz(
+    State(store): State<Store>,
+    timeout: Option<Extension<ReadinessTimeout>>,
+) -> (StatusCode, &'static str) {
+    let limit = timeout.map_or(
+        Duration::from_secs(READINESS_TIMEOUT_SECONDS),
+        |Extension(ReadinessTimeout(limit))| limit,
+    );
+    readiness(store::ping(&store), limit).await
+}
+
+/// 200 with `ok` when `ping` gives true within `limit`, and 503 with
+/// `unavailable` otherwise.
+async fn readiness(
+    ping: impl Future<Output = bool>,
+    limit: Duration,
+) -> (StatusCode, &'static str) {
+    if time::timeout(limit, ping).await == Ok(true) {
         (StatusCode::OK, "ok")
     } else {
         // The 503 body is a plain literal for the same reason as the liveness
@@ -182,8 +205,9 @@ pub async fn serve(settings: &Settings, state: AppState) -> io::Result<()> {
     //    process until they are installed, so once the "listening" line
     //    shows, a signal stops the server through the drain.
     // 2. We bind the listen address and log it.
-    // 3. We serve until a signal and then drain the in-flight requests, so a
-    //    SIGTERM does not cut connections.
+    // 3. We serve, with the readiness timeout of the settings, until a signal
+    //    and then drain the in-flight requests, so a SIGTERM does not cut
+    //    connections.
     // 4. We log "stopped", so the log tells a clean stop from a crash.
 
     // 1. install the signal handlers
@@ -195,10 +219,12 @@ pub async fn serve(settings: &Settings, state: AppState) -> io::Result<()> {
     tracing::info!(address = %listener.local_addr()?, "listening");
 
     // 3. serve and drain
+    let timeout = Duration::from_secs(settings.readiness_timeout_seconds);
+    let router = router(state).layer(Extension(ReadinessTimeout(timeout)));
     axum::serve(
         listener,
         // The audit middleware reads the peer's address from the connect info.
-        router(state).into_make_service_with_connect_info::<SocketAddr>(),
+        router.into_make_service_with_connect_info::<SocketAddr>(),
     )
     .with_graceful_shutdown(shutdown)
     .await?;
@@ -243,4 +269,23 @@ fn shutdown_signal() -> io::Result<impl Future<Output = ()>> {
         // The log then shows that a signal caused the stop that follows.
         tracing::info!("shutdown signal received");
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::future;
+    use std::time::Duration;
+
+    use axum::http::StatusCode;
+
+    use super::readiness;
+
+    #[tokio::test]
+    async fn a_ping_that_does_not_finish_in_time_is_unavailable() {
+        // A pending ping never finishes, so the answer is the timeout's.
+        let late = readiness(future::pending(), Duration::ZERO).await;
+        assert_eq!(late, (StatusCode::SERVICE_UNAVAILABLE, "unavailable"));
+        let ready = readiness(future::ready(true), Duration::from_secs(1)).await;
+        assert_eq!(ready, (StatusCode::OK, "ok"));
+    }
 }

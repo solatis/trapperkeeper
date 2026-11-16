@@ -24,6 +24,10 @@ pub const ENV_PREFIX: &str = "TRAPPERKEEPER_";
 /// inside a key name.
 pub const ENV_SEPARATOR: &str = "__";
 
+/// The default of `readiness_timeout_seconds`. The value is a choice that no
+/// measurement backs.
+pub const READINESS_TIMEOUT_SECONDS: u64 = 15;
+
 /// Every setting of the server, fully resolved. Each field has a default, so
 /// the settings resolve with no file, no environment and no flags. `serve`
 /// still refuses to start without `auth.signing_key`.
@@ -32,6 +36,8 @@ pub const ENV_SEPARATOR: &str = "__";
 pub struct Settings {
     /// Address the server listens on.
     pub listen: SocketAddr,
+    /// Seconds that `/readyz` waits for the store before it answers 503.
+    pub readiness_timeout_seconds: u64,
     /// The log output.
     pub log: LogSettings,
     /// The relational store.
@@ -47,6 +53,7 @@ impl Default for Settings {
             // an operator says so. The port 8080 is a choice that no
             // measurement backs.
             listen: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8080),
+            readiness_timeout_seconds: READINESS_TIMEOUT_SECONDS,
             log: LogSettings::default(),
             database: DatabaseSettings::default(),
             auth: AuthSettings::default(),
@@ -297,7 +304,26 @@ pub fn load(file: Option<&Path>, overrides: impl Serialize) -> Result<Settings, 
 
 #[cfg(test)]
 mod tests {
-    use super::{LevelFilter, LogLevel};
+    use figment::Jail;
+
+    use super::{LevelFilter, LogLevel, load};
+    use crate::cli::Overrides;
+
+    // The jail fixes the closure's error type to figment's, which is over 200
+    // bytes.
+    #[allow(clippy::result_large_err)]
+    #[test]
+    fn the_readiness_timeout_is_15_seconds_unless_set() {
+        Jail::expect_with(|jail| {
+            jail.clear_env();
+            let settings = load(None, Overrides::default()).map_err(|error| *error)?;
+            assert_eq!(settings.readiness_timeout_seconds, 15);
+            jail.set_env("TRAPPERKEEPER_READINESS_TIMEOUT_SECONDS", "3");
+            let settings = load(None, Overrides::default()).map_err(|error| *error)?;
+            assert_eq!(settings.readiness_timeout_seconds, 3);
+            Ok(())
+        });
+    }
 
     #[test]
     fn a_level_is_one_of_six_names() {
