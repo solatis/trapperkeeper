@@ -12,30 +12,19 @@ use crate::rule::Rule;
 pub enum Reason {
     /// The sample rate lies outside (0, 1] or is a NaN. `sample_rate` holds
     /// the refused value, which JSON writes as null when it is a NaN.
-    SampleRateOutOfRange {
-        sample_rate: f64,
-    },
+    SampleRateOutOfRange { sample_rate: f64 },
     /// The id is not a version 7 UUID. `version` holds the version number of
     /// the given UUID, 0 for the nil UUID.
-    RuleIdNotTimeOrdered {
-        version: usize,
-    },
-    TooManyTags {
-        count: usize,
-        max: usize,
-    },
+    RuleIdNotTimeOrdered { version: usize },
+    /// The scope holds `count` tags, which is more than `max`, the cap
+    /// `MAX_SCOPE_TAGS`.
+    TooManyTags { count: usize, max: usize },
     /// A tag key is empty or longer than `max`. `len` counts the characters
     /// of the key, and the accepted range is 1 to `max`.
-    TagKeyLength {
-        len: usize,
-        max: usize,
-    },
+    TagKeyLength { len: usize, max: usize },
     /// A tag value is empty or longer than `max`. `len` counts the characters
     /// of the value, and the accepted range is 1 to `max`.
-    TagValueLength {
-        len: usize,
-        max: usize,
-    },
+    TagValueLength { len: usize, max: usize },
 }
 
 /// One refusal: where in the rule document, as a JSON pointer (RFC 6901),
@@ -64,11 +53,11 @@ fn token(key: &str) -> String {
 /// form of a rule writes the fields: the id, then the sample rate, then the
 /// scope, then each tag in key order, with a key before its value.
 pub fn validate(rule: &Rule) -> Result<(), Vec<Error>> {
-    // `validate` runs one check per field of the rule, in the order in which
-    // the JSON form of a rule holds the fields. A failing check adds a
-    // refusal through `refuse` and does not return, so the result holds
-    // every refusal in that order. The scope is a `BTreeMap`, so the loop of
-    // step 4 visits the tags in key order.
+    // `validate` checks the id, the sample rate and the scope, in the order
+    // in which the JSON form of a rule holds those fields. A failing check
+    // adds a refusal through `refuse` and does not return, so the result
+    // holds every refusal in that order. The scope is a `BTreeMap`, so the
+    // loop of step 4 visits the tags in key order.
     //
     // 1. We refuse a `rule_id` that is not a version 7 UUID, and we report
     //    the version we found. The server issues version 7 UUIDs, the
@@ -119,7 +108,9 @@ pub fn validate(rule: &Rule) -> Result<(), Vec<Error>> {
         // characters. A byte count would cap a tag in a non-Latin script
         // sooner.
         let len = key.chars().count();
-        // A key or a value of zero length addresses nothing on any sensor.
+        // A key or a value of zero length addresses nothing on any sensor,
+        // because a sensor's own tags are 1 to `MAX_TAG_LENGTH` characters
+        // too (ADR-0034).
         if !(1..=max).contains(&len) {
             refuse(at.clone(), Reason::TagKeyLength { len, max });
         }
