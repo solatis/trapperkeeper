@@ -31,6 +31,29 @@ pub enum TypeName {
 /// `is not None` have kinds of their own. A node is written as a JSON object
 /// whose one key names its kind, except `None`, which has no operand and is
 /// the bare string "none".
+///
+/// The parser builds `And` and `Or` with two or more operands in written
+/// order, and it splices an operand of the same kind into the list, so
+/// `(a and b) and c` is one node of three. The JSON form enforces neither
+/// property and reads an `and` of any length.
+///
+/// Each comparison, from `Eq` to `IsNotNone`, holds its left and its right
+/// operand, except `IsNone` and `IsNotNone`, which hold the one value they
+/// test. An `Eq` or a `Ne` with the literal `None` as an operand tests for a
+/// null, as `IsNone` and `IsNotNone` do. A value that is not there is a null
+/// too (ADR-0005).
+///
+/// `Any` and `All` are the quantifiers `any` and `all`, which an author
+/// writes as `any(test for name in list)`.
+///
+/// The JSON key of a function, from `Len` to `IsNan`, is the name an author
+/// types, with `_` for the dot, so `re.search` has the key `re_search`. The
+/// pattern of `ReSearch`, `ReMatch` and `ReFullmatch` is a literal text
+/// rather than an expression, so the server can check it when the rule is
+/// created.
+///
+/// The first operand of a method, from `StartsWith` to `IsAscii`, is the
+/// text the method is called on.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 // A node with a key it does not know, or with a property its kind does not
 // have, fails the parse.
@@ -60,19 +83,10 @@ pub enum Expr {
 
     // Logic.
     Not(Box<Expr>),
-    /// The parser builds `And` and `Or` with two or more operands in written
-    /// order, and it splices an operand of the same kind into the list, so
-    /// `(a and b) and c` is one node of three. The JSON form enforces
-    /// neither property and reads an `and` of any length.
     And(Vec<Expr>),
     Or(Vec<Expr>),
 
     // Comparisons.
-    /// Each comparison holds its left and its right operand, except `IsNone`
-    /// and `IsNotNone`, which hold the one value they test. An `Eq` or a `Ne`
-    /// with the literal `None` as an operand tests for a null, as `IsNone`
-    /// and `IsNotNone` do. A value that is not there is a null too
-    /// (ADR-0005).
     Eq(Box<Expr>, Box<Expr>),
     Ne(Box<Expr>, Box<Expr>),
     Lt(Box<Expr>, Box<Expr>),
@@ -102,7 +116,7 @@ pub enum Expr {
         otherwise: Box<Expr>,
     },
 
-    /// The quantifiers `any` and `all`, as `any(test for name in list)`.
+    // The quantifiers.
     Any {
         name: String,
         list: Box<Expr>,
@@ -115,17 +129,12 @@ pub enum Expr {
     },
 
     // The functions.
-    /// The JSON key of a function is the name an author types, with `_` for
-    /// the dot.
     Len(Box<Expr>),
     #[serde(rename = "isinstance")]
     IsInstance {
         value: Box<Expr>,
         types: Vec<TypeName>,
     },
-    /// The pattern of the three pattern functions is a literal text rather
-    /// than an expression, so the server can check it when the rule is
-    /// created.
     ReSearch {
         pattern: String,
         text: Box<Expr>,
@@ -142,7 +151,6 @@ pub enum Expr {
     IsNan(Box<Expr>),
 
     // The methods.
-    /// The first operand of a method is the text the method is called on.
     #[serde(rename = "startswith")]
     StartsWith(Box<Expr>, Box<Expr>),
     #[serde(rename = "endswith")]
