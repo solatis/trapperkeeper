@@ -179,8 +179,8 @@ fn database_state() -> impl Strategy<Value = State> {
     let row = prop_oneof![Just(Row::Applied), Just(Row::Missing), Just(Row::Edited)];
     let migrated = (
         proptest::collection::vec(row, versions.len()),
-        // Above the last real version, so no unknown one collides with it. The
-        // range and the cap of two are a choice.
+        // The unknown versions lie above the last real one, so none collides
+        // with it. The range and the cap of two are a choice.
         proptest::collection::btree_set((1..1000_i64).prop_map(move |n| last + n), 0..=2),
     )
         .prop_map(|(rows, unknown)| State::Migrated {
@@ -300,7 +300,8 @@ fn build(state: &State, database: &TestDatabase) {
 
 proptest! {
     #![proptest_config(ProptestConfig {
-        // 32 cases, because each creates a database on every backend.
+        // The property runs 32 cases, because each creates a database on
+        // every backend.
         cases: 32,
         // No regression file is left in the tree. The panic message shows the
         // minimal failing input.
