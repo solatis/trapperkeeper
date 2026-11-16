@@ -1,6 +1,9 @@
-//! The grammar of the rule language, written with the kit: one function per
-//! level of precedence, from the lowest up. The kinds of expression are
-//! ADR-0041.
+//! The grammar of the rule language, written with the kit, which is the set
+//! of parser combinators in `kit.rs`. That file says what a note, a refusal,
+//! `label` and `hidden` are. This file holds `parse`, which tries the reasons
+//! `KeywordCase` and `NotInLanguage` before it returns an `Expected` error,
+//! the token tests, and the rules of the grammar. ADR-0041 lists the kinds of
+//! expression that the grammar reads.
 
 use std::mem;
 use std::ops::Range;
@@ -13,17 +16,24 @@ use super::kit::{
 use super::tokens::{Tok, lex};
 use crate::expr::{Expr, Segment, TypeName};
 
-// The words of the language: the twelve of ADR-0041 and the two module
-// names. A name token that is one of them is no name.
+// The twelve reserved words of ADR-0041 and the two module names `re` and
+// `math`. `name` does not match a name token that is one of them, so a field
+// of that name is written `record["in"]`. The printer writes such a key in
+// brackets for the same reason.
 pub(super) const WORDS: [&str; 14] = [
     "and", "or", "not", "in", "is", "if", "else", "for", "None", "True", "False", "record", "re",
     "math",
 ];
 
-// The two words that name a module and nothing else.
+// ADR-0041 reserves `re` and `math` as the names of the two modules, so that
+// a call does not need four tokens to tell it from a field. `function_name`
+// reads one only as the start of a call such as `re.search`, and a bare `re`
+// is refused with `ModuleAlone`.
 const MODULES: [&str; 2] = ["re", "math"];
 
-// Python keywords outside the language. They are names here, and they are
+// Python's keywords (`keyword.kwlist`) less those that are words of the
+// language. ADR-0041 makes them names, and a rule may use one as a key,
+// because the language does not aim to ban Python's other keywords. They are
 // used only to explain a failure right after one.
 const PYTHON_ONLY: [&str; 24] = [
     "lambda", "def", "class", "import", "from", "return", "while", "elif", "try", "except",
@@ -62,8 +72,9 @@ pub fn parse(text: &str) -> Result<Expr, SyntaxError> {
     //    comes after the test that uses it.
     // 4. Otherwise we build the error from the refusal and from the log of
     //    the input, in which each token test that did not match noted what
-    //    it wanted. Before we return a generic "expected" error, we try two
-    //    targeted reasons, and neither changes which texts are valid.
+    //    it wanted. Before we return an `Expected` error, we try the reasons
+    //    `KeywordCase` and `NotInLanguage`, and neither changes which texts
+    //    are valid.
 
     // 1. split into tokens
     let input = Input::new(text, lex(text));
@@ -88,20 +99,24 @@ pub fn parse(text: &str) -> Result<Expr, SyntaxError> {
     if !matches!(error.reason, Reason::Expected { .. }) {
         return Err(error);
     }
-    // A word in the wrong case is tried first, as `AND` in `a > 1 AND b <
-    // 2`, and then a Python keyword right before the failure, as `lambda`
-    // in `lambda x: x > 1`.
+    // `KeywordCase` for the word at the failure is tried before
+    // `NotInLanguage` for the word before it, because the word at the failure
+    // is the word the author has to edit. `AND` in `a > 1 AND b < 2` gets the
+    // first, and `lambda` in `lambda x: x > 1` the second. In `lambda AND b`
+    // both apply, and the order picks `KeywordCase`.
     let targeted = miscased_word(&input).or_else(|| python_only_word(&input));
-    // Without a targeted reason, the generic error gets what the grammar
-    // knows of the name at its place, as "did you mean `and`?" for `adn`.
+    // When neither applies, the `Expected` error gets what the grammar knows
+    // of the name at its place, as "did you mean `and`?" for `adn`.
     Err(targeted.unwrap_or_else(|| with_words(&input, error)))
 }
 
-/// `KeywordCase`, when the token at the failure is a name that differs only
-/// in case from a word of the language that could stand there.
+/// Returns a `KeywordCase` error over the name token at the furthest place,
+/// when that name differs only in case from a word of the language that some
+/// test wanted there, and `None` otherwise.
 fn miscased_word(i: &Input<'_>) -> Option<SyntaxError> {
     // `wanted` also holds the notes that `label` and `hidden` keep out of
-    // the error. In `x NOT in y` it holds `not` behind "an operator".
+    // the error. In `x NOT in y` it holds `not`, which the label "an
+    // operator" of `compare_tail` took out of the error.
     let (pos, wanted) = i.furthest();
     let token = i.tok(pos);
     // Only a name token can be a miscased word: `AND` in `a > 1 AND b < 2`.
@@ -118,18 +133,19 @@ fn miscased_word(i: &Input<'_>) -> Option<SyntaxError> {
         found: found.clone(),
         keyword,
     };
-    // The error covers the name, bytes 6 to 9 of `a > 1 AND b < 2`.
     let at = token.at.clone();
     // The word must be one that a test wanted at this place. A test notes a
     // word in backticks, as `word` names it. In `a > 1 Record b` no test
-    // wanted `record`, so the error stays generic.
+    // wanted `record`, so the function returns `None`, and `parse` goes on to
+    // `python_only_word` and then to the `Expected` error.
     wanted
         .contains(&format!("`{keyword}`"))
         .then_some(SyntaxError { at, reason })
 }
 
-/// `NotInLanguage`, when the token before the failure is a Python keyword
-/// outside the language. The error points at that keyword.
+/// Returns a `NotInLanguage` error over the token before the furthest place,
+/// when that token is a Python keyword outside the language, and `None`
+/// otherwise.
 fn python_only_word(i: &Input<'_>) -> Option<SyntaxError> {
     // The parse failed at the furthest note: `x` in `lambda x: x > 1`, where
     // `lambda` was read as a field and `x` cannot follow it.
@@ -142,22 +158,21 @@ fn python_only_word(i: &Input<'_>) -> Option<SyntaxError> {
         return None;
     };
     let reason = Reason::NotInLanguage { word: word.clone() };
-    // The error covers the keyword, bytes 0 to 6 of `lambda x: x > 1`.
     let at = token.at.clone();
-    // Any other name before the failure, as `a` in `a adn b`, gives none.
     PYTHON_ONLY
         .contains(&word.as_str())
         .then_some(SyntaxError { at, reason })
 }
 
-/// The generic error with what the grammar knows of the name at its place: a
-/// word of the language that stands there, or the nearest word that could
-/// stand there.
+/// For an `Expected` error whose place holds a name token, returns the error
+/// with `found` set to `Found::Word` when the name is a word of the language,
+/// and otherwise with `nearest` set to the nearest word that some test wanted
+/// there. Any other error comes back unchanged.
 fn with_words(i: &Input<'_>, error: SyntaxError) -> SyntaxError {
     let (pos, wanted) = i.furthest();
-    // Only a name token at the place gets help, and `parse` passes only an
-    // `Expected` error. The pattern takes `expected` and `after` from it to
-    // build the new reason. `a > )` returns the error as it is.
+    // Only a name token at the place gets a word or a guess, and `parse`
+    // passes only an `Expected` error, so the second half of the pattern
+    // always matches. `a > )` returns the error as it is.
     let (
         Tok::Name(name),
         Reason::Expected {
@@ -169,9 +184,9 @@ fn with_words(i: &Input<'_>, error: SyntaxError) -> SyntaxError {
     };
     // The name may be a word of the language, as `or` in `a and or b`.
     let word = WORDS.iter().find(|w| **w == name).copied();
-    // Only a word that some test wanted at this place is offered. `wanted`
-    // holds the notes behind a label too. After the `x` of `x iss None` it
-    // holds `is`, which the label "an operator" keeps out of the error.
+    // Only a word that some test wanted at this place is offered. After the
+    // `x` of `x iss None` the label "an operator" took `is` out of the error,
+    // and `is` is still offered.
     let could_stand = |w: &&&str| wanted.contains(&format!("`{w}`"));
     let known: Vec<&str> = WORDS.iter().filter(could_stand).copied().collect();
     let reason = Reason::Expected {
@@ -242,14 +257,16 @@ fn any_name(i: &Input<'_>, p: usize) -> Reply<String> {
 ///
 /// Reads a whole rule, such as `amount > 100`, up to the end of the text.
 fn rule(i: &Input<'_>, p: usize) -> Reply<Expr> {
-    // The empty text gets a reason of its own, over the whole text.
+    // A text with no token, empty or only spaces, is refused with `Empty`
+    // over the whole text. The tokenizer skips spaces, so the guard tests for
+    // `End` at the first token.
     if matches!(i.tok(p).kind, Tok::End) {
         let (at, reason) = (0..i.text.len(), Reason::Empty);
         let error = SyntaxError { at, reason };
         return Err(Refusal { pos: p, error });
     }
     // An error at the end says after which expression it stands, as in
-    // "after `a > 1`" for `a > 1 b`. The map drops the `()` of the end.
+    // "after `a > 1`" for `a > 1 b`.
     map(then_after(expr, end_of_rule), |(e, ())| e)(i, p)
 }
 
@@ -257,7 +274,6 @@ fn rule(i: &Input<'_>, p: usize) -> Reply<Expr> {
 ///
 /// Reads the end of `amount > 100`. In `a > 1) and b` it refuses the `)`.
 fn end_of_rule(i: &Input<'_>, p: usize) -> Reply<()> {
-    // `end` reads the `End` token, or notes "the end of the rule".
     let end = token("the end of the rule", |t| {
         matches!(t.kind, Tok::End).then_some(())
     });
@@ -268,15 +284,15 @@ fn end_of_rule(i: &Input<'_>, p: usize) -> Reply<()> {
         _ => None,
     });
     // A closing bracket here closes nothing, because every opening bracket
-    // consumes its own. The refusal covers the `)`, bytes 5 to 6 of
-    // `a > 1) and b`.
+    // consumes its own. The refusal covers the `)` of `a > 1) and b`.
     let stray = try_map(closer, |_, close, at| {
         let reason = Reason::ClosesNothing { close };
         Err(SyntaxError { at, reason })
     });
-    // The rule tries the end of the text first, then a stray bracket. Without
-    // `hidden`, the error for `a > 1 b` would list the empty name of
-    // `closer`.
+    // The stray bracket is read only to refuse it. `hidden` keeps its test
+    // out of the list of what could stand after a complete rule, so
+    // `a > 1 b < 2` gets "expected `and`, `or`, `if` or the end of the rule"
+    // with no bracket.
     or(end, hidden(stray))(i, p)
 }
 
@@ -295,19 +311,19 @@ fn expr(i: &Input<'_>, p: usize) -> Reply<Expr> {
 /// Reads `price if price > 0 else 0`. The branch after `else` may be a
 /// conditional again, so `a if b else c if d else e` groups to the right.
 fn conditional(i: &Input<'_>, p: usize) -> Reply<Expr> {
-    // Python's `a if b` without `else` is the mistake to name. `price if
-    // price > 0` is refused at the end of the text, where `else` is missing.
+    // A missing `else` gets a refusal of its own, `ConditionalNeedsElse`.
+    // `price if price > 0` is refused at the end of the text.
     let needs_else = require(Reason::ConditionalNeedsElse, word("else"));
-    // `tail` reads `if price > 0 else 0` and gives the test and the branch
-    // after `else`. The test is read at the level of `or`, so a conditional
-    // in it needs parentheses. The branch after `else` is nested, because
-    // this rule calls itself there.
+    // The test is read at the level of `or`, so a conditional in it needs
+    // parentheses. The branch after `else` goes through `nested`, so that the
+    // cap on nesting holds where this rule calls itself.
     let tail = then(right(word("if"), or_expr), nested(needs_else, conditional));
     // `first` is the value before `if`, `price` in the example.
     map(then(or_expr, opt(tail)), |(first, tail)| match tail {
         // `a or b`, with no `if` after it.
         None => first,
-        // `then if test else otherwise`.
+        // `tail` gave the test and the branch after `else`, and the node
+        // reads `then if test else otherwise`.
         Some((test, otherwise)) => Expr::If {
             test: Box::new(test),
             then: Box::new(first),
@@ -337,8 +353,10 @@ fn and_expr(i: &Input<'_>, p: usize) -> Reply<Expr> {
 /// operand that is a node of the same kind, so `(a and b) and c` is one list
 /// of three.
 fn join(make: fn(Vec<Expr>) -> Expr, l: Expr, r: Expr) -> Expr {
-    // The kind of node that `make` builds, `And` or `Or`. The empty node is
-    // built only to learn its kind.
+    // `kind` is the kind of node that `make` builds, `And` or `Or`, which the
+    // function learns by building an empty node. It does not compare `make`
+    // with `Expr::And`, because Rust does not promise that two pointers to
+    // one function compare equal.
     let kind = mem::discriminant(&make(Vec::new()));
     // `operands` gives the operands that one side brings into the list.
     let operands = |e: Expr| {
@@ -352,7 +370,6 @@ fn join(make: fn(Vec<Expr>) -> Expr, l: Expr, r: Expr) -> Expr {
             e => vec![e],
         }
     };
-    // In `(a and b) and c` the left side gives `a, b` and the right side `c`.
     let mut all = operands(l);
     all.extend(operands(r));
     make(all)
@@ -360,8 +377,9 @@ fn join(make: fn(Vec<Expr>) -> Expr, l: Expr, r: Expr) -> Expr {
 
 /// `not_expr := "not" not_expr | comparison`
 ///
-/// Reads `not active` and `not not x`. A `not` that follows a value is not
-/// read here: it starts `not in`, which `comparison` reads.
+/// Reads `not active` and `not not x`. A `not` that follows a value starts
+/// the operator `not in`, which `comparison` reads, so this rule reads only a
+/// `not` that stands where a value starts.
 fn not_expr(i: &Input<'_>, p: usize) -> Reply<Expr> {
     let not_or_comparison = or(
         // `not x`. The operand is read by this same rule, so `not not x`
@@ -375,7 +393,8 @@ fn not_expr(i: &Input<'_>, p: usize) -> Reply<Expr> {
     label("a value", not_or_comparison)(i, p)
 }
 
-// The comparison operators and the builder of each one's node.
+// The six comparisons of the language (ADR-0041), each with the builder of
+// its node.
 const COMPARISONS: [(&str, Binary); 6] = [
     ("==", Expr::Eq),
     ("!=", Expr::Ne),
@@ -417,13 +436,11 @@ enum Tail {
 /// Reads the `> 100` of `amount > 100` and the `is not None` of
 /// `discount is not None`.
 fn compare_tail(i: &Input<'_>, p: usize) -> Reply<Tail> {
-    // `> 100` gives the operator and the right operand, each with its
-    // bytes. The places are kept for the errors of `build_comparison`. The
-    // operand is read by `additive`, so in `0 < amount < 10` it stops before
+    // `additive` reads the operand, so in `0 < amount < 10` it stops before
     // the second `<`.
     let operator_and_operand = then(spanned(compare_op), spanned(additive));
-    // In `x == None` the parts are `Expr::Eq` with bytes 2 to 4, then the
-    // literal `None` with bytes 5 to 9.
+    // The value is the operator and the right operand, each with its bytes.
+    // `build_comparison` uses the bytes for its errors.
     let binary = map(operator_and_operand, |((make, op_at), (r, r_at))| {
         Tail::Binary(make, op_at, r, r_at)
     });
@@ -439,7 +456,9 @@ fn compare_tail(i: &Input<'_>, p: usize) -> Reply<Tail> {
 }
 
 /// A second operator after a comparison with its place, and the operand
-/// after it with its place, when there is one.
+/// after it with its place. The outer `None` means that no second operator
+/// followed the comparison. The inner `None` means that a second operator
+/// stood and no operand followed it, as in `a < b <`.
 type Chained = Option<(Placed<()>, Option<Placed<Expr>>)>;
 
 /// `comparison := additive compare_tail?`
@@ -448,26 +467,26 @@ type Chained = Option<(Placed<()>, Option<Placed<Expr>>)>;
 /// the operand alone. Comparisons do not chain, so `0 < amount < 10` is
 /// refused.
 fn comparison(i: &Input<'_>, p: usize) -> Reply<Expr> {
-    // `again` reads a second operator, as the second `<` of `0 < amount <
-    // 10` or the second `is` of `x is None is None`, and gives `()`.
-    // It is read only to refuse the chain with the rewrite that names its
-    // operands. It is hidden, or the error for `a > 1 b` would list "an
-    // operator", `in`, `not` and `is`.
+    // `again` reads a second operator, as the second `<` of
+    // `0 < amount < 10` or the second `is` of `x is None is None`. It is
+    // hidden, or the error for `a > 1 b` would list "an operator", `in`,
+    // `not` and `is`.
     let again = hidden(or(map(compare_op, |_| ()), map(word("is"), |_| ())));
-    // `chained` gives the second operator with its place, then the third
-    // operand with its place: `10` in `0 < amount < 10`, nothing in `a < b <`.
+    // The second operator is read so that `build_comparison` refuses every
+    // chain with `ChainedComparison`, because the language has no chained
+    // comparisons (ADR-0041). It offers a rewrite only when it can write
+    // one. The third operand is optional, so that `a < b <` is still refused
+    // as a chain, at its second `<`.
     let chained = opt(then(spanned(again), opt(spanned(additive))));
     // `tail` reads what follows the first operand: `< amount` and the chain
     // after it. In `amount and x` nothing follows.
     let tail = opt(then(compare_tail, chained));
-    // The rule reads the first operand with its place, then the tail.
-    // `build_comparison` builds the node from them or refuses the text.
     try_map(then(spanned(additive), tail), build_comparison)(i, p)
 }
 
-/// The refusal of the operator at `op_at` when its left or its right operand
-/// is the literal `None`, or nothing. The error covers the operator and the
-/// `None` beside it.
+/// Returns the refusal of the operator at `op_at` when its left or its right
+/// operand is the literal `None`, and `None` when neither is. The error
+/// covers the operator and that `None`.
 fn none_operand(
     i: &Input<'_>,
     left: &Placed<Expr>,
@@ -476,11 +495,12 @@ fn none_operand(
 ) -> Option<SyntaxError> {
     let ((left, left_at), (right, right_at)) = (left, right);
     // The left operand is tested first, so the error for `None >= None`
-    // covers `None >=`. `None + 1` gives bytes 0 to 6, `None +`, and
-    // `x < None` gives bytes 2 to 8, `< None`.
+    // covers `None >=`.
     let at = if matches!(left, Expr::None) {
+        // `None + 1` gives bytes 0 to 6, `None +`.
         left_at.start..op_at.end
     } else if matches!(right, Expr::None) {
+        // `x < None` gives bytes 2 to 8, `< None`.
         op_at.start..right_at.end
     } else {
         return None;
@@ -496,27 +516,35 @@ fn none_operand(
 fn build_comparison(
     i: &Input<'_>,
     ((left, left_at), tail): (Placed<Expr>, Option<(Tail, Chained)>),
+    // The bytes of the whole comparison, which `try_map` passes and no error
+    // here needs.
     _: Range<usize>,
 ) -> Result<Expr, SyntaxError> {
-    // `left` and `left_at` are the first operand and its bytes, `0` and 0 to
-    // 1 in `0 < amount < 10`. The last parameter is the bytes of the whole
-    // comparison, which `try_map` passes and no error here needs.
+    // The function builds the node of a comparison from the first operand and
+    // the tail that `comparison` read, or it refuses the text. It tests these
+    // cases in order: no operator followed, a second operator followed, an
+    // `is None` or `is not None` tail, an ordering beside the literal `None`,
+    // and an `in` or `not in` before the literal `None`. A binary tail that
+    // passes them becomes the node. The place of the second case matters, and
+    // the note there says why.
     let text = |at: &Range<usize>| i.slice(at);
     // No operator followed: `amount` in `amount and x` is the operand alone.
     let Some((tail, chained)) = tail else {
         return Ok(left);
     };
-    // A second operator stood after the comparison. `again_at` is its
-    // bytes, 11 to 12 of `0 < amount < 10`, and `third` is `10` with its
-    // bytes.
+    // A second operator stood after the comparison. `again_at` is its bytes,
+    // and `third` is the optional third operand with its bytes, `10` in
+    // `0 < amount < 10`. This case comes before the `is None` arms, because
+    // those arms return a complete node, and `x is None is None` would
+    // otherwise parse as `IsNone` and drop its second `is`.
     if let Some((((), again_at), third)) = chained {
-        // The rewrite needs two comparisons of two operands each, so it is
-        // left out after `is None` and when the third operand is missing.
+        // The rewrite needs two comparisons of two operands each.
         let write = match (&tail, third) {
             (Tail::Binary(_, op_at, _, right_at), Some((_, third_at))) => {
                 // `first` is `0 < amount`, written from the three parts.
                 let first = format!("{} {} {}", text(&left_at), text(op_at), text(right_at));
-                // `amount < 10`: the middle operand is written twice.
+                // The middle operand stands in both comparisons, so `second`
+                // is `amount < 10`.
                 let second = format!("{} {} {}", text(right_at), text(&again_at), text(&third_at));
                 Some(format!("{first} and {second}"))
             }
@@ -524,14 +552,13 @@ fn build_comparison(
             _ => None,
         };
         let reason = Reason::ChainedComparison { write };
-        // The error covers the second operator.
         return Err(SyntaxError {
             at: again_at,
             reason,
         });
     }
     // `is None` and `is not None` are complete nodes. A binary tail gives
-    // its parts for the check of an ordering below.
+    // its parts for the two checks below.
     let (make, op_at, right) = match tail {
         Tail::IsNone(false) => return Ok(Expr::IsNone(Box::new(left))),
         Tail::IsNone(true) => return Ok(Expr::IsNotNone(Box::new(left))),
@@ -570,7 +597,9 @@ fn build_comparison(
     Ok(make(Box::new(left.0), Box::new(right.0)))
 }
 
-// The arithmetic operators of each level and the builder of each one's node.
+// The arithmetic operators of each level, each with the builder of its node.
+// The two levels follow Python's precedence (ADR-0041). The set holds the
+// operators that rules need so far, and another operator can be added later.
 const ADDITIVE: [(&str, Binary); 2] = [("+", Expr::Add), ("-", Expr::Sub)];
 const TERM: [(&str, Binary); 3] = [("*", Expr::Mul), ("/", Expr::Div), ("%", Expr::Mod)];
 
@@ -624,9 +653,10 @@ fn term(i: &Input<'_>, p: usize) -> Reply<Expr> {
 
 /// `unary := "-" number | "-" unary | postfix`
 ///
-/// Reads a leading minus. On a number token it gives a negative literal, as
-/// in `-5`, and on anything else a `Neg`, as in `-a` and `-(5)`. Refuses
-/// `-None`.
+/// Reads a postfix form, or a leading minus before one. On a number token the
+/// minus gives a negative literal, as in `-5`, and on anything else a `Neg`,
+/// as in `-a` and `-(5)`. Refuses `-None` and an integer below the smallest
+/// i64.
 fn unary(i: &Input<'_>, p: usize) -> Reply<Expr> {
     // `int` gives the magnitude of an integer token. The tokenizer reads a
     // number without its sign.
@@ -638,26 +668,30 @@ fn unary(i: &Input<'_>, p: usize) -> Reply<Expr> {
         Tok::Float(v) => Some(v),
         _ => None,
     });
+    // The two number alternatives come before `- unary`, because the choice
+    // takes the first that matches, and `- unary` would read `-5` as `Neg` of
+    // `5`.
     let minus_or_postfix = choice!(
         // `-5`. The minus folds only into a number token and never into a
         // parsed operand, so `-(5)` stays a `Neg` and a printed tree parses
-        // back to itself. The magnitude may be 2^63 with the minus, so the
-        // smallest integer can be written. The number is hidden, or `- )`
-        // would get "expected a number or a value".
+        // back to itself. The number is hidden, or `- )` would get "expected
+        // a number or a value".
         try_map(right(punct("-"), hidden(int)), |_, v, at| {
             let reason = Reason::IntTooLarge;
-            // 0 minus the magnitude fails above 2^63. The error then covers
-            // the minus and the number, bytes 0 to 20 of
-            // `-9223372036854775809 < x`.
+            // Subtracting the magnitude from 0 fails above 2^63, so the
+            // smallest integer, with the magnitude 2^63, can still be
+            // written. The error covers the minus and the number.
             let negative = 0_i64.checked_sub_unsigned(v);
             negative.map(Expr::Int).ok_or(SyntaxError { at, reason })
         }),
         // `-0.5`.
         map(right(punct("-"), hidden(float)), |v| Expr::Float(-v)),
-        // `-a` and `- -5`. Each minus counts as a level of nesting.
+        // `-a` and `- -5`. Each minus that this alternative reads opens a
+        // level of nesting. In `- -5` only the first does, because the second
+        // folds into the literal `-5`.
         try_map(nested(punct("-"), unary), |_, e, at| match e {
-            // `-None` could never match (ADR-0005). It is refused over the
-            // minus and the `None`, bytes 0 to 5 of `-None > 1`.
+            // `-None` could never match (ADR-0005). The refusal covers the
+            // minus and the `None`.
             Expr::None => {
                 let op = "-".to_owned();
                 let reason = Reason::NoneOperand { op };
@@ -689,14 +723,11 @@ enum Post {
 ///
 /// Reads `items[0].price`, `flows["in"]` and `name.strip().upper()`.
 fn postfix(i: &Input<'_>, p: usize) -> Reply<Expr> {
-    // `steps` gives each step with its bytes: `[0]`, then `.price`, in
-    // `items[0].price`. The steps are hidden from expected sets, because a
-    // `.` or a `[` may follow almost any value. A step that fails after its
-    // first token still reports, as `customer..country` with "expected a
-    // name".
+    // The steps are hidden, because a `.` or a `[` may follow almost any
+    // value and would show up in every "expected" error. A step that fails
+    // after its first token still reports, as `customer..country` with
+    // "expected a name".
     let steps = many(spanned(hidden(or(dot_step, bracket_step))));
-    // The rule reads the atom with its bytes, then the steps.
-    // `apply_postfixes` builds the node or refuses the text.
     try_map(then(spanned(atom), steps), apply_postfixes)(i, p)
 }
 
@@ -705,14 +736,15 @@ fn postfix(i: &Input<'_>, p: usize) -> Reply<Expr> {
 /// Reads the `.price` of `item.price` and the `.upper()` of `name.upper()`.
 fn dot_step(i: &Input<'_>, p: usize) -> Reply<Post> {
     // Any name token is read here, also a word of the language, so that
-    // `flows.in` gets a reason of its own in `apply_postfixes`. The name
-    // comes with its bytes, then the arguments with theirs when a `(`
-    // follows.
+    // `flows.in` gets a reason of its own in `apply_postfixes`.
     let step = then(spanned(any_name), opt(spanned(args)));
+    // The value is the name with its bytes, then the arguments with theirs
+    // when a `(` follows.
     map(right(punct("."), step), |((name, at), call)| match call {
         // `.upper()`: a method call.
         Some((args, args_at)) => Post::Call(name, at, args, args_at),
-        // `.in`: a word of the language is never a key.
+        // `.in`: a word of the language after a dot is never a key
+        // (ADR-0041).
         None if WORDS.contains(&name.as_str()) => Post::Word(name, at),
         // `.price`: a key.
         None => Post::Step(Segment::Key(name)),
@@ -721,12 +753,13 @@ fn dot_step(i: &Input<'_>, p: usize) -> Reply<Post> {
 
 /// `"[" (index | text) "]"`
 ///
-/// Reads the `[0]` of `items[0]` and the `["in"]` of `flows["in"]`.
+/// Reads the `[0]` of `items[0]` and the `["in"]` of `flows["in"]`. A
+/// negative index such as `[-1]` is refused with a reason of its own.
 fn bracket_step(i: &Input<'_>, p: usize) -> Reply<Post> {
-    // `step` reads the `0` of `items[0]` or the `"in"` of `flows["in"]`. An
-    // index above `u32::MAX` does not match, so `items[99999999999]` gets
-    // "expected an index or a key".
+    // `step` reads the `0` of `items[0]` or the `"in"` of `flows["in"]`.
     let step = token("an index or a key", |t| match &t.kind {
+        // A path index is a u32. An index above `u32::MAX` does not match,
+        // so `items[99999999999]` gets "expected an index or a key".
         Tok::Int(v) => u32::try_from(*v).ok().map(Segment::Index),
         Tok::Text(s) => Some(Segment::Key(s.clone())),
         _ => None,
@@ -734,11 +767,11 @@ fn bracket_step(i: &Input<'_>, p: usize) -> Reply<Post> {
     // `number` reads any integer token, as the `1` of `[-1]`.
     let number = token("a number", |t| matches!(t.kind, Tok::Int(_)).then_some(()));
     // `[-1]`. Python's index from the end is refused by name (ADR-0041). The
-    // refusal covers `-1`, bytes 6 to 8 of `items[-1].price > 5`. The
-    // closure always refuses, and the turbofish names `Segment` as the value
-    // it would give, so both alternatives below give a `Segment`.
+    // refusal covers the `-1` of `items[-1].price > 5`.
     let negative = try_map(then(punct("-"), number), |_, _, at| {
         let reason = Reason::NegativeIndex;
+        // The closure always refuses. The turbofish names `Segment` as the
+        // value it would give, so both alternatives below give a `Segment`.
         Err::<Segment, _>(SyntaxError { at, reason })
     });
     // `inside` reads the index or the key, then the `]`. The negative index
@@ -748,15 +781,21 @@ fn bracket_step(i: &Input<'_>, p: usize) -> Reply<Post> {
     map(right(punct("["), inside), Post::Step)(i, p)
 }
 
-/// Applies the postfix steps to the atom, left to right.
+/// Applies the postfix steps to the atom, left to right, and returns the
+/// expression with every step applied.
+///
+/// It refuses `record` with no key, or with an index or a method
+/// (`BareRecord`), a key or an index on a value that is no path
+/// (`KeyOnValue`), a word of the language after a dot (`WordAfterDot`), and
+/// a method call that `method` refuses.
 fn apply_postfixes(
     i: &Input<'_>,
+    // The atom comes with its bytes, and `posts` holds each step with its
+    // bytes.
     ((atom, atom_at), posts): (Placed<Expr>, Vec<Placed<Post>>),
+    // The bytes of the whole form, which no error here needs.
     _: Range<usize>,
 ) -> Result<Expr, SyntaxError> {
-    // `atom` and `atom_at` are the atom and its bytes, `items` and 0 to 5
-    // in `items[0].price`. `posts` holds each step with its bytes. The last
-    // parameter is the bytes of the whole form, which no error here needs.
     let refuse = |at: Range<usize>, reason| Err(SyntaxError { at, reason });
     // `record` alone is a field with an empty path.
     let bare_record = |e: &Expr| matches!(e, Expr::Field(path) if path.is_empty());
@@ -767,12 +806,17 @@ fn apply_postfixes(
     for (post, at) in posts {
         e = match (post, e) {
             // `record[0]`: the record is an object, so its first step is a
-            // key. The error covers `record[0]`, bytes 0 to 9.
+            // key. This arm comes before the next one, because a bare
+            // `record` is an `Expr::Field` with an empty path, and the next
+            // arm would push the index onto it.
             (Post::Step(Segment::Index(_)), e) if bare_record(&e) => {
+                // The error covers `record[0]`, bytes 0 to 9.
                 return refuse(atom_at.start..at.end, Reason::BareRecord);
             }
-            // A step on a field: `.country` on `customer`, or the first key
-            // of `record["unit price"]`.
+            // A step on a path that starts at `record`, as the first key of
+            // `record["unit price"]` and each step after it. A bare name
+            // such as `customer` is an `Expr::Element` here and takes the
+            // next arm.
             (Post::Step(step), Expr::Field(mut path)) => {
                 path.push(step);
                 Expr::Field(path)
@@ -783,10 +827,10 @@ fn apply_postfixes(
                 path.push(step);
                 Expr::Element { name, path }
             }
-            // Only a path has keys. `"abc".x == 1` is refused at `.x`,
-            // bytes 5 to 7.
+            // Only a path has keys and indexes, so `"abc".x == 1` is refused
+            // at `.x`.
             (Post::Step(_), _) => return refuse(at, Reason::KeyOnValue),
-            // `flows.in`, refused at `in`, bytes 6 to 8.
+            // `flows.in` is refused at `in`.
             (Post::Word(word, word_at), _) => {
                 // The bracket form of the same key, built from the text
                 // before the dot: `flows`, then `flows["in"]`. `trim_end`
@@ -795,8 +839,8 @@ fn apply_postfixes(
                 let write = format!("{before}[\"{word}\"]");
                 return refuse(word_at, Reason::WordAfterDot { word, write });
             }
-            // `record.upper()`: a method on the whole record, refused at
-            // `record`, bytes 0 to 6.
+            // `record.upper()`: a method on the whole record is refused at
+            // `record`.
             (Post::Call(..), e) if bare_record(&e) => {
                 return refuse(atom_at, Reason::BareRecord);
             }
@@ -808,15 +852,17 @@ fn apply_postfixes(
             }
         };
     }
-    // `record` with no key is the whole record, which is no value. `record
-    // == 1` is refused at `record`, bytes 0 to 6.
+    // `record` with no key is the whole record, which is no value.
+    // `record == 1` is refused at `record`.
     if bare_record(&e) {
         return refuse(atom_at, Reason::BareRecord);
     }
     Ok(e)
 }
 
-/// How many arguments a method takes, with the builder of its node.
+/// How many arguments a method takes, with the builder of its node. `Zero`
+/// builds the node from the receiver alone, and `One` from the receiver and
+/// the one argument.
 #[derive(Clone, Copy)]
 pub(super) enum Arity {
     Zero(Unary),
@@ -854,8 +900,8 @@ fn method(
     // The error takes the table's name, because `WrongArgumentCount` holds
     // a `&'static str`.
     let Some(&(known, arity)) = METHODS.iter().find(|(n, _)| *n == name) else {
-        // `name.startwith("a")` is refused at `startwith`, bytes 5 to 14,
-        // with the nearest method `startswith`.
+        // `name.startwith("a")` is refused at `startwith`, with the nearest
+        // method `startswith`.
         let nearest = nearest(name, &names(&METHODS));
         let name = name.to_owned();
         let reason = Reason::UnknownMethod { name, nearest };
@@ -867,13 +913,15 @@ fn method(
     let receiver = Box::new(receiver);
     // `takes` is 0 or 1, and `given` counts the arguments in the text.
     let (takes, given) = (usize::from(matches!(arity, Arity::One(_))), args.len());
-    // `pop` takes the last argument off.
+    // `pop` gives the last argument by value, or none when there is none.
+    // `given` was counted before the pop, so the arms tell no argument, one
+    // argument and more apart.
     match (arity, args.pop()) {
         // `name.upper()`.
         (Arity::Zero(make), None) => Ok(make(receiver)),
         // `name.startswith("a")`, with one argument and no more.
         (Arity::One(make), Some(argument)) if given == 1 => Ok(make(receiver, Box::new(argument))),
-        // `name.upper("x")` is refused at `("x")`, bytes 10 to 15, and so is
+        // `name.upper("x")` is refused at `("x")`, and so is
         // `name.startswith()` at `()`.
         _ => {
             let reason = Reason::WrongArgumentCount {
@@ -889,64 +937,62 @@ fn method(
     }
 }
 
-/// The names of a table, as an error lists them and as `nearest` reads them.
+/// The names of a table.
 pub(super) fn names<T>(table: &[(&'static str, T)]) -> Vec<&'static str> {
     table.iter().map(|(name, _)| *name).collect()
 }
 
 /// The known name nearest to `word`, when it is near enough to be a typo:
 /// one edit per four characters, and at least one. Two names that are
-/// equally near give none, because neither is the better guess.
+/// equally near give none, and so does an empty list of known names.
 fn nearest<'a>(word: &str, known: &[&'a str]) -> Option<&'a str> {
-    // `lenn` may be one edit off and `startwith` two.
+    // `lenn` may be one edit off and `startwith` two. The limit is a choice
+    // and is not measured, and the parser has a limit here on purpose.
     let limit = (word.chars().count() / 4).max(1);
-    // `distances` pairs each known name with its distance from `word`.
     let distances: Vec<(usize, &str)> =
         known.iter().map(|k| (edit_distance(word, k), *k)).collect();
-    // `min_by_key` gives the least distance and the first name at it. An
-    // empty list of known names gives none.
+    // An empty list of known names gives none.
     let (least, name) = *distances.iter().min_by_key(|(d, _)| *d)?;
-    // `iz` is one edit from `is`, `in` and `if`, so it gets no guess.
+    // Two names at the same least distance give no guess, because neither is
+    // the better guess. `iz` is one edit from `is`, `in` and `if`.
     let unique = distances.iter().filter(|(d, _)| *d == least).count() == 1;
     // `abs` is two edits from `all` and `any`, over its limit of one, so
     // `abs(a - b)` gets the whole list of functions.
     (least <= limit && unique).then_some(name)
 }
 
-/// How many edits turn `a` into `b`. An edit inserts, deletes or replaces a
-/// character, or swaps two neighbours.
+/// The optimal string alignment distance of `a` and `b`: the fewest
+/// insertions, deletions, replacements and swaps of neighbours that turn `a`
+/// into `b`, where no character is edited again after a swap.
 fn edit_distance(a: &str, b: &str) -> usize {
+    // The function computes the optimal string alignment distance, which is
+    // the restricted variant of the Damerau-Levenshtein distance, by dynamic
+    // programming over a full table of prefixes. `rows[i][j]` is the number
+    // of edits that turn the first `i` characters of `a` into the first `j`
+    // characters of `b`, so the last cell holds the distance of the whole
+    // words.
+
     // The words become lists of characters, so a character of several bytes
     // counts as one.
     let (a, b): (Vec<char>, Vec<char>) = (a.chars().collect(), b.chars().collect());
-    // `rows[i][j]` is the number of edits that turn the first `i` characters
-    // of `a` into the first `j` characters of `b`.
     let mut rows = vec![vec![0; b.len() + 1]; a.len() + 1];
     for i in 0..=a.len() {
         for j in 0..=b.len() {
-            // From or to the empty prefix, every character is one insertion
-            // or one deletion: row 0 holds `j`, and column 0 holds `i`.
             if i == 0 || j == 0 {
                 rows[i][j] = i + j;
                 continue;
             }
-            // Replace the last character of the prefix of `a` by the last
-            // character of the prefix of `b`. That costs nothing when the two
-            // are equal.
             let replaced = rows[i - 1][j - 1] + usize::from(a[i - 1] != b[j - 1]);
-            // Or delete the last character of `a`, or insert the last
-            // character of `b`, whichever needs the fewest edits in all.
             let mut least = replaced.min(rows[i - 1][j] + 1).min(rows[i][j - 1] + 1);
-            // Or swap: the last two characters of `a` are the last two of
-            // `b` in the other order. A swap counts as one edit, so `adn` is
-            // one edit from `and`.
+            // When the last two characters of `a` are the last two of `b` in
+            // the other order, one swap of them is also a candidate, so `adn`
+            // is one edit from `and` and gets the guess `and`.
             if i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1] {
                 least = least.min(rows[i - 2][j - 2] + 1);
             }
             rows[i][j] = least;
         }
     }
-    // The last cell holds the distance of the whole words.
     rows[a.len()][b.len()]
 }
 
@@ -956,6 +1002,11 @@ fn edit_distance(a: &str, b: &str) -> usize {
 ///
 /// Reads `len(name)`, `record`, `amount`, `100`, `(a or b)` and `[1, 2]`.
 fn atom(i: &Input<'_>, p: usize) -> Reply<Expr> {
+    // The rule tries the forms of an atom in order, and the first that
+    // matches wins. Only the place of `call` matters, ahead of the bare name,
+    // and the note at `call` says why. The other forms start with different
+    // tokens, since `name` does not match `record`, `None`, `True` and
+    // `False`.
     choice!(
         // `len(name)`. The calls come before the bare name, because a name
         // followed by `(` is a call and never a field.
@@ -983,8 +1034,7 @@ fn atom(i: &Input<'_>, p: usize) -> Reply<Expr> {
 ///
 /// Reads `None`, `True`, `100`, `0.5` and `"paid"`.
 fn literal(i: &Input<'_>, p: usize) -> Reply<Expr> {
-    // `int` gives the magnitude of an integer token, and the alternative for
-    // `100` below checks it against `i64`.
+    // `int` gives the magnitude of an integer token.
     let int = token("a literal", |t| match t.kind {
         Tok::Int(v) => Some(v),
         _ => None,
@@ -999,8 +1049,7 @@ fn literal(i: &Input<'_>, p: usize) -> Reply<Expr> {
         map(word("True"), |_| Expr::Bool(true)),
         map(word("False"), |_| Expr::Bool(false)),
         // `100`. A magnitude above the largest i64 is too large without a
-        // minus before it: `9223372036854775808 > x` is refused at bytes 0
-        // to 19.
+        // minus before it, as in `9223372036854775808 > x`.
         try_map(int, |_, v, at| {
             let reason = Reason::IntTooLarge;
             i64::try_from(v)
@@ -1071,8 +1120,10 @@ fn items(i: &Input<'_>, p: usize) -> Reply<(Vec<Expr>, bool)> {
 /// `()`.
 fn parenthesized(i: &Input<'_>, p: usize) -> Reply<Expr> {
     // `inside` reads the items between `(` and `)`, one level of nesting
-    // deeper. A `(` without its `)`, as in `(a > 1 and b < 2`, is refused at
-    // the `(`.
+    // deeper. `delimited` refuses at the `(` only when the items matched and
+    // the text ends where the `)` should stand, as in `(a > 1 and b < 2`. Any
+    // other token in place of the `)` gives no match, and the error is an
+    // ordinary "expected" error at that token.
     let inside = delimited(punct("("), items, punct(")"));
     // `pop` takes the last item off, so the arms can tell one item from
     // several.
@@ -1103,8 +1154,9 @@ fn bracket_list(i: &Input<'_>, p: usize) -> Reply<Expr> {
 ///
 /// Reads the `(name)` of `len(name)` and the `("a")` of `x.startswith("a")`.
 fn args(i: &Input<'_>, p: usize) -> Reply<Vec<Expr>> {
-    // The `(` is hidden from expected sets, because after any name it is
-    // one more thing that could follow.
+    // The `(` is hidden, so that it does not show up in the "expected" error
+    // after a name that arguments may follow, as the name after a dot in
+    // `x.price`.
     let inside = delimited(hidden(punct("(")), items, punct(")"));
     // A comma at the end is dropped: `len(name,)` is `len(name)`. The
     // caller counts the arguments.
@@ -1157,31 +1209,46 @@ pub(super) const FUNCTIONS: [(&str, Arguments); 8] = [
 /// `call := (name | ("re" | "math") "." name) "(" arguments ")"`
 ///
 /// Reads `len(name)`, `isinstance(price, int)` and `re.search(r"a", x)`.
-/// The name picks how the arguments are read.
+/// The name picks how the arguments are read. After the dot of a module any
+/// name token is read, also a word of the language.
+///
+/// A called name outside the closed list is refused with `UnknownFunction`,
+/// with the nearest known function when one is near enough. `re` or `math`
+/// with no function after it is refused with `ModuleAlone`.
 fn call(i: &Input<'_>, p: usize) -> Reply<Expr> {
-    // A call is a name, a `(` and arguments that the name decides how to
-    // read.
+    // The function reads a function name, tests for the `(` after it without
+    // moving past it, and only then looks the name up in `FUNCTIONS`. Then
+    // it runs the parser of the arguments that the entry names.
     //
-    // 1. We read the name: a plain name, or `re` or `math`, a dot and a
-    //    name. Without one the rule does not match.
-    // 2. We look for the `(`. A plain name without it is no call, so `atom`
-    //    reads a field and `len == 1` is a rule about a field `len`.
-    // 3. We look the name up in the closed list. The lookup comes after the
-    //    `(`, so only a name that is called can be an unknown function.
-    // 4. We read the arguments in the way the function asks for. This is
-    //    the only rule that reads a name and its `(`, so no other
-    //    alternative reads the same bracket again.
+    // 1. We read the name with `function_name`: a plain name, or `re` or
+    //    `math`, a dot and a name. Without a name the rule gives no match.
+    //    `re` or `math` with no function after it is refused with
+    //    `ModuleAlone`, and the `?` passes that refusal on.
+    // 2. We test for the `(` at the token after the name, without moving
+    //    past it. Without a `(` the rule gives no match. A plain name
+    //    without `(` is no call, so the bare-name alternative of `atom`
+    //    reads it as a field, and `len == 1` is a rule about a field `len`.
+    // 3. We look the name up in `FUNCTIONS`, and refuse an unknown name with
+    //    the nearest known function. The lookup comes after the `(`, so only
+    //    a name that is called can be an unknown function.
+    // 4. We run the parser of the arguments that the entry names, from the
+    //    `(` at `q`, so that parser reads the `(` again itself. Of the
+    //    alternatives of `atom`, `call` is the only one that reads a name
+    //    and its `(`. So no other alternative of that choice reads the same
+    //    bracketed text again, which would double the parse time per level
+    //    of nesting.
 
     // 1. read the name
     // `function_name` gives the name and whether it has a module, `len` and
-    // false for `len(name)`. `q` is the token after the name.
+    // false for `len(name)`. `q` is the index of the token after the name.
     let Some(((function, in_module), q)) = function_name(i, p)? else {
         return Ok(None);
     };
-    // The bytes of the name, 0 to 4 of `lenn(name) > 3`.
+    // `at` holds the bytes of the name, 0 to 4 of `lenn(name) > 3`, which the
+    // refusal of an unknown name covers.
     let at = i.span(p, q);
 
-    // 2. look for the `(`
+    // 2. test for the `(`
     let open = punct("(");
     // After `re.search` the `(` must follow, so it is not hidden there, and
     // `re.search == 1` gets "expected `(` after `search`".
@@ -1197,6 +1264,8 @@ fn call(i: &Input<'_>, p: usize) -> Reply<Expr> {
     }
 
     // 3. look the name up
+    // The table's `name` is a `&'static str`, which the argument parsers and
+    // their reasons hold, and `function` is a `String`.
     let Some(&(name, arguments)) = FUNCTIONS.iter().find(|(n, _)| *n == function) else {
         // The refusal covers the bytes of the name and gives the nearest
         // known one, as `len` for `lenn`.
@@ -1204,12 +1273,12 @@ fn call(i: &Input<'_>, p: usize) -> Reply<Expr> {
         let name = function;
         let reason = Reason::UnknownFunction { name, nearest };
         let error = SyntaxError { at, reason };
+        // The refusal stands at `q`, the token after the name, as `try_map`
+        // puts its refusal after the tokens that its parser read.
         return Err(Refusal { pos: q, error });
     };
 
-    // 4. read the arguments
-    // Each arm builds its parser of the arguments and runs it from the `(`
-    // at `q`.
+    // 4. run the parser of the arguments
     match arguments {
         Arguments::One(make) => one_argument(name, make)(i, q),
         Arguments::Quantifier(make) => quantifier_arguments(name, make)(i, q),
@@ -1221,7 +1290,9 @@ fn call(i: &Input<'_>, p: usize) -> Reply<Expr> {
 /// `name | ("re" | "math") "." name`
 ///
 /// Reads the `len` of `len(name)` and the `re.search` of
-/// `re.search(r"a", x)`, and says whether the name has a module.
+/// `re.search(r"a", x)`, and says whether the name has a module. After the
+/// dot any name token is read, also a word of the language. `re` or `math`
+/// with no function after it is refused with `ModuleAlone`.
 fn function_name(i: &Input<'_>, p: usize) -> Reply<(String, bool)> {
     // `module` reads `re` or `math`, as the module of `re.search`. The note
     // has no name, because `hidden` below keeps it out of every error.
@@ -1230,34 +1301,37 @@ fn function_name(i: &Input<'_>, p: usize) -> Reply<(String, bool)> {
         _ => None,
     });
     let Some((module, q)) = hidden(module)(i, p)? else {
-        // `len`: a plain name. `name` refuses a word of the language, so
-        // `in(x)` is no call.
+        // `len`: a plain name. `name` does not match a word of the language,
+        // so `in(x)` is no call.
         return map(name, |name| (name, false))(i, p);
     };
     // `re.search`: the module, a dot and the function. Any name token is
     // read after the dot, so `re.if(x)` is the unknown function `re.if`.
-    // `re` or `math` with no function after it names nothing.
     let Some((function, r)) = right(punct("."), any_name)(i, q)? else {
-        // `re == 1` is refused at `re`, bytes 0 to 2. In `re.` the note "a
-        // name" after the dot lies further and wins.
+        // `re` or `math` with no function after it is refused with
+        // `ModuleAlone`. `re == 1` is refused at `re`.
         let (at, reason) = (i.tok(p).at.clone(), Reason::ModuleAlone { word: module });
         let error = SyntaxError { at, reason };
+        // The refusal stands at the token after the module. In `re.` that is
+        // the dot, so the note "a name" after the dot lies further and
+        // `explain` reports that note.
         return Err(Refusal { pos: q, error });
     };
     // The name is joined as `FUNCTIONS` lists it, `re.search`, and `r` is
-    // the token after it.
+    // the index of the token after the function.
     Ok(Some(((format!("{module}.{function}"), true), r)))
 }
 
-/// `"(" expr ")"`
+/// `"(" expr ","? ")"`
 ///
-/// Reads the `(name)` of `len(name)`. Any other number of arguments is
-/// refused.
+/// Reads the `(name)` of `len(name)`, and `len(name,)` reads as `len(name)`.
+/// Any other number of arguments is refused.
 fn one_argument(name: &'static str, make: Unary) -> impl Parser<Expr> {
     // `at` is the bytes of the arguments with their brackets, `(a, b)` at 3
     // to 9 in `len(a, b) > 1`.
     try_map(args, move |_, mut args, at| {
-        // `pop` takes the last argument, and `given` counts all of them.
+        // `given` counts the arguments before `pop` takes the last one off,
+        // so the count in the error includes it.
         let given = args.len();
         match args.pop() {
             // `len(name)`.
@@ -1277,12 +1351,13 @@ fn one_argument(name: &'static str, make: Unary) -> impl Parser<Expr> {
 /// Reads the `(i.price > 100 for i in items)` of
 /// `any(i.price > 100 for i in items)`.
 fn quantifier_arguments(function: &'static str, make: Quantifier) -> impl Parser<Expr> {
-    // `any(i > 1)` without `for` is the mistake to name. `any(i.price >
-    // 100)` is refused at the `)`, bytes 17 to 18.
+    // `require` turns a missing `for` into the refusal `QuantifierNeedsFor`
+    // at the token where `for` should stand, as the `)` of
+    // `any(i.price > 100)`.
     let needs_for = require(Reason::QuantifierNeedsFor { function }, word("for"));
     // `binding` reads `for i in`. An error at `in` says after which name it
-    // stands, as "expected `in` after `i`" for `for i items`. `name` refuses
-    // a word, so `for in items` gets "expected a name after `for`".
+    // stands, as "expected `in` after `i`" for `for i items`. `name` does not
+    // match a word, so `for in items` gets "expected a name after `for`".
     let binding = right(needs_for, then_after(name, word("in")));
     // `body` reads the test, the binding, then the list. The list is read at
     // the level of `or`, as Python reads it.
@@ -1300,14 +1375,18 @@ fn quantifier_arguments(function: &'static str, make: Quantifier) -> impl Parser
 /// Reads the `(price, (int, float))` of `isinstance(price, (int, float))`.
 fn isinstance_arguments(i: &Input<'_>, p: usize) -> Reply<Expr> {
     // `after_value` reads `, (int, float)` after the value, and a comma at
-    // the end.
+    // the end. The types are optional, so that `isinstance(x)` matches and
+    // reaches the refusal `WrongArgumentCount` below, which counts the
+    // arguments. A missing `,` would otherwise give an "expected" error.
     let after_value = opt(right(punct(","), left(types, opt(punct(",")))));
     let inside = delimited(punct("("), then(expr, after_value), punct(")"));
     // `at` is the bytes of the arguments with their brackets.
     try_map(inside, |_, (value, types), at| {
-        // `isinstance(x)`: the types are missing. The error covers `(x)`,
-        // bytes 10 to 13.
+        // `isinstance(x)`: the types are missing, and the error covers
+        // `(x)`.
         let Some(types) = types else {
+            // `isinstance` takes the value and its types, and only the value
+            // was given.
             let (name, takes, given) = ("isinstance", 2, 1);
             let reason = Reason::WrongArgumentCount { name, takes, given };
             return Err(SyntaxError { at, reason });
@@ -1328,8 +1407,8 @@ pub(super) const TYPES: [(&str, TypeName); 5] = [
 
 /// `type := "int" | "float" | "str" | "bool" | "list"`
 ///
-/// Reads the `int` of `isinstance(price, int)`. Any other name is refused
-/// with the nearest known one.
+/// Reads the `int` of `isinstance(price, int)`. Any other name is refused,
+/// with the nearest known type when one is near enough to be a typo.
 fn type_name(i: &Input<'_>, p: usize) -> Reply<TypeName> {
     // Any name token is read, so a word such as `None` is an unknown type
     // too. `isinstance(price, number)` is refused at `number`, bytes 18 to
@@ -1375,7 +1454,7 @@ fn pattern_arguments(function: &'static str, make: Pattern) -> impl Parser<Expr>
     });
     // The pattern is a text token and no expression, so it can be checked
     // when the rule is created (ADR-0041). `re.search(pattern, x)` is
-    // refused at `pattern`, bytes 10 to 17.
+    // refused at `pattern`.
     let pattern = require(Reason::PatternNotLiteral { function }, text_token);
     // `body` reads the pattern, a comma, the text to search, and a comma at
     // the end.
@@ -1385,7 +1464,8 @@ fn pattern_arguments(function: &'static str, make: Pattern) -> impl Parser<Expr>
 }
 
 /// Turns every element that no enclosing `any` or `all` binds into a field
-/// of the record.
+/// of the record. `scope` holds the names that the quantifiers around `e`
+/// already bind, and the function gives it back as it found it.
 fn resolve(e: &mut Expr, scope: &mut Vec<String>) {
     match e {
         // A name that no quantifier binds is a field: `amount`, or `i.price`
@@ -1398,8 +1478,8 @@ fn resolve(e: &mut Expr, scope: &mut Vec<String>) {
             full.append(path);
             *e = Expr::Field(full);
         }
-        // The list is resolved outside the new name and the test inside it,
-        // as Python scopes a generator.
+        // `resolve` resolves the list before it binds the name of the
+        // quantifier, and the test after, as Python scopes a generator.
         Expr::Any { name, list, test } | Expr::All { name, list, test } => {
             resolve(list, scope);
             // The name is bound while the test is resolved. The scope is a
@@ -1408,8 +1488,9 @@ fn resolve(e: &mut Expr, scope: &mut Vec<String>) {
             resolve(test, scope);
             scope.pop();
         }
-        // Every other node resolves its children. A bound element, as `i` in
-        // `any(i > 1 for i in items)`, stays an element.
+        // For every other node, `resolve` resolves each child. A bound
+        // element, as `i` in `any(i > 1 for i in items)`, reaches this arm
+        // and stays an element.
         _ => {
             for child in e.children_mut() {
                 resolve(child, scope);
