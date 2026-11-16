@@ -37,10 +37,10 @@ event metadata reveals.
 
 ## 4. Evaluate locally, manage centrally
 
-Evaluation happens in the pipeline process. A record therefore costs no
-network round-trip, the server is no bottleneck, and evaluation goes on while
-the sensor is disconnected. Authoring, validation, authorization and audit
-happen in the management API.
+Evaluation happens in the pipeline process. A record therefore costs no network
+round-trip, the server is no bottleneck, and a sensor set to `cached` keeps
+evaluating while it is disconnected. Authoring, validation, authorization and
+audit happen in the management API.
 
 Cost: every SDK carries the same Rust core (`adr/0038`), and a host engine that
 runs translated rules must agree with it (`adr/0040`). The conformance suite
@@ -57,9 +57,10 @@ cost, never results.
 ## 6. Reversible operations
 
 Rules are immutable versions. `observe` lets an operator test a rule in
-production. A global pause turns every rule off. An operator undoes a rule
-action, by a human or by the agent, by pausing or deleting the rule. Because
-every rule action can be undone, the AI agent may change rules on its own.
+production. A global pause turns every rule off. An operator undoes a change to
+a rule, made by a human or by the agent, by pausing or deleting the rule.
+Because every such change can be undone, the AI agent may change rules on its
+own.
 
 ## 7. Simplicity
 
