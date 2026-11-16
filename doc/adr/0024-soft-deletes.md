@@ -11,11 +11,12 @@ the question while the users table was planned (owner, 2026-11-05).
 ## Decision
 
 Every entity table has a `deleted_at` column, epoch microseconds in UTC like
-every time column, and a deleted row stays in the table with it set. Every
-read of a live entity filters on `deleted_at IS NULL` next to its `tenant_id`
-filter (owner, 2026-11-05). The reads that resolve the user and the tenant of
-an audit row do not filter, so the trail still names a user or a tenant that
-was deleted later: `users::find_id_any` and the joins of `audit::page` (owner,
+every time column, and a deleted row stays in the table with it set. Every read
+of a live entity filters on `deleted_at IS NULL` next to its `tenant_id` filter
+(owner, 2026-11-05). The reads that resolve the user and the tenant of an audit
+row do not filter, so the trail still names a user or a tenant that was deleted
+later. `users::find_id_any` finds the user that a filter of the trail names, and
+the joins of `audit::page` name the user and the user's tenant (owner,
 2026-11-15).
 
 A name is unique among live rows only, so a deleted entity's name can be used
