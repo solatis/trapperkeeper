@@ -36,9 +36,9 @@ fn stored(database: &TestDatabase) -> Option<(String, bool, String, i64)> {
     })
 }
 
-/// Marks the superadmin of `$tk` deleted, as a first run leaves `$tk` when it
-/// stops before it creates the superadmin. The helper writes the row itself,
-/// because no route reaches `$tk`.
+/// Marks the superadmin of `$tk` deleted, which `reset` treats as a missing
+/// superadmin, as after a first run that stopped before it created one. The
+/// helper writes the row itself, because no route reaches `$tk`.
 fn delete(database: &TestDatabase) {
     // Any `deleted_at` that is not NULL marks the row deleted, so the test
     // needs no real time.
@@ -95,7 +95,7 @@ fn reset_superadmin_sets_a_new_one_time_password() {
     // 1. We open a missing database as reset-superadmin does, which never
     //    creates one, and expect `Error::Open`.
     // 2. We set the database up and reset twice. Each reset must replace the
-    //    hash and move the cutoff, so the old password and tokens stop working.
+    //    hash and move the cutoff.
     // 3. We mark the superadmin deleted and reset once more, which must create
     //    it again, as after a first run that stopped before it existed.
     on_each_backend(|backend| {
@@ -113,7 +113,7 @@ fn reset_superadmin_sets_a_new_one_time_password() {
             stored(&database).expect("the set-up created the superadmin");
         let (first, first_valid_after) = reset_and_check(&store, &database);
         // A reset hashes with Argon2id before it reads the clock for its
-        // cutoff, so a strict `>` cannot tie, here and below.
+        // cutoff in microseconds, so a strict `>` cannot tie, here and below.
         assert!(
             first_valid_after > created_valid_after,
             "the cutoff stayed on {backend}"
