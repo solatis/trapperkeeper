@@ -18,7 +18,8 @@ use uuid::Uuid;
 type Unary = fn(Box<Expr>) -> Expr;
 /// The builder of a node with two operands.
 type Binary = fn(Box<Expr>, Box<Expr>) -> Expr;
-/// The builder of a quantifier from its name, its list and its test.
+/// The builder of a quantifier from the name of its element, its list and
+/// its test.
 type Quantifier = fn(String, Box<Expr>, Box<Expr>) -> Expr;
 
 /// The kinds of node that hold one operand.
@@ -93,6 +94,7 @@ const TYPES: [TypeName; 5] = [
 pub fn expr() -> BoxedStrategy<Expr> {
     // The strategy keeps lists and paths to three items and texts to eight
     // characters, so a failing case shrinks to something a person can read.
+    // `.` matches no line break, so no generated text holds one.
     let text = || ".{0,8}";
     let path = || {
         let segment = prop_oneof![
@@ -103,7 +105,8 @@ pub fn expr() -> BoxedStrategy<Expr> {
     };
     // The flags leave out `INFINITE`, `QUIET_NAN` and `SIGNALING_NAN`, so
     // every generated float is finite. JSON has no form for a NaN or an
-    // infinity, and the round trip compares a NaN unequal to itself.
+    // infinity, and the JSON round trips of `tests/tree.rs` and
+    // `tests/model.rs` compare for equality, where a NaN differs from itself.
     let float = {
         use proptest::num::f64::{NEGATIVE, NORMAL, POSITIVE, SUBNORMAL, ZERO};
         NEGATIVE | NORMAL | POSITIVE | SUBNORMAL | ZERO
@@ -121,7 +124,9 @@ pub fn expr() -> BoxedStrategy<Expr> {
     // An `And` may hold an `And` or fewer than two operands, and an `Element`
     // may stand outside a quantifier that names it. A depth of 2 recursions
     // above the leaves gives the three levels. The desired size 24 and the
-    // expected branch size 3 are choices that no measurement backs.
+    // expected branch size 3 are choices that no measurement backs. No test
+    // fails when a variant of `Expr` is missing from the lists below, which
+    // is why `engine/AGENTS.md` asks for it.
     leaf.prop_recursive(2, 24, 3, move |inner| {
         let operand = || inner.clone().prop_map(Box::new);
         prop_oneof![
@@ -138,6 +143,8 @@ pub fn expr() -> BoxedStrategy<Expr> {
                 .prop_map(|(make, name, list, test)| make(name, list, test)),
             (operand(), vec(select(TYPES.to_vec()), 0..=3))
                 .prop_map(|(value, types)| Expr::IsInstance { value, types }),
+            // The pattern is any text, because the engine does not check a
+            // pattern.
             (select(PATTERNS.to_vec()), text(), operand())
                 .prop_map(|(make, pattern, text)| make(pattern, text)),
         ]
@@ -156,6 +163,8 @@ pub fn rule_id() -> impl Strategy<Value = Uuid> {
 /// A scope within the caps: 0 to `MAX_SCOPE_TAGS` tags, each key and value
 /// of 1 to `MAX_TAG_LENGTH` characters.
 pub fn scope() -> impl Strategy<Value = BTreeMap<String, String>> {
+    // `.` matches no line break, so no generated tag holds one, although
+    // `validate` accepts one.
     let text = || {
         proptest::string::string_regex(&format!(".{{1,{MAX_TAG_LENGTH}}}"))
             .expect("a valid pattern")
