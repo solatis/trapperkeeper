@@ -17,10 +17,9 @@ The author of the change answers your questions.
 ## The change
 
 The change is part $1 of $0, and $0 is a git range or one or more paths joined
-by commas. For paths, the parts together cover every line of the files under
-the paths, and a long file is cut into several parts. Every line of the spans
-below then counts as changed. These are the spans of lines that the part
-covers:
+by commas. For paths, each span below is a whole file, or a piece of a long
+file that is cut into several parts, and every line of such a span counts as
+changed. These are the spans of lines that the part covers:
 
 !`python3 "${CLAUDE_SKILL_DIR}/../doc-discipline/scripts/change_parts.py" $0 $1 2>&1 || true`
 
