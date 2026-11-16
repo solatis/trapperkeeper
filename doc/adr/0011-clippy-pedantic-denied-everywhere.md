@@ -18,9 +18,9 @@ developer's machine and in CI.
 
 ## Rejected alternatives
 
-The default clippy group alone, as too lenient. Warning locally and denying
-only in CI, because a commit could pass locally and fail remotely. Formatting
-checks only with clippy advisory, because warnings then accumulate.
+The default clippy group alone, as too lenient. Warning locally and denying only
+in CI, because a commit could pass locally and fail remotely. Running only the
+formatting check and leaving clippy advisory, because warnings then accumulate.
 
 ## Consequences
 
