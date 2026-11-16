@@ -837,6 +837,8 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
             "malformed number",
         ),
         ("0x > 1", 0..2, Reason::MalformedNumber, "malformed number"),
+        // A leading zero before a digit is refused also across underscores,
+        // as Python refuses `0_7`.
         ("0_7 > x", 0..3, Reason::MalformedNumber, "malformed number"),
         (
             "9223372036854775808 > x",
