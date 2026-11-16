@@ -26,22 +26,18 @@ pub struct Cli {
     pub command: Command,
 }
 
-/// Settings a flag may override. Each flag is an `Option`, and the tables
-/// `log` and `database` are plain structs of such flags. An absent flag leaves
-/// the value of the layers below in place. The tables nest as in
-/// `config::Settings`, so figment merges each flag over the setting of the
-/// same key. `Default` is the "no flags" value the tests pass. The struct has
-/// no `auth` table, because `auth.signing_key` and `auth.previous_signing_key`
-/// have no flag, and they have none because ADR-0013 warns on any secret given
-/// as a flag (ADR-0025).
+/// Settings a flag may override, nested as in `config::Settings`, so figment
+/// merges each flag over the setting of the same key. An absent flag leaves
+/// the value below in place. `Default` is the "no flags" value the tests pass.
+/// The signing keys have no flag, because ADR-0013 warns on a secret given as
+/// a flag (ADR-0025).
 #[derive(Args, Serialize, Default)]
 pub struct Overrides {
     /// Address the server listens on, an IP address and a port, such as
     /// `127.0.0.1:8080` or `[::1]:8080`.
     #[arg(long, global = true, value_name = "ADDR")]
-    // An absent flag serializes to nothing. figment's merge takes the incoming
-    // value whatever it is, so a null would replace the value of the lower
-    // layers, and `extract` would then fail on the null.
+    // An absent flag serializes to nothing, because the merge would let a
+    // null replace the value below and `extract` would fail on it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub listen: Option<SocketAddr>,
 
@@ -57,8 +53,7 @@ impl Overrides {
     #[must_use]
     pub fn secrets(&self) -> Vec<&'static str> {
         let mut secrets = Vec::new();
-        // The database URL is the only secret setting that has a flag. The
-        // signing keys, the other secret settings, have no flag.
+        // The database URL is the only secret setting that has a flag.
         if self.database.url.is_some() {
             secrets.push("--database-url");
         }
@@ -84,22 +79,20 @@ pub struct DatabaseOverrides {
     /// `mariadb://...`.
     #[arg(long = "database-url", global = true, value_name = "URL")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    // The field is a `String` and not a `DatabaseUrl`, which serializes with
-    // its password replaced by `***`. figment merges the serialized flags over
-    // the lower layers, so the masked text would become the URL that opens.
+    // A `String` and not a `DatabaseUrl`, whose serialization masks the
+    // password, because the merged flags become the URL that the server opens.
     pub url: Option<String>,
 }
 
 /// The subcommands.
 #[derive(Subcommand)]
 pub enum Command {
-    /// Run the server. Create the database when nothing exists at the URL, set
-    /// up an empty database first, and refuse to start without
-    /// `auth.signing_key`.
+    /// Run the server, creating and setting up the database when it is
+    /// missing or empty. Needs `auth.signing_key`.
     Serve,
     /// Create the database when it is missing, apply the pending migrations,
-    /// and create the superadmin when it is missing and log its one-time
-    /// password.
+    /// and create the superadmin and log its one-time password when it is
+    /// missing.
     Migrate,
     /// Give the superadmin a new one-time password and print it, creating the
     /// superadmin when it is missing.
