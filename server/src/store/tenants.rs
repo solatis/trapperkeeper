@@ -8,10 +8,14 @@ use uuid::Uuid;
 
 use super::{SYSTEM_TENANT_ID, Tx, on_tx, sql};
 
-/// The `role_name` of the role a tenant's first admin holds.
+/// The `role_name` of the admin role that `create` gives every tenant it
+/// makes. The first user of a created tenant holds it, and the rule that a
+/// tenant keeps at least one live admin counts the users who hold it.
 pub const ADMIN_ROLE: &str = "admin";
 
-/// The roles every created tenant holds, by name and title.
+/// The roles every created tenant holds, each as a `role_name` and a
+/// `role_title`. ADR-0023 decides that a tenant the superadmin creates gets
+/// the roles admin, operator and observer.
 const ROLES: [(&str, &str); 3] = [
     (ADMIN_ROLE, "Admin"),
     ("operator", "Operator"),
@@ -31,8 +35,13 @@ pub struct Tenant {
 
 /// What a new tenant is made of.
 pub struct NewTenant<'a> {
-    /// Lowercase, as the name rule leaves it.
+    /// The name as `names::tenant_name` returns it. It must be lowercase,
+    /// because the tenants table refuses any other name with a CHECK, and
+    /// `create` then fails with `Database` and not with `NameTaken`.
     pub name: &'a str,
+    /// A display name that keeps its case. The MariaDB column holds at most
+    /// 255 characters, and `create` does not check the length, so the caller
+    /// does.
     pub title: &'a str,
 }
 
@@ -57,10 +66,14 @@ impl std::error::Error for CreateError {}
 
 impl From<sqlx::Error> for CreateError {
     fn from(error: sqlx::Error) -> Self {
-        // The live-only unique index on the name is the one unique constraint
-        // the inserts can break: every id is fresh, and the roles belong to
-        // the new tenant.
         match error {
+            // The only unique constraint that the inserts of `create` can
+            // violate is the unique index on the names of live tenants.
+            // Every tenant id and role id is a fresh version 7 UUID, so the
+            // primary keys and the unique key on (tenant_id, role_id) cannot
+            // collide. The three role names of `ROLES` are distinct and
+            // belong to the new tenant, so the unique index on live role
+            // names cannot be violated either.
             sqlx::Error::Database(database) if database.is_unique_violation() => Self::NameTaken,
             error => Self::Database(error),
         }
@@ -72,7 +85,8 @@ impl From<sqlx::Error> for CreateError {
 ///
 /// # Errors
 ///
-/// `NameTaken` when a live tenant has the name; `Database` otherwise.
+/// Returns `NameTaken` when a live tenant has the name, and `Database` when
+/// the store fails in any other way.
 pub async fn create(tx: &mut Tx, new: NewTenant<'_>) -> Result<String, CreateError> {
     let tenant_id = Uuid::now_v7().to_string();
     let insert = sql(
@@ -86,9 +100,13 @@ pub async fn create(tx: &mut Tx, new: NewTenant<'_>) -> Result<String, CreateErr
             .bind(new.title)
             .execute(conn)
             .await
+            // Each backend returns a query result type of its own, and the
+            // arms that `on_tx!` expands to must yield one type. `create`
+            // needs nothing from the result, so the closure drops it.
             .map(|_| ())
     })?;
-    // Each tenant holds role rows of its own (ADR-0023).
+    // Roles are rows per tenant, because nearly every table carries a tenant
+    // id, and so that a tenant may hold roles of its own (ADR-0023).
     for (name, title) in ROLES {
         let insert = sql(
             tx,
@@ -114,7 +132,8 @@ pub async fn create(tx: &mut Tx, new: NewTenant<'_>) -> Result<String, CreateErr
 ///
 /// Fails when the database cannot be read.
 pub async fn list(tx: &mut Tx) -> Result<Vec<Tenant>, sqlx::Error> {
-    // `$tk` holds the superadmin and no customer, so it is left out.
+    // The query leaves out `$tk`, because `$tk` holds only the superadmin and
+    // is not a customer (ADR-0028).
     let select = sql(
         tx,
         "SELECT tenant_id, tenant_name, tenant_title FROM tenants \
@@ -128,7 +147,11 @@ pub async fn list(tx: &mut Tx) -> Result<Vec<Tenant>, sqlx::Error> {
     })
 }
 
-/// The live tenant named `tenant_name`, or `None`.
+/// The live tenant named `tenant_name`, or `None`. The function compares
+/// `tenant_name` byte for byte with stored names, which are always lowercase,
+/// so a caller passes a lowercased name or gets `None`. Unlike `list`, `find`
+/// also returns the system tenant `$tk`, so a caller that must hide it
+/// filters it out.
 ///
 /// # Errors
 ///
@@ -142,12 +165,16 @@ pub async fn find(tx: &mut Tx, tenant_name: &str) -> Result<Option<Tenant>, sqlx
     on_tx!(tx, |conn| {
         sqlx::query_as(AssertSqlSafe(select))
             .bind(tenant_name)
+            // The unique index on the names of live tenants lets at most one
+            // live row match.
             .fetch_optional(conn)
             .await
     })
 }
 
-/// Whether `tenant_id` holds a live role named `role_name`.
+/// Whether `tenant_id` holds a live role named `role_name`. The function
+/// compares `role_name` byte for byte with stored role names, which are
+/// always lowercase, so a name in another case matches no role.
 ///
 /// # Errors
 ///
