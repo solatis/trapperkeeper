@@ -1,12 +1,15 @@
-//! The superadmin: the user `admin` of the system tenant `$tk`, created on the
-//! first migration of an empty database and reset from the console
-//! (ADR-0028).
+//! The superadmin, the user `admin` of the system tenant `$tk` (ADR-0028).
+//! The set-up creates it when it is missing: serve runs the set-up on an
+//! empty database, and migrate runs it on every run. reset-superadmin gives
+//! it a new one-time password from the console and creates it when it is
+//! missing.
 
 use crate::accounts::{self, NewAccount};
 use crate::store::users::{self, CreateError};
 use crate::store::{SYSTEM_TENANT_ID, Store};
 
-/// The superadmin's user name.
+/// The superadmin's user name. ADR-0028 makes the superadmin the user `admin`
+/// of `$tk`.
 pub const NAME: &str = "admin";
 
 /// The superadmin's role name. Only the system tenant holds this role, and
@@ -30,6 +33,8 @@ fn account() -> NewAccount<'static> {
 /// Fails when the database cannot be read or written.
 pub async fn ensure(store: &Store) -> Result<Option<String>, sqlx::Error> {
     let mut tx = store.begin().await?;
+    // An existing superadmin returns here, before `accounts::create`
+    // generates and hashes a password.
     if users::find(&mut tx, SYSTEM_TENANT_ID, NAME)
         .await?
         .is_some()
@@ -54,13 +59,13 @@ pub async fn ensure(store: &Store) -> Result<Option<String>, sqlx::Error> {
 /// # Errors
 ///
 /// `NameTaken` when another run created the superadmin after this one looked
-/// for it; `Database` when the database cannot be read or written.
+/// for it. `Database` when the database cannot be read or written.
 pub async fn reset(store: &Store) -> Result<String, CreateError> {
     let mut tx = store.begin().await?;
     let password = match users::find(&mut tx, SYSTEM_TENANT_ID, NAME).await? {
         Some(user) => accounts::reset(&mut tx, SYSTEM_TENANT_ID, &user.id).await?,
-        // A first run that stopped before the superadmin existed is
-        // recovered here.
+        // The reset creates the superadmin when it is missing, as after a
+        // first set-up that stopped between the migrations and `ensure`.
         None => accounts::create(&mut tx, account()).await?,
     };
     tx.commit().await?;
