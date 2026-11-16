@@ -33,8 +33,8 @@ where
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Refusal> {
         let app = AppState::from_ref(state);
         // The bearer header is read first, for the CLI and the agent. The
-        // access cookie is read only when no bearer header is present, for
-        // the browser.
+        // access cookie is read when `bearer` finds no token, for the
+        // browser.
         let token = match bearer(parts) {
             Some(token) => token.to_owned(),
             None => cookie(parts, state)
@@ -132,7 +132,10 @@ pub async fn authenticate(app: &AppState, kind: Kind, token: &str) -> Result<Use
     Ok(user)
 }
 
-/// The token of an `Authorization: Bearer` header, or `None`.
+/// The token of an `Authorization: Bearer` header. `None` when the header is
+/// missing, is not text, has another scheme or has no space after the scheme.
+/// A header with only spaces after the scheme gives an empty token, which the
+/// token check refuses.
 fn bearer(parts: &Parts) -> Option<&str> {
     parts
         .headers
