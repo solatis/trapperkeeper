@@ -51,8 +51,8 @@ fn one_tag(key: &str, value: &str) -> BTreeMap<String, String> {
 /// Changes `rule` by the defect `d` and returns the JSON pointer and the
 /// reason of the only refusal that `validate` must report. Every defect of
 /// the scope replaces the whole scope, so that the returned refusal is the
-/// only one: the generated scope may already hold `MAX_SCOPE_TAGS` tags, and
-/// one more tag would also be refused as too many.
+/// only one, because the generated scope may already hold `MAX_SCOPE_TAGS`
+/// tags, and one more tag would also be refused as too many.
 fn apply(d: Defect, rule: &mut Rule) -> (String, Reason) {
     let too_long = MAX_TAG_LENGTH + 1;
 
@@ -64,8 +64,9 @@ fn apply(d: Defect, rule: &mut Rule) -> (String, Reason) {
                 // rate sits directly past the inclusive upper bound.
                 Defect::SampleRateAboveOne => 1.0 + f64::EPSILON,
                 // The outer arm admits three defects, so `_` is
-                // `SampleRateNan` here. Naming it would leave this match
-                // without the other variants of `Defect`.
+                // `SampleRateNan` here. Naming it would make this match
+                // non-exhaustive, because the compiler does not know that
+                // the outer arm admits only three variants.
                 _ => f64::NAN,
             };
             rule.sample_rate = sample_rate;
@@ -116,8 +117,8 @@ fn apply(d: Defect, rule: &mut Rule) -> (String, Reason) {
             // The key holds `/` and `~`, the two characters that a JSON
             // pointer escapes. RFC 6901 writes `~` as `~0` and `/` as `~1`,
             // which gives the pointer expected below. This defect carries
-            // that key, because its defect lies in the value and the key is
-            // free.
+            // that key, because the defect lies in the value, so the key can
+            // hold any characters.
             rule.scope = one_tag("a/b~c", &"v".repeat(too_long));
             let (len, max) = (too_long, MAX_TAG_LENGTH);
             (
