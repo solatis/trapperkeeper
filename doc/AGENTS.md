@@ -1,7 +1,8 @@
 # doc/
 
-Knowledge that has no home in code, or none yet. Everything else belongs in the
-`AGENTS.md` of the directory that implements it (see the root `AGENTS.md`).
+This folder holds the knowledge that has no home in code, or no home yet.
+Everything else belongs in the `AGENTS.md` of the directory that implements it
+(see the root `AGENTS.md`).
 
 | File              | What                                               | When to read                            |
 | ----------------- | -------------------------------------------------- | --------------------------------------- |
