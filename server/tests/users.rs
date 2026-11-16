@@ -65,8 +65,8 @@ fn admin_manages_the_users_of_its_tenant() {
         assert_eq!(ops_created["role"], "operator");
         let ops_password = ops_created["password"].as_str().expect("a password");
         let tenant_id = ops_created["tenant_id"].as_str().expect("a tenant id");
-        let watcher = create_user(&server, &ada, "acme", "obs@example.com", "observer");
-        let watcher_password = watcher["password"].as_str().expect("a password");
+        let observer_created = create_user(&server, &ada, "acme", "obs@example.com", "observer");
+        let observer_password = observer_created["password"].as_str().expect("a password");
 
         // 3. By name, each with the tenant's id and the must-change flag of a
         //    generated password.
@@ -122,16 +122,16 @@ fn admin_manages_the_users_of_its_tenant() {
 
         // 7. The name is percent-encoded, so the test sees that the path
         //    segment is decoded before the lookup.
-        let (watcher, _) = log_in(&server, "acme", "obs@example.com", watcher_password);
+        let (observer, _) = log_in(&server, "acme", "obs@example.com", observer_password);
         let response = call(
             &server,
-            &watcher,
+            &observer,
             "DELETE",
             "/api/v1/tenants/acme/users/obs%40example.com",
             None,
         );
         assert_eq!(response.status, 200, "{} on {backend}", response.body);
-        assert_eq!(me_status(&server, &watcher), 401);
+        assert_eq!(me_status(&server, &observer), 401);
 
         // 8. The reset ends the session held with the old password, and the
         //    new password logs in and must change.
