@@ -1,5 +1,6 @@
-//! The migrations embedded in the binary: applying them, and checking a
-//! database against them before serving.
+//! The migrations of each backend, embedded in the binary. The module
+//! applies them, and it checks a database against them before serve or
+//! reset-superadmin uses it.
 
 use std::fmt;
 
@@ -9,13 +10,15 @@ use sqlx::{Database, Pool};
 
 use super::{Store, installation};
 
-/// The migrations of each backend, embedded at compile time.
+// The migrations of each backend, embedded at compile time.
 static SQLITE: Migrator = sqlx::migrate!("migrations/sqlite");
 static POSTGRES: Migrator = sqlx::migrate!("migrations/postgres");
 static MARIADB: Migrator = sqlx::migrate!("migrations/mariadb");
 
 /// How a database differs from the binary's migrations, with the versions
-/// concerned.
+/// concerned. A command fixes `Empty` and `Pending`. `Unknown`, `Edited` and
+/// `Dirty` need a rebuilt database, because the project migrates nothing
+/// backwards and repairs nothing in place (ADR-0019).
 #[derive(Debug)]
 pub enum Mismatch {
     /// The database has applied no migration.
@@ -32,9 +35,6 @@ pub enum Mismatch {
 
 impl fmt::Display for Mismatch {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Only an empty or a pending database is fixed by a command. The
-        // others say to rebuild, because nothing is migrated backwards or
-        // repaired in place (doc/principles.md 8).
         match self {
             Self::Empty => f.write_str(
                 "the database is empty; `trapperkeeper serve` sets it up on its first start, \
@@ -77,28 +77,31 @@ fn list(versions: &[i64]) -> String {
 ///
 /// # Errors
 ///
-/// Fails on a database that does not match the binary, or when a migration
-/// or the salt fails.
+/// Fails on a database with a dirty, an unknown or an edited migration, when
+/// a migration fails, or when writing the signing salt fails. A pending or an
+/// empty database does not fail, because `apply` migrates it.
 pub async fn apply(store: &Store) -> Result<usize, MigrateError> {
     let count = match store {
         Store::Sqlite(pool) => apply_with(&SQLITE, pool).await?,
         Store::Postgres(pool) => apply_with(&POSTGRES, pool).await?,
         Store::MariaDb(pool) => apply_with(&MARIADB, pool).await?,
     };
-    // Written here and not by a migration, so every database that applied
-    // the migrations has a salt of its own, however it was migrated.
+    // `apply` writes the salt here and not in a migration, so every database
+    // that applied the migrations has a salt of its own. The migrate command
+    // and the first serve both run `apply`.
     let mut tx = store.begin().await?;
     installation::ensure_salt(&mut tx).await?;
     tx.commit().await?;
     Ok(count)
 }
 
-/// Compares the database with the binary's migrations without applying any.
+/// Compares the database with the binary's migrations and applies none of
+/// them. It creates an empty tracking table when the database has none.
 /// Returns `None` when they match.
 ///
 /// # Errors
 ///
-/// Fails when the database cannot be read.
+/// Fails when the tracking table cannot be created or read.
 pub async fn check(store: &Store) -> Result<Option<Mismatch>, MigrateError> {
     match store {
         Store::Sqlite(pool) => check_with(&SQLITE, pool).await,
@@ -107,10 +110,15 @@ pub async fn check(store: &Store) -> Result<Option<Mismatch>, MigrateError> {
     }
 }
 
+/// Applies the migrations of `migrator` that the database has not applied,
+/// and returns how many ran. Fails as `Migrator::run` fails.
 async fn apply_with<D: Database>(migrator: &Migrator, pool: &Pool<D>) -> Result<usize, MigrateError>
 where
     D::Connection: Migrate,
 {
+    // `Migrator::run` reports no count. A successful run applies every
+    // migration that was pending before it, so the list taken before the run
+    // gives the count.
     let applied = tracked(migrator, pool)
         .await?
         .list_applied_migrations(&migrator.table_name)
@@ -119,6 +127,8 @@ where
     Ok(pending(migrator, &applied).len())
 }
 
+/// Returns the first mismatch between the database and `migrator`, or `None`
+/// when they match. Fails when the tracking table cannot be created or read.
 async fn check_with<D: Database>(
     migrator: &Migrator,
     pool: &Pool<D>,
@@ -126,22 +136,18 @@ async fn check_with<D: Database>(
 where
     D::Connection: Migrate,
 {
-    // 1. open a connection with the tracking table in place
-    // 2. a dirty version
-    // 3. no applied migration
-    // 4. unknown versions
-    // 5. edited versions
-    // 6. pending migrations
-    //
-    // The checks run from the mismatch that most needs a rebuild to the ones
-    // a command fixes, so the message names the first problem to solve.
+    // The function reads the tracking table and tests it against a chain of
+    // mismatches, and it returns the first that applies. The place of three
+    // cases matters: `Dirty` comes first, `Empty` comes before every check
+    // of the applied rows, and `Pending` comes last. The note at each of
+    // them says why.
 
-    // 1. A database without a tracking table gets an empty one, so it reads
-    //    as empty.
+    // A database without a tracking table gets an empty one here, so it
+    // reads as `Empty` below.
     let mut connection = tracked(migrator, pool).await?;
 
-    // 2. A dirty row stays in the table, so it is checked before the others
-    //    read it as applied.
+    // `Dirty` comes first, because the dirty row stays in the tracking table,
+    // and the list read after it holds that row as applied.
     if let Some(version) = connection.dirty_version(&migrator.table_name).await? {
         return Ok(Some(Mismatch::Dirty(version)));
     }
@@ -149,14 +155,16 @@ where
         .list_applied_migrations(&migrator.table_name)
         .await?;
 
-    // 3. An empty tracking table means a new database, which the first serve
-    //    sets up.
+    // An empty table means a new database, which the first serve sets up, so
+    // `Empty` is reported where `Pending` would name every migration. With
+    // no applied row, the checks for `Unknown` and `Edited` below could find
+    // nothing.
     if applied.is_empty() {
         return Ok(Some(Mismatch::Empty));
     }
 
-    // 4. A version the binary lacks means a newer binary, or another build,
-    //    made this database.
+    // A version that the binary lacks means that a newer binary or another
+    // build made this database.
     let unknown: Vec<i64> = applied
         .iter()
         .filter(|a| !migrator.version_exists(a.version))
@@ -166,14 +174,15 @@ where
         return Ok(Some(Mismatch::Unknown(unknown)));
     }
 
-    // 5. A different checksum means the file changed after the database
-    //    applied it. A down file shares its up file's version, so only the up
-    //    file is compared.
+    // A different checksum means that the migration file changed after the
+    // database applied it.
     let edited: Vec<i64> = applied
         .iter()
         .filter(|a| {
             migrator.iter().any(|m| {
                 m.version == a.version
+                    // A down file shares the version of its up file, so the
+                    // filter compares only the up file.
                     && m.migration_type.is_up_migration()
                     && m.checksum != a.checksum
             })
@@ -184,7 +193,10 @@ where
         return Ok(Some(Mismatch::Edited(edited)));
     }
 
-    // 6. Only migrations that migrate applies are left.
+    // `Pending` comes last, because it is the mismatch that
+    // `trapperkeeper migrate` fixes. `Migrator::run` refuses a database that
+    // is dirty, holds an unknown version or holds an edited one, so the
+    // rebuild cases above must be reported first.
     let pending = pending(migrator, &applied);
     Ok((!pending.is_empty()).then_some(Mismatch::Pending(pending)))
 }
