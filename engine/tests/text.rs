@@ -76,6 +76,11 @@ const WORDS: [&str; 14] = [
     "math",
 ];
 
+/// The steps of a generated field after its first key, at most. Two keeps
+/// the 27 fields of the largest tree, with keys of eight characters, under
+/// `MAX_TEXT_LENGTH`.
+const MOST_FIELD_STEPS: usize = 2;
+
 /// A name that an author can write bare: a letter or `_`, then letters,
 /// digits or `_`, and no word of the language.
 fn name() -> impl Strategy<Value = String> {
@@ -107,10 +112,10 @@ fn canonical_in(scope: &[String], depth: u32) -> BoxedStrategy<Expr> {
         use proptest::num::f64::{NEGATIVE, NORMAL, POSITIVE, SUBNORMAL, ZERO};
         NEGATIVE | NORMAL | POSITIVE | SUBNORMAL | ZERO
     };
-    // A field has one to four segments, and the first is a key, because the
+    // A field has one to three segments, and the first is a key, because the
     // record is an object. The parser refuses `record[0] == 1` and
     // `record == 1`. A key is any text, so the bracket form gets exercised.
-    let field = (text(), steps(3)).prop_map(|(first, rest)| {
+    let field = (text(), steps(MOST_FIELD_STEPS)).prop_map(|(first, rest)| {
         let key = Segment::Key(first);
         Expr::Field(std::iter::once(key).chain(rest).collect())
     });
@@ -141,10 +146,11 @@ fn canonical_in(scope: &[String], depth: u32) -> BoxedStrategy<Expr> {
         return leaf.boxed();
     };
 
-    // Lists and operand lists hold at most three, keys and texts at most
-    // eight characters, and a tree at most three levels. That is at most 27
-    // leaves, so a printed tree stays far under the caps of the parser.
-    // `sub` gives the operands, one level less deep, and `one` boxes one.
+    // Lists and operand lists hold at most three items, keys and texts at
+    // most eight characters, a field at most three segments and a tree at
+    // most three levels. That is at most 27 leaves, which print to about 3300
+    // characters, under `MAX_TEXT_LENGTH`, and the three levels stay under
+    // `MAX_NESTING`. `sub` gives the operands, one level less deep.
     let sub = canonical_in(scope, below);
     let one = || sub.clone().prop_map(Box::new);
     // `and` and `or` take two or three operands, and an operand of the same
@@ -993,6 +999,32 @@ fn the_limits_hold_at_their_edges() {
     // the 33rd, at byte 32.
     assert_eq!(error.at, max..max + 1);
     assert_eq!(error.to_string(), "a rule nests at most 32 levels deep");
+}
+
+/// The largest tree that `canonical_in` generates at depth 3 prints to a
+/// text within the cap on length, and that text parses back to the tree.
+#[test]
+fn the_largest_canonical_tree_fits_the_text_cap() {
+    // The longest key is eight control characters, each printed as an escape
+    // of four characters. The field has as many keys as the strategy allows.
+    let key = || Segment::Key("\u{1}".repeat(8));
+    let field = || Expr::Field((0..=MOST_FIELD_STEPS).map(|_| key()).collect());
+    // A conditional is the largest node. It holds three operands, as a list,
+    // an `and` and an `or` do, and it adds `if`, `else` and the parentheses
+    // around a conditional that is its first branch or its test.
+    let conditional = |operand: &dyn Fn() -> Expr| Expr::If {
+        test: Box::new(operand()),
+        then: Box::new(operand()),
+        otherwise: Box::new(operand()),
+    };
+    // Three levels of conditionals stand above the 27 fields.
+    let lowest = || conditional(&field);
+    let middle = || conditional(&lowest);
+    let tree = conditional(&middle);
+    let printed = tree.to_string();
+    let length = printed.chars().count();
+    assert!(length <= MAX_TEXT_LENGTH, "{length} characters");
+    assert_eq!(parse(&printed), Ok(tree));
 }
 
 #[test]
