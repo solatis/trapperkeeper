@@ -31,11 +31,11 @@ pipeline. A rule has one action (owner, 2026-11-11, 2026-11-13).
 
 The server parses the text and validates the rule. No SDK validates (owner,
 2026-11-11). A sensor receives the tree. The owner may change the choice that
-the server parses the text and a sensor receives the tree, if that choice
-proves inconvenient (owner, 2026-11-13). A
-sensor checks what it receives against corruption and forgery, and it returns
-an error on anything unexpected (owner, 2026-11-12). Whether the database
-stores the text, the tree or both is open (`decisions.md`).
+the server parses the text and a sensor receives the tree, if that choice proves
+inconvenient (owner, 2026-11-13). A sensor checks what it receives against
+corruption and forgery, and it returns an error on anything unexpected (owner,
+2026-11-12). Whether the database stores the text, the tree or both is open
+(`decisions.md`).
 
 Sampling happens above the evaluation of a rule. A rule that is sampled out
 for a record is left out of the set of rules applied to that record, as if the
