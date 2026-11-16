@@ -237,10 +237,13 @@ fn number(text: &str, at: usize) -> Result<Token, SyntaxError> {
         // exponent. Without a digit the `e` is left, and the check below
         // refuses `1e` as malformed.
         if matches!(bytes.get(end), Some(b'e' | b'E')) {
-            let sign = usize::from(matches!(bytes.get(end + 1), Some(b'+' | b'-')));
-            if bytes.get(end + 1 + sign).is_some_and(u8::is_ascii_digit) {
+            let sign_len = usize::from(matches!(bytes.get(end + 1), Some(b'+' | b'-')));
+            if bytes
+                .get(end + 1 + sign_len)
+                .is_some_and(u8::is_ascii_digit)
+            {
                 float = true;
-                end = run(end + 1 + sign, false);
+                end = run(end + 1 + sign_len, false);
             }
         }
     }
