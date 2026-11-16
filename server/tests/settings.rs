@@ -165,6 +165,7 @@ fn a_secret_flag_is_reported() {
         database: None,
     };
     let flags = Layer {
+        // Any database URL given as a flag is a secret flag.
         database: Some(DatabaseUrl::Postgres(0, "secret".to_owned())),
         ..silent.clone()
     };
@@ -178,6 +179,8 @@ fn a_secret_flag_is_reported() {
 #[test]
 fn a_missing_config_file_is_refused() {
     let path = Path::new("no-such-directory/trapperkeeper.toml");
+    // The loader refuses the missing file before it reads the environment,
+    // so the test needs no jail.
     let error = load_settings(Some(path), Overrides::default()).err();
     let message = error.expect("a missing file is refused").to_string();
     assert!(
@@ -191,8 +194,8 @@ proptest! {
         // No regression file is left in the tree. The panic message shows the
         // minimal failing input.
         failure_persistence: None,
-        // The default number of cases, because a case is one write and one
-        // load.
+        // proptest's default number of cases, because a case costs only one
+        // file write and one load.
         .. ProptestConfig::default()
     })]
 
