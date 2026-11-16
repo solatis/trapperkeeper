@@ -19,10 +19,11 @@ chumsky 1174.
 The parser is built from parser combinators of our own, with no library
 (owner, 2026-11-14).
 
-Of the three kits of combinators that were tried, the parser uses the simplest.
-A choice tries its alternatives in order, each from the same place. A token test
-that does not match notes in one log what it wanted. The parser builds the error
-from the notes that lie furthest in the text (owner, 2026-11-14).
+Of the three kits of our own combinators that were tried, the parser uses the
+simplest. A choice tries its alternatives in order, each from the same place. A
+token test that does not match notes in one log what it wanted. The parser
+builds the error from the notes that lie furthest in the text (owner,
+2026-11-14).
 
 No two alternatives of a choice read the same bracketed text. A cap of 1,000,000
 token tests per text refuses a text that would take too long.
