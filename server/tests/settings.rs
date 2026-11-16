@@ -194,8 +194,8 @@ proptest! {
         // No regression file is left in the tree. The panic message shows the
         // minimal failing input.
         failure_persistence: None,
-        // proptest's default number of cases, because a case costs only one
-        // file write and one load.
+        // The property keeps proptest's default number of cases, because a
+        // case costs only one file write and one load.
         .. ProptestConfig::default()
     })]
 
