@@ -80,9 +80,8 @@ impl Modify for BearerScheme {
     responses((status = OK, description = "the process is alive", body = String))
 )]
 async fn healthz() -> &'static str {
-    // The body is a plain literal and no JSON object, because an orchestrator
-    // reads only the status code and a person reads the body, so no shape of
-    // the body is worth keeping.
+    // A literal and no JSON object, because an orchestrator reads only the
+    // status code and a person reads the body.
     "ok"
 }
 
@@ -112,30 +111,19 @@ async fn readyz(State(store): State<Store>) -> (StatusCode, &'static str) {
 /// `/openapi.json`, the audit trail and the request log. The handlers share
 /// `state`.
 pub fn router(state: AppState) -> Router {
-    // `router` builds the router through utoipa-axum, so the API document is
-    // generated as the handlers are registered (ADR-0016). It splits the
-    // document off before it adds the route that serves it, and it wraps the
-    // whole router in the audit and trace layers at the end.
+    // utoipa-axum generates the API document as the handlers are registered
+    // (ADR-0016).
     //
-    // 1. We register each management handler on an `OpenApiRouter` through
-    //    `routes!`, without the prefix. `routes!` registers a handler and its
-    //    description in one call, and a handler added with `.route` would be
-    //    missing from the document.
-    // 2. We start the document from `ApiDoc`, nest the management routes under
-    //    `API_PREFIX` and register the two probes at the root. The management
-    //    routes live under the versioned prefix, and the probes stay at the
-    //    root, where orchestrators look for them (ADR-0026).
-    // 3. We split the router from the finished document. The route that the
-    //    next step adds serves the document that the split returns, so the
-    //    split comes first.
-    // 4. We build the audit layer, add the route that serves the document at
-    //    `/openapi.json`, and give the handlers the state. The document stays
-    //    at the root, where tools look for it (ADR-0026), and its route goes
-    //    on the plain axum router, so the document does not list it.
-    // 5. We wrap the whole router in the audit layer and then in the trace
-    //    layer, so the trace layer is the outer one. One middleware over every
-    //    route cannot be forgotten, and the trace span around it also covers
-    //    the audit write and the document route.
+    // 1. We register the management handlers through `routes!`, which adds
+    //    each one to the document too.
+    // 2. We nest them under `API_PREFIX` and add the probes at the root, where
+    //    orchestrators look for them (ADR-0026).
+    // 3. We split off the document, which the next step serves.
+    // 4. We add the route of the document at the root and give the handlers
+    //    the state. The route bypasses `routes!`, so the document does not
+    //    list itself.
+    // 5. We wrap the router in the audit layer and then the trace layer, so
+    //    the trace span also covers the audit write.
 
     // 1. register the management routes
     let management = OpenApiRouter::new()
@@ -161,8 +149,7 @@ pub fn router(state: AppState) -> Router {
         .split_for_parts();
 
     // 4. add the document route and the state
-    // The audit middleware takes the state as well, so it is built from a
-    // clone before `with_state` moves the state.
+    // The audit layer takes a clone of the state before `with_state` moves it.
     let audit = middleware::from_fn_with_state(state.clone(), audit::record);
     let router = router
         .route("/openapi.json", get(move || async move { Json(api) }))
@@ -170,12 +157,9 @@ pub fn router(state: AppState) -> Router {
 
     // 5. wrap the router in the audit and trace layers
     router.layer(audit).layer(
-        // The request-start and end-of-stream events of tower-http stay at
-        // DEBUG, so they add no lines at the default level.
         TraceLayer::new_for_http()
-            // tower-http writes the span and the response event at DEBUG,
-            // and these two calls raise them to INFO, so each request is one
-            // INFO line with method, URI, status and latency.
+            // Raising the span and the response event from tower-http's DEBUG
+            // makes each request one INFO line at the default level.
             .make_span_with(DefaultMakeSpan::new().level(Level::INFO))
             .on_response(DefaultOnResponse::new().level(Level::INFO)),
     )
@@ -186,40 +170,29 @@ pub fn router(state: AppState) -> Router {
 ///
 /// # Errors
 ///
-/// Returns the I/O error when installing a signal handler, binding, reading
-/// the bound address or serving fails, and prints nothing, so the caller
-/// reports it.
+/// Returns the I/O error of a signal handler, the bind or serving, and prints
+/// nothing.
 pub async fn serve(settings: &Settings, state: AppState) -> io::Result<()> {
-    // `serve` installs the signal handlers, binds the listen address, serves
-    // the router until a signal arrives and drains the in-flight requests.
-    // The first three steps can fail and return their I/O error, and the bind
-    // and the clean stop each write an info line.
+    // `serve` runs the router until a signal and stops it cleanly.
     //
-    // 1. We install the handlers for the signals that stop the server. This
-    //    comes before the bind, so a signal sent once the "listening" line
-    //    appears stops the server through the drain instead of killing it.
-    // 2. We bind the configured listen address and log the bound address at
-    //    info, which tells an operator that the server accepts connections.
-    // 3. We serve the router until the shutdown future resolves, then finish
-    //    the in-flight requests, so a SIGTERM from an orchestrator drains the
-    //    connections instead of cutting them.
-    // 4. We log "stopped" once the drain completes, so the log tells a clean
-    //    stop from a crash.
+    // 1. We install the signal handlers before the bind, so a signal sent once
+    //    the "listening" line shows stops the server through the drain.
+    // 2. We bind the listen address and log it.
+    // 3. We serve until a signal and then drain the in-flight requests, so a
+    //    SIGTERM does not cut connections.
+    // 4. We log "stopped", so the log tells a clean stop from a crash.
 
     // 1. install the signal handlers
     let shutdown = shutdown_signal()?;
 
     // 2. bind and say so
-    // A failed bind is the common operator error, a port in use or an address
-    // that is not local.
     let listener = TcpListener::bind(settings.listen).await?;
     tracing::info!(address = %listener.local_addr()?, "listening");
 
     // 3. serve and drain
     axum::serve(
         listener,
-        // The service carries connect info, because the audit middleware
-        // reads the peer's address.
+        // The audit middleware reads the peer's address from the connect info.
         router(state).into_make_service_with_connect_info::<SocketAddr>(),
     )
     .with_graceful_shutdown(shutdown)
@@ -262,8 +235,7 @@ fn shutdown_signal() -> io::Result<impl Future<Output = ()>> {
 
     Ok(async move {
         received.await;
-        // The future logs the signal at INFO, so the log shows that a signal
-        // caused the stop that follows and no crash.
+        // The log then shows that a signal caused the stop that follows.
         tracing::info!("shutdown signal received");
     })
 }
