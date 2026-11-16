@@ -1,5 +1,5 @@
--- The same version and columns as the SQLite and MariaDB files; the three
--- directories change together.
+-- This file creates the same table and indexes as sqlite/0005_audit.sql, whose
+-- comments explain them.
 CREATE TABLE audit (
     audit_id       TEXT PRIMARY KEY,
     tenant_id      TEXT,

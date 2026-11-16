@@ -1,5 +1,5 @@
--- The same version and columns as the SQLite and MariaDB files; the three
--- directories change together.
+-- This file creates the same table and index as sqlite/0003_users.sql, whose
+-- comments explain them.
 CREATE TABLE users (
     user_id              TEXT PRIMARY KEY,
     tenant_id            TEXT NOT NULL REFERENCES tenants (tenant_id),
