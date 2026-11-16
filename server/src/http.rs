@@ -172,8 +172,8 @@ pub fn router(state: AppState) -> Router {
 ///
 /// # Errors
 ///
-/// Returns the I/O error of a signal handler, the bind or serving, and does
-/// not print it, so the caller reports it.
+/// Returns the I/O error of a signal handler, the bind, reading the bound
+/// address or serving, and does not print it, so the caller reports it.
 pub async fn serve(settings: &Settings, state: AppState) -> io::Result<()> {
     // `serve` runs the router until a signal and stops it cleanly.
     //
