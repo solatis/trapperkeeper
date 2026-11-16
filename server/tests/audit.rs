@@ -1,6 +1,6 @@
-//! The audit trail on the router served in this process, on each backend:
-//! which requests leave rows and what they hold, paging, and a deleted user
-//! still named.
+//! The audit trail on the router served in this process, on each backend.
+//! The tests check which requests leave rows and what a row holds, how the
+//! trail pages, and that a row still names a deleted user.
 
 mod common;
 
@@ -10,8 +10,9 @@ use common::{
 };
 use serde_json::{Value, json};
 
-/// Creates the tenant `acme` with the admin `ada@example.com` as the
-/// superadmin, and returns the admin's password.
+/// With the superadmin's `token`, creates the tenant `acme` whose admin is
+/// `ada@example.com`, and returns the admin's one-time password. Panics unless
+/// the create answers 201.
 fn create_acme(server: &InProcess, token: &str) -> String {
     let new = json!({ "name": "acme", "title": "Acme", "admin": "ada@example.com" });
     let response = call(server, token, "POST", "/api/v1/tenants", Some(&new));
@@ -23,8 +24,8 @@ fn create_acme(server: &InProcess, token: &str) -> String {
         .to_owned()
 }
 
-/// The rows of the trail `query` selects on the server's database, as
-/// (method, route, status, user id, tenant id, path params, peer, client).
+/// One audit row as `stored_rows` reads it: method, route, status, user id,
+/// tenant id, path parameters as JSON, peer address and client address.
 type StoredRow = (
     String,
     String,
@@ -39,10 +40,14 @@ type StoredRow = (
 /// The rows of `tenant_id`'s trail in time order, read from the store, or
 /// every row without a tenant when `tenant_id` is `None`.
 fn stored_rows(server: &InProcess, tenant_id: Option<&str>) -> Vec<StoredRow> {
+    // An audit id is a version 7 UUID, so the order of the ids is the order
+    // of the writes.
     let select = if tenant_id.is_some() {
         "SELECT method, route, status, user_id, tenant_id, path_params, peer_address, client_address \
          FROM audit WHERE tenant_id = $1 ORDER BY audit_id"
     } else {
+        // `$1 = 'x'` is always true and gives this statement the placeholder
+        // of the other, so both take the one bind below.
         "SELECT method, route, status, user_id, tenant_id, path_params, peer_address, client_address \
          FROM audit WHERE tenant_id IS NULL AND $1 = 'x' ORDER BY audit_id"
     };
@@ -56,7 +61,9 @@ fn stored_rows(server: &InProcess, tenant_id: Option<&str>) -> Vec<StoredRow> {
     })
 }
 
-/// The trail of `tenant` through the route, with `query` appended.
+/// GETs `/api/v1/tenants/{tenant}/audit` with `query` appended, as `token`,
+/// and returns the listed rows. Panics unless the route answers 200 with a
+/// JSON array.
 fn trail(server: &InProcess, token: &str, tenant: &str, query: &str) -> Vec<Value> {
     let path = format!("/api/v1/tenants/{tenant}/audit{query}");
     let response = call(server, token, "GET", &path, None);
@@ -65,31 +72,37 @@ fn trail(server: &InProcess, token: &str, tenant: &str, query: &str) -> Vec<Valu
     listed.as_array().expect("an array").clone()
 }
 
-/// The superadmin's login and its creation of a tenant leave rows in `$tk`'s
-/// trail with the peer as the client, a GET leaves none, a request with
-/// X-Forwarded-For shows it as the client beside the unchanged peer, a failed
-/// login leaves a row under the named user's tenant with no user, a login
-/// for an unknown user leaves a row with no tenant, and a mint is filed
-/// under the user's tenant with the superadmin named as the caller.
+/// Each changing request leaves one row with its method, route, status,
+/// caller, tenant, peer and client, and a GET leaves none. A login and the
+/// superadmin's mint of a session are filed under the tenant of the user they
+/// name.
 #[test]
 fn changing_requests_leave_rows_and_reads_do_not() {
-    // 1. log in as the superadmin, create a tenant, list the tenants
-    // 2. read $tk's rows from the store
-    // 3. send a request with X-Forwarded-For
-    // 4. fail a login for a known user and for an unknown one
-    // 5. mint a session for the tenant's admin
-    // 6. read the tenant's trail through the route
+    // The test sends requests as the superadmin and as anonymous callers, and
+    // checks the rows after each set.
+    //
+    // 1. We log in as the superadmin, create `acme` and list the tenants. The
+    //    login and the create leave rows under `$tk`, and the GET none.
+    // 2. We read the rows of `$tk` from the store, because the list route
+    //    answers `$tk` as an unknown tenant.
+    // 3. We repeat the create with `X-Forwarded-For`. Its 409 still leaves a
+    //    row, whose client is the header's address, as the middleware assumes
+    //    one proxy (ADR-0031).
+    // 4. We fail a login for ada and one for an unknown user. Only the
+    //    unknown user's row has no tenant, so the test reads it from the
+    //    store.
+    // 5. We mint a session for ada, which is filed under her tenant.
+    // 6. We read the trail of `acme` through the route.
     on_each_backend(|backend| {
         let server = serve_in_process(backend);
 
-        // 1. The login is itself a changing request, so it is the first row.
+        // 1. log in, create a tenant, list the tenants
         let token = superadmin_token(&server);
         create_acme(&server, &token);
         let response = call(&server, &token, "GET", "/api/v1/tenants", None);
         assert_eq!(response.status, 200, "{} on {backend}", response.body);
 
-        // 2. The login row has the tenant and no user, because the name
-        //    tried is never stored; the create names the superadmin.
+        // 2. read the rows of $tk
         let rows = stored_rows(&server, Some(SYSTEM_TENANT_ID));
         assert_eq!(rows.len(), 2, "{rows:?} on {backend}");
         let (method, route, status, user, tenant, params, peer, client) = &rows[0];
@@ -97,10 +110,12 @@ fn changing_requests_leave_rows_and_reads_do_not() {
             (method.as_str(), route.as_str(), *status),
             ("POST", "/api/v1/login", 200)
         );
+        // A login row names no user, only the tenant of the named one.
         assert_eq!(
             (user.as_deref(), tenant.as_deref()),
             (None, Some(SYSTEM_TENANT_ID))
         );
+        // Without `X-Forwarded-For` the client is the peer.
         assert_eq!(
             (params.as_str(), peer.as_str(), client.as_str()),
             ("{}", "127.0.0.1", "127.0.0.1")
@@ -116,8 +131,7 @@ fn changing_requests_leave_rows_and_reads_do_not() {
         );
         assert_eq!(params, "{}");
 
-        // 3. The header is trusted as received, which is the one-proxy rule;
-        //    the refused create is recorded with its 409.
+        // 3. create again behind a proxy
         let bearer = format!("Bearer {token}");
         let new = json!({ "name": "acme", "title": "Acme", "admin": "ada@example.com" });
         let response = request(
@@ -138,8 +152,7 @@ fn changing_requests_leave_rows_and_reads_do_not() {
             (409, "127.0.0.1", "203.0.113.7")
         );
 
-        // 4. The row of a login for an unknown user has no tenant, so no
-        //    admin reads it, and a store-level read sees it.
+        // 4. fail two logins
         let wrong = json!({ "tenant": "acme", "name": "ada@example.com", "password": "wrong" });
         let response = request(
             server.addr,
@@ -163,7 +176,7 @@ fn changing_requests_leave_rows_and_reads_do_not() {
         let (_, route, status, ..) = &rows[0];
         assert_eq!((route.as_str(), *status), ("/api/v1/login", 401));
 
-        // 5. The mint names acme in its path, so it is filed there, not in $tk.
+        // 5. mint a session for ada
         let response = call(
             &server,
             &token,
@@ -173,8 +186,9 @@ fn changing_requests_leave_rows_and_reads_do_not() {
         );
         assert_eq!(response.status, 200, "{} on {backend}", response.body);
 
-        // 6. Newest first: the mint, filed under acme with the superadmin
-        //    and its own tenant named, then the failed login with no user.
+        // 6. read the trail of acme
+        // The creates sit under `$tk`, and the unknown user's login has no
+        // tenant, so the trail holds the mint and ada's login, newest first.
         let listed = trail(&server, &token, "acme", "");
         assert_eq!(listed.len(), 2, "{listed:?} on {backend}");
         assert_eq!(
@@ -195,16 +209,28 @@ fn changing_requests_leave_rows_and_reads_do_not() {
     });
 }
 
-/// Paging: more rows than the limit, newest first, `before` continues where
-/// the page ended, and `user` narrows the page to that user's rows.
+/// The route lists the trail newest first, `before` continues after the last
+/// row of a page, and `user` narrows the page to that user's rows.
 #[test]
 fn the_trail_pages_newest_first() {
+    // The test fills the trail of `acme` with six rows and reads them as two
+    // pages of at most four, and narrowed to one user.
+    //
+    // 1. We create `acme` and log ada in, whose login is the first row of
+    //    its trail and names no user.
+    // 2. Ada creates five users, so the trail holds six rows.
+    // 3. We read the first page of four.
+    // 4. We read the second page, before the last id of the first, which
+    //    holds the two oldest rows.
+    // 5. We narrow the trail to ada, which holds the five creates, and to an
+    //    unknown name, which is empty.
     on_each_backend(|backend| {
+        // 1. create acme and log ada in
         let server = serve_in_process(backend);
         let token = superadmin_token(&server);
         let password = create_acme(&server, &token);
         let (ada, _) = log_in(&server, "acme", "ada@example.com", &password);
-        // Five creates by the admin, after the admin's own login row.
+        // 2. create five users
         for n in 0..5 {
             let new = json!({ "name": format!("u{n}@example.com"), "role": "observer" });
             let response = call(
@@ -217,15 +243,19 @@ fn the_trail_pages_newest_first() {
             assert_eq!(response.status, 201, "{} on {backend}", response.body);
         }
 
+        // 3. read the first page
         let first = trail(&server, &ada, "acme", "?limit=4");
         assert_eq!(first.len(), 4, "{first:?} on {backend}");
         let ids: Vec<&str> = first
             .iter()
             .map(|r| r["id"].as_str().expect("an id"))
             .collect();
+        // The text of a version 7 UUID sorts by time, so descending ids run
+        // from newest to oldest.
         assert!(ids.windows(2).all(|w| w[0] > w[1]), "{ids:?} on {backend}");
         assert_eq!(first[0]["route"], "/api/v1/tenants/{tenant}/users");
 
+        // 4. read the second page
         let second = trail(
             &server,
             &ada,
@@ -236,6 +266,8 @@ fn the_trail_pages_newest_first() {
         assert!(second[0]["id"].as_str().expect("an id") < ids[3]);
         assert_eq!(second[1]["route"], "/api/v1/login");
 
+        // 5. narrow to one user
+        // The mixed case shows that the filter matches a name in any case.
         let narrowed = trail(&server, &ada, "acme", "?user=Ada@Example.com");
         assert_eq!(narrowed.len(), 5, "{narrowed:?} on {backend}");
         assert!(narrowed.iter().all(|r| r["user"] == "ada@example.com"));
@@ -244,11 +276,21 @@ fn the_trail_pages_newest_first() {
     });
 }
 
-/// A row for a user deleted since still shows the name, because the join
-/// ignores `deleted_at`, and the user filter finds the deleted user.
+/// A row of a user deleted since still names that user, and the user filter
+/// still finds the deleted user.
 #[test]
 fn the_trail_names_a_deleted_user() {
+    // The test has a user act once, deletes the user, and reads the trail
+    // narrowed to that user.
+    //
+    // 1. We create `acme`, log ada in, and create bob.
+    // 2. Bob logs in and out. The logout is the only row that names bob,
+    //    because a login row names no user.
+    // 3. Ada deletes bob, which keeps his row in the users table.
+    // 4. We narrow the trail to bob, which must hold the logout with his name
+    //    and tenant, because the trail joins the users table on the id alone.
     on_each_backend(|backend| {
+        // 1. create acme, ada and bob
         let server = serve_in_process(backend);
         let token = superadmin_token(&server);
         let password = create_acme(&server, &token);
@@ -263,15 +305,16 @@ fn the_trail_names_a_deleted_user() {
         );
         assert_eq!(response.status, 201, "{} on {backend}", response.body);
         let created: Value = serde_json::from_str(&response.body).expect("a JSON body");
+        // 2. bob logs in and out
         let (bob, _) = log_in(
             &server,
             "acme",
             "bob@example.com",
             created["password"].as_str().expect("a password"),
         );
-        // A logout is bob's one changing request with bob as the caller.
         let response = call(&server, &bob, "POST", "/api/v1/logout", None);
         assert_eq!(response.status, 200, "{} on {backend}", response.body);
+        // 3. ada deletes bob
         let response = call(
             &server,
             &ada,
@@ -281,6 +324,7 @@ fn the_trail_names_a_deleted_user() {
         );
         assert_eq!(response.status, 200, "{} on {backend}", response.body);
 
+        // 4. narrow the trail to bob
         let rows = trail(&server, &ada, "acme", "?user=bob@example.com");
         assert_eq!(rows.len(), 1, "{rows:?} on {backend}");
         assert_eq!(rows[0]["route"], "/api/v1/logout");
