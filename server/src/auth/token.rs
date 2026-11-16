@@ -245,8 +245,9 @@ impl Keyring {
 async fn derive(passphrase: String, salt: String) -> (String, [u8; 32]) {
     // Each derivation runs one Argon2id hash with 64 MiB of memory, which
     // must not block the runtime, so it runs on the blocking pool (ADR-0014).
-    // serve builds the keyring once, when it starts, and `from_store` calls
-    // `derive` once for each key.
+    // The derivations take no permit of the hashing limit. serve builds the
+    // keyring once, before it accepts a request, and `from_store` runs them
+    // one after the other.
     task::spawn_blocking(move || {
         let mut key = [0_u8; 32];
         // The derivation uses the parameters of the password hasher
