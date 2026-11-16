@@ -39,4 +39,5 @@ host name is left to a later UI (owner, 2026-11-06).
 ## Consequences
 
 Every schema and every query carries the tenant id. The tenant filter is the
-only isolation between tenants. A person in two tenants has two accounts. The store and management API components cite this record.
+only isolation between tenants. A person in two tenants has two accounts. The
+store component and the server cite this record.
