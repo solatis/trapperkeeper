@@ -37,15 +37,16 @@ pub const ACCESS_COOKIE: &str = "tk_access";
 /// it `tk_refresh`.
 pub const REFRESH_COOKIE: &str = "tk_refresh";
 
-/// The path of the refresh route, which is `API_PREFIX` followed by the
-/// route's own path, so it changes when either changes. The browser sends
-/// the refresh cookie to this path alone (ADR-0025).
+/// The path of the refresh route. The literal repeats `API_PREFIX` and the
+/// route's own path, so a change to either must change it too. The browser
+/// sends the refresh cookie to this path alone (ADR-0025).
 pub const REFRESH_PATH: &str = "/api/v1/refresh";
 
-/// The body that a login, a password change and a minted session hand out. A
-/// login and a password change also set the `tk_access` and `tk_refresh`
-/// cookies, and a minted session sets none. The key names are familiar from
-/// token responses and follow no standard to the letter.
+/// The body that a login, a password change and the superadmin's mint route
+/// in `sessions.rs` hand out. A login and a password change also set the
+/// `tk_access` and `tk_refresh` cookies, and the mint route sets none. The
+/// key names are chosen freely. The first four are familiar from the token
+/// response of OAuth 2, and the body follows no standard.
 #[derive(Serialize, ToSchema)]
 pub struct Login {
     /// The access token, sent back as `Authorization: Bearer`.
@@ -63,8 +64,9 @@ pub struct Login {
 }
 
 /// The hash of the empty password, computed at the first login that needs
-/// it. A login whose tenant or name is unknown verifies against it, and a
-/// match logs no one in, because there is no user to keep.
+/// it. A login whose tenant or name is unknown verifies against it. A
+/// password that matches it still logs no one in, because the handler found
+/// no user.
 static DUMMY_HASH: OnceCell<String> = OnceCell::const_new();
 
 /// Logs a user in with the tenant's name, the user's name and the password.
@@ -313,6 +315,10 @@ pub async fn logout(caller: Caller, State(state): State<AppState>, jar: CookieJa
     // `revoke_tokens` sets the user's `tokens_valid_after`, which every token
     // of either kind is checked against. The value is per user, so every
     // session of the user ends, the caller's included (ADR-0025).
+    //
+    // The block runs the opening of the transaction, the update and the
+    // commit together, so a failure of any of them reaches the one
+    // `database_error` below.
     let revoked = async {
         let mut tx = state.store.begin().await?;
         users::revoke_tokens(
@@ -383,7 +389,9 @@ pub async fn change_password(
     // 1. We verify the current password against the caller's stored hash and
     //    refuse with the 401 of `unauthorized` when it does not match. An
     //    access token alone then cannot change the password, so a stolen
-    //    token cannot take the account.
+    //    token cannot take the account. This check comes first, so a caller
+    //    who cannot prove the current password gets the 401 whatever the new
+    //    password is.
     // 2. We refuse with 400 a new password shorter than 12 or longer than
     //    1024 characters. The lower bound refuses trivial passwords, and the
     //    upper bound caps the input of the hash.
@@ -395,8 +403,9 @@ pub async fn change_password(
     //    while it runs.
     // 4. We issue new tokens and set both cookies, once the write has
     //    committed. `logged_in` reads the clock after step 3 read it for the
-    //    cutoff, so the issue time of the tokens is not before the cutoff,
-    //    and `authenticate` refuses only a token issued before it.
+    //    cutoff. Unless the clock stepped back in between, the issue time of
+    //    the tokens is not before the cutoff, and `authenticate` refuses only
+    //    a token issued before it.
 
     // 1. check the current password
     let user = caller.user;
@@ -419,6 +428,9 @@ pub async fn change_password(
     let password_hash = password::hash(change.new_password).await;
     let written = async {
         let mut tx = state.store.begin().await?;
+        // An update that matches no row is no error. When the user was
+        // deleted since the extractor read it, the tokens of step 4 fail at
+        // their first check, because `authenticate` finds no live user.
         users::set_password(
             &mut tx,
             PasswordSet {
@@ -439,7 +451,8 @@ pub async fn change_password(
 
     // 4. issue new tokens
     // `user` is the copy that the `Caller` extractor read before the change,
-    // so the call passes the flag that step 3 wrote.
+    // so its `password_must_change` may still be true. The call passes
+    // `false`, the value that step 3 wrote.
     logged_in(&state, jar, &user, false)
 }
 
@@ -472,11 +485,12 @@ pub async fn me(caller: Caller) -> Json<Me> {
     })
 }
 
-/// A 401 with the body `unauthorized` and no `WWW-Authenticate` header. A
-/// failed login, a refresh without a token and a wrong current password get
-/// it alike, so the response does not say which name exists or which check
-/// failed. `Refusal::Unauthorized` gives the same body with
-/// `WWW-Authenticate: Bearer`.
+/// A 401 with the body `unauthorized` and no `WWW-Authenticate` header. The
+/// handlers of this file return it for a failure that they find themselves:
+/// a failed login, which then does not say which name exists or whether the
+/// password was wrong, a refresh without a token, and a wrong current
+/// password. A token that `authenticate` refuses gets `Refusal::Unauthorized`
+/// instead, which has the same body and `WWW-Authenticate: Bearer`.
 fn unauthorized() -> Response {
     (StatusCode::UNAUTHORIZED, "unauthorized").into_response()
 }
