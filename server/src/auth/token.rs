@@ -39,9 +39,9 @@ impl Kind {
     /// How long a token of this kind lives.
     #[must_use]
     pub fn lifetime(self) -> Duration {
-        // ADR-0025 sets both lifetimes. A refresh keeps the refresh token, so
-        // 7 days is also how long a login lasts, and a key rotation keeps the
-        // previous key for that long.
+        // ADR-0025 sets both lifetimes. The refresh route issues no new
+        // refresh token, so 7 days is also how long a login lasts, and how
+        // long an operator leaves the previous key set after a rotation.
         match self {
             Self::Access => Duration::from_hours(1),
             Self::Refresh => Duration::from_hours(7 * 24),
@@ -245,16 +245,22 @@ impl Keyring {
 async fn derive(passphrase: String, salt: String) -> (String, [u8; 32]) {
     // Each derivation runs one Argon2id hash with 64 MiB of memory, which
     // must not block the runtime, so it runs on the blocking pool (ADR-0014).
-    // `from_store` calls `derive` once for each key, at startup.
+    // serve builds the keyring once, when it starts, and `from_store` calls
+    // `derive` once for each key.
     task::spawn_blocking(move || {
         let mut key = [0_u8; 32];
         // The derivation uses the parameters of the password hasher
         // (ADR-0022). The stretching makes each offline guess at a passphrase
         // cost one Argon2id run (ADR-0025).
         password::hasher()
+            // The salt is the 32 hex characters that
+            // `installation::ensure_salt` wrote, which is above argon2's
+            // minimum of 8 bytes.
             .hash_password_into(passphrase.as_bytes(), salt.as_bytes(), &mut key)
             .expect("the salt and the output length are within argon2's bounds");
-        // The id changes only with the key, and nobody types one.
+        // The id is a fingerprint of the derived key, so nobody types one
+        // (ADR-0025). It is a hash, so the `kid` in the header of a token
+        // shows no byte of the key.
         let fingerprint = Sha256::digest(key);
         // The id is the first 8 bytes of the fingerprint, as 16 hex
         // characters. The length is a choice that no measurement backs.
