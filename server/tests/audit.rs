@@ -240,7 +240,7 @@ fn the_trail_pages_newest_first() {
         assert_eq!(narrowed.len(), 5, "{narrowed:?} on {backend}");
         assert!(narrowed.iter().all(|r| r["user"] == "ada@example.com"));
         let none = trail(&server, &ada, "acme", "?user=nobody@example.com");
-        assert_eq!(none, [] as [Value; 0]);
+        assert!(none.is_empty(), "{none:?} on {backend}");
     });
 }
 
