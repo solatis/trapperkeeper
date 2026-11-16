@@ -1,9 +1,8 @@
 # Per-issue plans of the tk-* workflow; never committed (.claude/skills/tk-workflow)
 .plans/
 
-# Cargo build output
 /target/
 
-# The database a local migrate creates with the default URL, and the side files
-# SQLite writes next to it
+# The database that serve and migrate create in the working directory with
+# the default URL, and the side files SQLite writes next to it
 trapperkeeper.db*
