@@ -116,12 +116,12 @@ fn login_then_me() {
         // An unknown tenant, another tenant, a wrong password and an unknown
         // name. All four get the same body, so a response does not say which
         // part was wrong.
-        let password = server.admin_password.as_str();
+        let admin_password = server.admin_password.as_str();
         for (tenant, name, password) in [
-            ("nowhere", ADMIN, password),
-            ("other", ADMIN, password),
+            ("nowhere", ADMIN, admin_password),
+            ("other", ADMIN, admin_password),
             (SYSTEM_TENANT, ADMIN, "not the password"),
-            (SYSTEM_TENANT, "nobody", password),
+            (SYSTEM_TENANT, "nobody", admin_password),
         ] {
             let response = log_in(&server, tenant, name, password);
             assert_eq!(response.status, 401);
