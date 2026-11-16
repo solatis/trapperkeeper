@@ -98,11 +98,11 @@ pub async fn login(
     //    lookup matches whatever case the caller typed (ADR-0020). A store
     //    failure answers 500.
     // 2. We note the found user's tenant, without a user id, in the
-    //    request's identity cell. This comes before the password check, so
-    //    the audit row of a failed login is filed under that tenant too. The
-    //    row holds no name, so the tenant's admins see failed logins against
-    //    their tenant without the name tried, and a login for an unknown
-    //    tenant or name leaves a row without a tenant (ADR-0031).
+    //    request's identity cell, and a login for an unknown tenant or name
+    //    notes nothing. This comes before the password check, so the audit
+    //    row of a failed login is filed under that tenant too. The row holds
+    //    no name, so the tenant's admins see failed logins against their
+    //    tenant without the name tried (ADR-0031).
     // 3. We verify the password against the user's hash, or against the
     //    dummy hash when the tenant or the name is unknown. A login for an
     //    unknown user then costs one verify, as a login for a known user
@@ -207,10 +207,9 @@ fn token_cookie(
         // ADR-0025 decides `HttpOnly`, `SameSite=Strict` and `Secure`.
         .http_only(true)
         .same_site(SameSite::Strict)
-        // The server serves plain HTTP, so a browser reaches it through a
-        // proxy that terminates TLS, or on `http://localhost`, which browsers
-        // treat as secure. In both cases the browser keeps a cookie that is
-        // marked `Secure`.
+        // Browsers keep a cookie marked `Secure` only over HTTPS or on
+        // `http://localhost`. The server serves plain HTTP, so a browser on
+        // any other host must reach it through a proxy that terminates TLS.
         .secure(true)
         .path(path)
         .max_age(cookie::time::Duration::seconds(
@@ -313,15 +312,14 @@ pub async fn refresh(
     )
 )]
 pub async fn logout(caller: Caller, State(state): State<AppState>, jar: CookieJar) -> Response {
-    // `revoke_tokens` sets the user's `tokens_valid_after`, which every token
-    // of either kind is checked against. The value is per user, so every
-    // session of the user ends, the caller's included (ADR-0025).
-    //
     // The block runs the opening of the transaction, the update and the
     // commit together, so a failure of any of them reaches the one
     // `database_error` below.
     let revoked = async {
         let mut tx = state.store.begin().await?;
+        // `revoke_tokens` sets the user's `tokens_valid_after`, which every
+        // token of either kind is checked against. The value is per user, so
+        // every session of the user ends, the caller's included (ADR-0025).
         users::revoke_tokens(
             &mut tx,
             &caller.user.tenant_id,
@@ -404,9 +402,9 @@ pub async fn change_password(
     //    while it runs.
     // 4. We issue new tokens and set both cookies, once the write has
     //    committed. `logged_in` reads the clock after step 3 read it for the
-    //    cutoff. Unless the clock stepped back in between, the issue time of
-    //    the tokens is not before the cutoff, and `authenticate` refuses only
-    //    a token issued before it.
+    //    cutoff. Unless the clock stepped back in between, the tokens were
+    //    issued no earlier than the cutoff, so `authenticate`, which refuses
+    //    only a token issued before it, accepts them.
 
     // 1. check the current password
     let user = caller.user;
@@ -430,8 +428,8 @@ pub async fn change_password(
     let written = async {
         let mut tx = state.store.begin().await?;
         // An update that matches no row is no error. When the user was
-        // deleted since the extractor read it, the tokens of step 4 fail at
-        // their first check, because `authenticate` finds no live user.
+        // deleted since the extractor read it, the new tokens fail at their
+        // first check, because `authenticate` finds no live user.
         users::set_password(
             &mut tx,
             PasswordSet {
@@ -453,7 +451,7 @@ pub async fn change_password(
     // 4. issue new tokens
     // `user` is the copy that the `Caller` extractor read before the change,
     // so its `password_must_change` may still be true. The call passes
-    // `false`, the value that step 3 wrote.
+    // `false`, the value that the write stored.
     logged_in(&state, jar, &user, false)
 }
 
@@ -488,9 +486,9 @@ pub async fn me(caller: Caller) -> Json<Me> {
 
 /// A 401 with the body `unauthorized` and no `WWW-Authenticate` header. The
 /// handlers of this file return it for a failure that they find themselves:
-/// a failed login, which then does not say which name exists or whether the
-/// password was wrong, a refresh without a token, and a wrong current
-/// password. A token that `authenticate` refuses gets `Refusal::Unauthorized`
+/// a failed login, a refresh without a token and a wrong current password. A
+/// failed login then does not say which name exists or whether the password
+/// was wrong. A token that `authenticate` refuses gets `Refusal::Unauthorized`
 /// instead, which has the same body and `WWW-Authenticate: Bearer`.
 fn unauthorized() -> Response {
     (StatusCode::UNAUTHORIZED, "unauthorized").into_response()
