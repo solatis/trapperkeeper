@@ -184,10 +184,10 @@ pub struct SyntaxError {
 }
 
 /// "a", "a or b", "a, b or c".
-fn one_of(names: &[String]) -> String {
-    // `Display` writes no list when `names` is empty, so the first arm
+fn one_of(items: &[String]) -> String {
+    // `Display` writes no list when `items` is empty, so the first arm
     // gives nothing.
-    match names {
+    match items {
         [] => String::new(),
         [one] => one.clone(),
         [first @ .., last] => format!("{} or {last}", first.join(", ")),
