@@ -21,8 +21,8 @@ The client address is `X-Forwarded-For` as received when present, else the
 peer. One proxy is assumed, and chains of proxies are out of scope (owner,
 2026-11-07).
 
-A failed write is logged at error and the response stands (owner,
-2026-11-07).
+A failed write of the audit row is logged at error and the response stands
+(owner, 2026-11-07).
 
 A row is filed under the tenant the route resolved from its path when it has
 one, and under the caller's tenant otherwise, so a tenant's admins see what
@@ -50,6 +50,5 @@ The middleware writes the row in a transaction of its own after the handler has
 committed. A change can therefore land without its audit row. When that happens,
 the middleware logs an error that names the route. A forged header on a server
 with no proxy is recorded as the client, next to the true peer. The table grows
-without bound until retention is decided (owner, 2026-11-07: a TTL later). The
-superadmin's own trail in `$tk` holds only what it did outside a tenant's path,
-such as creating tenants.
+without bound until retention is decided. The superadmin's own trail in `$tk`
+holds only what it did outside a tenant's path, such as creating tenants.
