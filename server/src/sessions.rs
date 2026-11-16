@@ -1,7 +1,8 @@
-//! The superadmin's route that mints a session for a user: the body a login
-//! hands that user, without the cookies. The tenant and the user are path
-//! parameters rather than a body, so the audit trail, which stores path
-//! parameters and never a body, records who minted a session for whom.
+//! The superadmin's route that mints a session for a user. The tenant and the
+//! user are path parameters, because every tenant-scoped route follows the
+//! model `/tenants/{tenant}/users/{name}` (ADR-0030). The audit trail, which
+//! stores path parameters and never a body, therefore records who minted a
+//! session for whom.
 
 use std::time::SystemTime;
 
@@ -16,8 +17,8 @@ use crate::http::AppState;
 use crate::store::users;
 
 /// Mints an access token and a refresh token for the named user of the named
-/// tenant, as a login body without cookies. Needs superadmin. 404 when the
-/// tenant or the user is not live.
+/// tenant, as a login body without cookies. Needs superadmin. Answers 404
+/// when the tenant or the user does not exist or was deleted.
 #[utoipa::path(
     post,
     path = "/tenants/{tenant}/users/{name}/session",
@@ -38,11 +39,14 @@ pub async fn mint(
     State(state): State<AppState>,
     Path((tenant, name)): Path<(String, String)>,
 ) -> Response {
-    // Both names lowercased, as login does (ADR-0020). Nothing refuses
-    // the superadmin's own account, because that mint is the same as a
-    // refresh.
     let found = async {
         let mut tx = state.store.begin().await?;
+        // The handler lowercases both names before the lookup, as login does,
+        // because names are stored lowercase (ADR-0020). It looks the user up
+        // with `users::find_in` and not through `scope::tenant`, so the route
+        // reaches the system tenant `$tk` and lets the superadmin mint a
+        // session for its own account, which issues a new refresh token as a
+        // login does.
         users::find_in(&mut tx, &tenant.to_lowercase(), &name.to_lowercase()).await
     }
     .await;
@@ -53,16 +57,18 @@ pub async fn mint(
         Ok(None) => return (StatusCode::NOT_FOUND, "no such tenant or user").into_response(),
         Err(error) => return database_error(&error),
     };
-    // Noted so the audit row is filed under the user's tenant, whose admins
-    // then see who minted a session for whom.
+    // The handler records the user's tenant as the request's scope, so the
+    // audit middleware files the row under that tenant, whose admins see the
+    // superadmin as the caller and both names in the path parameters.
     caller.identity.set_scope(&user.tenant_id);
-    // The body alone, no cookie, so the superadmin's own browser session
-    // stays and the client decides what to do with the tokens. The
-    // must-change flag passes through as it is, because it restricts nothing
-    // and the client shows it.
+    // The handler returns the body and sets no cookie, so the superadmin's
+    // own browser session stays and the client decides how to use the
+    // tokens.
     Json(login_body(
         &state,
         &user,
+        // The must-change flag passes through as stored, because it
+        // restricts no route and the client shows it.
         user.password_must_change,
         SystemTime::now(),
     ))
