@@ -47,8 +47,9 @@ tower-http = { version = "0.7", features = ["trace"] }
 serde_json = "1"
 # sqlx runs the store's SQL and its migrations (ADR-0019). The default features
 # are off, because the store uses neither the Any driver nor json. macros
-# provides `migrate!`, sqlite-bundled and rustls need no system library, and
-# the mysql driver serves MariaDB.
+# provides `migrate!`. sqlite-bundled compiles SQLite in, and
+# tls-rustls-ring-webpki needs no system OpenSSL. postgres and mysql are the
+# drivers of the server databases, and mysql serves MariaDB.
 sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "sqlite-bundled", "postgres", "mysql", "tls-rustls-ring-webpki", "migrate", "macros"] }
 # url parses the database URL, so that the settings can mask its password.
 # sqlx already brings it in.
