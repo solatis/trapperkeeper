@@ -5,8 +5,8 @@
 mod common;
 
 use common::{
-    InProcess, SYSTEM_TENANT_ID, call, log_in, on_each_backend, on_pool, request, serve_in_process,
-    superadmin_token,
+    ADMIN, InProcess, SYSTEM_TENANT, SYSTEM_TENANT_ID, call, log_in, on_each_backend, on_pool,
+    request, serve_in_process, superadmin_token,
 };
 use serde_json::{Value, json};
 
@@ -182,8 +182,8 @@ fn changing_requests_leave_rows_and_reads_do_not() {
             "/api/v1/tenants/{tenant}/users/{name}/session"
         );
         assert_eq!(listed[0]["status"], 200);
-        assert_eq!(listed[0]["user"], "admin");
-        assert_eq!(listed[0]["user_tenant"], "$tk");
+        assert_eq!(listed[0]["user"], ADMIN);
+        assert_eq!(listed[0]["user_tenant"], SYSTEM_TENANT);
         assert_eq!(
             listed[0]["path_params"],
             json!({ "name": "ada@example.com", "tenant": "acme" })
