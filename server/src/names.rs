@@ -14,15 +14,12 @@ pub struct Refused(pub &'static str);
 /// `Refused` when the lowercased name breaks the rule.
 pub fn tenant_name(name: &str) -> Result<String, Refused> {
     let name = name.to_lowercase();
-    // `len` counts bytes, which equal the characters here, because the set
-    // below admits ASCII alone. The cap of 64 is a choice that no measurement
-    // backs.
+    // `len` counts bytes, which are characters in this ASCII set. 64 is a
+    // choice that no measurement backs.
     let valid = (1..=64).contains(&name.len())
         && name
             .chars()
-            // Letters, digits and this punctuation can be typed anywhere and
-            // fit in a URL path as they are. `$` is outside the set, so the
-            // server's own names cannot be created.
+            // These fit in a URL path as they are, and `$` is outside them.
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || ".-_".contains(c));
     if valid {
         Ok(name)
@@ -41,11 +38,9 @@ pub fn tenant_name(name: &str) -> Result<String, Refused> {
 /// `Refused` when the lowercased name breaks the rule.
 pub fn user_name(name: &str) -> Result<String, Refused> {
     let name = name.to_lowercase();
-    // The function checks only the shape of the address, because the server
-    // sends no mail that could confirm it. 254 is the longest address SMTP
-    // carries (RFC 5321, 4.5.3.1.3), and SMTP counts it in octets, as `len`
-    // counts bytes. 3 is the length of `a@b`, the shortest text that the `@`
-    // check accepts, so the lower bound adds nothing to that check.
+    // Only the shape is checked, because the server sends no mail. 254 bytes
+    // is the longest address SMTP carries (RFC 5321, 4.5.3.1.3), and 3 is
+    // `a@b`, the shortest that the `@` check accepts.
     let shaped = (3..=254).contains(&name.len())
         && !name.chars().any(char::is_whitespace)
         && name.split_once('@').is_some_and(|(local, domain)| {
