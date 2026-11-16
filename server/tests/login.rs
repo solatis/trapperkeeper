@@ -444,8 +444,8 @@ impl Model {
 
 proptest! {
     #![proptest_config(ProptestConfig {
-        // 12 cases, because each serves a router on every backend, which
-        // hashes a password and derives a ring, and derives a ring of its own.
+        // 12 cases, because each case serves a router on every backend, which
+        // hashes a password and derives a ring, and the case derives one more.
         cases: 12,
         // No regression file is left in the tree.
         failure_persistence: None,
