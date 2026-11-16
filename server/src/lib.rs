@@ -44,26 +44,16 @@ use setup::SetUp;
 ///
 /// `run` does not panic.
 pub async fn run() -> ExitCode {
-    // `run` resolves everything a subcommand needs and then dispatches to it.
-    // It resolves the settings before it installs logging and before any
-    // subcommand runs, so a bad configuration fails the same way for every
-    // subcommand.
+    // `run` resolves the settings before any subcommand runs, so a bad
+    // configuration fails the same way for every subcommand.
     //
-    // 1. We parse the command line with clap. clap prints help, the version
-    //    or a usage error itself and exits the process, with status 0 for
-    //    help and the version and status 2 for a usage error, so no parse
-    //    error reaches `run`.
-    // 2. We resolve the settings from the file that `--config` names, the
-    //    environment and the flags, and on an error we print it and return
-    //    failure. This comes before logging, because the log level is one of
-    //    the settings.
-    // 3. We install logging at the resolved level, and on an error we print
-    //    it and return failure.
-    // 4. We log a warning for each secret given as a flag, and we log the
-    //    resolved settings at debug. Both are log events, so they come after
-    //    step 3.
-    // 5. We dispatch on the subcommand and return the exit status that it
-    //    returns.
+    // 1. We parse the command line. clap handles help, the version and a
+    //    usage error itself and exits with status 0 or 2.
+    // 2. We resolve the settings. This comes before logging, because the log
+    //    level is a setting.
+    // 3. We install logging.
+    // 4. We warn about each secret flag and log the resolved settings.
+    // 5. We dispatch on the subcommand.
 
     // 1. parse the command line
     let cli = Cli::parse();
@@ -91,9 +81,8 @@ pub async fn run() -> ExitCode {
     for flag in cli.overrides.secrets() {
         tracing::warn!(flag, "a secret setting was given on the command line");
     }
-    // The settings go out as one JSON string, so a reader of the log sees
-    // what the server resolved without parsing Debug text. Each value is a
-    // string, a table or an absent key, so the serialization cannot fail.
+    // One JSON string spares a reader the Debug text. Each value is a string,
+    // a table or an absent key, so the serialization cannot fail.
     let json = serde_json::to_string(&settings).expect("the settings serialize");
     tracing::debug!(settings = %json, "settings resolved");
 
@@ -106,28 +95,19 @@ pub async fn run() -> ExitCode {
 }
 
 /// Serves the API until a signal stops it, after it sets up an empty
-/// database, and returns success. It prints the error on stderr and returns
-/// failure when the signing key is not set, when the database is refused or
-/// cannot be set up, when the keys cannot be derived, or when installing the
-/// signal handlers, binding or serving fails.
+/// database. It prints any error on stderr and returns failure.
 async fn serve(settings: &Settings) -> ExitCode {
-    // `serve` refuses to start at every check before `http::serve` binds the
-    // listener, so a refused server is never reachable.
+    // Every refusal comes before the listener binds, so a refused server is
+    // never reachable.
     //
-    // 1. We check that `auth.signing_key` is set, and refuse to start with a
-    //    message on stderr when it is not.
-    // 2. We open the database, set it up when it is empty and log what the
-    //    set-up did, or print the error and fail.
-    // 3. We derive the signing keys from the current and the previous
-    //    passphrase and the salt that the database holds. This comes after
-    //    step 2, because the salt lives in the store.
-    // 4. We build the state of the router from the store and the keys, and
-    //    serve until a signal, returning success or printing the error.
+    // 1. We check that `auth.signing_key` is set.
+    // 2. We open the database, setting it up when it is empty.
+    // 3. We derive the signing keys, which needs the salt in the database.
+    // 4. We serve until a signal.
 
     // 1. check the signing key
     // The check runs before the database is touched, so a refused start
-    // leaves the database as it was, and the first start that succeeds is the
-    // one that sets it up and logs the one-time password.
+    // leaves the database as it was.
     let Some(signing) = &settings.auth.signing_key else {
         eprintln!(
             "auth.signing_key is not set; serve needs a passphrase of at least 32 characters, \
@@ -139,9 +119,7 @@ async fn serve(settings: &Settings) -> ExitCode {
     // 2. open or set up the database
     let store = match setup::open_or_set_up(settings.database.url.expose()).await {
         Ok((store, set_up)) => {
-            // `open_or_set_up` returns a set-up only when it found the
-            // database empty and set it up. A database that already matches
-            // the migrations returns none.
+            // Only a database that was empty returns a set-up.
             if let Some(set_up) = &set_up {
                 log_set_up(set_up);
             }
@@ -218,15 +196,12 @@ async fn migrate(settings: &Settings) -> ExitCode {
 }
 
 /// Gives the superadmin a new one-time password, creating the superadmin when
-/// it is missing, prints the password, and returns the exit status. It opens
-/// the database without creating it, so it fails when the database does not
-/// open or does not match the migrations.
+/// it is missing, and prints it. It opens the database without creating it.
 async fn reset_superadmin_command(settings: &Settings) -> ExitCode {
     let store = match setup::open_checked(settings.database.url.expose()).await {
         Ok(store) => store,
-        // The command adds the hint here and not in the `Display` of
-        // `setup::Error`, because serve shares that text and creates a missing
-        // database itself. Only this command opens without creating.
+        // The hint stays out of `setup::Error`, because serve shares that
+        // text and creates a missing database itself.
         Err(error @ setup::Error::Open(_)) => {
             eprintln!(
                 "{error}\nthe database does not open; when it does not exist, \
@@ -241,8 +216,7 @@ async fn reset_superadmin_command(settings: &Settings) -> ExitCode {
     };
     match superadmin::reset(&store).await {
         Ok(password) => {
-            // The command prints the password alone on stdout instead of
-            // logging it, so a script can read the output.
+            // The password alone goes to stdout, so a script can read it.
             println!("{password}");
             ExitCode::SUCCESS
         }
