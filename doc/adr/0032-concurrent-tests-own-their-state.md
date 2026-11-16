@@ -16,22 +16,22 @@ Tests run concurrently and are kept apart by what they own, never by
 serializing them (owner, 2026-11-09).
 
 Each test owns everything it touches. On SQLite its database is a file in a
-scratch directory of its own, removed with the test. On Postgres and MariaDB
-its database is created on the server the admin URL names, with a `CREATE
-DATABASE` for a name made of the process id and a counter, and dropped when
-the test ends. A test that serves the router binds a listener of its own on
-port 0 and keeps it, and holds its own store, derived keys and tokens. No
-test reads another test's rows.
+scratch directory of its own, removed with the test. On Postgres and MariaDB its
+database is created on the server that the admin URL, `TK_TEST_POSTGRES_URL` or
+`TK_TEST_MARIADB_URL`, names, with a `CREATE DATABASE` for a name made of the
+process id and a counter, and dropped when the test ends. A test that serves the
+router binds a listener of its own on port 0 and keeps it, and holds its own
+store, derived keys and tokens. No test reads another test's rows.
 
 The tokio runtime is shared by the whole test process, because a sqlx
 connection belongs to the runtime that opened it. It is an executor and holds
 no test's state.
 
-A resource the process shares is locked for each case, or a single test of
+A resource the process shares is locked for each test case, or a single test of
 its binary uses it. The settings property changes the environment inside
 figment's jail, which holds a global lock and restores the environment
-afterwards. The log test installs the global tracing subscriber and is the
-only test of its binary.
+afterwards. The log test installs the global tracing subscriber and is the only
+test of its binary.
 
 Tests that will run against a live TrapperKeeper server, such as the SDKs'
 integration tests, are expected to follow the same rule at the level that
