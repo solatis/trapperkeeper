@@ -20,28 +20,23 @@ pub fn hasher() -> Argon2<'static> {
     Argon2::new(Algorithm::Argon2id, Version::V0x13, params)
 }
 
-/// Limits how many hashes run at once to the number of CPUs. Login is
-/// unauthenticated and each hash holds 64 MiB while it runs, so under a flood
-/// of attempts the attempts wait for a permit instead of each allocating
-/// 64 MiB.
+/// Limits how many hashes run at once to the number of CPUs, so a flood of
+/// unauthenticated logins waits instead of allocating 64 MiB each.
 static HASHING: OnceLock<Semaphore> = OnceLock::new();
 
 fn hashing() -> &'static Semaphore {
-    // When the host does not report its CPU count, the limit is one permit,
-    // the smallest limit that still lets a hash run. The value is a choice
-    // that no measurement backs.
+    // One permit when the host reports no CPU count.
     HASHING.get_or_init(|| Semaphore::new(thread::available_parallelism().map_or(1, NonZero::get)))
 }
 
-/// The PHC string of `password`, hashed with a fresh random salt. The call
-/// waits for a free slot while as many hashes run as the limit allows.
+/// The PHC string of `password`, hashed with a fresh random salt. Waits for
+/// a free slot of the limit.
 pub async fn hash(password: String) -> String {
     let permit = hashing()
         .acquire()
         .await
         .expect("the semaphore is never closed");
-    // One Argon2id hash is CPU-bound work over 64 MiB and 3 passes, which
-    // must not block the runtime (ADR-0014).
+    // CPU-bound, so off the runtime (ADR-0014).
     task::spawn_blocking(move || {
         // The blocking task holds the permit, so a caller that drops this
         // future does not free it while the hash still runs.
@@ -56,8 +51,8 @@ pub async fn hash(password: String) -> String {
 }
 
 /// Whether `password` hashes to `phc` under the salt and parameters that `phc`
-/// carries. A string that does not parse matches nothing. The call waits for
-/// a free slot while as many hashes run as the limit allows.
+/// carries. A string that does not parse matches nothing. Waits for a free
+/// slot of the limit.
 pub async fn verify(password: String, phc: String) -> bool {
     let permit = hashing()
         .acquire()
@@ -67,9 +62,8 @@ pub async fn verify(password: String, phc: String) -> bool {
         // The blocking task holds the permit, so a caller that drops this
         // future does not free it while the hash still runs.
         let _permit = permit;
-        // `verify_password` takes the algorithm, the parameters and the salt
-        // from `phc`, so the parameters of `hasher` do not count here. argon2
-        // compares the two outputs in constant time.
+        // The parameters come from `phc`, and the comparison is constant
+        // time.
         hasher()
             .verify_password(password.as_bytes(), phc.as_str())
             .is_ok()
@@ -80,9 +74,7 @@ pub async fn verify(password: String, phc: String) -> bool {
 
 /// A new password of 16 random ASCII letters and digits.
 pub fn generate() -> String {
-    // The length 16 is a choice. 16 characters drawn from 62 symbols give
-    // about 95 bits, which is enough, because the holder is asked to change
-    // the password at the first login.
+    // About 95 bits, enough for a password changed at the first login.
     Alphanumeric.sample_string(&mut rand::rng(), 16)
 }
 
@@ -97,13 +89,11 @@ mod tests {
         //
         // 1. We start a hash in a task of its own and wait until it has taken
         //    a permit.
-        // 2. We abort the task and wait for it to end, which drops the future
-        //    of `hash`. The hash goes on in its blocking thread, because
-        //    tokio does not stop a blocking task that has started.
+        // 2. We abort the task, which drops the future of `hash`. tokio does
+        //    not stop a blocking task that has started.
         // 3. We check that the permit is still taken.
 
-        // The limit is at least one permit, and no other test of this binary
-        // hashes, so `free` is at least 1 and only this test moves the
+        // No other test of this binary hashes, so only this one moves the
         // permits.
         let free = hashing().available_permits();
         // 1. start a hash
@@ -113,12 +103,9 @@ mod tests {
         }
         // 2. abort the caller
         caller.abort();
-        // The task ends with the error of a cancelled task, which is the
-        // outcome that the test asked for.
         let _ = caller.await;
         // 3. check the permit
-        // One Argon2id hash takes far longer than the abort, so the hash is
-        // still running here.
+        // A hash takes far longer than the abort, so it still runs here.
         assert!(hashing().available_permits() < free);
     }
 }
