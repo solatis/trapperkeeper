@@ -465,7 +465,8 @@ pub fn request(
     // not justify an HTTP client crate.
     //
     // 1. We write one request with `Connection: close`, so the server closes
-    //    the connection once it has answered.
+    //    the connection after its answer and no idle connection outlives the
+    //    call or serves another request.
     // 2. We read the head up to its blank line.
     // 3. We take the status code and the headers from the head.
     // 4. We read as many body bytes as `Content-Length` announces. Reading to
