@@ -39,8 +39,8 @@ pub struct Tenant {
 pub struct NewTenant<'a> {
     /// The name as `names::tenant_name` returns it. It must be lowercase,
     /// because the tenants table refuses any other name with a CHECK, and
-    /// `create` then fails with `Database` and not with `NameTaken`. Its 64
-    /// characters at most fit the 255 of the MariaDB column.
+    /// `create` then fails with `Database` and not with `NameTaken`. The
+    /// name has at most 64 characters, which fit the MariaDB column of 255.
     pub name: &'a str,
     /// A display name that keeps its case. The MariaDB column holds at most
     /// 255 characters, where the TEXT columns of SQLite and Postgres have no
@@ -108,9 +108,8 @@ pub async fn create(tx: &mut Tx, new: NewTenant<'_>) -> Result<String, CreateErr
             // needs nothing from the result, so the closure drops it.
             .map(|_| ())
     })?;
-    // Each tenant gets role rows of its own. Nearly every table carries a
-    // tenant id, and the roles follow that rule, so that a tenant may hold
-    // roles of its own (ADR-0023).
+    // Roles are rows per tenant, because nearly every table carries a tenant
+    // id and a tenant may hold roles of its own (ADR-0023).
     for (name, title) in ROLES {
         let insert = sql(
             tx,
