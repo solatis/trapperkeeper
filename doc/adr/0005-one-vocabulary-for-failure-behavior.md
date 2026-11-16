@@ -105,8 +105,7 @@ a fault in it does not happen. That is why the guard in `y != 0 and x / y > 5`
 protects the division. When the left operand is unknown, the right one is
 evaluated and its fault counts. In a conditional the test comes first, so a
 fault in the test counts. A fault in the branch that the test does not pick does
-not happen (owner,
-2026-11-13, 2026-11-14).
+not happen (owner, 2026-11-13, 2026-11-14).
 
 Under `any` and `all`, an element with a fault turns the rule off for that
 record, whatever the other elements say. The order of the elements does not
@@ -117,8 +116,8 @@ value of the wrong type (owner, 2026-11-13).
 
 ## Rejected alternatives
 
-A setting per condition for a missing field and for a wrong type, because a
-rule should say in its own text what it does.
+A setting in a rule's expression for a missing field and for a value of the
+wrong type, because a rule should say in its own text what it does.
 
 Semantics of our own for a null, because every reader and every host engine
 already knows SQL's.
@@ -141,8 +140,8 @@ report. A fault that counts wherever it stands, because no guard could
 protect a division.
 
 One report for a field that no record had, because a typo shows as a rule that
-never matches, and event-informed tooling on the server is the place to find it
-(`principles.md`, 2) (owner, 2026-11-14). A report per record under a rate
+never matches, and `principles.md`, 2 leaves its detection to event-informed
+tooling on the server (owner, 2026-11-14). A report per record under a rate
 limit, because ordinary records with optional keys would keep producing reports.
 
 The else branch for a conditional whose test is unknown, as in SQL's `CASE`,
