@@ -125,7 +125,8 @@ where
         .list_applied_migrations(&migrator.table_name)
         .await?;
     // The connection of `tracked` was a temporary of the statement above, so
-    // the pool has it back before `run` takes one.
+    // the pool has it back before `run` takes one. A pool of one connection
+    // would otherwise wait for it.
     migrator.run(pool).await?;
     Ok(pending(migrator, &applied).len())
 }
@@ -168,8 +169,8 @@ where
     }
 
     // A version that the binary lacks means that a newer binary or another
-    // build made this database. `version_exists` also counts a down file,
-    // and the migration directories hold none (ADR-0019).
+    // build made this database. `version_exists` counts every embedded file
+    // of the version, an up file and a down file alike.
     let unknown: Vec<i64> = applied
         .iter()
         .filter(|a| !migrator.version_exists(a.version))
