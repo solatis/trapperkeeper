@@ -125,7 +125,7 @@ impl<'t> Input<'t> {
 
     /// Replaces the notes made at `p` since `mark` by `name`, or by nothing.
     /// It does nothing when a note lies further than `p`.
-    fn rename(&self, p: usize, mark: (usize, usize), name: Option<&str>) {
+    fn rename(&self, p: usize, (at, count): (usize, usize), name: Option<&str>) {
         let mut log = self.log.borrow_mut();
         // The body noted something past `p`, and those notes are about a
         // later token. In `x not y`, `label("an operator")` starts at index
@@ -142,11 +142,11 @@ impl<'t> Input<'t> {
             };
         }
         // When the log stood at `p` before the combinator started, the
-        // first `mark.1` notes there are older than its body, and they
+        // first `count` notes there are older than its body, and they
         // stay. Otherwise every note at `p` is the body's. In `a adn b`
         // the hidden test for a closing bracket after `a` starts at index
         // 1 with the mark (1, 5), and only its own note leaves `wanted`.
-        let kept = if mark.0 == p { mark.1 } else { 0 };
+        let kept = if at == p { count } else { 0 };
         // The body's notes leave the error and move to `replaced`, where
         // `furthest` still finds them.
         let taken = log.wanted.split_off(kept);
