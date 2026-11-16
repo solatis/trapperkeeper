@@ -35,7 +35,9 @@ pub struct User {
 /// The columns of `User`, from users joined with the user's live role,
 /// filtered to live users and live roles of the tenant bound as `$1`. Each
 /// caller appends a condition whose placeholders start at `$2`, or an ORDER
-/// BY. A macro, because `concat!` takes only literals.
+/// BY. The macro does not join tenants, so it does not check that the tenant
+/// is live, and a live user whose role is deleted is not found. A macro,
+/// because `concat!` takes only literals.
 macro_rules! SELECT_USER {
     () => {
         "SELECT u.user_id, u.tenant_id, u.user_name, r.role_name, u.password_hash, \
@@ -155,9 +157,10 @@ pub async fn list(tx: &mut Tx, tenant_id: &str) -> Result<Vec<User>, sqlx::Error
 ///
 /// Fails when the database cannot be read.
 pub async fn count_admins(tx: &mut Tx, tenant_id: &str) -> Result<i64, sqlx::Error> {
-    // The count is a read of its own and no condition in the WHERE of the
-    // UPDATE in `delete`. Zero rows affected by that UPDATE then still means
-    // a missing user, and a last admin is told apart before the write.
+    // The route that deletes a user calls this count before `delete`, where
+    // a condition in the WHERE of that UPDATE could make the same check. Zero
+    // rows affected by the UPDATE then always means a missing user, and the
+    // route tells a last admin apart before the write.
     let select = sql(
         tx,
         "SELECT COUNT(*) FROM users u \
@@ -175,13 +178,15 @@ pub async fn count_admins(tx: &mut Tx, tenant_id: &str) -> Result<i64, sqlx::Err
 }
 
 /// Gives the live user `user_id` of `tenant_id` the tenant's live role named
-/// `role_name`, which the caller has checked the tenant holds. When no live
-/// user of the tenant has the id, it changes nothing and returns `Ok`.
+/// `role_name`. The caller has checked that the tenant holds the role, so
+/// that an unknown role is answered as the caller's mistake and not as a
+/// database error. When no live user of the tenant has the id, it changes
+/// nothing and returns `Ok`.
 ///
 /// # Errors
 ///
-/// Fails when the database cannot be written, and also when the tenant holds
-/// no live role of that name.
+/// Fails when the database cannot be written, and also when a live user
+/// matches and the tenant holds no live role of that name.
 pub async fn set_role(
     tx: &mut Tx,
     tenant_id: &str,
@@ -212,8 +217,8 @@ pub async fn set_role(
     })
 }
 
-/// Marks the live user `user_id` of `tenant_id` deleted at `now`. Returns
-/// whether a row changed.
+/// Marks the live user `user_id` of `tenant_id` deleted at `now`, a time in
+/// epoch microseconds in UTC. Returns whether a row changed.
 ///
 /// # Errors
 ///
@@ -311,7 +316,8 @@ pub async fn find_id_any(
     // Deleted users count, because the audit trail of a deleted user is
     // still asked for by name. A name can be used again after a delete
     // (ADR-0024), so the ORDER BY puts the live user first and then the most
-    // recently created.
+    // recently created. Two deleted users of one name that were created in
+    // the same microsecond tie, and the database then returns either.
     let select = sql(
         tx,
         "SELECT user_id FROM users WHERE tenant_id = $1 AND user_name = $2 \
@@ -346,8 +352,9 @@ pub async fn find_by_id(
     })
 }
 
-/// Sets the user's `tokens_valid_after` to `now`, which revokes every token
-/// issued before it.
+/// Sets the user's `tokens_valid_after` to `now`, a time in epoch
+/// microseconds in UTC, which revokes every token issued before it. When no
+/// live user of the tenant has the id, it changes nothing and returns `Ok`.
 ///
 /// # Errors
 ///
@@ -386,7 +393,9 @@ pub struct PasswordSet<'a> {
 }
 
 /// Replaces the user's password hash, sets the must-change flag, and sets
-/// `tokens_valid_after` to `now`.
+/// `tokens_valid_after` to `now`, which ends every session that began before
+/// the change (ADR-0025). When no live user of the tenant has the id, it
+/// changes nothing and returns `Ok`.
 ///
 /// # Errors
 ///
