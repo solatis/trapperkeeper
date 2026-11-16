@@ -37,7 +37,7 @@ pub struct User {
 /// caller appends a condition whose placeholders start at `$2`, or an ORDER
 /// BY. The macro does not join tenants, so it does not check that the tenant
 /// is live. Its join on live roles leaves out a live user whose role is
-/// deleted. A macro, because `concat!` takes only literals.
+/// deleted. It is a macro, because `concat!` takes only literals.
 macro_rules! SELECT_USER {
     () => {
         "SELECT u.user_id, u.tenant_id, u.user_name, r.role_name, u.password_hash, \
@@ -304,6 +304,8 @@ pub async fn find_in(
 
 /// The id of the user named `user_name` in `tenant_id`, deleted or not: the
 /// live one when there is one, else the most recently created, or `None`.
+/// Two deleted users of one name that were created in the same microsecond
+/// tie, and the database then returns either.
 ///
 /// # Errors
 ///
@@ -316,8 +318,7 @@ pub async fn find_id_any(
     // Deleted users count, because the audit trail of a deleted user is
     // still asked for by name. A name can be used again after a delete
     // (ADR-0024), so the ORDER BY puts the live user first and then the most
-    // recently created. Two deleted users of one name that were created in
-    // the same microsecond tie, and the database then returns either.
+    // recently created.
     let select = sql(
         tx,
         "SELECT user_id FROM users WHERE tenant_id = $1 AND user_name = $2 \
