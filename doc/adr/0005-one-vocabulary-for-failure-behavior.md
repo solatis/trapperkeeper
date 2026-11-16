@@ -16,13 +16,12 @@ not there, and Arrow and Spark implement that logic.
 
 ## Decision
 
-Each sensor is set to one of three behaviors for when the server is
-unreachable. `pass-through` is the default. It turns the rules off, lets the
-records flow and prints a warning at most. `halt` raises an error into the
-pipeline, and a sensor opts into it. `cached` keeps using the last rules the
-sensor synced. By default a sensor that cannot reach the server never raises
-into the pipeline, because TrapperKeeper being down should not affect a
-production pipeline by default (owner, 2026-11-15).
+Each sensor is set to one of three behaviors for when the server is unreachable.
+`pass-through`, the default, turns the rules off, lets the records flow and
+prints a warning at most. `cached` keeps using the last rules the sensor synced.
+`halt` raises an error into the pipeline, and a sensor opts into it, because
+TrapperKeeper being down should not affect a production pipeline by default
+(owner, 2026-11-15).
 
 A rule treats a value that is not there as a null in the data. That value is no
 fault and does not turn the rule off. A missing key is a null (owner,
@@ -125,9 +124,9 @@ Semantics of our own for a null, because every reader and every host engine
 already knows SQL's.
 
 A missing value as a fault, because rules would then be off for ordinary
-records. Reports would flow for ordinary records too. And
-`amount > 500 or status == "paid"` would give another outcome than the same
-rule with its operands swapped.
+records. Reports would flow for ordinary records too. And `amount > 500 or
+status == "paid"` would give another outcome than the same rule with its
+operands swapped, because written order decides which fault counts.
 
 Plain false for a comparison with a null, because `not (amount > 500)` would
 match every record without an amount and `amount <= 500` would not.
@@ -141,10 +140,10 @@ A fault as unknown that is reported, because every guarded division would
 report. A fault that counts wherever it stands, because no guard could
 protect a division.
 
-One report for a field that no record had, because a typo shows as a rule
-that never matches, and tooling on the server finds it later from the events
-(owner, 2026-11-14). A report per record under a rate limit, because ordinary
-records with optional keys would keep producing reports.
+One report for a field that no record had, because a typo shows as a rule that
+never matches, and event-informed tooling on the server is the place to find it
+(`principles.md`, 2) (owner, 2026-11-14). A report per record under a rate
+limit, because ordinary records with optional keys would keep producing reports.
 
 The else branch for a conditional whose test is unknown, as in SQL's `CASE`,
 because `("high" if amount > 500 else "low") == "low"` would match every
