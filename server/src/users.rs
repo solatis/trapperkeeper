@@ -180,7 +180,9 @@ pub async fn create(
     Path(tenant): Path<String>,
     Json(request): Json<NewUserRequest>,
 ) -> Response {
-    // The checked name comes back lowercased, as the store keeps it.
+    // The checks of the request come before the tenant lookup, because they
+    // need no database. The checked name comes back lowercased, as the store
+    // keeps it.
     let name = match names::user_name(&request.name) {
         Ok(name) => name,
         Err(refused) => return Refused::BadRequest(refused.0).into_response(),
@@ -343,8 +345,9 @@ pub async fn change_role(
 ) -> Response {
     // The order of the checks decides which refusal a caller sees.
     //
-    // 1. We refuse `superadmin` before any read, because only the system
-    //    tenant `$tk` holds that role (ADR-0028).
+    // 1. We refuse `superadmin`, because only the system tenant `$tk` holds
+    //    that role (ADR-0028). This check needs no database, so it comes
+    //    before the tenant lookup.
     // 2. We find the user before we check the role, so an unknown name is
     //    404 whatever role the body names.
     // 3. We refuse to demote the tenant's last live admin.
