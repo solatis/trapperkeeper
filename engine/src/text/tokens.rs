@@ -41,9 +41,9 @@ const PUNCTS: [&str; 17] = [
     "==", "!=", "<=", ">=", "<", ">", "+", "-", "*", "/", "%", "(", ")", "[", "]", ",", ".",
 ];
 
-// Operators of other languages and ours for each. Four prototypes of the
-// parser ran one list of faulty texts before one was chosen (ADR-0042). The
-// five are the foreign operators of those texts: `amount = 100`,
+// Operators of other languages and ours for each. The parser was designed
+// on a list of faulty texts, each with a target for its error (ADR-0042).
+// `FOREIGN` holds the foreign operators of those texts: `amount = 100`,
 // `a > 1 && b < 2`, `a > 1 || b < 2`, `!active` and `status <> "paid"`.
 const FOREIGN: [(&str, &str); 5] = [
     ("<>", "!="),
@@ -397,8 +397,8 @@ fn quoted_text(text: &str, at: usize, open: usize, raw: bool) -> Result<Token, S
         }
         // A backslash at the end of the text or before a line break escapes
         // nothing, and the text is never closed. The error then runs to the
-        // end of the whole text, also past the line break, where a bare line
-        // break ends the error at the break.
+        // end of the whole text, also past the line break. After a bare line
+        // break the error ends at the break.
         let Some((_, escaped)) = chars.next().filter(|(_, c)| *c != '\n' && *c != '\r') else {
             break;
         };
@@ -417,8 +417,8 @@ fn quoted_text(text: &str, at: usize, open: usize, raw: bool) -> Result<Token, S
             let found = text[n..stop].to_owned();
             refuse(n..stop, Reason::BadEscape { found })
         };
-        // The language reads these eight of Python's escapes so far, and a
-        // commit can add one. Any other escape is a `BadEscape`.
+        // These eight of Python's escapes are a first set. Any other escape
+        // is a `BadEscape`.
         value.push(match escaped {
             '\\' | '\'' | '"' => escaped,
             'n' => '\n',
