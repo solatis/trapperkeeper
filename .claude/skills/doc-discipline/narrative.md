@@ -372,6 +372,8 @@ function had always probed the store.
    2. **Cut.** Delete or rewrite each of these comments:
       - a note that repeats what the line below it says
       - a note that restates a walkthrough item
+      - a walkthrough item that restates the values, names or calls of its
+        step
       - a walkthrough sentence about one line, which moves to that line as a
         note
       - a note that explains what a language feature does in general

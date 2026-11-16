@@ -51,8 +51,9 @@ inside a note uses bullets (owner, 2026-11-14).
 
 A plan sketches a function that needs a walkthrough with the walkthrough in
 full and its back-references. The code carries at least the claims of its
-sketch. When the owner remarks on comments, the plan stage rewrites every
-sketch the remark concerns (owner, 2026-11-14).
+sketch, except a claim that restates the values, names or calls of its step,
+which the audit drops (owner, 2026-11-16). When the owner remarks on comments,
+the plan stage rewrites every sketch the remark concerns (owner, 2026-11-14).
 
 A script in the doc-discipline skill, `check_steps.py`, checks the numbering
 of walkthroughs and back-references in any language, in code and in the fenced
