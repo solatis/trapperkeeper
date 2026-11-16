@@ -10,10 +10,11 @@ use crate::limits::MAX_TEXT_LENGTH;
 /// What a token is.
 #[derive(Debug, Clone, PartialEq)]
 pub(super) enum Tok {
-    // A word of the language is a name here. The grammar tells them apart.
+    // A word of the language, such as `and`, is a name here. The grammar
+    // tells them apart.
     Name(String),
-    // The magnitude without a sign, so the grammar can fold a leading minus
-    // into the smallest integer.
+    // The magnitude without a sign, as a u64, so the grammar can fold a
+    // leading minus into the smallest i64, whose magnitude no i64 holds.
     Int(u64),
     Float(f64),
     // The characters between the quotes of a text literal. An escape is
@@ -40,10 +41,10 @@ const PUNCTS: [&str; 17] = [
     "==", "!=", "<=", ">=", "<", ">", "+", "-", "*", "/", "%", "(", ")", "[", "]", ",", ".",
 ];
 
-// Operators of other languages and ours for each. The five are the foreign
-// operators of the faulty texts that the four parser prototypes ran
-// (ADR-0042): `amount = 100`, `a > 1 && b < 2`, `a > 1 || b < 2`, `!active`
-// and `status <> "paid"`.
+// Operators of other languages and ours for each. Four prototypes of the
+// parser ran one list of faulty texts before one was chosen (ADR-0042). The
+// five are the foreign operators of those texts: `amount = 100`,
+// `a > 1 && b < 2`, `a > 1 || b < 2`, `!active` and `status <> "paid"`.
 const FOREIGN: [(&str, &str); 5] = [
     ("<>", "!="),
     ("&&", "and"),
@@ -316,6 +317,7 @@ fn number(text: &str, at: usize) -> Result<Token, SyntaxError> {
     let no_hex_digits = hex && digits.is_empty();
     // A 0 that a digit follows, with or without underscores between them, is
     // refused, as Python refuses `007` and `0_7`. `0`, `0.5` and `0x10` pass.
+    // The check also refuses `00` and `01.5`, which Python accepts.
     let leading_zero = !hex
         && bytes[at] == b'0'
         && bytes[at + 1..end]
@@ -363,7 +365,8 @@ fn quoted_text(text: &str, at: usize, open: usize, raw: bool) -> Result<Token, S
     // apostrophe.
     let quote = char::from(text.as_bytes()[open]);
     // Three quotes in a row open a triple-quoted text, which is refused:
-    // bytes 0 to 3 of `"""abc""" == x`. The empty text `""` has two.
+    // bytes 0 to 3 of `"""abc""" == x`. The error covers the three quotes
+    // alone, also after a prefix. The empty text `""` has two.
     if text[open..].chars().take(3).filter(|c| *c == quote).count() == 3 {
         return refuse(open..open + 3, Reason::TripleQuote);
     }
@@ -393,8 +396,9 @@ fn quoted_text(text: &str, at: usize, open: usize, raw: bool) -> Result<Token, S
             continue;
         }
         // A backslash at the end of the text or before a line break escapes
-        // nothing, and the text is never closed. The error then covers the
-        // rest of the text.
+        // nothing, and the text is never closed. The error then runs to the
+        // end of the whole text, also past the line break, where a bare line
+        // break ends the error at the break.
         let Some((_, escaped)) = chars.next().filter(|(_, c)| *c != '\n' && *c != '\r') else {
             break;
         };
@@ -413,7 +417,8 @@ fn quoted_text(text: &str, at: usize, open: usize, raw: bool) -> Result<Token, S
             let found = text[n..stop].to_owned();
             refuse(n..stop, Reason::BadEscape { found })
         };
-        // These eight escapes are a first set, and more can be added later.
+        // The language reads these eight of Python's escapes so far, and a
+        // commit can add one. Any other escape is a `BadEscape`.
         value.push(match escaped {
             '\\' | '\'' | '"' => escaped,
             'n' => '\n',
