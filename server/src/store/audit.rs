@@ -10,7 +10,9 @@ use super::{Tx, now_micros, on_tx, sql};
 /// What one changing request leaves in the trail. Each field fills the
 /// column of the same name in `audit`, and the comments in
 /// `server/migrations/sqlite/0005_audit.sql` say what each column holds and
-/// when it is NULL. `append` adds the id and the time.
+/// when it is NULL. `user_id` is `None` for an anonymous request, and
+/// `tenant_id` is `None` when such a request names no existing user. `append`
+/// adds the id and the time.
 pub struct Record<'a> {
     pub tenant_id: Option<&'a str>,
     pub user_id: Option<&'a str>,
@@ -30,7 +32,8 @@ pub struct Record<'a> {
 /// Fails when the database cannot be written.
 pub async fn append(tx: &mut Tx, record: Record<'_>) -> Result<(), sqlx::Error> {
     // The id is a version 7 UUID, whose text sorts by creation time, so
-    // ordering by `audit_id` orders the trail by time (ADR-0020).
+    // ordering by `audit_id` orders the trail by time, to the millisecond
+    // (ADR-0020).
     let audit_id = Uuid::now_v7().to_string();
     let insert = sql(
         tx,
@@ -46,6 +49,8 @@ pub async fn append(tx: &mut Tx, record: Record<'_>) -> Result<(), sqlx::Error> 
             .bind(record.method)
             .bind(record.route)
             .bind(record.path_params)
+            // sqlx encodes no unsigned integer for Postgres, and the INTEGER
+            // column holds an `i32`.
             .bind(i32::from(record.status))
             .bind(record.peer_address)
             .bind(record.client_address)
@@ -85,7 +90,10 @@ macro_rules! SELECT_ROWS_BEFORE {
         // Neither LEFT JOIN filters on `deleted_at`, so the trail still names
         // a user deleted since (ADR-0024). The join on users matches on
         // `user_id` alone, because a row filed under a customer tenant can
-        // name the superadmin, who is a user of `$tk` (ADR-0031).
+        // name the superadmin, who is a user of `$tk` (ADR-0031). An id holds
+        // only hex digits and hyphens at fixed places, which the collation
+        // of a Postgres database orders as bytes do, so the comparison with
+        // `$2` and the ORDER BY of a caller keep the time order.
         "SELECT a.audit_id, u.user_name, t.tenant_name AS user_tenant, a.method, a.route, \
          a.path_params, a.status, a.peer_address, a.client_address, a.recorded_at \
          FROM audit a \
