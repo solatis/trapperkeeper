@@ -6,8 +6,8 @@ Date: 2026-11-06.
 
 The server gets users with passwords. The superadmin, the user `admin` of the
 system tenant `$tk` (`doc/adr/0028`), gets a generated password that reaches the
-console once: the command that first migrates an empty database logs it as one
-INFO event, and `reset-superadmin` prints a new one. The owner wanted stronger
+console once. The command that first migrates an empty database logs it as one
+INFO event. `reset-superadmin` prints a new one. The owner wanted stronger
 parameters than the OWASP floor and asked for the trade-offs (owner,
 2026-11-05).
 
