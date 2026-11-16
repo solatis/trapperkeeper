@@ -99,8 +99,8 @@ pub enum Reason {
     /// `0 < amount and amount < 10`. It is `None` after `is None` and when
     /// the third operand is missing, as in `a < b <`.
     ChainedComparison { write: Option<String> },
-    /// The `< None` of `x < None`. `op` is the operator beside the `None`,
-    /// and for `-None` it is the minus.
+    /// The `< None` of `x < None` and the `in None` of `x in None`. `op` is
+    /// the operator beside the `None`, and for `-None` it is the minus.
     NoneOperand { op: String },
     /// The second text of `"abc" "def" == name`, which Python would join.
     AdjacentTexts,

@@ -491,7 +491,8 @@ fn none_operand(
 }
 
 /// The node of a comparison from its parts, or why it is none: a chain of
-/// comparisons, or an ordering of the literal `None`.
+/// comparisons, an ordering beside the literal `None`, or the literal `None`
+/// as the right operand of `in` or `not in`.
 fn build_comparison(
     i: &Input<'_>,
     ((left, left_at), tail): (Placed<Expr>, Option<(Tail, Chained)>),
@@ -540,16 +541,31 @@ fn build_comparison(
     // two pointers to one function compare equal, so the operator is told
     // by its text.
     let op = text(&op_at);
-    // Of the comparisons, the parser refuses `None` beside an ordering
-    // alone (ADR-0005). `x == None` tests for a missing value, and
-    // `x in None` parses and gives unknown.
+    // `<`, `<=`, `>` and `>=` are the orderings. The parser refuses the
+    // literal `None` beside an ordering and as the right operand of `in` and
+    // `not in`. `x == None` tests for a missing value, and a `None` inside a
+    // membership list, as in `x in ("paid", None)`, still matches a null.
     let ordering = matches!(op, "<" | "<=" | ">" | ">=");
+    // `not` and `in` may stand apart by any spaces, so the words of the
+    // operator's text are compared.
+    let words: Vec<&str> = op.split_whitespace().collect();
+    let membership = matches!(words[..], ["in"] | ["not", "in"]);
     let left = (left, left_at);
-    // `x < None` could never match, so an ordering refuses the literal
-    // `None`. A field that holds a null is not refused, so `x < y` parses
-    // and gives unknown for a record without `y`.
+    // `x < None` could never match, and `x in None` could never match either
+    // (ADR-0005). A field that holds a null is not refused. `x < y` parses
+    // and gives unknown for a record without `y`, and `x in y` gives unknown
+    // when `y` holds a null in place of a list.
     if ordering && let Some(error) = none_operand(i, &left, &op_at, &right) {
         return Err(error);
+    }
+    // Only the right operand is tested, so `None in x` parses.
+    if membership && matches!(right.0, Expr::None) {
+        // The error covers the operator and the `None`: bytes 2 to 9 of
+        // `x in None`.
+        let at = op_at.start..right.1.end;
+        let op = words.join(" ");
+        let reason = Reason::NoneOperand { op };
+        return Err(SyntaxError { at, reason });
     }
     Ok(make(Box::new(left.0), Box::new(right.0)))
 }

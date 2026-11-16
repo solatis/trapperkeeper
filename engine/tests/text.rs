@@ -42,14 +42,11 @@ const UNARY: [Unary; 17] = [
 
 /// The kinds of node with two operands that the parser builds around any
 /// two operands.
-const BINARY: [Binary; 6] = [
-    Expr::Eq,
-    Expr::Ne,
-    Expr::In,
-    Expr::NotIn,
-    Expr::StartsWith,
-    Expr::EndsWith,
-];
+const BINARY: [Binary; 4] = [Expr::Eq, Expr::Ne, Expr::StartsWith, Expr::EndsWith];
+
+/// The kinds of node with two operands that refuse the literal `None` as
+/// their right operand.
+const MEMBERSHIP: [Binary; 2] = [Expr::In, Expr::NotIn];
 
 /// The kinds of node with two operands that refuse the literal `None` as an
 /// operand: the orderings and the arithmetic.
@@ -196,6 +193,9 @@ fn canonical_in(scope: &[String], depth: u32) -> BoxedStrategy<Expr> {
         vec(sub.clone(), 0..=3).prop_map(Expr::List),
         (select(UNARY.to_vec()), one()).prop_map(|(make, a)| make(a)),
         (select(BINARY.to_vec()), one(), one()).prop_map(|(make, a, b)| make(a, b)),
+        // The right operand is not the literal `None`, because the parser
+        // refuses `x in None`. `None in x` reads back.
+        (select(MEMBERSHIP.to_vec()), one(), not_none()).prop_map(|(make, a, b)| make(a, b)),
         // No operand is the literal `None`, because the parser refuses
         // `x < None` and `None + 1`.
         (select(NUMERIC.to_vec()), not_none(), not_none()).prop_map(|(make, a, b)| make(a, b)),
@@ -446,6 +446,18 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
             2..8,
             none_operand("<"),
             "`<` cannot take `None`; to test for a missing value, write `is None`",
+        ),
+        (
+            "x in None",
+            2..9,
+            none_operand("in"),
+            "`in` cannot take `None`; to test for a missing value, write `is None`",
+        ),
+        (
+            "x not in None",
+            2..13,
+            none_operand("not in"),
+            "`not in` cannot take `None`; to test for a missing value, write `is None`",
         ),
         // With `None` on both sides the error names the left one.
         (

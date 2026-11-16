@@ -1,6 +1,6 @@
 # 0005. One vocabulary for failure behavior
 
-Date: 2026-11-15.
+Date: 2026-11-16.
 
 ## Context
 
@@ -61,9 +61,9 @@ Five tests are never unknown: `is None`, `is not None`, `x == None`,
 this meaning. `a == b` on two fields that both hold a null gives unknown.
 
 The parser refuses the literal `None` beside an ordering or an arithmetic
-operator, because such a rule could never match. A field that holds a null
-there is data, so `x + 1` is a null and `x < y` is unknown (owner,
-2026-11-14).
+operator, and after `in` and `not in`, because such a rule could never match.
+A field that holds a null there is data, so `x + 1` is a null and `x < y` is
+unknown (owner, 2026-11-14, 2026-11-16).
 
 A rule differs from SQL in three places. The first is the literal `None`.
 Under `==`, under `!=` and in a membership list it tests for a null, and
@@ -204,12 +204,14 @@ test is unknown. On Spark a rule is translated into a Spark expression
 `WHEN test IS NULL` arm. Each difference from SQL is held by a fixture
 (`adr/0006`).
 
-The literal `None` parses as the right side of `in`, as an argument of
-a function and as the receiver of a method, as in `x in None`, `len(None)`
-and `None.upper()`. Such a rule gives unknown for every record and matches
-nothing in silence. The parser does not refuse these forms, because each
-needs a check of its own in another rule of the grammar. Validation of the
-expression can refuse them together.
+The parser refuses `x in None` and `x not in None`, as it refuses the
+literal `None` beside an ordering. `x in y` gives unknown only when `y` is a
+field that should hold a list and holds a null (owner, 2026-11-16). The
+literal `None` still parses as an argument of a function and as the receiver
+of a method, as in `len(None)` and `None.upper()`. Such a rule gives unknown
+for every record and matches nothing in silence. The parser does not refuse
+these two forms, because each needs a check of its own in another rule of the
+grammar. Validation of the expression can refuse them together.
 
 A column has one type (`adr/0036`). An adapter builds the columns from the
 records of a source. For dicts and maps it keeps the rows whose value had
