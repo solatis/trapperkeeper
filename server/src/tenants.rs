@@ -64,10 +64,8 @@ pub struct NewTenantRequest {
     admin: String,
 }
 
-/// What a created tenant returns: the tenant's stored name and title, the
-/// admin's name and the admin's generated password. No other response returns
-/// that password, because the store keeps only its hash and the audit trail
-/// stores no body.
+/// What a created tenant returns: its stored name and title, the admin's
+/// name, and the admin's generated password, which no other response returns.
 #[derive(Serialize, ToSchema)]
 pub struct CreatedTenant {
     name: String,
@@ -98,36 +96,22 @@ pub async fn create(
     State(state): State<AppState>,
     Json(request): Json<NewTenantRequest>,
 ) -> Response {
-    // The handler checks the tenant name, the admin's name and the title,
-    // then creates the tenant and its first admin in one transaction, and
-    // answers 201 with the admin's generated password.
+    // The handler creates the tenant and its first admin in one transaction.
     //
-    // 1. We check the tenant name and the admin's email with the rules in
-    //    `names`, and the trimmed title for 1 to 255 characters. The trimmed
-    //    title is also what the store keeps and the response returns. A
-    //    refusal answers 400 with the words of the rule that refused. Every
-    //    check runs before the transaction opens, so a refused request writes
-    //    nothing.
-    // 2. We open a transaction and create the tenant with the roles admin,
-    //    operator and observer, which gives the tenant's id.
-    // 3. We create the first admin in the new tenant with the role admin,
-    //    through `accounts::create`, which generates the admin's password,
-    //    sets the must-change flag and returns the password. Every user is
-    //    created through `accounts::create`, so every user gets a generated
-    //    password with the must-change flag set.
-    // 4. We commit, then answer 201 with the stored name and title, the
-    //    admin's name and the password, 409 when a live tenant has the name,
-    //    and 500 on a database error.
+    // 1. We check the input before the transaction opens, so a refused
+    //    request writes nothing.
+    // 2. We create the tenant and its roles.
+    // 3. We create the first admin through `accounts::create`, as every user
+    //    is created, so the admin gets a generated password.
+    // 4. We commit and answer.
 
     // 1. check the names and the title
     let title = request.title.trim();
-    // The checks run in the order tenant name, admin name, title, and the
-    // first that fails supplies the text of the 400.
+    // The first check that fails gives the text of the 400.
     let checked = names::tenant_name(&request.name).and_then(|name| {
         let admin = names::user_name(&request.admin)?;
-        // 255 is the width of the `tenant_title` column on MariaDB, a
-        // utf8mb4 VARCHAR(255) that counts characters, so the check counts
-        // characters and not bytes.
+        // 255 is the width of the title column on MariaDB, which counts
+        // characters.
         if (1..=255).contains(&title.chars().count()) {
             Ok((name, admin))
         } else {
@@ -153,9 +137,7 @@ pub async fn create(
             },
         )
         .await
-        // The closure turns the user error into a tenant error, so every `?`
-        // in this block yields `tenants::CreateError`, which the match below
-        // answers.
+        // The block's `?` needs one error type, `tenants::CreateError`.
         .map_err(|error| match error {
             users::CreateError::Database(error) => tenants::CreateError::Database(error),
             // The tenant was created in this transaction, so it has no users.
