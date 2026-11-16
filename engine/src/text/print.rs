@@ -60,20 +60,25 @@ fn level(e: &Expr) -> u8 {
 
 impl fmt::Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write(self, CONDITIONAL, &mut Vec::new(), f)
+        write_expr(self, CONDITIONAL, &mut Vec::new(), f)
     }
 }
 
 /// Writes `e`, in parentheses when it binds looser than `min`. `scope` holds
 /// the element names bound at this point.
 #[expect(clippy::too_many_lines, reason = "one arm per kind of node")]
-fn write(e: &Expr, min: u8, scope: &mut Vec<String>, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+fn write_expr(
+    e: &Expr,
+    min: u8,
+    scope: &mut Vec<String>,
+    f: &mut fmt::Formatter<'_>,
+) -> fmt::Result {
     // `e` binds looser than its place allows. In parentheses any level
     // fits again. `And([Or([a, b]), c])` prints as `(a or b) and c`,
     // because `a or b and c` reads back as `a or (b and c)`.
     if level(e) < min {
         f.write_str("(")?;
-        write(e, CONDITIONAL, scope, f)?;
+        write_expr(e, CONDITIONAL, scope, f)?;
         return f.write_str(")");
     }
     // A comparison writes both operands one level tighter, because
@@ -134,7 +139,7 @@ fn write(e: &Expr, min: u8, scope: &mut Vec<String>, f: &mut fmt::Formatter<'_>)
         // `(not a) and b`.
         Expr::Not(x) => {
             f.write_str("not ")?;
-            write(x, NOT, scope, f)
+            write_expr(x, NOT, scope, f)
         }
         // An operand of `and` is at the level of `not` or tighter, so an
         // `or` among them gets parentheses, as in `a and (b or c)`. An `and`
@@ -156,11 +161,11 @@ fn write(e: &Expr, min: u8, scope: &mut Vec<String>, f: &mut fmt::Formatter<'_>)
         // the operands of `<` are. `IsNone(Lt(a, b))` prints as
         // `(a < b) is None`, because the parser refuses `a < b is None`.
         Expr::IsNone(x) => {
-            write(x, ADDITIVE, scope, f)?;
+            write_expr(x, ADDITIVE, scope, f)?;
             f.write_str(" is None")
         }
         Expr::IsNotNone(x) => {
-            write(x, ADDITIVE, scope, f)?;
+            write_expr(x, ADDITIVE, scope, f)?;
             f.write_str(" is not None")
         }
         Expr::Add(l, r) => write_infix(l, "+", r, added, scope, f),
@@ -175,7 +180,7 @@ fn write(e: &Expr, min: u8, scope: &mut Vec<String>, f: &mut fmt::Formatter<'_>)
             // Any other operand is written at the level of a minus: `-a`,
             // `--a` and `-(a + b)`.
             let number = matches!(**x, Expr::Int(_) | Expr::Float(_));
-            write(x, if number { PARENTHESES } else { UNARY }, scope, f)
+            write_expr(x, if number { PARENTHESES } else { UNARY }, scope, f)
         }
         Expr::If {
             test,
@@ -186,11 +191,11 @@ fn write(e: &Expr, min: u8, scope: &mut Vec<String>, f: &mut fmt::Formatter<'_>)
             // `or`, and the branch after `else` at the level of the
             // conditional, because it groups to the right. A conditional as
             // the first branch prints as `(a if b else c) if d else e`.
-            write(then, OR, scope, f)?;
+            write_expr(then, OR, scope, f)?;
             f.write_str(" if ")?;
-            write(test, OR, scope, f)?;
+            write_expr(test, OR, scope, f)?;
             f.write_str(" else ")?;
-            write(otherwise, CONDITIONAL, scope, f)
+            write_expr(otherwise, CONDITIONAL, scope, f)
         }
         Expr::Any { name, list, test } => write_quantifier("any", name, list, test, scope, f),
         Expr::All { name, list, test } => write_quantifier("all", name, list, test, scope, f),
@@ -203,7 +208,7 @@ fn write(e: &Expr, min: u8, scope: &mut Vec<String>, f: &mut fmt::Formatter<'_>)
         }
         Expr::IsInstance { value, types } => {
             f.write_str("isinstance(")?;
-            write(value, CONDITIONAL, scope, f)?;
+            write_expr(value, CONDITIONAL, scope, f)?;
             let names: Vec<&str> = types.iter().map(|t| type_name(*t)).collect();
             // One type is written bare, and any other number as a list.
             // `isinstance(x, (int,))` reads back to the same tree as
@@ -242,7 +247,7 @@ fn write_joined(
         if n > 0 {
             f.write_str(between)?;
         }
-        write(item, min, scope, f)?;
+        write_expr(item, min, scope, f)?;
     }
     Ok(())
 }
@@ -259,9 +264,9 @@ fn write_infix(
     scope: &mut Vec<String>,
     f: &mut fmt::Formatter<'_>,
 ) -> fmt::Result {
-    write(l, mins.0, scope, f)?;
+    write_expr(l, mins.0, scope, f)?;
     write!(f, " {op} ")?;
-    write(r, mins.1, scope, f)
+    write_expr(r, mins.1, scope, f)
 }
 
 /// Writes `function(test for name in list)`.
@@ -279,14 +284,14 @@ fn write_quantifier(
     // name stays in it only while the test is written. It leaves before
     // `?` returns an error, so `scope` is the same on every way out.
     scope.push(name.to_owned());
-    let written = write(test, CONDITIONAL, scope, f);
+    let written = write_expr(test, CONDITIONAL, scope, f);
     scope.pop();
     written?;
     write!(f, " for {name} in ")?;
     // The list is written at the level of `or`, which is where the grammar
     // reads it. A conditional as the list prints in parentheses, because
     // the grammar ends the list at the `if`.
-    write(list, OR, scope, f)?;
+    write_expr(list, OR, scope, f)?;
     f.write_str(")")
 }
 
@@ -314,7 +319,7 @@ fn write_call(
         }
         f.write_str(", ")?;
     }
-    write(argument, CONDITIONAL, scope, f)?;
+    write_expr(argument, CONDITIONAL, scope, f)?;
     f.write_str(")")
 }
 
@@ -333,10 +338,10 @@ fn write_method(
     // Any other receiver is an atom or in parentheses. `Upper(Add(a, b))`
     // prints as `(a + b).upper()`, because `a + b.upper()` reads back as
     // `a + (b.upper())`.
-    write(receiver, if number { PARENTHESES } else { ATOM }, scope, f)?;
+    write_expr(receiver, if number { PARENTHESES } else { ATOM }, scope, f)?;
     write!(f, ".{name}(")?;
     if let Some(argument) = argument {
-        write(argument, CONDITIONAL, scope, f)?;
+        write_expr(argument, CONDITIONAL, scope, f)?;
     }
     f.write_str(")")
 }
