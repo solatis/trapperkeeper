@@ -212,7 +212,7 @@ pub async fn delete(
     );
     // Zero rows means the user was deleted between the caller's read and
     // this write, which the route answers as 404.
-    let changed = on_tx!(tx, |conn| {
+    let affected = on_tx!(tx, |conn| {
         sqlx::query(AssertSqlSafe(update))
             .bind(now)
             .bind(tenant_id)
@@ -221,7 +221,7 @@ pub async fn delete(
             .await
             .map(|done| done.rows_affected())
     })?;
-    Ok(changed > 0)
+    Ok(affected > 0)
 }
 
 /// The live user named `user_name` in `tenant_id`, or `None`.
