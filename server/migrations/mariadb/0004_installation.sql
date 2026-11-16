@@ -1,5 +1,5 @@
--- The same version and columns as the SQLite and Postgres files, in the
--- MariaDB forms 0001_tenants.sql explains.
+-- This file creates the same table as sqlite/0004_installation.sql, in the
+-- MariaDB forms that 0001_tenants.sql explains.
 CREATE TABLE installation (
     singleton    INTEGER PRIMARY KEY CHECK (singleton = 1),
     signing_salt VARCHAR(64) NOT NULL

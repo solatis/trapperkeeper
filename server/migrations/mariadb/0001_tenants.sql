@@ -1,12 +1,13 @@
 -- This file creates the same table and seed row as sqlite/0001_tenants.sql,
--- whose comments explain them, in the MariaDB forms below. The columns are
--- VARCHAR, because MariaDB cannot index TEXT without a prefix length
--- (ADR-0019). An id is a UUID stored as 36-character text on every backend
--- (ADR-0020), hence VARCHAR(36). The other lengths are a choice that no
--- measurement backs: VARCHAR(255) for names, titles, password_hash, route
--- and client_address, VARCHAR(64) for signing_salt and peer_address, and
--- VARCHAR(16) for method. These lengths are limits, and the system has
--- limits on purpose.
+-- whose comments explain them, in the MariaDB forms below. The text columns
+-- are VARCHAR, because MariaDB cannot index TEXT without a prefix length
+-- (ADR-0019). The one TEXT column is path_params of audit, which no key
+-- uses. A VARCHAR needs a length. An id is a UUID stored as 36-character
+-- text on every backend (ADR-0020), hence VARCHAR(36). The other lengths are
+-- limits that the system sets on purpose, and their values are chosen and
+-- not measured: VARCHAR(255) for names, titles, password_hash, route and
+-- client_address, VARCHAR(64) for signing_salt and peer_address, and
+-- VARCHAR(16) for method.
 -- utf8mb4_bin makes MariaDB compare text by bytes, as Postgres and SQLite do
 -- for equality. Under a case-insensitive collation the lowercase CHECK on a
 -- name would accept "Acme", and ADR-0020 rejects case-insensitive

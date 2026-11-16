@@ -1,6 +1,6 @@
--- The same version and columns as the SQLite and Postgres files, in the
--- MariaDB forms 0001_tenants.sql explains: VARCHAR columns, the utf8mb4_bin
--- collation, and the live column in the unique key.
+-- This file creates the same table and seed row as sqlite/0002_roles.sql, in
+-- the MariaDB forms that 0001_tenants.sql explains: VARCHAR columns, the
+-- utf8mb4_bin collation, and the live column in the unique key.
 CREATE TABLE roles (
     role_id    VARCHAR(36)  PRIMARY KEY,
     tenant_id  VARCHAR(36)  NOT NULL REFERENCES tenants (tenant_id),

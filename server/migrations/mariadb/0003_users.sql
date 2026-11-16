@@ -1,5 +1,5 @@
--- The same version and columns as the SQLite and Postgres files, in the
--- MariaDB forms 0001_tenants.sql explains: VARCHAR columns, the utf8mb4_bin
+-- This file creates the same table as sqlite/0003_users.sql, in the MariaDB
+-- forms that 0001_tenants.sql explains: VARCHAR columns, the utf8mb4_bin
 -- collation, and the live column in the unique key.
 CREATE TABLE users (
     user_id              VARCHAR(36)  PRIMARY KEY,
