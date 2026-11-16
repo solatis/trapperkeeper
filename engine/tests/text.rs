@@ -383,9 +383,11 @@ fn expected(wanted: &[&str], found: Found, after: Option<&str>) -> Reason {
     }
 }
 
-/// The reason for a name that stands where `wanted` could, after `after`.
-fn found_name(wanted: &[&str], name: &str, after: Option<&str>) -> Reason {
-    expected(wanted, Found::Token(name.to_owned()), after)
+/// The reason for a token that is no word of the language and stands where
+/// `wanted` could stand, after `after`. Like `expected`, it suggests no
+/// nearest word.
+fn found_token(wanted: &[&str], token: &str, after: Option<&str>) -> Reason {
+    expected(wanted, Found::Token(token.to_owned()), after)
 }
 
 /// (text, the bytes the error is about, the reason, its sentence).
@@ -565,7 +567,7 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
         (
             "customer..country == 1",
             9..10,
-            found_name(&["a name"], ".", Some(".")),
+            found_token(&["a name"], ".", Some(".")),
             "expected a name after `.`, found `.`",
         ),
         (
@@ -577,13 +579,13 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
         (
             "a > 1 b < 2",
             6..7,
-            found_name(&after_condition, "b", Some("a > 1")),
+            found_token(&after_condition, "b", Some("a > 1")),
             "expected `and`, `or`, `if` or the end of the rule after `a > 1`, found `b`",
         ),
         (
             "price * > 3",
             8..9,
-            found_name(&["a value"], ">", Some("*")),
+            found_token(&["a value"], ">", Some("*")),
             "expected a value after `*`, found `>`",
         ),
         (
@@ -644,7 +646,7 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
         (
             "any(i.price > 100 for i items)",
             24..29,
-            found_name(&["`in`"], "items", Some("i")),
+            found_token(&["`in`"], "items", Some("i")),
             "expected `in` after `i`, found `items`",
         ),
         (
@@ -694,7 +696,7 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
         (
             "x iz None",
             2..4,
-            found_name(&after_operand, "iz", Some("x")),
+            found_token(&after_operand, "iz", Some("x")),
             "expected an operator, `and`, `or`, `if` or the end of the rule after `x`, found `iz`",
         ),
         (
@@ -714,7 +716,7 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
         (
             "[1, 2) == x",
             5..6,
-            found_name(
+            found_token(
                 &["an operator", "`and`", "`or`", "`if`", "`,`", "`]`"],
                 ")",
                 Some("2"),
@@ -724,13 +726,13 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
         (
             "x not y",
             6..7,
-            found_name(&["`in`"], "y", Some("not")),
+            found_token(&["`in`"], "y", Some("not")),
             "expected `in` after `not`, found `y`",
         ),
         (
             "x is 5",
             5..6,
-            found_name(&["`not`", "`None`"], "5", Some("is")),
+            found_token(&["`not`", "`None`"], "5", Some("is")),
             "expected `not` or `None` after `is`, found `5`",
         ),
         (
