@@ -11,10 +11,9 @@ objects. Frameworks hold columns in different layouts.
 
 The executor reads a view. An adapter builds the view. It looks the fields up in
 the cheapest way its framework allows and presents the values as continuous
-arrays (owner, 2026-11-13). The executor walks each leaf column as an array of
-values, and the values need not be contiguous, because the column description
-records how far apart they are. A view is zero-copy as far as possible (owner,
-2026-11-13).
+arrays (owner, 2026-11-13). The executor walks each column as an array of
+values, which may lie a fixed stride apart. A view is zero-copy as far as
+possible (owner, 2026-11-13).
 
 A view describes each column in our own column description. The description
 gives the value type and width, where the values are and how far apart they are,
