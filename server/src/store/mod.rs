@@ -18,7 +18,8 @@ use sqlx::postgres::{PgPool, Postgres};
 use sqlx::sqlite::{Sqlite, SqliteConnectOptions, SqlitePool};
 use sqlx::{Database, Executor, Transaction};
 
-/// The id of the system tenant `$tk`, which the first migration seeds.
+/// The id of the system tenant `$tk`, which the first migration seeds. `$tk`
+/// holds the superadmin and is no customer tenant (ADR-0028).
 pub const SYSTEM_TENANT_ID: &str = "00000000-0000-7000-8000-000000000000";
 
 /// An open store on one of the three backends. Clones share one connection
@@ -77,8 +78,8 @@ impl Tx {
 fn sql(tx: &Tx, statement: &'static str) -> Cow<'static, str> {
     match tx {
         Tx::Sqlite(_) | Tx::Postgres(_) => Cow::Borrowed(statement),
-        // The arm drops the numbers, because MariaDB's `?` binds by position
-        // (ADR-0019).
+        // MariaDB has no numbered placeholder, only `?`, so the arm rewrites
+        // each one (ADR-0019).
         Tx::MariaDb(_) => {
             let mut out = String::with_capacity(statement.len());
             let mut chars = statement.chars().peekable();
@@ -86,7 +87,10 @@ fn sql(tx: &Tx, statement: &'static str) -> Cow<'static, str> {
                 if c == '$' && chars.peek().is_some_and(char::is_ascii_digit) {
                     out.push('?');
                     // A placeholder can have several digits, as `$10` does,
-                    // and the whole number becomes one `?`.
+                    // and the whole number becomes one `?`. The loop does
+                    // not know SQL quoting, so it would also rewrite a `$`
+                    // and a digit inside a quoted literal, and no statement
+                    // of the store holds one.
                     while chars.peek().is_some_and(char::is_ascii_digit) {
                         chars.next();
                     }
@@ -99,8 +103,8 @@ fn sql(tx: &Tx, statement: &'static str) -> Cow<'static, str> {
     }
 }
 
-/// Runs `$body` with `$conn` bound to the connection of `$tx`, whichever
-/// backend it is on.
+/// Runs `$body` with `$conn` bound to the connection of `$tx`, a `&mut Tx`,
+/// whichever backend it is on.
 macro_rules! on_tx {
     ($tx:expr, |$conn:ident| $body:expr) => {
         // The three arms repeat the body, because each binds `$conn` to a
@@ -206,9 +210,9 @@ pub async fn open(url: &str) -> Result<Store, sqlx::Error> {
 /// and the user of the URL may not create databases.
 pub async fn create(url: &str) -> Result<Store, sqlx::Error> {
     match backend(url)? {
-        // `create` passes `true` to `open_sqlite`, which has sqlx create the
-        // file. The user does not add `mode=rwc` to the URL, so migrate and
-        // serve take the same URL.
+        // `mode=rwc` in a SQLite URL also creates a missing file. `create`
+        // asks sqlx for that through `open_sqlite` and leaves the URL alone,
+        // so migrate and serve take the same URL.
         Backend::Sqlite => open_sqlite(url, true).await,
         Backend::Postgres => {
             create_missing::<Postgres>(url).await?;
@@ -250,6 +254,9 @@ async fn open_sqlite(url: &str, create: bool) -> Result<Store, sqlx::Error> {
 
 /// Creates the database `url` names on its server, unless it exists.
 async fn create_missing<D: MigrateDatabase>(url: &str) -> Result<(), sqlx::Error> {
+    // Two processes that create the same missing database at once can both
+    // see it missing. The second `create_database` then fails, and so does
+    // `create`.
     if !D::database_exists(url).await? {
         D::create_database(url).await?;
     }
