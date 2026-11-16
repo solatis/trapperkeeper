@@ -4,12 +4,9 @@
 
 mod common;
 
-use common::{
-    block_on, call, log_in, on_each_backend, on_pool, serve_in_process, superadmin_token,
-};
+use common::{call, log_in, on_each_backend, on_pool, serve_in_process, superadmin_token};
 use proptest::prelude::*;
 use serde_json::{Value, json};
-use trapperkeeper_server::{NewAccount, create_account};
 
 /// The superadmin creates a tenant, the new tenant shows in the list, and its
 /// admin logs in with the returned password and must change it. The same
@@ -250,27 +247,22 @@ fn every_role_meets_each_route_minimum() {
                 .expect("the role is inserted");
         });
 
-        // 3. Through the library, because no route creates a user of a
-        //    given role yet.
-        let mut callers = vec![("superadmin", token)];
+        // 3. create and log in one user per role
+        let mut callers = vec![("superadmin", token.clone())];
         for role in ["admin", "operator", "observer", "auditor"] {
             let name = format!("{role}@example.com");
-            let password = block_on(async {
-                let mut tx = server.store.begin().await.expect("a transaction");
-                let password = create_account(
-                    &mut tx,
-                    NewAccount {
-                        tenant_id: &tenant_id,
-                        name: &name,
-                        role_name: role,
-                    },
-                )
-                .await
-                .expect("the user is created");
-                tx.commit().await.expect("the user is committed");
-                password
-            });
-            callers.push((role, log_in(&server, "acme", &name, &password).0));
+            let new = json!({ "name": name, "role": role });
+            let response = call(
+                &server,
+                &token,
+                "POST",
+                "/api/v1/tenants/acme/users",
+                Some(&new),
+            );
+            assert_eq!(response.status, 201, "{} on {backend}", response.body);
+            let created: Value = serde_json::from_str(&response.body).expect("a JSON body");
+            let password = created["password"].as_str().expect("a password");
+            callers.push((role, log_in(&server, "acme", &name, password).0));
         }
 
         // 4. A permitted call answers neither 401 nor 403, because it can
