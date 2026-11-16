@@ -41,9 +41,9 @@ impl IntoResponse for Refused {
 }
 
 /// The live customer tenant the `{tenant}` path segment names, when it is the
-/// caller's own or the caller is the superadmin, recorded in the caller's
-/// identity cell. Takes the caller's user and cell, so a route on `Caller`
-/// and one on `AtLeast<R>` use it alike.
+/// caller's own or the caller is the superadmin. The tenant is recorded in
+/// the request's `audit::Identity`. Takes the caller's user and identity, so
+/// a route on `Caller` and one on `AtLeast<R>` use it alike.
 ///
 /// # Errors
 ///
@@ -66,8 +66,8 @@ pub async fn tenant(
     let Some(tenant) = found.filter(|t| t.id != SYSTEM_TENANT_ID) else {
         return Err(Refused::NotFound);
     };
-    // The superadmin's rank, not its tenant, opens every customer tenant,
-    // with no session minted as one of the tenant's users (ADR-0029).
+    // The superadmin's rank, not its tenant, opens every customer tenant, so
+    // the superadmin needs no session as one of its users (ADR-0029).
     let superadmin = Rank::of(&caller.role_name) == Some(Rank::Superadmin);
     if tenant.id != caller.tenant_id && !superadmin {
         return Err(Refused::Forbidden);
