@@ -31,8 +31,8 @@ pub fn tenant_name(name: &str) -> Result<String, Refused> {
     }
 }
 
-/// `name` lowercased, when it is an email address: 3 to 254 bytes as UTF-8,
-/// one `@` with text on both sides, no whitespace, and no leading `$`.
+/// `name` lowercased, when it is an email address: 3 to 254 characters, one
+/// `@` with text on both sides, no whitespace, and no leading `$`.
 ///
 /// # Errors
 ///
@@ -40,9 +40,10 @@ pub fn tenant_name(name: &str) -> Result<String, Refused> {
 pub fn user_name(name: &str) -> Result<String, Refused> {
     let name = name.to_lowercase();
     // The function checks only the shape, because the server sends no mail.
-    // 254 bytes is the longest address SMTP carries (RFC 5321, 4.5.3.1.3),
-    // and 3 is `a@b`, the shortest that the `@` check accepts.
-    let shaped = (3..=254).contains(&name.len())
+    // SMTP carries at most 254 octets (RFC 5321, 4.5.3.1.3). The rule counts
+    // 254 characters, which fit MariaDB's VARCHAR(255) and the TEXT of the
+    // other backends. 3 is `a@b`, the shortest that the `@` check accepts.
+    let shaped = (3..=254).contains(&name.chars().count())
         && !name.chars().any(char::is_whitespace)
         && name.split_once('@').is_some_and(|(local, domain)| {
             !local.is_empty() && !domain.is_empty() && !domain.contains('@')
@@ -58,4 +59,18 @@ pub fn user_name(name: &str) -> Result<String, Refused> {
         return Err(Refused("names that start with '$' belong to the server"));
     }
     Ok(name)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::user_name;
+
+    #[test]
+    fn a_user_name_is_bounded_in_characters() {
+        // Each `\u{e9}` is one character of two bytes, so the first name has
+        // 254 characters in 504 bytes.
+        let name = |letters: usize| format!("{}@b.c", "\u{e9}".repeat(letters));
+        assert!(user_name(&name(250)).is_ok());
+        assert!(user_name(&name(251)).is_err());
+    }
 }
