@@ -14,9 +14,9 @@ tracing is the logging facade and tracing-subscriber writes the lines. The
 server writes JSON, one object per line, when stdout is not a terminal, and
 tracing's compact human format when it is. The server detects the terminal
 itself and has no setting for the format. The level is the `log.level` setting
-with the default `info`, through the normal precedence of the settings. A set
-`RUST_LOG` directive replaces the setting with its full filter syntax. An
-invalid directive fails startup.
+with the default `info`, through the normal precedence of the settings. When the
+environment holds `RUST_LOG`, its directive replaces the setting with its full
+filter syntax. An invalid directive fails startup.
 
 ## Rejected alternatives
 
