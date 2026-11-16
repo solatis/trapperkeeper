@@ -211,7 +211,7 @@ fn token_cookie(
         .secure(true)
         .path(path)
         .max_age(cookie::time::Duration::seconds(
-            i64::try_from(kind.lifetime().as_secs()).expect("a week fits"),
+            i64::try_from(kind.lifetime().as_secs()).expect("the lifetime of a token fits"),
         ))
         .build()
 }
