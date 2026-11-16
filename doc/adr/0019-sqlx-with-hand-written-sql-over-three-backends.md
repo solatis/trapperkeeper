@@ -26,8 +26,8 @@ Each backend has its own migration directory of numbered SQL files. `migrate!`
 embeds the files in the binary, and sqlx records each applied file with its
 checksum in `_sqlx_migrations`. There are no down files, because deployments are
 rebuilt rather than migrated backwards (owner, 2026-11-02; `doc/principles.md`
-8). `serve` sets up an empty database, and it refuses a database whose applied
-migrations otherwise differ from the migrations embedded in the binary.
+8). `serve` sets up an empty database. It refuses any other database whose
+applied migrations differ from the migrations embedded in the binary.
 
 The database setting is a URL in the form sqlx accepts as is, so the project
 defines no connection format of its own (owner, 2026-11-02). The default is
