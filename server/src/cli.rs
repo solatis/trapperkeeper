@@ -1,7 +1,6 @@
 //! The command line of the `trapperkeeper` binary: the subcommands, the
 //! options that stand before or after them, and the settings a flag may
-//! override. The overrides are the top layer of `config::load`, so
-//! `Overrides` serializes to the same tree as `config::Settings`.
+//! override.
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -27,18 +26,22 @@ pub struct Cli {
     pub command: Command,
 }
 
-/// Settings a flag may override. Every field is optional, and an absent flag
-/// leaves the value of the layers below in place. Nested settings are nested
-/// here too, so the tree matches. `Default` is the "no flags" value the tests
-/// pass. The signing keys have no flag, because they are secrets that only
-/// the file or the environment gives (ADR-0025).
+/// Settings a flag may override. Each flag is an `Option`, and the tables
+/// `log` and `database` are plain structs of such flags. An absent flag leaves
+/// the value of the layers below in place. The tables nest as in
+/// `config::Settings`, so figment merges each flag over the setting of the
+/// same key. `Default` is the "no flags" value the tests pass. The struct has
+/// no `auth` table, because `auth.signing_key` and `auth.previous_signing_key`
+/// have no flag, and they have none because ADR-0013 warns on any secret given
+/// as a flag (ADR-0025).
 #[derive(Args, Serialize, Default)]
 pub struct Overrides {
-    /// Address the server listens on, `host:port`.
+    /// Address the server listens on, an IP address and a port, such as
+    /// `127.0.0.1:8080` or `[::1]:8080`.
     #[arg(long, global = true, value_name = "ADDR")]
-    // An absent flag must serialize to nothing: serialized as a null, it would
-    // be taken by the merge over the layer below, and extraction would then
-    // fail with a type error.
+    // An absent flag serializes to nothing. figment's merge takes the incoming
+    // value whatever it is, so a null would replace the value of the lower
+    // layers, and `extract` would then fail on the null.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub listen: Option<SocketAddr>,
 
@@ -54,6 +57,8 @@ impl Overrides {
     #[must_use]
     pub fn secrets(&self) -> Vec<&'static str> {
         let mut secrets = Vec::new();
+        // The database URL is the only secret setting that has a flag. The
+        // signing keys, the other secret settings, have no flag.
         if self.database.url.is_some() {
             secrets.push("--database-url");
         }
@@ -79,17 +84,22 @@ pub struct DatabaseOverrides {
     /// `mariadb://...`.
     #[arg(long = "database-url", global = true, value_name = "URL")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    // A plain `String` and not `DatabaseUrl`, because the flags layer is
-    // serialized into the merge and a masked value would replace the URL.
+    // The field is a `String` and not a `DatabaseUrl`, which serializes with
+    // its password replaced by `***`. figment merges the serialized flags over
+    // the lower layers, so the masked text would become the URL that opens.
     pub url: Option<String>,
 }
 
-/// The subcommands. Each one resolves the settings first and then runs.
+/// The subcommands.
 #[derive(Subcommand)]
 pub enum Command {
-    /// Run the server. On an empty database, set it up first.
+    /// Run the server. Create the database when nothing exists at the URL, set
+    /// up an empty database first, and refuse to start without
+    /// `auth.signing_key`.
     Serve,
-    /// Apply pending database migrations.
+    /// Create the database when it is missing, apply the pending migrations,
+    /// and create the superadmin when it is missing and log its one-time
+    /// password.
     Migrate,
     /// Give the superadmin a new one-time password and print it, creating the
     /// superadmin when it is missing.
