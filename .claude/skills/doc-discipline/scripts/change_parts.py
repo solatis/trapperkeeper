@@ -14,9 +14,9 @@ parts in git's order of the files. It reads those files from disk, because the
 reader reads the files from disk too, so a span never names a line that the
 reader does not have.
 
-In both forms the script cuts a longer span at a blank line where one is near.
-It knows no language grammar, so a cut can fall inside a function when the file
-has no blank line near the size.
+In both forms the script cuts a span longer than the target size at a blank
+line where one is near. It knows no language grammar, so a cut can fall inside
+a function when the file has no blank line near the size.
 """
 
 import argparse
@@ -43,7 +43,8 @@ CUT_WINDOW = 40
 SKIP_DIRS = {".git", "target", "node_modules", "vendor", "thirdparty",
              "third_party", "build", "dist"}
 # git takes a file for binary when one of its first 8000 bytes is a NUL byte.
-# The number is FIRST_FEW_BYTES in git's xdiff-interface.c.
+# The number is the constant FIRST_FEW_BYTES in xdiff-interface.c of the git
+# source.
 BINARY_HEAD = 8000
 
 # The new side of a hunk header, such as "@@ -10,2 +12,3 @@ fn f()" with groups 12 and 3.
@@ -194,6 +195,8 @@ def tracked_files(paths):
         # git quotes a name that holds a special character unless the names end
         # with a NUL byte.
         "-z",
+        # A name that is not UTF-8 keeps its bytes through surrogateescape, so
+        # `open` finds the file under the decoded name.
         "--"] + paths).decode("utf-8", "surrogateescape").split("\0")
     # The same files are left out as in a range.
     return [n for n in names if n and not is_skipped(n)]
@@ -292,6 +295,8 @@ def parse_args(argv):
     p = Parser(prog="change_parts.py", allow_abbrev=False,
                description="List the parts of a change or of the files under paths, "
                            "or print the spans of part K.")
+    # The paths share one word, because `/doc-read` passes the script two
+    # words, this one and the part number.
     p.add_argument("source", metavar="SOURCE", help="a range BASE...REV, or PATH[,PATH]...")
     p.add_argument("part", nargs="?", type=int, metavar="K")
     p.add_argument("--size", type=int, default=DEFAULT_SIZE, metavar="N",
@@ -300,17 +305,15 @@ def parse_args(argv):
     args.parsed = args.paths = None
     # A word with two dots in a row is a range, so a mistyped range such as
     # "a..b" is reported as a malformed range and is not looked up as a path.
-    # A path that holds two dots in a row, such as "../x", cannot be given,
-    # and none needs to be, because the paths are relative to the working
-    # directory.
+    # A path that holds two dots in a row cannot be given. That rules out
+    # "../x", which a caller at the root of the repository does not need, and
+    # a file whose own name holds the dots.
     if ".." in args.source:
         args.parsed = parse_range(args.source)
         if args.parsed is None:
             p.error("malformed range %r, expected BASE...REV" % args.source)
     else:
         args.paths = parse_paths(args.source)
-        # An empty path, as in "a,,b", is a usage error with the word quoted,
-        # like a malformed range.
         if args.paths is None:
             p.error("malformed paths %r, expected PATH[,PATH]..." % args.source)
     if args.size < 1:
