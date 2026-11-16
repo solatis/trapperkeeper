@@ -4,8 +4,8 @@ Date: 2026-10-31.
 
 ## Context
 
-Cross-cutting changes across server, SDKs, UI and fixtures are expected to be
-common, and all components are released together.
+Cross-cutting changes across the server, the SDKs, the UI and the fixtures
+are expected to be common. All components are released together.
 
 ## Decision
 
@@ -20,5 +20,4 @@ several pull requests.
 
 ## Consequences
 
-A cross-cutting change is one pull request. What is released together lives
-together. An SDK that needs its own repository gets a case-by-case record.
+A cross-cutting change is one pull request. An SDK that needs its own repository gets a case-by-case record.

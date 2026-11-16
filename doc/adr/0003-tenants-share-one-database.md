@@ -6,8 +6,8 @@ Date: 2026-11-06.
 
 TrapperKeeper runs as a hosted service for many customers and as a
 self-hosted install, which usually holds one tenant. Retrofitting tenancy
-later would touch authentication and every entity, and carrying a tenant id
-from the start costs almost nothing.
+later would touch authentication and every entity. Carrying a tenant id from
+the start costs almost nothing.
 
 ## Decision
 
@@ -20,7 +20,9 @@ tenant id, and every query is tenant-scoped (owner, 2026-11-06).
 A person belongs to one tenant, and a login names the tenant together with
 the name and the password (owner, 2026-11-06).
 
-The superadmin creates tenants (`adr/0028`). Self-service signup comes later.
+The superadmin creates tenants (`adr/0028`), and a setting opens self-service
+signup. Signup stays off until a later milestone adds mail, because signup
+needs mail to verify addresses (owner, 2026-11-06).
 
 ## Rejected alternatives
 
@@ -36,6 +38,5 @@ host name is left to a later UI (owner, 2026-11-06).
 
 ## Consequences
 
-Every schema and every query carries the tenant id, and the tenant filter is
-the only isolation between tenants. A person in two tenants has two
-accounts. The store and management API components cite this record.
+Every schema and every query carries the tenant id. The tenant filter is the
+only isolation between tenants. A person in two tenants has two accounts. The store and management API components cite this record.

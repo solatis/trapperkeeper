@@ -4,7 +4,8 @@ Date: 2026-09-21.
 
 ## Context
 
-Rules are versioned and retired, while events outlive them as audit records.
+An edit makes a new rule with a new `rule_id`, and rules are deleted. Events
+outlive the rules as audit records.
 An event that only referenced its rule would depend on rule state with a
 different retention.
 
@@ -15,11 +16,11 @@ self-contained.
 
 ## Rejected alternatives
 
-A reference to the rule version instead of a copy, because the event log then
-could not have its own retention or engine.
+A reference to the rule by its `rule_id` instead of a copy, because the event
+log then could not have its own retention or engine.
 
 ## Consequences
 
 Events are larger, which is acceptable since only matches are reported. The
-event log can have its own retention and its own engine. The sensor API
-component cites this record.
+event log can have its own retention and its own engine. The sensor API cites
+this record in its `AGENTS.md` when its code lands.
