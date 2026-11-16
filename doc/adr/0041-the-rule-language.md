@@ -90,9 +90,8 @@ CEL, because few data people know it.
 
 A language of our own, because the owner wants no new language.
 
-Declared field types and an `any` type, because a literal or an operator
-already fixes the type, and in `a == b` the data decides. `any` was a declared
-field type, so it goes together with the declarations.
+Declared field types, among them a type `any`, because a literal or an operator
+already fixes the type, and in `a == b` the data decides.
 
 Python's answers for a field that holds a null, such as `x != 5` being true
 when `x` is not there. The literal `None` follows Python (`adr/0005`).
@@ -137,4 +136,5 @@ All of Python's tests of a text's characters, because `isdecimal` and
 ## Consequences
 
 The language has no timestamp type. `decisions.md` holds the open decision on
-one. A translator for a host engine walks the same tree (`adr/0040`).
+one. A translator for a host engine walks the tree that the server builds and
+the sensors receive (`adr/0040`).
