@@ -13,73 +13,71 @@ publish.workspace = true
 name = "trapperkeeper"
 path = "src/main.rs"
 
-# The tests reach the router through this library, and the binary is a thin
-# entry point over it. It keeps the package's name.
+# The binary is a thin entry point over this library, which the tests drive
+# too. The library keeps the package's name, as `trapperkeeper_server`.
 [lib]
 path = "src/lib.rs"
 
-# clap parses the command line and figment merges the settings layers; why
-# these two is ADR-0012.
-# figment has only the two providers the layers need; the file format is TOML.
 [dependencies]
+# clap parses the command line (ADR-0012).
 clap = { version = "4", features = ["derive"] }
+# figment merges the settings layers (ADR-0012). Its toml and env features add
+# the providers for the file and the environment.
 figment = { version = "0.10", features = ["toml", "env"] }
 serde = { version = "1", features = ["derive"] }
-# tokio runs everything (ADR-0014); axum serves HTTP
-# and utoipa derives the API contract from the handlers
-# (ADR-0016). tokio has only the features the
-# server uses: the runtime and its macro, sockets, signals for shutdown, and
-# sync for the semaphore that limits concurrent password hashes.
+# tokio is the runtime (ADR-0014). Its features are the multi-thread runtime
+# and its macro, sockets, signals for shutdown, and sync for the semaphore of
+# the password hashes and the cell of the dummy hash.
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "sync"] }
+# axum serves HTTP (ADR-0016).
 axum = "0.8"
+# utoipa derives the API document from the annotations of the handlers
+# (ADR-0016).
 utoipa = "6"
+# utoipa-axum registers each handler with its description in one `routes!`.
 utoipa-axum = "0.3"
-# tracing is the logging facade and tracing-subscriber writes the lines; the
-# format and level rules are ADR-0017.
+# tracing is the logging facade, and tracing-subscriber writes the log lines in
+# the format that ADR-0017 sets.
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
-# The request log is tower-http's trace layer; no other tower-http feature yet.
+# The trace layer of tower-http writes the request log.
 tower-http = { version = "0.7", features = ["trace"] }
-# The resolved settings are logged as one JSON string, so a reader parses them
-# instead of Rust's Debug text; already in the tree through axum's json feature.
+# serde_json writes the resolved settings for the log, and the audit trail
+# stores path parameters as JSON. axum's json feature already brings it in.
 serde_json = "1"
-# sqlx runs the store's SQL and its migrations; why sqlx is
-# ADR-0019. The default
-# features are off, because they bring the Any driver and json, which the store
-# does not use. macros is on because it provides migrate!, and the store calls
-# none of its compile-time query macros. sqlite-bundled compiles SQLite into
-# the binary, so no platform needs a system library. postgres and mysql are the
-# server databases, and the mysql driver serves MariaDB. TLS goes through
-# rustls, so no platform needs a system OpenSSL.
+# sqlx runs the store's SQL and its migrations (ADR-0019). The default features
+# are off, because the store uses neither the Any driver nor json. macros
+# provides `migrate!`, sqlite-bundled and rustls need no system library, and
+# the mysql driver serves MariaDB.
 sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "sqlite-bundled", "postgres", "mysql", "tls-rustls-ring-webpki", "migrate", "macros"] }
-# The database URL is parsed to mask its password; already in the tree through
-# sqlx.
+# url parses the database URL, so that the settings can mask its password.
+# sqlx already brings it in.
 url = "2"
-# Passwords are hashed with Argon2id, stored as PHC strings
-# (ADR-0022). The default features bring the
-# PHC string format and the random salt.
+# argon2 hashes passwords into PHC strings (ADR-0022) and stretches the signing
+# passphrases into keys (ADR-0025). The default features bring the PHC format
+# and the random salt.
 argon2 = "0.6"
 # Entity ids are version 7 UUIDs, generated in Rust (ADR-0020).
 uuid = { version = "1", features = ["v7"] }
-# Generated passwords and the installation's signing salt draw from the
-# system's random source.
+# Generated passwords and the signing salt come from rand's thread-local
+# generator, which the operating system seeds.
 rand = "0.10"
-# Access tokens are HS256 JWTs (ADR-0025).
-# Default features off, because PEM parsing is for asymmetric keys; rust_crypto
-# is the HMAC provider and pulls the sha2 already in the tree.
+# Access and refresh tokens are HS256 JWTs (ADR-0025). The default features are
+# off, because their PEM parsing serves only asymmetric keys. rust_crypto
+# provides HMAC.
 jsonwebtoken = { version = "11", default-features = false, features = ["rust_crypto"] }
-# The key ids are fingerprints of the derived keys; the same sha2 jsonwebtoken
-# and sqlx use.
+# The key ids are SHA-256 fingerprints of the derived keys. jsonwebtoken and
+# sqlx-core use this sha2 version too.
 sha2 = "0.10"
-# The cookie jar extractor for the token cookie; default features off, because
-# the rest of axum-extra is unused. cookie itself gives the cookie's duration
-# type, which axum-extra does not re-export.
+# axum-extra provides the cookie jar extractor for the two token cookies. Its
+# default features are off to keep the dependency set small.
 axum-extra = { version = "0.12", default-features = false, features = ["cookie"] }
+# cookie provides the type of a cookie's Max-Age, which axum-extra does not
+# re-export.
 cookie = { version = "0.18", default-features = false }
 
 [dev-dependencies]
-# The settings precedence is one property over generated layers
-# (ADR-0018).
+# proptest runs the property tests of the server (ADR-0018).
 proptest = "1"
 # The settings property loads inside figment's jail, which locks the
 # environment and the working directory while a case runs.
