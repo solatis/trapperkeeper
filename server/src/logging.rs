@@ -13,7 +13,7 @@ use tracing_subscriber::util::{SubscriberInitExt, TryInitError};
 
 /// Name of the environment variable whose filter directive, when set,
 /// replaces the log level setting.
-pub const DIRECTIVE_VAR: &str = "RUST_LOG";
+const DIRECTIVE_VAR: &str = "RUST_LOG";
 
 /// Why the subscriber could not be installed.
 #[derive(Debug)]
