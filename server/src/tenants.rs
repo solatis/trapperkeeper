@@ -36,6 +36,8 @@ pub struct TenantView {
 )]
 pub async fn list(_caller: AtLeast<role::Superadmin>, State(state): State<AppState>) -> Response {
     let listed = async {
+        // The store functions take a transaction. This one only reads, and
+        // dropping it rolls it back.
         let mut tx = state.store.begin().await?;
         tenants::list(&mut tx).await
     }
@@ -111,7 +113,7 @@ pub async fn create(
     let checked = names::tenant_name(&request.name).and_then(|name| {
         let admin = names::user_name(&request.admin)?;
         // 255 is the width of the title column on MariaDB, which counts
-        // characters.
+        // characters. Postgres and SQLite keep it as TEXT without a limit.
         if (1..=255).contains(&title.chars().count()) {
             Ok((name, admin))
         } else {
