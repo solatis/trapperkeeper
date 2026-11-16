@@ -38,15 +38,16 @@ pub const ACCESS_COOKIE: &str = "tk_access";
 pub const REFRESH_COOKIE: &str = "tk_refresh";
 
 /// The path of the refresh route. The literal repeats `API_PREFIX` and the
-/// route's own path, so a change to either must change it too. The browser
-/// sends the refresh cookie to this path alone (ADR-0025).
+/// route's own path, and no test compares them, so a change to either must
+/// change it too. The browser sends the refresh cookie to this path alone
+/// (ADR-0025).
 pub const REFRESH_PATH: &str = "/api/v1/refresh";
 
 /// The body that a login, a password change and the superadmin's mint route
 /// in `sessions.rs` hand out. A login and a password change also set the
 /// `tk_access` and `tk_refresh` cookies, and the mint route sets none. The
-/// key names are chosen freely. The first four are familiar from the token
-/// response of OAuth 2, and the body follows no standard.
+/// body follows no standard. Its first four keys have the names that the
+/// token response of OAuth 2 gives them, which clients know.
 #[derive(Serialize, ToSchema)]
 pub struct Login {
     /// The access token, sent back as `Authorization: Bearer`.
