@@ -1,7 +1,7 @@
 //! The role ladder: observer, operator, admin and superadmin, each above the
 //! one before, and the extractor that holds a route to a minimum role
-//! (ADR-0029). The rungs that exist as types, `Admin` and
-//! `Superadmin`, are the minimums routes name.
+//! (ADR-0029). Only `Admin` and `Superadmin` have a marker type, because no
+//! route names `Observer` or `Operator` as its minimum.
 
 use std::marker::PhantomData;
 
@@ -64,8 +64,8 @@ impl Rung for Superadmin {
 }
 
 /// Proof that the caller of a route holds at least the role `R`, with the
-/// caller's user and identity cell, so a route scopes to a tenant without a
-/// second extractor. The extraction fails with `Refusal::Forbidden` (403)
+/// caller's user and the identity cell that `Caller` carries, so a route
+/// scopes to a tenant without a second extractor. The extraction fails with `Refusal::Forbidden` (403)
 /// when the caller's role ranks below `R` or is off the ladder, and with the
 /// refusals of `Caller` when the token check fails.
 pub struct AtLeast<R: Rung> {
