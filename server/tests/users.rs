@@ -263,12 +263,12 @@ fn user_routes_refuse_bad_names_roles_and_other_users() {
         }
 
         // A non-admin learns nothing about other names from the delete route.
-        let obs = create_user(&server, &ada, "acme", "obs@example.com", "observer");
+        let obs_created = create_user(&server, &ada, "acme", "obs@example.com", "observer");
         let (obs, _) = log_in(
             &server,
             "acme",
             "obs@example.com",
-            obs["password"].as_str().expect("a password"),
+            obs_created["password"].as_str().expect("a password"),
         );
         for name in ["ada@example.com", "nobody@example.com"] {
             let path = format!("/api/v1/tenants/acme/users/{name}");
