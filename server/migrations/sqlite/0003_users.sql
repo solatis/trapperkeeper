@@ -16,7 +16,7 @@ CREATE TABLE users (
     -- Tokens issued before this time are refused, so setting it to now
     -- revokes every token of the user (ADR-0025).
     tokens_valid_after   BIGINT NOT NULL,
-    -- Epoch microseconds in UTC, as every time column (ADR-0019).
+    -- Epoch microseconds in UTC, as every time column does (ADR-0019).
     created_at           BIGINT NOT NULL,
     deleted_at           BIGINT,
     -- The role must belong to the user's tenant (ADR-0023).
