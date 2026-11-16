@@ -12,11 +12,11 @@ file. How the layers are merged was open.
 ## Decision
 
 clap, through its derive API, parses the command line, so the command line is
-one annotated struct. figment merges the settings layers into one serde
-struct, lowest layer first: the defaults, the TOML file named by `--config`,
-the environment variables prefixed `TRAPPERKEEPER_`, and the parsed flags. The
-order of the merge calls in `config::load` sets the precedence, so no merge
-code states it.
+one annotated struct. figment merges the settings layers into one serde struct,
+lowest layer first: the defaults, the TOML file named by `--config`, the
+environment variables prefixed `TRAPPERKEEPER_`, and the parsed flags. The order
+of the merge calls in `config::load` sets the precedence, and no hand-written
+code compares the layers.
 
 ## Rejected alternatives
 
