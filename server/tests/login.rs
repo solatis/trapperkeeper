@@ -247,9 +247,8 @@ fn admin_id(database: &common::TestDatabase) -> String {
 }
 
 /// Sets `deleted_at` of the superadmin's row to `at`, in epoch microseconds.
-/// The test writes the row
-/// itself, because no route reaches the superadmin of the system tenant
-/// (ADR-0028).
+/// The test writes the row itself, because no route reaches the superadmin of
+/// the system tenant (ADR-0028).
 fn delete_admin(database: &common::TestDatabase, at: i64) {
     let update = placeholders(
         database.backend,
@@ -269,8 +268,8 @@ fn delete_admin(database: &common::TestDatabase, at: i64) {
 
 proptest! {
     #![proptest_config(ProptestConfig {
-        // 12 cases, because each serves a router on every backend and runs
-        // Argon2id six times or more.
+        // The property runs 12 cases, because each serves a router on every
+        // backend and runs Argon2id six times or more.
         cases: 12,
         // No regression file is left in the tree. The panic message shows the
         // minimal failing input.
@@ -296,13 +295,15 @@ proptest! {
         //    of another passphrase, and one that signs with the other and
         //    still checks with the server's key.
         // 2. We issue the token with its token defects.
-        // 3. We apply the user defects. The logout comes before the deletion,
-        //    because a deleted user cannot log in.
+        // 3. We apply the user defects, which the server sees at the next
+        //    request, because it reads the user each time. The logout comes
+        //    before the deletion, because a deleted user cannot log in.
         // 4. We send the token to `me`, which must answer 200 only without a
         //    defect.
         // 5. We check the token on the rotated and the other ring, which read
         //    no user row, so only the signature, the key and the expiry
-        //    decide.
+        //    decide. Only the rings show a rotation, because the server's ring
+        //    holds no previous key.
         let has = |defect: Defect| defects.contains(&defect);
         for backend in backends() {
             // 1. serve and derive three rings
@@ -363,7 +364,7 @@ struct Held {
     value: String,
     kind: Kind,
     /// The epoch the token was issued in. The epoch counts the moves of the
-    /// admin's cutoff that the model has seen: a logout or a password change
+    /// admin's cutoff that the model has seen. A logout or a password change
     /// moves the cutoff, which revokes every earlier token.
     epoch: u32,
     expired: bool,
@@ -431,7 +432,8 @@ impl Model {
                 value: "not.a.token".to_owned(),
                 kind: Kind::Access,
                 epoch: 0,
-                // Live for no kind and no epoch, so every route refuses it.
+                // The token is live for no kind and no epoch, so every route
+                // refuses it.
                 expired: true,
             })
     }
@@ -444,8 +446,9 @@ impl Model {
 
 proptest! {
     #![proptest_config(ProptestConfig {
-        // 12 cases, because each case serves a router on every backend, which
-        // hashes a password and derives a ring, and the case derives one more.
+        // The property runs 12 cases, because each case serves a router on
+        // every backend, which hashes a password and derives a ring, and the
+        // case derives one more.
         cases: 12,
         // No regression file is left in the tree.
         failure_persistence: None,
@@ -461,8 +464,8 @@ proptest! {
         for backend in backends() {
             let server = serve_in_process(backend);
             let user_id = admin_id(server.database());
-            // Derived as the server's ring is, so the tokens it mints fail on
-            // their expiry alone.
+            // The ring derives as the server's does, so the tokens it mints
+            // fail on their expiry alone.
             let own = block_on(Keyring::from_store(&server.store, TEST_KEY, None))
                 .expect("the keys derive");
             let mut model = Model {
