@@ -107,9 +107,7 @@ impl DatabaseUrl {
         &self.0
     }
 
-    /// The URL with its password replaced by `***`. A URL that does not parse
-    /// and contains an `@` comes back as `***` whole, and every other URL
-    /// without a password comes back unchanged.
+    /// The URL with its password replaced by `***`.
     fn masked(&self) -> String {
         match Url::parse(&self.0) {
             Ok(mut url) if url.password().is_some() => {
@@ -122,9 +120,8 @@ impl DatabaseUrl {
             // An unparsed URL with an `@` is masked whole, because no one can
             // tell which part is the password.
             Err(_) if self.0.contains('@') => "***".to_owned(),
-            // This arm takes a parsed URL without a password, such as
-            // `sqlite://trapperkeeper.db`, and an unparsed URL without an `@`.
-            // The second has no user information (RFC 3986, 3.2.1).
+            // A parsed URL without a password, or an unparsed URL without an
+            // `@`, which has no user information (RFC 3986, 3.2.1).
             Ok(_) | Err(_) => self.0.clone(),
         }
     }
@@ -151,10 +148,8 @@ pub struct AuthSettings {
     /// The passphrase that signs new tokens and checks them.
     pub signing_key: Option<SigningKey>,
     /// The passphrase that signed before the last rotation. It only checks
-    /// tokens, and it checks them for as long as it is set. The operator
-    /// removes it once the tokens it signed have expired, 7 days after the
-    /// rotation, which is the lifetime of a refresh token. The server does not
-    /// drop it by itself.
+    /// tokens, as long as it is set. The operator removes it 7 days after the
+    /// rotation, when the tokens it signed have expired.
     pub previous_signing_key: Option<SigningKey>,
 }
 
@@ -236,53 +231,38 @@ pub type Error = Box<figment::Error>;
 
 /// Resolves the settings from four sources: the defaults, the TOML file at
 /// `file` when one is given, the environment variables prefixed
-/// `TRAPPERKEEPER_`, and `overrides`. A later source wins over an earlier one.
-/// `overrides` must serialize to the tree of `Settings`, with each absent value
-/// omitted.
+/// `TRAPPERKEEPER_`, and `overrides`. A later source wins. `overrides` must
+/// serialize to the tree of `Settings`, with each absent value omitted.
 ///
 /// # Errors
 ///
-/// Fails when `file` names no file, which includes a missing path and a
-/// directory, when a layer does not parse, when a key is unknown, when a value
-/// has the wrong type, or when its type refuses it, such as a signing key
-/// shorter than 32 characters or an unknown level name.
+/// Fails when `file` names no file, when a layer does not parse, or when a key
+/// is unknown or its type refuses the value.
 pub fn load(file: Option<&Path>, overrides: impl Serialize) -> Result<Settings, Error> {
-    // `load` merges the layers with figment from the lowest up, and then
-    // extracts the result into `Settings`. figment's `merge` takes the
-    // incoming value, so the layer merged last wins. `join` would keep the
-    // existing value instead and invert the precedence.
+    // figment's `merge` takes the incoming value, so the layer merged last
+    // wins, where `join` would keep the existing value.
     //
-    // 1. We start from the serialized defaults of `Settings`. Every field then
-    //    has a value, so a layer above may set only some keys.
-    // 2. We merge the TOML file when a path was given, and refuse a path that
-    //    names no file.
-    // 3. We merge the environment variables that carry the prefix, split on
-    //    the separator, so a flat name such as `TRAPPERKEEPER_LOG__LEVEL`
-    //    reaches the nested key `log.level`.
-    // 4. We merge the serialized flags last, so a given flag wins over every
-    //    other layer. An absent flag serializes to nothing and leaves the
-    //    value below it in place.
-    // 5. We extract the merged tree into `Settings`, where an unknown key or a
-    //    value that its type refuses fails. `deny_unknown_fields` turns a typo
-    //    in a key into an error.
+    // 1. We start from the defaults, so a layer above may set only some keys.
+    // 2. We merge the TOML file when a path was given.
+    // 3. We merge the prefixed environment variables, split on the separator
+    //    so that a flat name reaches a nested key.
+    // 4. We merge the flags last.
+    // 5. We extract the result, where `deny_unknown_fields` turns a mistyped
+    //    key into an error.
 
     // 1. start from the defaults
-    // The defaults pass through the masking serializers of `DatabaseUrl` and
-    // `SigningKey`. No default holds a secret, so the masks change nothing.
+    // No default holds a secret, so the masking serializers change nothing.
     let mut figment = Figment::from(Serialized::defaults(Settings::default()));
 
     // 2. merge the file
     if let Some(path) = file {
-        // The guard refuses a path that names no file before figment reads
-        // it, with a message that names the path.
         if !path.is_file() {
             return Err(Box::new(figment::Error::from(format!(
                 "configuration file {} does not exist",
                 path.display()
             ))));
         }
-        // The call uses `file_exact`, because `file` would also search the
-        // parent directories of a relative path.
+        // `file` would also search the parent directories of a relative path.
         figment = figment.merge(Toml::file_exact(path));
     }
 
@@ -290,8 +270,7 @@ pub fn load(file: Option<&Path>, overrides: impl Serialize) -> Result<Settings, 
     figment = figment.merge(Env::prefixed(ENV_PREFIX).split(ENV_SEPARATOR));
 
     // 4. merge the flags
-    // `defaults` names figment's default profile, the only profile this
-    // server uses.
+    // `defaults` names figment's default profile, the only one in use.
     figment = figment.merge(Serialized::defaults(overrides));
 
     // 5. extract the settings
