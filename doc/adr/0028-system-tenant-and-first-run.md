@@ -10,10 +10,11 @@ wants one command to set up an install.
 
 ## Decision
 
-The superadmin is the user `admin` of the system tenant `$tk`. `$tk` holds
-the role `superadmin` and no other role, and no other tenant holds the role
+The superadmin is the user `admin` of the system tenant `$tk`. `$tk` holds the
+role `superadmin` and no other role, and no other tenant holds the role
 `superadmin`. The superadmin logs in, receives tokens and is revoked by the
-cutoff in the same way as every other user (owner, 2026-11-06).
+revocation cutoff (`adr/0025`) in the same way as every other user (owner,
+2026-11-06).
 
 Names that start with `$` are the server's own (owner, 2026-11-06). The API
 refuses a tenant name or a user name that starts with `$`.
@@ -24,8 +25,8 @@ the response to the person who created the user (owner, 2026-11-06).
 
 The command that first migrates an empty database creates the superadmin and
 logs its one-time password as one INFO event. serve does this on an empty
-database, and migrate does it when an operator runs it first. serve refuses
-a database with pending migrations (owner, 2026-11-06).
+database, and migrate does it when an operator runs it first. serve refuses a
+database that is not empty and has pending migrations (owner, 2026-11-06).
 
 serve and migrate create the database that the URL names when it does not
 exist yet, also on Postgres and MariaDB, so that one command sets up an
