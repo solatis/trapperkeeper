@@ -1,7 +1,6 @@
 //! The relational store: the control-plane data, in SQLite, Postgres or
 //! MariaDB. The rules every table and query follow are in this directory's
-//! `AGENTS.md`. Store functions take a `Tx` and never commit, so a caller
-//! composes them in one transaction.
+//! `AGENTS.md`.
 
 pub mod audit;
 pub mod installation;
@@ -70,19 +69,24 @@ impl Tx {
     }
 }
 
-/// `statement` with its placeholders as the backend of `tx` spells them:
-/// MariaDB takes `?` in place of `$1`, `$2` and so on.
+/// Returns `statement` with its placeholders in the form the backend of `tx`
+/// expects. MariaDB gets `?` in place of `$1`, `$2` and so on, and SQLite and
+/// Postgres get the statement unchanged. A statement uses each placeholder
+/// number once and in ascending order, because on MariaDB the values bind in
+/// the order the placeholders appear and the numbers are dropped.
 fn sql(tx: &Tx, statement: &'static str) -> Cow<'static, str> {
     match tx {
         Tx::Sqlite(_) | Tx::Postgres(_) => Cow::Borrowed(statement),
-        // A statement uses each number once, in ascending order, because `?`
-        // binds by position (ADR-0019).
+        // The arm drops the numbers, because MariaDB's `?` binds by position
+        // (ADR-0019).
         Tx::MariaDb(_) => {
             let mut out = String::with_capacity(statement.len());
             let mut chars = statement.chars().peekable();
             while let Some(c) = chars.next() {
                 if c == '$' && chars.peek().is_some_and(char::is_ascii_digit) {
                     out.push('?');
+                    // A placeholder can have several digits, as `$10` does,
+                    // and the whole number becomes one `?`.
                     while chars.peek().is_some_and(char::is_ascii_digit) {
                         chars.next();
                     }
@@ -96,12 +100,17 @@ fn sql(tx: &Tx, statement: &'static str) -> Cow<'static, str> {
 }
 
 /// Runs `$body` with `$conn` bound to the connection of `$tx`, whichever
-/// backend it is on. A macro, because each backend's connection is its own
-/// type and the body is checked once per type.
+/// backend it is on.
 macro_rules! on_tx {
     ($tx:expr, |$conn:ident| $body:expr) => {
+        // The three arms repeat the body, because each binds `$conn` to a
+        // connection of a different type, so the compiler checks the body
+        // once for each type.
         match $tx {
             Tx::Sqlite(tx) => {
+                // `&mut **tx` reaches the backend's connection inside the
+                // sqlx `Transaction`, which is the executor that the body's
+                // queries run on.
                 let $conn = &mut **tx;
                 $body
             }
@@ -117,6 +126,9 @@ macro_rules! on_tx {
     };
 }
 
+// `use on_tx` makes the macro an item of this module, so the submodules
+// import it by path as `super::on_tx`. The `mod` lines above come before the
+// macro, so its textual scope does not reach them.
 use on_tx;
 
 /// The current time as epoch microseconds in UTC, the form every time column
@@ -128,7 +140,7 @@ pub fn now_micros() -> i64 {
     i64::try_from(since_epoch.as_micros()).expect("the clock is before the year 294000")
 }
 
-/// The database a URL names.
+/// The kind of database server, which the scheme of the URL chooses.
 enum Backend {
     Sqlite,
     Postgres,
@@ -139,11 +151,14 @@ enum Backend {
 ///
 /// # Errors
 ///
-/// Fails on any other scheme, and the message lists the accepted ones.
+/// Fails when no driver among SQLite, Postgres and MySQL lists the scheme of
+/// `url`. The message lists the schemes that the drivers accept.
 fn backend(url: &str) -> Result<Backend, sqlx::Error> {
+    // A URL without a colon, such as a bare file path, gets the empty scheme,
+    // which no driver lists, so the function returns the error below.
     let scheme = url.split_once(':').map_or("", |(scheme, _)| scheme);
-    // Each driver's own scheme list, so the accepted schemes are the ones the
-    // driver parses.
+    // The table takes each driver's own `URL_SCHEMES`, so the store accepts
+    // the schemes that the driver parses.
     let backends = [
         (Sqlite::URL_SCHEMES, Backend::Sqlite),
         (Postgres::URL_SCHEMES, Backend::Postgres),
@@ -187,14 +202,14 @@ pub async fn open(url: &str) -> Result<Store, sqlx::Error> {
 /// # Errors
 ///
 /// Fails when the URL does not parse, or when the database cannot be created
-/// or opened.
+/// or opened. On Postgres and MariaDB it fails when the database is missing
+/// and the user of the URL may not create databases.
 pub async fn create(url: &str) -> Result<Store, sqlx::Error> {
     match backend(url)? {
-        // Creation is turned on here instead of with `mode=rwc` in the URL, so
-        // migrate and serve take the same URL.
+        // `create` passes `true` to `open_sqlite`, which has sqlx create the
+        // file. The user does not add `mode=rwc` to the URL, so migrate and
+        // serve take the same URL.
         Backend::Sqlite => open_sqlite(url, true).await,
-        // The servers create a database with a statement, which needs a user
-        // allowed to create databases.
         Backend::Postgres => {
             create_missing::<Postgres>(url).await?;
             open(url).await
