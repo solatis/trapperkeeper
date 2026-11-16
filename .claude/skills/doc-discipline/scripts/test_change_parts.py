@@ -3,6 +3,7 @@
 import contextlib
 import io
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -137,13 +138,13 @@ class Output(unittest.TestCase):
 
     def test_list_lines(self):
         parts = [[Span("a", 1, 4), Span("b", 2, 3)], [Span("c", 5, 5)]]
-        self.assertEqual(cp.list_lines(parts, 6, 3), [
+        self.assertEqual(cp.list_lines(parts, 6, 3, "changed lines"), [
             "part 1/2: 6 lines: a:1-4, b:2-3",
             "part 2/2: 1 lines: c:5-5",
             "change_parts: 2 parts, 6 changed lines in 3 files"])
 
     def test_list_lines_of_an_empty_change(self):
-        self.assertEqual(cp.list_lines([], 0, 0),
+        self.assertEqual(cp.list_lines([], 0, 0, "changed lines"),
                          ["change_parts: 0 parts, 0 changed lines in 0 files"])
 
 
@@ -273,6 +274,115 @@ class GitRange(unittest.TestCase):
     def test_bad_size(self):
         status, _, err = self.run_main(self.base + "..." + self.rev, "--size", "0")
         self.assertEqual((status, err), (2, "change_parts: --size must be at least 1\n"))
+
+
+@unittest.skipUnless(shutil.which("git"), "git is not on PATH")
+class Paths(unittest.TestCase):
+
+    def setUp(self):
+        # The repository holds one file for each case below: two tracked files
+        # in a directory with an untracked file beside them, a long file, a
+        # lock file, an empty file, a file with a NUL byte and a file whose last
+        # line has no newline.
+        self.tmp = tempfile.TemporaryDirectory()
+        repo = self.repo = self.tmp.name
+        git_in(repo, "init", "-q")
+        write(repo, "dir/a.py", numbered("a", 3))
+        write(repo, "dir/b.py", numbered("b", 4))
+        write(repo, "long.py", TWO_FUNCTIONS)
+        write(repo, "Cargo.lock", "lock\n")
+        write(repo, "empty.py", "")
+        write(repo, "nul.bin", "a\0b\n")
+        write(repo, "tail.py", "a\nb")
+        git_in(repo, "add", "-A")
+        git_in(repo, "commit", "-q", "-m", "base")
+        write(repo, "dir/untracked.py", "x\n")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def run_main(self, *argv):
+        with working_directory(self.repo):
+            return main_output(list(argv))
+
+    def test_word_is_paths(self):
+        self.assertEqual(cp.parse_paths("a,b"), ["a", "b"])
+        self.assertIsNone(cp.parse_paths("a,,b"))
+        self.assertIsNone(cp.parse_paths("-a"))
+
+    def test_whole_files_in_git_order(self):
+        # git lists dir/a.py before tail.py, although the word names tail.py first.
+        status, lines, err = self.run_main("tail.py,dir/a.py")
+        self.assertEqual((status, err), (0, ""))
+        self.assertEqual(lines, [
+            "part 1/1: 5 lines: dir/a.py:1-3, tail.py:1-2",
+            "change_parts: 1 parts, 5 lines in 2 files"])
+
+    def test_directory_names_its_tracked_files(self):
+        status, lines, _ = self.run_main("dir", "1")
+        self.assertEqual((status, lines), (0, ["dir/a.py:1-3", "dir/b.py:1-4"]))
+
+    def test_long_file_is_cut_at_a_blank_line(self):
+        # The cut falls at the blank line 31, where the range form cuts the same file.
+        status, lines, _ = self.run_main("long.py", "--size", "31")
+        self.assertEqual((status, lines), (0, [
+            "part 1/2: 31 lines: long.py:1-31",
+            "part 2/2: 30 lines: long.py:32-61",
+            "change_parts: 2 parts, 61 lines in 1 files"]))
+
+    def test_files_that_are_left_out(self):
+        status, lines, _ = self.run_main("Cargo.lock,empty.py,nul.bin,tail.py")
+        self.assertEqual((status, lines), (0, [
+            "part 1/1: 2 lines: tail.py:1-2",
+            "change_parts: 1 parts, 2 lines in 1 files"]))
+
+    def test_file_without_a_last_newline(self):
+        # The file holds "a\nb", so its second line counts although no newline ends it.
+        status, lines, _ = self.run_main("tail.py", "1")
+        self.assertEqual((status, lines), (0, ["tail.py:1-2"]))
+
+    def test_summary_counts_lines(self):
+        status, lines, _ = self.run_main("dir,long.py,tail.py", "--size", "31")
+        self.assertEqual(status, 0)
+        summary = re.fullmatch(r"change_parts: (\d+) parts, (\d+) lines in (\d+) files", lines[-1])
+        self.assertIsNotNone(summary, lines[-1])
+        counts = [int(re.fullmatch(r"part \d+/\d+: (\d+) lines: .*", row).group(1))
+                  for row in lines[:-1]]
+        self.assertEqual((len(counts), sum(counts)), (int(summary.group(1)), int(summary.group(2))))
+        # dir/a.py, dir/b.py, long.py and tail.py
+        self.assertEqual(summary.group(3), "4")
+
+    def test_small_files_share_a_part(self):
+        # dir/a.py has 3 lines and dir/b.py has 4, so a size of 7 holds both
+        # and a size of 6 does not.
+        _, lines, _ = self.run_main("dir", "--size", "7")
+        self.assertEqual(lines[:-1], ["part 1/1: 7 lines: dir/a.py:1-3, dir/b.py:1-4"])
+        _, lines, _ = self.run_main("dir", "--size", "6")
+        self.assertEqual(lines[:-1], ["part 1/2: 3 lines: dir/a.py:1-3",
+                                      "part 2/2: 4 lines: dir/b.py:1-4"])
+
+    def test_spans_of_one_part(self):
+        status, lines, _ = self.run_main("long.py,tail.py", "2", "--size", "31")
+        self.assertEqual((status, lines), (0, ["long.py:32-61"]))
+
+    def test_unknown_path(self):
+        status, lines, err = self.run_main("nosuch.py")
+        self.assertEqual((status, lines), (2, []))
+        self.assertTrue(err.startswith("change_parts: git ls-files failed: "), err)
+        self.assertEqual(err.count("\n"), 1)
+
+    def test_tracked_file_missing_from_disk(self):
+        os.remove(os.path.join(self.repo, "tail.py"))
+        status, lines, err = self.run_main("tail.py")
+        self.assertEqual((status, lines), (2, []))
+        self.assertTrue(err.startswith("change_parts: cannot read tail.py: "), err)
+        self.assertEqual(err.count("\n"), 1)
+
+    def test_empty_path(self):
+        status, lines, err = self.run_main("a,,b")
+        self.assertEqual((status, lines), (2, []))
+        self.assertTrue(err.startswith("change_parts: malformed paths"), err)
+        self.assertEqual(err.count("\n"), 1)
 
 
 if __name__ == "__main__":

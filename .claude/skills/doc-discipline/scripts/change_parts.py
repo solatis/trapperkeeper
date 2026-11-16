@@ -1,12 +1,22 @@
 #!/usr/bin/env python3
-"""Split the changed lines of a git range into parts that one cold reader can read whole.
+"""Split a change, or whole files, into parts that one cold reader can read whole.
 
-The script reads the diff of a range BASE...REV and lists, per part, the line
-spans of the files at REV that the part covers. It joins spans that lie close
-together, fills parts in the order of the diff up to a target size, and cuts a
-longer span at a blank line where one is near. It knows no language grammar, so
-a cut can fall inside a function when the file has no blank line near the size.
-It does not read deleted files, binary files or names that git quotes.
+The script takes a git range BASE...REV or one or more paths joined by commas.
+It lists, per part, the line spans of the files that the part covers.
+
+For a range, the script reads the diff and covers the changed lines of the
+files at REV. It joins spans that lie close together and fills parts in the
+order of the diff up to a target size. It does not read deleted files, binary
+files or names that git quotes.
+
+For paths, the script covers the tracked files under them, whole, and fills
+parts in git's order of the files. It reads those files from disk, because the
+reader reads the files from disk too, so a span never names a line that the
+reader does not have.
+
+In both forms the script cuts a longer span at a blank line where one is near.
+It knows no language grammar, so a cut can fall inside a function when the file
+has no blank line near the size.
 """
 
 import argparse
@@ -15,7 +25,7 @@ import subprocess
 import sys
 from collections import namedtuple
 
-# A span of lines start..end, both included, of a file at REV.
+# A span of lines start..end, both included, of a file at REV or on disk.
 Span = namedtuple("Span", "path start end")
 
 # Measured on one file of 1070 lines: readers that got about 350 lines each
@@ -51,6 +61,16 @@ def parse_range(text):
     if base.startswith("-") or rev.startswith(("-", ".")) or base.endswith("."):
         return None
     return base, rev
+
+
+def parse_paths(text):
+    """Return the paths of a word "<path>[,<path>]...", or None when a path is empty or starts
+    with "-"."""
+    paths = text.split(",")
+    # A word such as "a,-b" is a usage error, as a range with such a side is.
+    if any(not p or p.startswith("-") for p in paths):
+        return None
+    return paths
 
 
 def new_side(header):
@@ -152,6 +172,69 @@ def file_lines(rev, path):
     return git(["show", rev + ":" + path]).decode("utf-8", "replace").split("\n")
 
 
+def tracked_files(paths):
+    """Return the tracked files that `paths` name, each once, in git's order and without
+    skipped files.
+
+    Raises as `git` does, also for a path that names no tracked file.
+    """
+    # git lists the files in path order whatever the order of the arguments, so
+    # a part number means the same in the list call and in the reader's call.
+    names = git([
+        # A directory stands for the tracked files under it, so build output
+        # and ignored files are left out.
+        "ls-files",
+        # A mistyped path fails the call. Without this flag git prints no name
+        # for it and reports success.
+        "--error-unmatch",
+        # git quotes a name that holds a special character unless the names end
+        # with a NUL byte.
+        "-z",
+        "--"] + paths).decode("utf-8", "surrogateescape").split("\0")
+    # The same files are left out as in a range.
+    return [n for n in names if n and not is_skipped(n)]
+
+
+def disk_lines(path):
+    """Return the lines of the file on disk, or None for a binary file. Raises as `open` does."""
+    with open(path, "rb") as f:
+        data = f.read()
+    # git also takes a file with a NUL byte for binary, and a range leaves
+    # binary files out.
+    if b"\0" in data:
+        return None
+    # The bytes are read as UTF-8 with replacement, as `file_lines` reads them,
+    # so a file that is not UTF-8 does not fail the call.
+    text = data.decode("utf-8", "replace")
+    # The list ends with an empty string when the file ends with a newline, as
+    # the list of `file_lines` does, so `cut_line` reads both alike.
+    return text.split("\n")
+
+
+def path_parts(files, size):
+    """Return (parts, lines, files read) of the whole files `files`, as they are on disk.
+
+    Raises as `open` does.
+    """
+    pieces, total, read = [], 0, 0
+    for path in files:
+        lines = disk_lines(path)
+        # An empty or binary file has no line for a reader, so it gives no span
+        # and is not counted.
+        if lines is None or lines == [""]:
+            continue
+        # A file that ends with a newline has one line fewer than the split gives.
+        last = len(lines) - (1 if lines[-1] == "" else 0)
+        # A file longer than the size is cut at a blank line where one is near,
+        # as a long span of a range is.
+        pieces += cut_span(Span(path, 1, last), lines, size)
+        total += last
+        read += 1
+    # Whole files fill a part in order up to the size, so several small files
+    # share one part, as the spans of a range do.
+    return fill_parts(pieces, size), total, read
+
+
 def change_parts(base, rev, size):
     """Return (parts, changed lines, files) of the range. Raises as `git` does."""
     # The parts come from the diff in four steps.
@@ -176,17 +259,18 @@ def format_span(s):
     return "%s:%d-%d" % s
 
 
-def list_lines(parts, changed, files):
+def list_lines(parts, counted, files, unit):
     """Return the output lines of the list form.
 
-    A part counts the lines of its spans, which include the unchanged lines that joining took
-    in. The last line counts the changed lines alone.
+    For a range, a part counts the lines of its spans, which include the unchanged lines that
+    joining took in, and the last line counts the changed lines alone. For paths, both count
+    every line of the files.
     """
     n = len(parts)
     rows = ["part %d/%d: %d lines: %s" % (k, n, sum(map(length, p)),
                                           ", ".join(map(format_span, p)))
             for k, p in enumerate(parts, 1)]
-    return rows + ["change_parts: %d parts, %d changed lines in %d files" % (n, changed, files)]
+    return rows + ["change_parts: %d parts, %d %s in %d files" % (n, counted, unit, files)]
 
 
 class Parser(argparse.ArgumentParser):
@@ -197,27 +281,56 @@ class Parser(argparse.ArgumentParser):
 
 
 def parse_args(argv):
-    """Return the parsed arguments. Exits with status 2 on a usage error."""
+    """Return the parsed arguments, with `parsed` set for a range or `paths` set for paths.
+
+    Exits with status 2 on a usage error.
+    """
     p = Parser(prog="change_parts.py", allow_abbrev=False,
-               description="List the parts of a change, or print the spans of part K.")
-    p.add_argument("range", metavar="BASE...REV")
+               description="List the parts of a change or of the files under paths, "
+                           "or print the spans of part K.")
+    p.add_argument("source", metavar="SOURCE", help="a range BASE...REV, or PATH[,PATH]...")
     p.add_argument("part", nargs="?", type=int, metavar="K")
     p.add_argument("--size", type=int, default=DEFAULT_SIZE, metavar="N",
-                   help="target number of changed lines per part (default %d)" % DEFAULT_SIZE)
+                   help="target number of lines per part (default %d)" % DEFAULT_SIZE)
     args = p.parse_args(argv)
-    args.parsed = parse_range(args.range)
-    if args.parsed is None:
-        p.error("malformed range %r, expected BASE...REV" % args.range)
+    args.parsed = args.paths = None
+    # A word with two dots in a row is a range, so a mistyped range such as
+    # "a..b" is reported as a malformed range and is not looked up as a path.
+    if ".." in args.source:
+        args.parsed = parse_range(args.source)
+        if args.parsed is None:
+            p.error("malformed range %r, expected BASE...REV" % args.source)
+    else:
+        args.paths = parse_paths(args.source)
+        # An empty path, as in "a,,b", is a usage error with the word quoted,
+        # like a malformed range.
+        if args.paths is None:
+            p.error("malformed paths %r, expected PATH[,PATH]..." % args.source)
     if args.size < 1:
         p.error("--size must be at least 1")
     return args
 
 
 def main(argv=None):
-    """Print the parts of the range or the spans of one part and return the exit status."""
+    """Print the parts of the range or of the paths, or the spans of one part, and return the
+    exit status."""
     args = parse_args(sys.argv[1:] if argv is None else argv)
     try:
-        parts, changed, files = change_parts(args.parsed[0], args.parsed[1], args.size)
+        if args.paths is None:
+            parts, counted, files = change_parts(args.parsed[0], args.parsed[1], args.size)
+        else:
+            tracked = tracked_files(args.paths)
+            try:
+                parts, counted, files = path_parts(tracked, args.size)
+            # A tracked file that is missing from disk is reported as one line
+            # that names the file. The handler for OSError below words its
+            # message for a git that cannot be run.
+            except OSError as e:
+                print("change_parts: cannot read %s: %s" % (e.filename, e.strerror),
+                      file=sys.stderr)
+                return 2
+    # A path that names no tracked file is a failure of git too, and it is
+    # reported like an unknown revision.
     except subprocess.CalledProcessError as e:
         reason = e.stderr.decode("utf-8", "replace").strip().splitlines()
         print("change_parts: git %s failed: %s" % (
@@ -227,7 +340,8 @@ def main(argv=None):
         print("change_parts: cannot run git: %s" % e, file=sys.stderr)
         return 2
     if args.part is None:
-        print("\n".join(list_lines(parts, changed, files)))
+        unit = "changed lines" if args.paths is None else "lines"
+        print("\n".join(list_lines(parts, counted, files, unit)))
     elif 1 <= args.part <= len(parts):
         print("\n".join(map(format_span, parts[args.part - 1])))
     else:

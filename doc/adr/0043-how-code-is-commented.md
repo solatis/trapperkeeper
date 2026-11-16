@@ -1,6 +1,6 @@
 # 0043. How code is commented
 
-Date: 2026-11-14.
+Date: 2026-11-15.
 
 ## Context
 
@@ -69,7 +69,9 @@ guided review shows the stops, the declines and the findings from those files
 
 The cold read takes a change in parts of about 300 changed lines, and one
 reader reads each part. The script `change_parts.py` in the doc-discipline
-skill lists the parts.
+skill lists the parts. The script also lists the parts of whole files given by
+path. A repair of existing code is read by path, so that a reader also reads
+the functions that the repair left as they were (owner, 2026-11-15).
 
 The doc-discipline skill is a guide that an agent loads once. It carries no
 policy of this repository, and the root `AGENTS.md` holds that policy. The
@@ -105,6 +107,10 @@ owner can check.
 One reader over a whole change. On a file of 1070 lines, one reader finds 9
 to 11 of the 16 places the owner marked and reports almost nothing in its last
 150 lines. Three readers on a third each find 15.
+
+A cold read of a repair by its range alone. A function that the audit judges
+fine is then read only by the auditor, which has read the rules and the whole
+module.
 
 One doc-discipline skill invoked with mode words for each check. The harness
 loads a skill as text, and a second invocation of a loaded skill adds only a

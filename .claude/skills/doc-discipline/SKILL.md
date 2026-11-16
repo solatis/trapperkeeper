@@ -17,13 +17,13 @@ the same copy serves every repository.
 
 ## Files
 
-| File                      | Read it                                                                         |
-| ------------------------- | ------------------------------------------------------------------------------- |
-| `narrative.md`            | before you write or change code, or the sketches of a plan                      |
-| `placement.md`            | before you write or move a document, or a comment that holds knowledge          |
-| `checks.md`               | after a change is complete, before it leaves the session                        |
-| `scripts/check_steps.py`  | the step check: it checks walkthrough numbers, back-references and denied marks |
-| `scripts/change_parts.py` | the part list: it splits a change into parts for `/doc-read`                    |
+| File                      | Read it                                                                                       |
+| ------------------------- | --------------------------------------------------------------------------------------------- |
+| `narrative.md`            | before you write or change code, or the sketches of a plan                                    |
+| `placement.md`            | before you write or move a document, or a comment that holds knowledge                        |
+| `checks.md`               | after a change is complete, before it leaves the session                                      |
+| `scripts/check_steps.py`  | the step check: it checks walkthrough numbers, back-references and denied marks               |
+| `scripts/change_parts.py` | the part list: it splits a change, or the files under given paths, into parts for `/doc-read` |
 
 The step check runs in one of four forms:
 
@@ -43,8 +43,9 @@ means findings, and 2 means a usage or git error.
 Two companion skills run in a new subagent of their own. The subagent sees
 none of the conversation, and its last message comes back to the caller.
 
-- `/doc-read <base>...HEAD <part>` takes the range of a change and the number
-  of one of its parts, and nothing else. A change is read in parts of about
+- `/doc-read` takes the range of a change, or one or more paths joined by
+  commas, and the number of one part, and nothing else. For paths, the reader
+  reads those files whole. A change is read in parts of about
   300 changed lines, one reader per part. A reader who has not seen the change
   reads the changed files as they are on disk. It returns one row for each
   line where it stopped, each function whose plan it had to rebuild, each
@@ -118,7 +119,10 @@ works as follows:
    changes a non-comment token and redo it by hand. Run the step check over
    the changed files and fix each finding until it reports none. Run the
    build or tests when that is cheap.
-5. Follow `checks.md` over the commits of the repair.
+5. Follow `checks.md` over the commits of the repair. In step 2 of
+   `checks.md`, a repair lists the parts of the repaired paths in place of the
+   range, so that a reader also reads the functions that the repair left as
+   they were.
 6. Report, in the form of the "Report" section, with the rows applied and
    declined.
 
