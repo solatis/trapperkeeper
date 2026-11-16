@@ -45,8 +45,9 @@ pub async fn ensure_salt(tx: &mut Tx) -> Result<(), sqlx::Error> {
     match inserted {
         // Another instance wrote its salt between the read and the insert,
         // and that salt is the installation's. On Postgres the violation has
-        // also aborted the transaction of `tx`, so a later commit of it ends
-        // as a rollback.
+        // also aborted the transaction of `tx`. A later commit of it then
+        // ends as a rollback without an error, and whatever else the
+        // transaction wrote is lost.
         Err(sqlx::Error::Database(database)) if database.is_unique_violation() => Ok(()),
         inserted => inserted,
     }
