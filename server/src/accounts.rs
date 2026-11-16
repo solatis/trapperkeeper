@@ -29,13 +29,11 @@ pub async fn create(tx: &mut Tx, new: NewAccount<'_>) -> Result<String, CreateEr
         tx,
         NewUser {
             tenant_id: new.tenant_id,
-            // The name is lowercased, so that two names that differ only in
-            // case name one user (ADR-0020).
+            // Two names that differ only in case name one user (ADR-0020).
             user_name: &new.name.to_lowercase(),
             role_name: new.role_name,
             password_hash: &password_hash,
-            // The flag makes the login body tell the UI to ask for a new
-            // password. Nothing in the server makes the person replace it.
+            // The flag only tells the UI to ask for a new password.
             password_must_change: true,
         },
     )
@@ -61,8 +59,7 @@ pub async fn reset(tx: &mut Tx, tenant_id: &str, user_id: &str) -> Result<String
             user_id,
             password_hash: &password_hash,
             must_change: true,
-            // Setting `tokens_valid_after` to now revokes every token issued
-            // to the user before the reset.
+            // This revokes every token issued before the reset.
             now: now_micros(),
         },
     )
