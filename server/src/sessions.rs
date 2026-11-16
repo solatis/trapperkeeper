@@ -41,12 +41,9 @@ pub async fn mint(
 ) -> Response {
     let found = async {
         let mut tx = state.store.begin().await?;
-        // The handler lowercases both names before the lookup, as login does,
-        // because names are stored lowercase (ADR-0020). It looks the user up
-        // with `users::find_in` and not through `scope::tenant`, so the route
-        // reaches the system tenant `$tk` and lets the superadmin mint a
-        // session for its own account, which issues a new refresh token as a
-        // login does.
+        // Names are stored lowercase (ADR-0020). The lookup skips
+        // `scope::tenant`, so the route also reaches `$tk` and the
+        // superadmin's own account.
         users::find_in(&mut tx, &tenant.to_lowercase(), &name.to_lowercase()).await
     }
     .await;
@@ -57,18 +54,14 @@ pub async fn mint(
         Ok(None) => return (StatusCode::NOT_FOUND, "no such tenant or user").into_response(),
         Err(error) => return database_error(&error),
     };
-    // The handler records the user's tenant as the request's scope, so the
-    // audit middleware files the row under that tenant, whose admins see the
-    // superadmin as the caller and both names in the path parameters.
+    // The audit row is filed under the user's tenant, so its admins see who
+    // minted a session for whom.
     caller.identity.set_scope(&user.tenant_id);
-    // The handler returns the body and sets no cookie, so the superadmin's
-    // own browser session stays and the client decides how to use the
-    // tokens.
+    // No cookie is set, so the superadmin's own browser session stays.
     Json(login_body(
         &state,
         &user,
-        // The must-change flag passes through as stored, because it
-        // restricts no route and the client shows it.
+        // The flag restricts no route, so it passes through as stored.
         user.password_must_change,
         SystemTime::now(),
     ))
