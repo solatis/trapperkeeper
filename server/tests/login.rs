@@ -31,15 +31,17 @@ fn login_then_me() {
     //
     // 1. We log in in upper case, which login lowercases (ADR-0020).
     // 2. We check the body and the two cookies. 3600 and 604800 are the hour
-    //    and the week that the tokens live.
+    //    and the week that the tokens live, and the flag is set, because the
+    //    superadmin still holds its generated password.
     // 3. We read `me` with the header, as the CLI does, and with the cookie
     //    alone, as the browser does.
     // 4. We refresh with the refresh cookie alone, as the browser does.
     // 5. We read `me` with no token, which gets the 401 that asks for a
     //    bearer token (RFC 6750, 3).
-    // 6. We create a second tenant and try four wrong logins under it and
-    //    `$tk`. All four get the same body, so a response does not say which
-    //    part was wrong.
+    // 6. We create a second tenant, so the superadmin's credentials can be
+    //    tried under another tenant that exists, and try four wrong logins.
+    //    All four get the same body, so a response does not say which part
+    //    was wrong.
     on_each_backend(|backend| {
         let server = serve_in_process(backend);
 
@@ -216,6 +218,7 @@ fn flip_signature(token: &str) -> String {
 /// characters must.
 #[test]
 fn flip_signature_keeps_a_valid_last_character() {
+    // `A` takes the branch that writes `E`, and `w` the other branch.
     for last in ['A', 'w'] {
         let token = format!("h.p.{}{last}", "a".repeat(42));
         let new = flip_signature(&token).chars().last().expect("a character");
@@ -243,7 +246,8 @@ fn admin_id(database: &common::TestDatabase) -> String {
     })
 }
 
-/// Sets `deleted_at` of the superadmin's row to `at`. The test writes the row
+/// Sets `deleted_at` of the superadmin's row to `at`, in epoch microseconds.
+/// The test writes the row
 /// itself, because no route reaches the superadmin of the system tenant
 /// (ADR-0028).
 fn delete_admin(database: &common::TestDatabase, at: i64) {
@@ -331,6 +335,7 @@ proptest! {
                 prop_assert_eq!(response.status, 200, "{:?} on {}: {}", defects, backend, response.body);
             }
             if has(Defect::DeletedUser) {
+                // The server checks only that `deleted_at` is set.
                 delete_admin(server.database(), now_micros);
             }
 
@@ -439,8 +444,8 @@ impl Model {
 
 proptest! {
     #![proptest_config(ProptestConfig {
-        // 12 cases, because each serves a router on every backend and derives
-        // one more ring.
+        // 12 cases, because each serves a router on every backend, which
+        // hashes a password and derives a ring, and derives a ring of its own.
         cases: 12,
         // No regression file is left in the tree.
         failure_persistence: None,
@@ -508,7 +513,8 @@ proptest! {
                         let body = json!({ "current_password": current, "new_password": new_password }).to_string();
                         let response = request(server.addr, "POST", "/api/v1/password", &[("Authorization", &bearer)], Some(&body));
                         // 401 wins over 400, because the token and the
-                        // current password are checked before the length.
+                        // current password are checked before the length. 12
+                        // is the server's minimum length.
                         let expected = if !model.live(&held, Kind::Access) || !*right_current {
                             401
                         } else if *new_len < 12 {
