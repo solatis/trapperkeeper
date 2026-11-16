@@ -4,13 +4,13 @@
 
 Data pipelines run on ephemeral compute: scheduler tasks, cluster jobs,
 containers, serverless functions. The data flowing through them changes shape
-constantly. Teams want quality checks and visibility on that data, but existing
-options force a bad trade:
+constantly. Teams want quality checks and visibility on that data, but the
+existing options force a bad trade.
 
-- checks hardcoded in pipeline code need a redeploy for every change;
-- schema-registry style tools need upfront registration and break on drift;
-- a monitoring tool that can fail the pipeline becomes a production risk, so it
-  gets removed.
+- Checks hardcoded in pipeline code need a redeploy for every change.
+- Schema-registry style tools need upfront registration and break on drift.
+- A monitoring tool that can fail the pipeline becomes a production risk, so
+  it gets removed.
 
 ## The product
 
@@ -24,8 +24,9 @@ evaluation.
   understands the data schema.
 - **Operators** manage rules through a web UI, a CLI, or an AI agent. A rule
   change reaches running sensors within about 30 seconds, without any deploy.
-- The **AI agent** troubleshoots data problems on request: it queries events,
-  and creates, scopes, samples and pauses rules on its own, inside guardrails.
+- The **AI agent** troubleshoots data problems on request. It queries events,
+  and it creates, scopes, samples and pauses rules on its own, inside
+  guardrails.
 
 ## Users
 
@@ -37,9 +38,9 @@ evaluation.
 
 | Term       | Meaning                                                                                                                                                                |
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Sensor     | In-process SDK instance, lives as long as the job. No registration, no identity, no server-side inventory.                                                             |
+| Sensor     | In-process SDK instance that lives as long as the job. What a sensor lacks: `principles.md`, 3.                                                                        |
 | Record     | One unit of user data passed to the sensor: any nested structure, or a dataframe row.                                                                                  |
-| Rule       | Immutable, versioned predicate over records plus an action, a sample rate and scope tags. The predicate is one expression (`adr/0041`).                                |
+| Rule       | Immutable predicate over records: one expression (`adr/0041`), an action, a sample rate and scope tags. An edit makes a new rule with a new `rule_id` (`adr/0033`).    |
 | Expression | One expression in Python-style syntax that gives a boolean, over the fields of a record.                                                                               |
 | Action     | `observe` (report only), `drop` (remove the record from the pipeline), `throw` (raise into the pipeline).                                                              |
 | Scope tags | Key-value tags on a rule; a sensor syncs only rules matching its own tags.                                                                                             |
@@ -55,11 +56,12 @@ evaluation.
 
 ## Integration surface
 
-- Sensor SDKs, in order: Rust first, then Python, then Go. Later languages
-  (Java, Node.js and others) are undecided, and Node.js comes last. Rust is
-  expected to be cheap, as the server side is written in Rust. Go is the
-  hardest case for publishing and native bindings (see `decisions.md`). All
-  SDKs must produce identical match results for identical input.
+- Sensor SDKs, in order: Rust first, then Python, then Java, then Go. The
+  design serves these four (`adr/0038`). Later languages, Node.js and others,
+  are undecided, and Node.js comes last. The Rust SDK costs little to build,
+  because the server side is written in Rust. Go is the hardest case for
+  publishing and native bindings (see `decisions.md`). Every SDK gives the same
+  outcome for the same rule and record (`principles.md`, 5).
 - Framework adapters on top of SDKs: dataframe libraries and cluster compute
   engines (vectorized evaluation), workflow schedulers and container
   orchestrators (automatic metadata).
@@ -71,8 +73,8 @@ evaluation.
 
 - Schema registry, or any server-side understanding of user data.
 - Sensor inventory, heartbeats, cross-job sensor identity.
-- Guaranteed event delivery. Events may be lost on crash or network partition;
-  the pipeline comes first.
+- Guaranteed event delivery. A sensor may lose events on a crash or a network
+  partition, because it never blocks or fails the pipeline to deliver them.
 - Staged or canary rule rollouts. `observe` plus scope tags plus sampling cover
   the need.
 - Pulling data from sources. TrapperKeeper only sees what pipeline code hands
