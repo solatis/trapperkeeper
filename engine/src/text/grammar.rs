@@ -851,9 +851,9 @@ fn method(
     mut args: Vec<Expr>,
     args_at: Range<usize>,
 ) -> Result<Expr, SyntaxError> {
-    // The table's `name` shadows the argument, because the reason
-    // `WrongArgumentCount` holds a `&'static str`.
-    let Some(&(name, arity)) = METHODS.iter().find(|(n, _)| *n == name) else {
+    // The error takes the table's name, because `WrongArgumentCount` holds
+    // a `&'static str`.
+    let Some(&(known, arity)) = METHODS.iter().find(|(n, _)| *n == name) else {
         // `name.startwith("a")` is refused at `startwith`, bytes 5 to 14,
         // with the nearest method `startswith`.
         let nearest = nearest(name, &names(&METHODS));
@@ -876,7 +876,11 @@ fn method(
         // `name.upper("x")` is refused at `("x")`, bytes 10 to 15, and so is
         // `name.startswith()` at `()`.
         _ => {
-            let reason = Reason::WrongArgumentCount { name, takes, given };
+            let reason = Reason::WrongArgumentCount {
+                name: known,
+                takes,
+                given,
+            };
             Err(SyntaxError {
                 at: args_at,
                 reason,
