@@ -49,9 +49,9 @@ There is no truthiness (owner, 2026-11-13).
 `any` over an empty list is false, and `all` over an empty list is true
 (owner, 2026-11-13).
 
-A NaN that the source treats as a value compares as IEEE 754 defines. Every comparison
-with it is false, except `!=`, which is true. An infinity is an ordinary
-number (owner, 2026-11-13).
+A NaN that the source treats as a value compares as IEEE 754 defines. Every
+comparison with it is false, except `!=`, which is true. An infinity is an
+ordinary number (owner, 2026-11-13).
 
 Patterns follow the linear-time dialect of Rust's `regex` crate, which has no
 lookaround and no backreferences. The server refuses a pattern outside it
@@ -73,8 +73,8 @@ A lowercase `null`, `true` or `false` is a name like any other (owner,
 2026-11-14).
 
 A rule may run over several lines. A number may hold underscores, and an integer
-may be hexadecimal. A membership list may hold fields (owner,
-2026-11-14). The parser refuses a comment (owner, 2026-11-13).
+may be hexadecimal. A membership list may hold fields (owner, 2026-11-14). The
+parser refuses a comment (owner, 2026-11-13).
 
 A text takes single or double quotes and has a raw form.
 
