@@ -36,11 +36,10 @@ that the API key of the sync resolved to (`adr/0003`, `adr/0027`). The row holds
 neither the key nor a key id. The row is keyed by tenant and tuple, not by key
 and not by sensor. Sensors that share one API key and declare different scopes
 produce one row each, and sensors with different keys and the same scope share
-one row (owner,
-2026-11-11: sharing a key with different scopes must be accounted for). The
-sync endpoint writes a tuple the first time it sees it and refreshes its
-last-seen time at most once an hour per server instance, through an
-in-memory map of what that instance wrote.
+one row (owner, 2026-11-11: sharing a key with different scopes must be
+accounted for). The sync endpoint writes a tuple the first time it sees it and
+refreshes its last-seen time at most once an hour per server instance, through
+an in-memory map of what that instance wrote.
 
 A tuple is live while a sensor has synced with it within the live window. The
 server deletes a tuple once its last-seen time is older than the retention. Both
@@ -62,8 +61,8 @@ index (owner, 2026-11-11).
 A registry of tags managed through the API, because it is registration under
 another name (`principles.md`, 3) and an admin chore. A registry kept by hand
 keeps scopes that no sensor declares and misses scopes that sensors declare. A
-tag would also have to be created before a pipeline could use it, and the
-seen-scope index shows any user which tags the sensors send (owner, 2026-11-16).
+tag would also have to be created before a pipeline could use it. The seen-scope
+index shows any user which tags the sensors send (owner, 2026-11-16).
 
 Deriving the scopes from events, because it lags and shows only the sensors
 that matched something.
