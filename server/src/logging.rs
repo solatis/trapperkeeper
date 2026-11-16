@@ -70,7 +70,7 @@ pub fn init(level: LevelFilter) -> Result<(), Error> {
     //    a default filter when it does not parse would let a typo silently log
     //    at the setting's level. Otherwise the filter is the level alone.
     let filter = if env::var_os(DIRECTIVE_VAR).is_some() {
-        EnvFilter::try_from_default_env().map_err(Error::InvalidDirective)?
+        EnvFilter::try_from_env(DIRECTIVE_VAR).map_err(Error::InvalidDirective)?
     } else {
         EnvFilter::default().add_directive(level.into())
     };
