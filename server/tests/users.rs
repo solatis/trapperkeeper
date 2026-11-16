@@ -52,10 +52,11 @@ fn admin_manages_the_users_of_its_tenant() {
     // 3. We list the users.
     // 4. We make the operator a second admin, so that the first admin may
     //    delete itself in step 5.
-    // 5. The first admin deletes itself.
+    // 5. The first admin deletes itself, and its token then gets 401.
     // 6. The promoted operator, now the last live admin, may not delete
     //    itself.
-    // 7. The observer deletes itself.
+    // 7. The observer deletes itself, as a user below admin may, and its
+    //    token then gets 401.
     // 8. We create a user and reset its password, which ends its session.
     on_each_backend(|backend| {
         let server = serve_in_process(backend);
@@ -214,7 +215,8 @@ fn superadmin_manages_any_tenants_users() {
                 response.body
             );
         }
-        // The superadmin is still live after the delete aimed at it.
+        // The superadmin is still live after the delete, the role change and
+        // the reset aimed at it.
         assert_eq!(me_status(&server, &token), 200);
     });
 }
@@ -267,7 +269,7 @@ fn user_routes_refuse_bad_names_roles_and_other_users() {
             (
                 "PUT",
                 "/api/v1/tenants/acme/users/ada@example.com/role",
-                // 400 and not 409 for the last admin, because the role is
+                // The last admin gets 400 and not 409, because the role is
                 // checked before the admins are counted.
                 json!({ "role": "auditor" }),
                 400,
