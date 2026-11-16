@@ -825,6 +825,7 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
             "malformed number",
         ),
         ("0x > 1", 0..2, Reason::MalformedNumber, "malformed number"),
+        ("0_7 > x", 0..3, Reason::MalformedNumber, "malformed number"),
         (
             "9223372036854775808 > x",
             0..19,

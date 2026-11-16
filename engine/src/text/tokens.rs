@@ -270,10 +270,14 @@ fn number(text: &str, at: usize) -> Result<Token, SyntaxError> {
     // `0x` with no digit after it is a malformed number, and not one that is
     // too large.
     let no_hex_digits = hex && digits.is_empty();
-    // A leading zero before a digit is refused, as Python refuses `007`.
-    // `0`, `0.5` and `0x10` pass.
-    let leading_zero =
-        !hex && bytes[at] == b'0' && bytes.get(at + 1).is_some_and(u8::is_ascii_digit);
+    // A 0 that a digit follows, with or without underscores between them, is
+    // refused, as Python refuses `007` and `0_7`. `0`, `0.5` and `0x10` pass.
+    let leading_zero = !hex
+        && bytes[at] == b'0'
+        && bytes[at + 1..end]
+            .iter()
+            .find(|b| **b != b'_')
+            .is_some_and(u8::is_ascii_digit);
     if !underscores_fit || no_hex_digits || leading_zero {
         return refuse(end, Reason::MalformedNumber);
     }
