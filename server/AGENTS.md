@@ -158,13 +158,14 @@ signing keys. Each module directory that appears under `src/` gets its own
   `doc/adr/0032-concurrent-tests-own-their-state.md`.
 
 **How to**: build, lint and test with the commands in the root `AGENTS.md`,
-How to. `cargo run -- --help` shows the command line. `cargo run -- serve` on
-a missing database creates `trapperkeeper.db` in the working directory, sets
-it up, logs the superadmin's one-time password, and starts the server on
-`127.0.0.1:8080`. Ctrl-C stops it. A local serve needs a signing key:
-`signing_key = "<any passphrase of 32 or more characters>"` under `[auth]` in
-the TOML file that `--config` names, or `TRAPPERKEEPER_AUTH__SIGNING_KEY` in
-the environment. `cargo run -- reset-superadmin` prints a new one-time
+How to. `cargo run -- --help` shows the command line. A local serve needs a
+signing key: `signing_key = "<any passphrase of 32 or more characters>"`
+under `[auth]` in the TOML file that `--config` names, or
+`TRAPPERKEEPER_AUTH__SIGNING_KEY` in the environment. With the key,
+`cargo run -- serve` on a missing database creates `trapperkeeper.db` in the
+working directory, sets it up, logs the superadmin's one-time password, and
+starts the server on `127.0.0.1:8080`. Ctrl-C stops it.
+`cargo run -- reset-superadmin` prints a new one-time
 password for the superadmin. The tests run against SQLite, and also against
 Postgres and MariaDB when `TK_TEST_POSTGRES_URL` and `TK_TEST_MARIADB_URL`
 are set, as `src/store/AGENTS.md`, How to, says.
