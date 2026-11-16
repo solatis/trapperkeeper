@@ -70,7 +70,7 @@ fn login_then_me() {
         assert_token_cookie(
             &set_cookie,
             &format!("tk_access={token}"),
-            "Path=/",
+            "Path=/api/v1",
             "Max-Age=3600",
         );
         assert_token_cookie(

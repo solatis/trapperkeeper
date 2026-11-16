@@ -16,7 +16,7 @@ use crate::audit::Identity;
 use crate::auth::caller::{Caller, authenticate};
 use crate::auth::password;
 use crate::auth::token::Kind;
-use crate::http::AppState;
+use crate::http::{API_PREFIX, AppState};
 use crate::store::now_micros;
 use crate::store::users::{self, PasswordSet, User};
 
@@ -36,6 +36,11 @@ pub const ACCESS_COOKIE: &str = "tk_access";
 /// The cookie that carries the refresh token for the browser. ADR-0025 names
 /// it `tk_refresh`.
 pub const REFRESH_COOKIE: &str = "tk_refresh";
+
+/// The path the browser sends the access cookie to: the prefix of the
+/// management routes, the only routes that read the cookie. The access token
+/// then leaves the browser only where it is needed.
+const ACCESS_PATH: &str = API_PREFIX;
 
 /// The path of the refresh route. The literal repeats `API_PREFIX` and the
 /// route's own path, and no test compares them, so a change to either must
@@ -185,7 +190,7 @@ fn logged_in(
             ACCESS_COOKIE,
             &body.access_token,
             Kind::Access,
-            "/",
+            ACCESS_PATH,
         ))
         .add(token_cookie(
             REFRESH_COOKIE,
@@ -289,7 +294,7 @@ pub async fn refresh(
             ACCESS_COOKIE,
             &access_token,
             Kind::Access,
-            "/",
+            ACCESS_PATH,
         )),
         Json(Refreshed {
             access_token,
@@ -349,7 +354,7 @@ fn clear_cookies(jar: CookieJar) -> CookieJar {
     };
     // A browser replaces a cookie only with one of the same name, domain and
     // path, so each removal carries the path that `logged_in` set.
-    jar.add(removal(ACCESS_COOKIE, "/"))
+    jar.add(removal(ACCESS_COOKIE, ACCESS_PATH))
         .add(removal(REFRESH_COOKIE, REFRESH_PATH))
 }
 
