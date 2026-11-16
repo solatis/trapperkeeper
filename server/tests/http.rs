@@ -46,8 +46,8 @@ fn openapi_describes_the_routes() {
         assert!(paths.contains_key("/api/v1/me"));
         assert!(paths.contains_key("/api/v1/tenants"));
         assert!(!paths.contains_key("/openapi.json"));
-        // The key is the name that routes cite in `security`, and the value is
-        // the HTTP scheme registered under it.
+        // The key `bearer` under `securitySchemes` is the name that routes
+        // cite in `security`, and the value is the HTTP scheme under it.
         assert_eq!(
             document["components"]["securitySchemes"]["bearer"]["scheme"],
             "bearer"
