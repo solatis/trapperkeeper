@@ -43,12 +43,12 @@ last-seen time at most once an hour per server instance, through an
 in-memory map of what that instance wrote.
 
 A tuple is live while a sensor has synced with it within the live window. The
-server deletes a tuple once its last-seen time is older than the retention.
-Both are settings of the server, `scopes.live_window` and `scopes.retention`,
-with defaults of 7 and 30 days (owner, 2026-11-11: configurable). `serve`
-periodically deletes the tuples older than the retention. The live test
-filters on the last-seen time and needs no housekeeping. Per-tenant values
-come later if a tenant needs them.
+server deletes a tuple once its last-seen time is older than the retention. Both
+are settings of the server, `scopes.live_window` and `scopes.retention`, with
+defaults of 7 and 30 days (owner, 2026-11-11: configurable). `serve`
+periodically deletes the tuples older than the retention. The check whether a
+tuple is live filters on the last-seen time and needs no housekeeping.
+Per-tenant values come later if a tenant needs them.
 
 The UI offers the seen keys and values when a rule is scoped and shows each
 scope's last-seen time. The management API refuses a rule whose scope
@@ -59,13 +59,11 @@ index (owner, 2026-11-11).
 
 ## Rejected alternatives
 
-A registry of tags managed through the API, because a registry is
-registration under another name, which `principles.md`, 3 excludes. Keeping a
-registry is an admin chore. A registry kept by hand drifts in both directions,
-so it keeps scopes that no sensor declares and misses scopes that sensors
-declare. A registry also adds friction, because a tag would have to be created
-before a pipeline could use it. With the seen-scope index any user can see
-which tags the sensors send (owner, 2026-11-16).
+A registry of tags managed through the API, because it is registration under
+another name (`principles.md`, 3) and an admin chore. A registry kept by hand
+keeps scopes that no sensor declares and misses scopes that sensors declare. A
+tag would also have to be created before a pipeline could use it, and the
+seen-scope index shows any user which tags the sensors send (owner, 2026-11-16).
 
 Deriving the scopes from events, because it lags and shows only the sensors
 that matched something.
@@ -99,6 +97,7 @@ its rules are written, and a job that runs less often than the live window
 cannot keep rules. A rule whose scope went stale stays in force, and the
 management API flags it. The operator keeps the number of distinct tags low. The
 caps bound the tags of each rule and of each sensor, and no cap bounds the tags
-of a tenant. The server takes the tuple from the JSON that the engine writes for
-the scope map of a rule. The sync wire (M7) carries the sensor's tags. The
-engine, the server and the web components cite this record.
+of a tenant. The server compares a rule's scope with the index in the tuple
+form, which is the JSON that the engine writes for a scope map. The sync wire
+(M7) carries the sensor's tags. The engine, the server and the web components
+cite this record.
