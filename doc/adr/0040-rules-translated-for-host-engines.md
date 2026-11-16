@@ -18,11 +18,11 @@ On Spark the Spark adapter translates the rules into Spark expressions. No
 TrapperKeeper code runs per row (owner, 2026-11-13).
 
 Whichever executor runs a rule, the rule behaves the same to the outside. Spark
-is an example, and the first host engine gets its executor when users ask for it
-(owner, 2026-11-16). On Spark an event arrives with the user's own Spark action.
-A `throw` aborts the job after Spark's task retries. A running batch query sees
-no rule change and no pause. A streaming query sees a rule change or a pause
-once per micro-batch.
+is an example, and the first evaluator for a host engine is written for the
+engine that users ask for (owner, 2026-11-16). On Spark an event arrives with
+the user's own Spark action. A `throw` aborts the job after Spark's task
+retries. A running batch query sees no rule change and no pause. A streaming
+query sees a rule change or a pause once per micro-batch.
 
 A rule literal never reaches a host's parser unescaped.
 
