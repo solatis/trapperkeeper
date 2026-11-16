@@ -97,7 +97,6 @@ its rules are written, and a job that runs less often than the live window
 cannot keep rules. A rule whose scope went stale stays in force, and the
 management API flags it. The operator keeps the number of distinct tags low. The
 caps bound the tags of each rule and of each sensor, and no cap bounds the tags
-of a tenant. The server compares a rule's scope with the index in the tuple
-form, which is the JSON that the engine writes for a scope map. The sync wire
-(M7) carries the sensor's tags. The engine, the server and the web components
-cite this record.
+of a tenant. A tuple has the form of the JSON that the engine writes for a scope
+map. The sync wire (M7) carries the sensor's tags. The engine, the server and
+the web components cite this record.
