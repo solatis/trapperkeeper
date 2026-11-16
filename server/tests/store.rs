@@ -1,8 +1,8 @@
 //! What migrate builds, which databases serve accepts and what the first
 //! serve sets up, through the library's setup functions. The file holds two
-//! scenarios and one property over generated databases (ADR-0018). Each runs
-//! on SQLite always, and on Postgres and MariaDB when their admin URLs are
-//! set.
+//! scenarios and one property over generated databases, as ADR-0018 prefers
+//! a property to a case per state. Each runs on SQLite always, and on
+//! Postgres and MariaDB when their admin URLs are set.
 
 mod common;
 
@@ -53,8 +53,8 @@ fn migrate_builds_a_database_that_serve_accepts() {
         let (_, first) = block_on(setup::create(&database.url)).expect("the database is set up");
         let password = first.password.as_deref().expect("a password");
         assert!(generated(password), "{password:?} on {backend}");
-        // No route shows `$tk`, its roles or the tracking table, so the test
-        // reads them through sqlx.
+        // No route shows the system tenant `$tk`, its roles or the tracking
+        // table, so the test reads them through sqlx.
         let tenants: Vec<(String, String, String)> = on_pool!(database, |pool| {
             sqlx::query_as("SELECT tenant_id, tenant_name, tenant_title FROM tenants")
                 .fetch_all(&pool)
@@ -65,6 +65,8 @@ fn migrate_builds_a_database_that_serve_accepts() {
             backend,
             "SELECT role_name, role_title FROM roles WHERE tenant_id = $1 ORDER BY role_id",
         );
+        // The rewritten statement is a `String` made from a literal, which
+        // `AssertSqlSafe` lets through.
         let roles: Vec<(String, String)> = on_pool!(database, |pool| {
             sqlx::query_as(AssertSqlSafe(select))
                 .bind(SYSTEM_TENANT_ID)
@@ -75,6 +77,7 @@ fn migrate_builds_a_database_that_serve_accepts() {
         // Every migration the tracking table lists ran in this set-up.
         assert!(first.applied > 0);
         assert_eq!(first.applied, tracked_versions(&database).len());
+        // The first migrations seed the system tenant and its role.
         assert_eq!(
             tenants,
             [(
@@ -155,7 +158,8 @@ enum Outcome {
 /// The versions migrate applies, read once from the tracking table of a
 /// freshly migrated SQLite database. Every backend has the same versions.
 fn embedded_versions() -> &'static [i64] {
-    // Read once per process, so one database is migrated for all cases.
+    // The library does not export its migrations, so the versions come from
+    // a migrated database, read once per process for all cases.
     static VERSIONS: OnceLock<Vec<i64>> = OnceLock::new();
     VERSIONS.get_or_init(|| {
         // SQLite runs in every test run, and each backend has every version.
