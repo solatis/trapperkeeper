@@ -1,17 +1,20 @@
 # Principles
 
-Trade-offs we resolve the same way every time. Each lists what we give up.
+This file lists the trade-offs we resolve the same way every time. A principle
+that gives something up says what under "Cost".
 
 ## 1. Least intrusive by default
 
 An observability tool must be invisible when it works and harmless when it
-breaks. Every default degrades toward pass-through. A value that is not there
-is data and switches nothing off. A rule that meets a fault on a record does
-not apply to that record and is reported (`adr/0005`). When the server is
-unreachable, the rules are off and records flow. Strictness is opt-in per
-sensor.
+breaks. Every default degrades toward pass-through. A value that is not there is
+data and switches nothing off. A rule that meets a fault on a record does not
+apply to that record, and the SDK reports the fault (`adr/0005`). When the
+server is unreachable, the rules are off and records flow. Strictness is opt-in
+per sensor.
 
-Cost: events can be lost.
+Cost: events can be lost. A crash of the native core is an exception to
+"harmless when it breaks". The loops of the core read the memory of a source in
+place, so the core can crash the process (`adr/0038`).
 
 ## 2. Schema-agnostic server
 
@@ -20,50 +23,54 @@ that are resolved against the actual record at evaluation time. Schema drift
 needs no coordination.
 
 Cost: a typo in a field path matches nothing, and nothing reports it
-(`adr/0005`).
-Mitigation belongs in tooling (event-informed suggestions), not in a registry.
+(`adr/0005`). Mitigation belongs in tooling (event-informed suggestions), not
+in a registry.
 
 ## 3. Ephemeral sensors
 
-Sensors live as long as the job. No registration, no identity, no heartbeat,
-no server-side inventory, no state that outlives the process.
+Sensors live as long as the job. A sensor has no registration, no identity, no
+heartbeat and no server-side inventory, and it keeps no state that outlives the
+process.
 
 Cost: no cross-run continuity, no "which sensors exist" view other than what
 event metadata reveals.
 
 ## 4. Evaluate locally, manage centrally
 
-Evaluation happens in the pipeline process: no network round-trip per record,
-no server bottleneck, works while disconnected. Everything else (authoring,
-validation, authorization, audit) happens in exactly one place.
+Evaluation happens in the pipeline process. A record therefore costs no
+network round-trip, the server is no bottleneck, and evaluation goes on while
+the sensor is disconnected. Authoring, validation, authorization and audit
+happen in the management API.
 
-Cost: every SDK carries the one core (`adr/0038`), and a host engine that
+Cost: every SDK carries the same Rust core (`adr/0038`), and a host engine that
 runs translated rules must agree with it (`adr/0040`). The conformance suite
 exists to pay this cost.
 
 ## 5. Deterministic semantics
 
-Same rule plus same record gives the same outcome in every SDK. Where ordering
-matters, tie-breaking is specified. A batch gives each record the outcome it
-gets alone (`adr/0037`). A source says what "no value" is, so two frameworks
-can differ on the same numbers (`adr/0036`). Optimizations (batching,
-vectorization, a later reordering of rules) may change cost, never results.
+The same rule on the same record gives the same outcome in every SDK. A batch
+gives each record the outcome it gets alone (`adr/0037`). A source says what "no
+value" is, so two frameworks can differ on the same numbers (`adr/0036`).
+Optimizations (batching, vectorization, a later reordering of rules) may change
+cost, never results.
 
 ## 6. Reversible operations
 
-Rules are immutable versions; `observe` exists to test in production; a global
-pause turns everything off. Any rule action, by human or agent, can be undone
-quickly. This is what makes autonomous agent operation acceptable.
+Rules are immutable versions. `observe` lets an operator test a rule in
+production. A global pause turns every rule off. An operator undoes a rule
+action, by a human or by the agent, by pausing or deleting the rule. Because
+every rule action can be undone, the AI agent may change rules on its own.
 
 ## 7. Simplicity
 
 Build the simple thing, record what was deferred as a decision, revisit on
-evidence. Work incrementally: no large upfront plans; a design question is
-settled when the code that needs it is written. A plan for one issue,
-written right before its code and deleted once it lands, is how that
-settling happens; it is not an upfront plan. Each component gets the kind
-of test `adr/0018` assigns it, unit, integration or end-to-end, with
-properties preferred over hand-picked cases. One convention per concern.
+evidence. We work incrementally and make no large upfront plans, and a design
+question is settled when the code that needs it is written. The plan for one
+issue is written right before its code and deleted once the code lands, and
+such a plan does not count as an upfront plan. Each component gets the kind of
+test `adr/0018` assigns it, unit, integration or end-to-end, and property,
+behavioral and data-driven tests are preferred. Each concern has one
+convention.
 
 ## 8. Backwards compatibility is not a concern
 
