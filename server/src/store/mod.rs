@@ -210,9 +210,9 @@ pub async fn open(url: &str) -> Result<Store, sqlx::Error> {
 /// and the user of the URL may not create databases.
 pub async fn create(url: &str) -> Result<Store, sqlx::Error> {
     match backend(url)? {
-        // `mode=rwc` in a SQLite URL also creates a missing file. `create`
-        // asks sqlx for that through `open_sqlite` and leaves the URL alone,
-        // so migrate and serve take the same URL.
+        // The `true` has sqlx create a missing file. The URL of the user
+        // therefore needs no `mode=rwc`, and migrate and serve take the same
+        // URL.
         Backend::Sqlite => open_sqlite(url, true).await,
         Backend::Postgres => {
             create_missing::<Postgres>(url).await?;
@@ -256,7 +256,7 @@ async fn open_sqlite(url: &str, create: bool) -> Result<Store, sqlx::Error> {
 async fn create_missing<D: MigrateDatabase>(url: &str) -> Result<(), sqlx::Error> {
     // Two processes that create the same missing database at once can both
     // see it missing. The second `create_database` then fails, and so does
-    // `create`.
+    // `create`, which no caller retries.
     if !D::database_exists(url).await? {
         D::create_database(url).await?;
     }
