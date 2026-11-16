@@ -18,9 +18,9 @@ through tool calls (owner, 2026-11-15).
 The agent manages rules and does not manage sensors. For a new instrumentation
 point in pipeline code, the agent at most suggests a patch to a human.
 
-The agent may create rules of any kind (owner, 2026-11-15). Two questions are
-open (`decisions.md`): how a rule records that the agent wrote it, and how the
-agent signs in.
+The agent may create rules of any kind, with any action (owner, 2026-11-15). Two
+questions are open (`decisions.md`): how a rule records that the agent wrote it,
+and how the agent signs in.
 
 ## Rejected alternatives
 
@@ -29,6 +29,6 @@ cycle above.
 
 ## Consequences
 
-The agent gets the same checks as a human, can be swapped for an external agent,
-and is optional to deploy. The agent component cites this record in its
-`AGENTS.md` when its directory is created with its first code.
+The agent gets the same checks as a human, can be replaced by another agent that
+calls the same API, and is optional to deploy. The agent component cites this
+record in its `AGENTS.md` when its directory is created with its first code.
