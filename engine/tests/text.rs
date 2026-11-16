@@ -4,6 +4,7 @@
 //! the reason and the sentence of each.
 
 use std::ops::Range;
+use std::sync::LazyLock;
 
 use proptest::collection::vec;
 use proptest::prelude::*;
@@ -390,6 +391,24 @@ fn found_token(wanted: &[&str], token: &str, after: Option<&str>) -> Reason {
     expected(wanted, Found::Token(token.to_owned()), after)
 }
 
+/// The texts that break the cap on length and the cap on nesting, each with
+/// the sentence of its reason. They are built once from the limits, because
+/// the rows of `faulty` hold `&'static str`.
+static OVER_THE_CAPS: LazyLock<[String; 4]> = LazyLock::new(|| {
+    [
+        // One character more than the cap: a condition, padded with spaces.
+        format!("{:<width$}", "a > 1", width = MAX_TEXT_LENGTH + 1),
+        format!("a rule is at most {MAX_TEXT_LENGTH} characters long"),
+        // `x` in one pair of parentheses more than the cap.
+        format!(
+            "{}x{}",
+            "(".repeat(MAX_NESTING + 1),
+            ")".repeat(MAX_NESTING + 1)
+        ),
+        format!("a rule nests at most {MAX_NESTING} levels deep"),
+    ]
+});
+
 /// (text, the bytes the error is about, the reason, its sentence).
 #[expect(clippy::too_many_lines, reason = "one row per faulty text")]
 fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
@@ -406,6 +425,7 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
     ];
     let count = |name, takes, given| Reason::WrongArgumentCount { name, takes, given };
     let none_operand = |op: &str| Reason::NoneOperand { op: op.to_owned() };
+    let [too_long, too_long_sentence, too_deep, too_deep_sentence] = &*OVER_THE_CAPS;
     vec![
         (
             "",
@@ -918,6 +938,24 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
                 word: "class".to_owned(),
             },
             "`class` is not part of the rule language",
+        ),
+        // The error covers the one character past the cap. The text is
+        // ASCII, so that character starts at byte `MAX_TEXT_LENGTH`.
+        (
+            too_long.as_str(),
+            MAX_TEXT_LENGTH..MAX_TEXT_LENGTH + 1,
+            Reason::TooLong {
+                max: MAX_TEXT_LENGTH,
+            },
+            too_long_sentence.as_str(),
+        ),
+        // The error covers the opening parenthesis that is one too many,
+        // which stands after `MAX_NESTING` others.
+        (
+            too_deep.as_str(),
+            MAX_NESTING..MAX_NESTING + 1,
+            Reason::TooDeep { max: MAX_NESTING },
+            too_deep_sentence.as_str(),
         ),
     ]
 }

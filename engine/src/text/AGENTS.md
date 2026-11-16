@@ -41,8 +41,11 @@ kit, the error that a faulty text gets, and the printer.
   combinator of the kit shows what it does on an example.
 - A new case of `Reason` gets a row in the table `faulty` of
   `engine/tests/text.rs`: a faulty text, the place of its error, the reason
-  and its sentence. No test checks that every reason has a row in
-  `faulty`, so the sentence of a reason without a row is never run by a test.
+  and its sentence. `TooComplex` is the one exception. No text reaches it
+  while no two alternatives of a choice read the same bracketed text, and the
+  test `a_deep_faulty_text_is_refused_for_its_own_mistake` guards that rule.
+  No test checks that every other reason has a row in `faulty`, so the
+  sentence of a reason without a row is never run by a test.
 - A canonical tree is a tree that the parser can build, and it prints to a
   text that parses back to the same tree. An `and` directly under an `and`
   is a tree that the parser cannot build. The property
