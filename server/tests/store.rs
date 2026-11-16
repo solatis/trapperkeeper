@@ -9,8 +9,8 @@ use std::collections::BTreeSet;
 use std::sync::OnceLock;
 
 use common::{
-    ADMIN, Backend, SYSTEM_TENANT, TestDatabase, backends, block_on, log_in, on_each_backend,
-    on_pool, placeholders, serve_store, set_up_database,
+    ADMIN, Backend, SYSTEM_TENANT, SYSTEM_TENANT_ID, TestDatabase, backends, block_on, log_in,
+    on_each_backend, on_pool, placeholders, serve_store, set_up_database,
 };
 use proptest::prelude::*;
 use sqlx::AssertSqlSafe;
@@ -57,15 +57,16 @@ fn migrate_builds_a_database_that_serve_accepts() {
                 .await
                 .expect("the tenants are read")
         });
+        let select = placeholders(
+            backend,
+            "SELECT role_name, role_title FROM roles WHERE tenant_id = $1 ORDER BY role_id",
+        );
         let roles: Vec<(String, String)> = on_pool!(database, |pool| {
-            sqlx::query_as(
-                "SELECT role_name, role_title FROM roles \
-                 WHERE tenant_id = '00000000-0000-7000-8000-000000000000' \
-                 ORDER BY role_id",
-            )
-            .fetch_all(&pool)
-            .await
-            .expect("the roles are read")
+            sqlx::query_as(AssertSqlSafe(select))
+                .bind(SYSTEM_TENANT_ID)
+                .fetch_all(&pool)
+                .await
+                .expect("the roles are read")
         });
         // Every migration the tracking table lists ran in this set-up.
         assert!(first.applied > 0);
