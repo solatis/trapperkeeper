@@ -1,5 +1,6 @@
-//! Entry point of the `trapperkeeper` binary. The tokio runtime owns the
-//! process, and the library does the rest.
+//! Entry point of the `trapperkeeper` binary. `main` starts the tokio runtime
+//! and returns the exit status of `trapperkeeper_server::run`. The work lives
+//! in the library, where the integration tests reach it.
 
 use std::process::ExitCode;
 
