@@ -40,7 +40,7 @@ struct Log {
 /// The tokens of one text, and what the parse has noted so far.
 pub(super) struct Input<'t> {
     pub text: &'t str,
-    pub tokens: Vec<Token>,
+    tokens: Vec<Token>,
     // A `RefCell`, because a parser takes the input by shared reference.
     // Every borrow ends before a parser runs again, so no two borrows
     // meet.
