@@ -84,8 +84,9 @@ pauses rules.
 
 The agent may create rules of any kind. How a rule records that the agent wrote
 it is open (see `decisions.md`). Rules are immutable, so an edit is a new rule
-with a new id. Pausing or deleting a rule undoes every agent action
-(`principles.md`, 6). The contents of a record are untrusted input to the model.
+with a new id, and an operator undoes a rule change of the agent by pausing or
+deleting the rule (`principles.md`, 6). The contents of a record are untrusted
+input to the model.
 
 ### Store
 
@@ -98,11 +99,10 @@ with a new id. Pausing or deleting a rule undoes every agent action
 
 ### Conformance suite
 
-The conformance suite is a set of language-neutral fixtures. Each entry holds
-a rule, records and the expected outcome of each record.
-The fixtures define what each kind of expression gives and when a rule cannot
-be evaluated (`adr/0006`). Every SDK must pass them, and they are the
-specification of evaluation.
+The conformance suite is a set of language-neutral fixtures. Each entry holds a
+rule, records and the expected outcome of each record. The fixtures define what
+each kind of expression gives and when a rule cannot be evaluated (`adr/0006`).
+Every SDK must pass them, and they are the specification of evaluation.
 
 ## Flows
 
@@ -122,7 +122,7 @@ time and appends to the event log.
 
 **Troubleshooting.** Operator asks agent -> agent queries events -> agent
 creates a narrow `observe` rule -> sensors pick it up -> agent reads resulting
-events -> agent reports findings, optionally proposes promotion.
+events -> agent reports findings.
 
 **Server unreachable.** Sensor applies its configured failure behavior, logs,
 retries sync at a fixed interval. Unreported events beyond the buffer are lost.
@@ -137,9 +137,9 @@ retries sync at a fixed interval. Unreported events beyond the buffer are lost.
   (`adr/0020`). Storage and the wire carry UTC, and only the presentation
   shows local time. An event keeps both the sensor's timestamp and the
   server's.
-- **Validation.** The server validates its own schemas strictly: rules,
-  settings and API requests. A rule treats the user's data leniently. A
-  missing value is data, and a rule that meets a fault on a record does not
+- **Validation.** The server validates its own schemas strictly: rules, settings
+  and API requests. A rule treats the user's data leniently. A rule treats a
+  missing value as a null, and a rule that meets a fault on a record does not
   apply to that record (`adr/0005`).
 - **Operations.** One distributable carries the subcommands `serve`, `migrate`
   and `reset-superadmin`. A secret setting may come from the settings file or
