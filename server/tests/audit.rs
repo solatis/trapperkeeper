@@ -160,7 +160,8 @@ fn changing_requests_leave_rows_and_reads_do_not() {
         assert_eq!(response.status, 401, "on {backend}");
         let rows = stored_rows(&server, None);
         assert_eq!(rows.len(), 1, "{rows:?} on {backend}");
-        assert_eq!((rows[0].1.as_str(), rows[0].2), ("/api/v1/login", 401));
+        let (_, route, status, ..) = &rows[0];
+        assert_eq!((route.as_str(), *status), ("/api/v1/login", 401));
 
         // 5. The mint names acme in its path, so it is filed there, not in $tk.
         let response = call(
