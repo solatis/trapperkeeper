@@ -9,9 +9,9 @@ not foreclose it. The owner stated the rule on 2026-11-01.
 
 ## Decision
 
-The web UI is rendered on the server: handlers return HTML through a template
-engine chosen with M8. There is no single-page application. JavaScript is
-allowed ad hoc, for small widgets only.
+The server renders the web UI. Its handlers return HTML through a template
+engine that is chosen with M8. There is no single-page application. JavaScript
+is allowed ad hoc, for small widgets only.
 
 ## Rejected alternatives
 
@@ -20,6 +20,5 @@ surface to build and secure, and the UI is low volume.
 
 ## Consequences
 
-The framework must let a handler return any body type; axum does. The template
-engine (askama or minijinja) is decided with the first page, in M8, and
-recorded then.
+The framework must let a handler return any body type, and axum does. The
+template engine is an open decision in `doc/decisions.md`.

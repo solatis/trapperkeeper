@@ -13,15 +13,14 @@ once.
 The workspace lints table in the root `Cargo.toml` denies clippy's `all` and
 `pedantic` groups and rustc warnings, and every crate inherits it. A single
 lint is relaxed per case with a higher-priority entry, never by lowering a
-group. CI passes no extra flag: a commit fails the same way on a developer's
-machine and in CI.
+group. CI passes no extra lint flag, so a commit fails the same way on a
+developer's machine and in CI.
 
 ## Rejected alternatives
 
 The default clippy group alone, as too lenient. Warning locally and denying
 only in CI, because a commit could pass locally and fail remotely. Formatting
-checks only with clippy advisory, because warnings then accumulate and lint
-stops meaning anything.
+checks only with clippy advisory, because warnings then accumulate.
 
 ## Consequences
 

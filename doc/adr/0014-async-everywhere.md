@@ -22,4 +22,4 @@ sensor API is high volume by design.
 ## Consequences
 
 Every I/O dependency is chosen for its async API. `main` is the runtime's entry
-point. Tests that drive the binary run it as a process.
+point.

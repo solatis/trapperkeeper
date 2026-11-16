@@ -4,19 +4,19 @@ Date: 2026-11-01.
 
 ## Context
 
-The milestone asks for structured logs. The format written to standard output
-and the source of the log level were open; the owner decided both on
+The milestone M1 asks for structured logs. The format written to standard
+output and the source of the log level were open. The owner decided both on
 2026-11-01.
 
 ## Decision
 
 tracing is the logging facade and tracing-subscriber writes the lines. The
-output is JSON, one object per line, when stdout is not a terminal, and
-tracing's compact human format when it is; the server detects the terminal
-and has no setting for the format. The level is the `log.level` setting with
-the default `info`, through the normal precedence of the settings. A `RUST_LOG`
-directive, when the variable is set, replaces the setting with its full filter
-syntax, and an invalid directive fails startup.
+server writes JSON, one object per line, when stdout is not a terminal, and
+tracing's compact human format when it is. The server detects the terminal
+itself and has no setting for the format. The level is the `log.level` setting
+with the default `info`, through the normal precedence of the settings. A set
+`RUST_LOG` directive replaces the setting with its full filter syntax. An
+invalid directive fails startup.
 
 ## Rejected alternatives
 
@@ -29,5 +29,6 @@ tower-http emits tracing events.
 ## Consequences
 
 The same command logs differently under a pipe than in a terminal, and scripts
-get JSON. The readable branch has no automated test, because CI has no
-terminal.
+get JSON. No automated test covers the compact format that the server writes to
+a terminal, because only a process shows terminal detection and no test starts a
+process (`adr/0018`).
