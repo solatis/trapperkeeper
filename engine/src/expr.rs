@@ -10,7 +10,8 @@ use serde::{Deserialize, Serialize};
 #[serde(untagged)]
 pub enum Segment {
     Key(String),
-    // The width of an index is a choice that no measurement backs.
+    // The width of an index is a choice that no measurement backs. A path
+    // has no negative index, because the parser refuses one (ADR-0041).
     Index(u32),
 }
 
@@ -40,7 +41,8 @@ pub enum Expr {
     Bool(bool),
     Int(i64),
     /// JSON has no form for a NaN or an infinity, so a float in a tree must
-    /// be finite.
+    /// be finite. The parser builds no other float, and `validate` does not
+    /// check a tree that other code builds.
     Float(f64),
     Text(String),
     List(Vec<Expr>),
@@ -49,7 +51,8 @@ pub enum Expr {
     /// The path starts at the record.
     Field(Vec<Segment>),
     /// The path starts at the element that an enclosing `Any` or `All` names.
-    /// An empty path is the element itself.
+    /// An empty path is the element itself. The JSON form does not check that
+    /// a quantifier names the element.
     Element {
         name: String,
         path: Vec<Segment>,
@@ -67,8 +70,9 @@ pub enum Expr {
     // Comparisons.
     /// Each comparison holds its left and its right operand, except `IsNone`
     /// and `IsNotNone`, which hold the one value they test. An `Eq` or a `Ne`
-    /// with the literal `None` as an operand tests for a missing value, as
-    /// `IsNone` and `IsNotNone` do (ADR-0005).
+    /// with the literal `None` as an operand tests for a null, as `IsNone`
+    /// and `IsNotNone` do. A value that is not there is a null too
+    /// (ADR-0005).
     Eq(Box<Expr>, Box<Expr>),
     Ne(Box<Expr>, Box<Expr>),
     Lt(Box<Expr>, Box<Expr>),
@@ -227,6 +231,8 @@ impl Expr {
             | Expr::StartsWith(l, r)
             | Expr::EndsWith(l, r) => vec![l, r],
             // In the text the test of a quantifier stands before its list.
+            // The arm does not bind the name, so a caller that follows the
+            // scope handles `Any` and `All` itself, as `resolve` does.
             Expr::Any { list, test, .. } | Expr::All { list, test, .. } => vec![test, list],
             // In the text the first branch stands before the test.
             Expr::If {
