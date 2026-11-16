@@ -61,7 +61,8 @@ fn request_is_logged_as_json_lines() {
 
     // 1. install the subscriber
     let buffer = Buffer::default();
-    // The filter that `logging::init` builds at the default level.
+    // The filter that `logging::init` builds at `info`, the default of the
+    // `log.level` setting.
     let filter = EnvFilter::default().add_directive(LevelFilter::INFO.into());
     let writer = buffer.clone();
     // Each event gets a clone of the buffer as its writer.
@@ -83,7 +84,7 @@ fn request_is_logged_as_json_lines() {
     let request = lines
         .iter()
         // tower-http's `DefaultOnResponse` writes this message when the
-        // response is sent.
+        // router has made the response, before its body goes out.
         .find(|line| line["fields"]["message"] == "finished processing request")
         .unwrap_or_else(|| panic!("no request line in {lines:?}"));
     // The router raises tower-http's event from DEBUG to INFO.
