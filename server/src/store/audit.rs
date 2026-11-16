@@ -70,7 +70,7 @@ pub struct Row {
 
 /// The columns of `Row`, joined with the user and the user's tenant, for
 /// `page` to narrow. A macro, because `concat!` takes only literals.
-macro_rules! SELECT_ROW {
+macro_rules! SELECT_ROWS_BEFORE {
     () => {
         "SELECT a.audit_id, u.user_name, t.tenant_name AS user_tenant, a.method, a.route, \
          a.path_params, a.status, a.peer_address, a.client_address, a.recorded_at \
@@ -115,7 +115,7 @@ pub async fn page(
         let select = sql(
             tx,
             concat!(
-                SELECT_ROW!(),
+                SELECT_ROWS_BEFORE!(),
                 " AND a.user_id = $3 ORDER BY a.audit_id DESC LIMIT $4"
             ),
         );
@@ -131,7 +131,7 @@ pub async fn page(
     }
     let select = sql(
         tx,
-        concat!(SELECT_ROW!(), " ORDER BY a.audit_id DESC LIMIT $3"),
+        concat!(SELECT_ROWS_BEFORE!(), " ORDER BY a.audit_id DESC LIMIT $3"),
     );
     on_tx!(tx, |conn| {
         sqlx::query_as(AssertSqlSafe(select))
