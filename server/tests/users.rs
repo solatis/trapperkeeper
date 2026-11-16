@@ -60,11 +60,11 @@ fn admin_manages_the_users_of_its_tenant() {
 
         // 2. Mixed case, so the response shows the name lowercased as it is
         //    stored.
-        let ops = create_user(&server, &ada, "acme", "Ops@Example.com", "operator");
-        assert_eq!(ops["name"], "ops@example.com");
-        assert_eq!(ops["role"], "operator");
-        let ops_password = ops["password"].as_str().expect("a password");
-        let tenant_id = ops["tenant_id"].as_str().expect("a tenant id");
+        let ops_created = create_user(&server, &ada, "acme", "Ops@Example.com", "operator");
+        assert_eq!(ops_created["name"], "ops@example.com");
+        assert_eq!(ops_created["role"], "operator");
+        let ops_password = ops_created["password"].as_str().expect("a password");
+        let tenant_id = ops_created["tenant_id"].as_str().expect("a tenant id");
         let watcher = create_user(&server, &ada, "acme", "obs@example.com", "observer");
         let watcher_password = watcher["password"].as_str().expect("a password");
 
