@@ -157,9 +157,11 @@ fn rank(role: &str) -> Option<u8> {
 /// tenant `acme`, and the three that name a user name one that does not
 /// exist, so the matrix changes nothing it later reads. The delete route takes
 /// any caller and allows the target itself; its minimum for another user's
-/// name is admin. Logout comes last, because it revokes the token every route
-/// before it uses.
-const ROUTES: [(&str, &str, Option<&str>); 11] = [
+/// name is admin. The password change goes without a body, so the server
+/// refuses it after it accepts the caller, and the password stays the same.
+/// Logout comes last, because it revokes the token every route before it
+/// uses.
+const ROUTES: [(&str, &str, Option<&str>); 12] = [
     ("GET", "/api/v1/tenants", Some("superadmin")),
     ("POST", "/api/v1/tenants", Some("superadmin")),
     ("GET", "/api/v1/tenants/acme/users", Some("admin")),
@@ -187,6 +189,7 @@ const ROUTES: [(&str, &str, Option<&str>); 11] = [
     ),
     ("GET", "/api/v1/tenants/acme/audit", Some("admin")),
     ("GET", "/api/v1/me", None),
+    ("POST", "/api/v1/password", None),
     ("POST", "/api/v1/logout", None),
 ];
 
