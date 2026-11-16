@@ -178,12 +178,13 @@ walkthrough, and notes at single lines.
    appears only where the code computes a range.
 9. Numbers appear only in a walkthrough and its back-references. A list
    inside a note uses bullets.
-10. Each kind of comment has a normal size. A walkthrough item is one to
-    three sentences, a note is one to three lines, and a back-reference is
-    one line. A walkthrough item grows past its size only for a worked
-    example that its steps use. A note that holds several facts is split, and
-    each fact moves to the line or the step it concerns. No ratio of comment
-    lines to code lines applies.
+10. Each kind of comment has a normal size. A walkthrough item is one
+    sentence, and it grows by one sentence for each fact the code does not
+    show. A note is one to three lines, and a back-reference is one line. A
+    walkthrough item grows past its size only for a worked example that its
+    steps use. A note that holds several facts is split, and each fact moves
+    to the line or the step it concerns. No ratio of comment lines to code
+    lines applies.
 11. Tests follow these rules like any other code. A test that moves the
     system through several states before it checks the result gets a
     walkthrough of its scenario. A check whose expected value is not obvious

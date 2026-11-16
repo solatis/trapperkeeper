@@ -98,6 +98,11 @@ Limits on quantity, such as a share of comment lines or "two lines at most".
 Agents cite such a limit to leave dense code bare, and a rule about the amount
 of comments does not answer a complaint about their kind.
 
+A cap on the length of a walkthrough item, such as one sentence at most. The
+walkthrough of `parse` needs several facts per step that the code does not
+show, and the owner took it as the model (owner, 2026-11-14). An item grows by
+one sentence for each such fact instead.
+
 A comment only where a line raises "why?". Most places where a reader stops
 raise "what does this do?": a closure, a destructured tuple, a chain of
 combinators or arithmetic on indexes.
