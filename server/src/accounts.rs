@@ -20,8 +20,8 @@ pub struct NewAccount<'a> {
 ///
 /// # Errors
 ///
-/// `NameTaken` when a live user of the tenant has the name; `Database`
-/// otherwise.
+/// `NameTaken` when a live user of the tenant has the name. `Database`
+/// otherwise, also when the tenant holds no live role of that name.
 pub async fn create(tx: &mut Tx, new: NewAccount<'_>) -> Result<String, CreateError> {
     let password = password::generate();
     let password_hash = password::hash(password.clone()).await;
@@ -33,7 +33,6 @@ pub async fn create(tx: &mut Tx, new: NewAccount<'_>) -> Result<String, CreateEr
             user_name: &new.name.to_lowercase(),
             role_name: new.role_name,
             password_hash: &password_hash,
-            // The flag only tells the UI to ask for a new password.
             password_must_change: true,
         },
     )
@@ -44,7 +43,7 @@ pub async fn create(tx: &mut Tx, new: NewAccount<'_>) -> Result<String, CreateEr
 /// Gives the user a new generated password that must be changed, revokes its
 /// tokens, and returns the password. Does not commit. A `user_id` that names
 /// no live user of the tenant changes no row, and the function still returns
-/// a password.
+/// a password, so the callers find the user first.
 ///
 /// # Errors
 ///
