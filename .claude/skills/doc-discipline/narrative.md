@@ -177,6 +177,62 @@ the body, so the reader learns how the function works only at its end. Steps
 2 and 3 run in one loop, so they are one step, and the walkthrough gives them
 one item.
 
+### How much an item says, in pseudocode
+
+An item is brief where the code of its step shows the rest, and it says more
+where the step rests on a fact that no line shows.
+
+CORRECT:
+
+```
+/// Places order `o` and returns its receipt. Fails when a line is invalid,
+/// the stock is short or the card is refused.
+checkout(o) -> receipt
+{
+    // We check the order, take the stock and the payment, and store it.
+    //
+    // 1. We check the order's lines.
+    // 2. We reserve the stock before we charge the card. A refused card then
+    //    only releases the reservation, which the customer never sees. In the
+    //    other order, a shortage after the charge would need a refund.
+    // 3. We store the order and return its receipt.
+
+    // 1. check the lines
+    check_lines(o.lines)?
+
+    // 2. reserve, then charge
+    r = reserve(o.lines)?
+    charge(o.card, o.total).or_else(e -> { release(r); fail(e) })?
+
+    // 3. store the order
+    return store(o, r)
+}
+```
+
+Items 1 and 3 are brief, because their code shows the rest: the limits of a
+line sit in `check_lines`, and `?` passes its error on. Item 2 says more,
+because no line shows why the reservation comes first.
+
+INCORRECT, elaborate where the code shows it:
+
+```
+    // 1. We refuse an order without lines, with more than 500 lines or with
+    //    a quantity outside 1 to 9999, and the caller gets the error.
+```
+
+The item copies the limits of `check_lines` and the work of `?`. The reader
+finds both at their lines, and the item goes wrong when a limit changes.
+
+INCORRECT, brief where the code does not show it:
+
+```
+    // 2. We reserve the stock and charge the card.
+```
+
+The item names the step and drops the reason for its order. Nothing then
+stops a reader from swapping the two calls, which brings refunds to the
+customer.
+
 ### A dense line, in pseudocode
 
 The line joins the operands of a chain such as `a - b - c`. `rest` comes from
