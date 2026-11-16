@@ -34,7 +34,8 @@ jobs:
           - { name: macos-aarch64, runner: macos-15, backends: "postgres,mariadb" }
     # `backends` names the server databases that the entry's tests must
     # reach. The test helpers fail the run when TK_TEST_EXPECT names a backend
-    # whose admin URL variable is not set.
+    # whose admin URL variable, TK_TEST_POSTGRES_URL or TK_TEST_MARIADB_URL, is
+    # not set.
     env:
       TK_TEST_EXPECT: ${{ matrix.backends }}
     steps:
@@ -80,7 +81,8 @@ jobs:
           echo "MARIADB_LTS=$lts" >> "$GITHUB_ENV"
           echo "MARIADB_LTS_RELEASE=$release" >> "$GITHUB_ENV"
       # Homebrew has one formula per Postgres major, and the highest is the
-      # latest.
+      # latest. brew search lists matching casks after a blank line, so grep
+      # keeps the formula names before tail picks the highest.
       - name: Install Postgres and MariaDB
         if: runner.os == 'macOS'
         timeout-minutes: 15
