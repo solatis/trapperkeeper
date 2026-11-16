@@ -39,7 +39,8 @@ pub struct AppState {
 }
 
 // `readyz` takes the store alone, and the other handlers take the whole
-// `AppState`. Written by hand, so axum's macros feature stays off.
+// `AppState`. The impl is written by hand so that axum's macros feature,
+// which would derive it, stays off.
 impl FromRef<AppState> for Store {
     fn from_ref(state: &AppState) -> Self {
         state.store.clone()
@@ -81,8 +82,8 @@ impl Modify for BearerScheme {
     responses((status = OK, description = "the process is alive", body = String))
 )]
 async fn healthz() -> &'static str {
-    // A literal and no JSON object, because an orchestrator reads only the
-    // status code and a person reads the body.
+    // The body is a plain literal and no JSON object, because an orchestrator
+    // reads only the status code and a person reads the body.
     "ok"
 }
 
@@ -120,9 +121,9 @@ pub fn router(state: AppState) -> Router {
     // 2. We nest them under `API_PREFIX` and add the probes at the root, where
     //    orchestrators look for them (ADR-0026).
     // 3. We split off the document, which the next step serves.
-    // 4. We add the route of the document at the root and give the handlers
-    //    the state. The route bypasses `routes!`, so the document does not
-    //    list itself.
+    // 4. We add the route of the document at the root, where tools look for
+    //    it (ADR-0026), and give the handlers the state. The route bypasses
+    //    `routes!`, so the document does not list itself.
     // 5. We wrap the router in the audit layer and then the trace layer, so
     //    the trace span also covers the audit write.
 
@@ -157,7 +158,7 @@ pub fn router(state: AppState) -> Router {
         .route("/openapi.json", get(move || async move { Json(api) }))
         .with_state(state);
 
-    // 5. wrap the router in the audit and trace layers
+    // 5. wrap in the audit and trace layers
     router.layer(audit).layer(
         TraceLayer::new_for_http()
             // Raising the span and the response event from tower-http's DEBUG
@@ -202,7 +203,7 @@ pub async fn serve(settings: &Settings, state: AppState) -> io::Result<()> {
     .with_graceful_shutdown(shutdown)
     .await?;
 
-    // 4. say that the drain completed
+    // 4. log the stop
     tracing::info!("stopped");
     Ok(())
 }
