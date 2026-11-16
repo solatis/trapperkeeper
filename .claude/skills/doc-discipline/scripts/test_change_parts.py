@@ -357,7 +357,7 @@ class Paths(unittest.TestCase):
         counts = [int(re.fullmatch(r"part \d+/\d+: (\d+) lines: .*", row).group(1))
                   for row in lines[:-1]]
         self.assertEqual((len(counts), sum(counts)), (int(summary.group(1)), int(summary.group(2))))
-        # dir/a.py, dir/b.py, long.py and tail.py
+        # The four files are dir/a.py, dir/b.py, long.py and tail.py.
         self.assertEqual(summary.group(3), "4")
 
     def test_small_files_share_a_part(self):
