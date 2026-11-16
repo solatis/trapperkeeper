@@ -82,8 +82,8 @@ fn superadmin_mints_a_session_that_acts_as_the_user() {
         // 4. log out from the minted session
         let response = call(&server, access, "POST", "/api/v1/logout", None);
         assert_eq!(response.status, 200, "{} on {backend}", response.body);
-        // Several requests lie between the admin's login and the logout, so
-        // the cutoff falls after the issue time of `own`.
+        // The cutoff and the issue time compare in microseconds, and several
+        // requests lie between the admin's login and the logout.
         assert_eq!(call(&server, &own, "GET", "/api/v1/me", None).status, 401);
         assert_eq!(call(&server, access, "GET", "/api/v1/me", None).status, 401);
     });
