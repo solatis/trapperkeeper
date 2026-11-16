@@ -39,7 +39,8 @@ pub struct Tenant {
 pub struct NewTenant<'a> {
     /// The name as `names::tenant_name` returns it. It must be lowercase,
     /// because the tenants table refuses any other name with a CHECK, and
-    /// `create` then fails with `Database` and not with `NameTaken`.
+    /// `create` then fails with `Database` and not with `NameTaken`. Its 64
+    /// characters at most fit the 255 of the MariaDB column.
     pub name: &'a str,
     /// A display name that keeps its case. The MariaDB column holds at most
     /// 255 characters, where the TEXT columns of SQLite and Postgres have no
