@@ -81,8 +81,8 @@ pub async fn run() -> ExitCode {
     for flag in cli.overrides.secrets() {
         tracing::warn!(flag, "a secret setting was given on the command line");
     }
-    // One JSON string spares a reader the Debug text. Each value is a string,
-    // a table or an absent key, so the serialization cannot fail.
+    // A log collector parses one JSON string, which it cannot do with Debug
+    // text. Each value is a string, a table or a null, so this cannot fail.
     let json = serde_json::to_string(&settings).expect("the settings serialize");
     tracing::debug!(settings = %json, "settings resolved");
 
@@ -102,7 +102,8 @@ async fn serve(settings: &Settings) -> ExitCode {
     //
     // 1. We check that `auth.signing_key` is set.
     // 2. We open the database, setting it up when it is empty.
-    // 3. We derive the signing keys, which needs the salt in the database.
+    // 3. We derive the signing keys, which needs the salt that the set-up
+    //    writes into the database.
     // 4. We serve until a signal.
 
     // 1. check the signing key
@@ -200,8 +201,9 @@ async fn migrate(settings: &Settings) -> ExitCode {
 async fn reset_superadmin_command(settings: &Settings) -> ExitCode {
     let store = match setup::open_checked(settings.database.url.expose()).await {
         Ok(store) => store,
-        // The hint stays out of `setup::Error`, because serve shares that
-        // text and creates a missing database itself.
+        // The hint stays out of `setup::Error`. serve prints the same text
+        // when it cannot tell whether the database exists, and it creates a
+        // missing database itself.
         Err(error @ setup::Error::Open(_)) => {
             eprintln!(
                 "{error}\nthe database does not open; when it does not exist, \
