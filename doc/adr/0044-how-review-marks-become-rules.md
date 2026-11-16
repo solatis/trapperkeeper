@@ -4,10 +4,11 @@ Date: 2026-11-14.
 
 ## Context
 
-The owner reviews every plan and every pull request, and what he marks there
-is the best evidence of where the rules fall short. Until now a mark led to a
-fix at the marked place. The lesson behind it went into a private memory note
-or nowhere, so the same kind of mark came back in later units.
+The owner reviews every plan and every pull request, and what he marks there is
+the best evidence of where the rules fall short. Before the postmortem existed,
+a mark led to a fix at the marked place. The lesson behind it went into a
+private memory note or nowhere, so the same kind of mark came back in later
+units.
 
 The one path from a complaint to a rule was a request in the chat. A rule
 change made that way answered a complaint about too much prose with limits
@@ -33,13 +34,7 @@ sends it.
 
 Every change to a rule file meets the same requirements, whoever asks for
 it. They are the section "Changing a rule" of
-`.claude/skills/tk-workflow/SKILL.md`. In short: the change quotes the marks
-behind it and touches rules for that kind of place alone. It needs marks
-from two reviews, or the owner's words that the defect recurs. It says which
-of four things failed, and a rule that was not applied gets a check and no
-further text. It replays the new sentence against the marks and against the
-owner's earlier complaints in the opposite direction. It prefers a rule
-about the kind of a thing to a rule about its quantity.
+`.claude/skills/tk-workflow/SKILL.md`.
 
 The history that these requirements need lives in the decision records. A
 rule of weight has a record, and a change that brings back one of its

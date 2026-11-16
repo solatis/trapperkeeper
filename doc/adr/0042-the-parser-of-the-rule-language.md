@@ -4,24 +4,28 @@ Date: 2026-11-14.
 
 ## Context
 
-A rule is written as text by people and by an AI client (`adr/0041`), and the
-error a faulty text gets is what its author works from.
+People and an AI client write a rule as text (`adr/0041`). The author of a
+faulty text works from the error that the text gets.
 
-Four prototypes parsed the same language and ran the same 37 faulty texts,
-each with a target for the place and the wording of its error: a parser
-written out by hand, combinators of our own, winnow 1.0.5 and chumsky 0.14.1.
+Four prototypes parsed the same language: a parser written out by hand,
+combinators of our own, winnow 1.0.5 and chumsky 0.14.1. Each prototype ran the
+same 37 faulty texts. Each text had a target for the place and the wording of
+its error. After tuning, the prototype written out had 1021 lines of code, the
+one with combinators of our own 1216, the one with winnow 1300 and the one with
+chumsky 1174.
 
 ## Decision
 
 The parser is built from parser combinators of our own, with no library
 (owner, 2026-11-14).
 
-The kit is the simplest one. A choice tries its alternatives in order, each
-from the same place. One log of what each token test wanted gives the error,
-from the notes furthest in the text (owner, 2026-11-14).
+Of the three kits that were tried, the parser uses the simplest. A choice
+tries its alternatives in order, each from the same place. A token test that
+does not match notes in one log what it wanted. The parser builds the error
+from the notes that lie furthest in the text (owner, 2026-11-14).
 
-No two alternatives read the same bracketed text, and a cap on the parser's
-work refuses a text that would take too long.
+No two alternatives of a choice read the same bracketed text. A cap on the
+token tests per text refuses a text that would take too long.
 
 The grammar is documented rule by rule, with the form and an example (owner,
 2026-11-14).
@@ -46,9 +50,9 @@ of the parser's tests.
 
 A parser library. In every prototype a good message was code written for that
 message. winnow's error holds no place and no text. chumsky gives sets of
-expected tokens that rules of our own turned into sentences, it adds eleven
-crates, and its strength is recovery after an error, which the parser does
-not use.
+expected tokens, and rules of our own turned those sets into sentences.
+chumsky adds eleven crates. chumsky's strength is recovery after an error, and
+the parser does not use recovery.
 
 A parser written out function by function, which had the best messages before
 tuning and the least code. The owner prefers how a grammar reads in
@@ -61,8 +65,9 @@ silent.
 A kit that commits by default, as Parsec does, because it needs marks of its
 own and was the largest of the three.
 
-Full parity of error messages with the best prototype. Code simplicity is
-balanced against the clarity of errors (owner, 2026-11-14).
+Full parity of error messages with the best prototype. The owner weighs the
+simplicity of the code against the clarity of errors, so the parser does not
+match the best prototype message for message (owner, 2026-11-14).
 
 A parser over characters, because its errors list single characters.
 
@@ -84,14 +89,14 @@ The kit stays fast only while no two alternatives read the same bracketed
 text. That is an invariant of `engine/src/text/AGENTS.md`, and a test and a
 cap on the parser's work hold it.
 
-A refusal is reported only when no plainer failure lies further in the text.
+The parser reports a refusal of a grammar rule unless a note of a token test
+lies further in the text. The refusal for too much work (`TooComplex`) wins
+over any note, because the parse stopped there.
 
-The cap on nesting bounds the parser's stack and not the depth of a tree.
-Validation holds the tree to its own limits.
-
-Measured on the same texts after tuning, in lines of prototype code: 1021
-written out, 1216 with combinators of our own, 1300 with winnow, 1174 with
-chumsky.
+The cap on nesting bounds the parser's stack and not the depth of a tree. The
+limits of a tree belong to the validation of the expression. `validate` does
+not check the expression yet, so no limit holds a tree.
 
 Whoever shows an error works out the line and the column from the byte range.
-Every new message is a new case of a public type.
+Every new reason is a new variant of the public enum `Reason`, which the
+crate exports from `engine/src/text`.

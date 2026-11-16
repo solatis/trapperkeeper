@@ -43,27 +43,29 @@ where the code computes a range. Numbers belong to walkthroughs, and a list
 inside a note uses bullets (owner, 2026-11-14).
 
 A plan sketches a function that needs a walkthrough with the walkthrough in
-full and its back-references. The claims of a sketch are the least the code
-carries, and a remark of the owner about comments rewrites the sketches it
-concerns (owner, 2026-11-14).
+full and its back-references. The code carries at least the claims of its
+sketch. When the owner remarks on comments, the plan stage rewrites every
+sketch the remark concerns (owner, 2026-11-14).
 
 A script in the doc-discipline skill, `check_steps.py`, checks the numbering
 of walkthroughs and back-references in any language, in code and in the fenced
-code blocks of Markdown. It also flags a comment that names a path under
-`doc/adr/` or carries a who-decided mark. The plan stage runs it on each plan.
-The build and merge stages run it on the whole of every file a branch changed
-(owner, 2026-11-14).
+code blocks of Markdown. It also flags a comment that matches a pattern given
+with `--deny`. The build and merge stages pass the two patterns of the root
+`AGENTS.md`, which catch a path under `doc/adr/` and a who-decided mark, and
+run it on the whole of every file a branch changed. The plan stage runs it on
+each plan without `--deny`, so on a plan it checks the numbering only (owner,
+2026-11-14).
 
-The session that owns a change writes its comments and documents, from
-evidence it can name, and it asks the owner where it has none. After its last
-code commit, the build stage runs the step check. Then `/doc-read` gives each
-part of the change to a reader that has seen neither the plan nor the
-conversation, and the reader lists where it had to stop. The session closes
-each stop with a rename, a comment from evidence, a question to the owner, or
-a decline with its reason. A second round of `/doc-read` reads what the
-session changed to close the stops. Then `/doc-audit` checks the change
-against the policy and reconciles it against the plan, and the session
-applies or declines each finding. The answers of the two skills are saved under `.plans/`, and the
+The session that owns a change writes its comments and documents, from evidence
+it can name, and it asks the owner where it has none. After its last code
+commit, the build stage runs the step check. Then `/doc-read` gives each part of
+the change to a reader that has seen neither the plan nor the conversation, and
+the reader lists where it had to stop. The session closes each stop with a
+rename, a comment from evidence, a question to the owner, or a decline with its
+reason. A second round of `/doc-read` reads what the session changed to close
+the stops. Then `/doc-audit` checks the change against the policy and reconciles
+it against the plan, and the session applies or declines each finding. The build
+stage saves the answers of `/doc-read` and `/doc-audit` under `.plans/`. The
 guided review shows the stops, the declines and the findings from those files
 (owner, 2026-11-14).
 
@@ -119,9 +121,9 @@ note. An agent then carries out a mode in its head and leaves no output.
 
 ## Consequences
 
-Existing code keeps the old shape until a follow-up brings it over. A branch
-that changes a file in the old shape brings that whole file over, because the
-step check covers every file a branch changed.
+A file that does not follow these rules stays as it is until a branch changes
+it. A branch that changes such a file brings the whole file under the rules,
+because the step check covers every file a branch changed.
 
 The build stage starts one subagent per part in each reader round and one for
 the audit, and its questions to the owner go out as one Inbox message per
@@ -135,4 +137,4 @@ the audit are there for those.
 
 `/doc-read` and `/doc-audit` rest on one behavior of the harness that its
 documentation does not confirm: a command line inside a skill that runs in its
-own subagent. The two skills are tried once before this change merges.
+own subagent.
