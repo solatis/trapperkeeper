@@ -20,4 +20,5 @@ several pull requests.
 
 ## Consequences
 
-A cross-cutting change is one pull request. An SDK that needs its own repository gets a case-by-case record.
+A cross-cutting change is one pull request. An SDK that needs its own repository
+gets a case-by-case record.
