@@ -28,8 +28,8 @@ pedantic = { level = "deny", priority = -1 }
 
 # Each Argon2id hash runs over 64 MiB in three passes. The login check, the
 # creation and the reset of an account, a password change and the derivation of
-# each token key when serve starts each run one hash, and the tests run all of
-# them. The dev profile optimizes the argon2 crate alone, so tests and local
+# each token-signing key when serve starts each run one hash, and the tests run
+# all of them. The dev profile optimizes the argon2 crate alone, so tests and local
 # runs pay the optimized cost of each hash. Level 3 is a choice that no
 # measurement backs.
 [profile.dev.package.argon2]
