@@ -10,10 +10,10 @@ engine, the Rust sensor library) and the non-Rust components follow it.
 ## Decision
 
 Each component has one top-level directory: `server/`, `engine/`, `agent/`,
-`sdk/<lang>/`, `web/` and `conformance/`. The AI agent has a directory of its
-own (owner, 2026-11-15). The Cargo workspace lists its members one by one. A
-component directory has its own `AGENTS.md`, and inside `server/` each module
-directory gets one as it appears.
+`sdk/<lang>/`, `web/` and `conformance/`. `agent/` holds the AI agent (owner,
+2026-11-15). The Cargo workspace lists its members one by one. A component
+directory has its own `AGENTS.md`, and inside `server/` each module directory
+gets one as it appears.
 
 ## Rejected alternatives
 
