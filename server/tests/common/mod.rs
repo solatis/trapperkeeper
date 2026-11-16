@@ -119,8 +119,8 @@ fn admin_url_var(backend: Backend) -> Option<&'static str> {
 }
 
 /// The backends this run tests: SQLite always, Postgres and MariaDB when
-/// their admin URL is set. Panics when `TK_TEST_EXPECT` names a backend whose
-/// URL is absent.
+/// their admin URL is set. Panics when `TK_TEST_EXPECT` names an unknown
+/// backend or one whose URL is absent.
 pub fn backends() -> Vec<Backend> {
     let all = [Backend::Sqlite, Backend::Postgres, Backend::MariaDb];
     let configured: Vec<Backend> = all
@@ -131,6 +131,10 @@ pub fn backends() -> Vec<Backend> {
     // is not set, because a skipped test passes (ADR-0021).
     let expected = env::var("TK_TEST_EXPECT").unwrap_or_default();
     for name in expected.split(',').map(str::trim).filter(|n| !n.is_empty()) {
+        assert!(
+            all.iter().any(|b| b.to_string() == name),
+            "TK_TEST_EXPECT names {name}, which is none of sqlite, postgres and mariadb"
+        );
         assert!(
             configured.iter().any(|b| b.to_string() == name),
             "TK_TEST_EXPECT names {name}, and its admin URL is not set"
