@@ -45,14 +45,14 @@ none of the conversation, and its last message comes back to the caller.
 
 - `/doc-read` takes the range of a change, or one or more paths joined by
   commas, and the number of one part, and nothing else. For paths, the parts
-  hold the tracked files under them whole, without the files that a range
-  leaves out too, such as lock files and binary files. A range is read in
-  parts of about 300 changed lines and paths in parts of about 300 lines, one
-  reader per part. A reader who has not seen the change reads the files as
-  they are on disk. It returns one row for each line where it stopped, each
-  function whose plan it had to rebuild, each comment that told it nothing,
-  each statement it believes false, and each term or statement in a document
-  it could not place.
+  hold the tracked files under them whole. The script leaves out the files it
+  also leaves out of a range, such as lock files and binary files. The script
+  splits a range into parts of about 300 changed lines, and paths into parts
+  of about 300 lines. One reader reads each part. A reader who has not seen
+  the change reads the files as they are on disk. It returns one row for each
+  line where it stopped, each function whose plan it had to rebuild, each
+  comment that told it nothing, each statement it believes false, and each
+  term or statement in a document it could not place.
 - `/doc-audit <scope> [plan: <plan>] [focus: ...] [also: ...]` takes a range
   or paths. It may also take a plan to reconcile against, a focus that limits
   the checks, and the paths of documents that belong to the task. It returns
@@ -121,11 +121,12 @@ works as follows:
    changes a non-comment token and redo it by hand. Run the step check over
    the changed files and fix each finding until it reports none. Run the
    build or tests when that is cheap.
-5. Follow `checks.md` over the commits of the repair, with one difference.
-   Where `checks.md` lists the parts of the range of the change, a repair
-   lists the parts of the paths that step 2 of this list gave to `/doc-audit`,
-   so that a reader also reads the functions that the repair left as they
-   were.
+5. Follow `checks.md` over the commits of the repair, with one difference in
+   the first reader round, which is step 2 of `checks.md`. Where that step
+   lists the parts of the range of the change, a repair lists the parts of the
+   paths that it gave to `/doc-audit`, so that a reader also reads the
+   functions that the repair left as they were. The second reader round, step
+   4 of `checks.md`, reads its range as `checks.md` says.
 6. Report, in the form of the "Report" section, with the rows applied and
    declined.
 
