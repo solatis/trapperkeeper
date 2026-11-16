@@ -23,7 +23,7 @@ audit live.
 Pipeline code embeds the sensor SDK. The sensor syncs the rules for its scope
 tags, evaluates them locally, buffers events and reports them in batches.
 
-- A sensor receives each rule as a validated tree and holds no parser
+- A sensor receives each rule as a validated tree and does not parse rule text
   (`adr/0033`).
 - Sampling is applied above the evaluation of a rule (`adr/0033`).
 - Buffering is explicit. A flush happens inline or on request. The engine
@@ -82,10 +82,10 @@ such as the web UI, the CLI or an alert hook, and the API never invokes it.
 The agent queries events to troubleshoot. It creates, scopes, samples and
 pauses rules.
 
-The agent may create rules of any kind. How a rule records that the agent
-wrote it is open (see `decisions.md`). Rules are immutable, so an edit is a new
-rule with a new id, and the rules and the pause make every agent action
-reversible. The contents of a record are untrusted input to the model.
+The agent may create rules of any kind. How a rule records that the agent wrote
+it is open (see `decisions.md`). Rules are immutable, so an edit is a new rule
+with a new id. Pausing or deleting a rule undoes every agent action
+(`principles.md`, 6). The contents of a record are untrusted input to the model.
 
 ### Store
 
@@ -112,13 +112,13 @@ changes afterwards, and an edit is stored as a new rule with a new id -> the
 version tag of the active set changes -> each sensor picks the rule up at its
 next sync (seconds, eventually consistent).
 
-**Record evaluation.** The pipeline hands a batch to the sensor, and a call
-for one record wraps the batch call -> sample -> the adapter presents the
-fields the rules read -> evaluate -> apply the actions (`observe` records an
-event, `drop` removes the dropped items from the object that the call returns
-to the caller, and `throw` raises once per call with the whole result in the
-exception) -> buffer events -> batch report -> the server stamps the receive
-time and appends to the event log (`adr/0037`).
+**Record evaluation.** The pipeline hands a batch to the sensor, and a call for
+one record wraps the batch call (`adr/0037`) -> sample -> the adapter presents
+the fields the rules read -> evaluate -> apply the actions (`observe` records an
+event, `drop` removes the records that a `drop` rule matched from the object
+that the call returns, and `throw` raises once per call with the whole result in
+the exception) -> buffer events -> batch report -> the server stamps the receive
+time and appends to the event log.
 
 **Troubleshooting.** Operator asks agent -> agent queries events -> agent
 creates a narrow `observe` rule -> sensors pick it up -> agent reads resulting
@@ -129,9 +129,9 @@ retries sync at a fixed interval. Unreported events beyond the buffer are lost.
 
 ## Cross-cutting
 
-- **Identity.** A sensor authenticates with an opaque API key, which the
-  server stores as a hash (`adr/0027`). A person logs in for signed tokens,
-  and a per-user cutoff revokes them (`adr/0025`). Every entity and every
+- **Identity.** A sensor authenticates with an opaque API key, which the server
+  stores as a hash (`adr/0027`). A person logs in for signed tokens, and a
+  per-user revocation cutoff revokes them (`adr/0025`). Every entity and every
   credential carries a tenant id.
 - **Identifiers and time.** Every entity has a time-ordered unique id
   (`adr/0020`). Storage and the wire carry UTC, and only the presentation
@@ -141,11 +141,12 @@ retries sync at a fixed interval. Unreported events beyond the buffer are lost.
   settings and API requests. A rule treats the user's data leniently. A
   missing value is data, and a rule that meets a fault on a record does not
   apply to that record (`adr/0005`).
-- **Operations.** One distributable carries a subcommand per role. A secret
-  setting may come from the file or the environment, and on the command line
-  the server accepts it with a warning (`adr/0013`). Today a proxy terminates
-  TLS. The server terminates TLS itself in a later milestone, and it can then
-  generate self-signed certificates if the user wants them, which secures for
-  example the link between a proxy and the backend.
+- **Operations.** One distributable carries the subcommands `serve`, `migrate`
+  and `reset-superadmin`. A secret setting may come from the settings file or
+  the environment, and on the command line the server accepts it with a warning
+  (`adr/0013`). Today a proxy terminates TLS. The server terminates TLS itself
+  in a later milestone, and it can then generate self-signed certificates if the
+  user wants them, for example to secure the link between a proxy and the
+  server.
 - **Observability.** Structured logs, metrics endpoint, liveness and readiness
   endpoints on every service.
