@@ -14,7 +14,6 @@ pub const NAME: &str = "admin";
 /// no route assigns it (ADR-0028).
 pub const ROLE: &str = "superadmin";
 
-/// The new account of the superadmin.
 fn account() -> NewAccount<'static> {
     NewAccount {
         tenant_id: SYSTEM_TENANT_ID,
@@ -31,7 +30,8 @@ fn account() -> NewAccount<'static> {
 /// Fails when the database cannot be read or written.
 pub async fn ensure(store: &Store) -> Result<Option<String>, sqlx::Error> {
     let mut tx = store.begin().await?;
-    // The lookup spares an existing superadmin a password hash.
+    // An existing superadmin returns here, so it costs no password hash in
+    // `accounts::create`.
     if users::find(&mut tx, SYSTEM_TENANT_ID, NAME)
         .await?
         .is_some()
