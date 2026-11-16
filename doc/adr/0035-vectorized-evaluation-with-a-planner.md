@@ -31,7 +31,8 @@ adapter for.
 Bind works once per schema of a source. Batches whose columns have the same
 underlying types run the same compiled loops. Bind picks one compiled loop per
 step from the column descriptions (`adr/0036`), and the sensor keeps the result
-of bind for each source (owner, 2026-11-16). An invocation builds no program.
+of bind for each schema of a source (owner, 2026-11-16). An invocation builds no
+program.
 
 The loops are compiled when an SDK is built, one per type and layout, from
 generic code. Nothing is compiled at run time (owner, 2026-11-13).
