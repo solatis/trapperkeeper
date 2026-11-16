@@ -67,7 +67,9 @@ pub struct NewTenantRequest {
 }
 
 /// What a created tenant returns: its stored name and title, the admin's
-/// name, and the admin's generated password, which no other response returns.
+/// name, and the admin's generated password. No other response returns that
+/// password, because the store keeps only its hash and the audit trail stores
+/// no body.
 #[derive(Serialize, ToSchema)]
 pub struct CreatedTenant {
     name: String,
