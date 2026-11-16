@@ -74,7 +74,9 @@ impl Tx {
 /// expects. MariaDB gets `?` in place of `$1`, `$2` and so on, and SQLite and
 /// Postgres get the statement unchanged. A statement uses each placeholder
 /// number once and in ascending order, because on MariaDB the values bind in
-/// the order the placeholders appear and the numbers are dropped.
+/// the order the placeholders appear and the numbers are dropped. A statement
+/// holds no `$` and digit inside a quoted literal, because the rewrite does
+/// not know SQL quoting and would rewrite that too.
 fn sql(tx: &Tx, statement: &'static str) -> Cow<'static, str> {
     match tx {
         Tx::Sqlite(_) | Tx::Postgres(_) => Cow::Borrowed(statement),
@@ -87,10 +89,7 @@ fn sql(tx: &Tx, statement: &'static str) -> Cow<'static, str> {
                 if c == '$' && chars.peek().is_some_and(char::is_ascii_digit) {
                     out.push('?');
                     // A placeholder can have several digits, as `$10` does,
-                    // and the whole number becomes one `?`. The loop does
-                    // not know SQL quoting, so it would also rewrite a `$`
-                    // and a digit inside a quoted literal, and no statement
-                    // of the store holds one.
+                    // and the whole number becomes one `?`.
                     while chars.peek().is_some_and(char::is_ascii_digit) {
                         chars.next();
                     }
