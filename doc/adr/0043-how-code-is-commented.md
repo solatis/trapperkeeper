@@ -1,6 +1,6 @@
 # 0043. How code is commented
 
-Date: 2026-11-15.
+Date: 2026-11-16.
 
 ## Context
 
@@ -12,6 +12,12 @@ rule's limits to do so. The parser of the rule language needs explanation at
 nearly every helper, and a handler that maps fields needs none. A rule about
 the amount of comments cannot serve both.
 
+Under the rules that followed, the swing came back at the top of a body.
+Walkthrough items restated the values, names and calls of their steps, such as
+the bounds that a check enforces, and the owner marked them as too much prose.
+The rule asked each item to say in full sentences what its step does, and agents
+read that as a request to restate the step (owner, 2026-11-16).
+
 The build stage also ran its own comment checks in the context that wrote the
 code and reported them as clean. Nothing showed the owner that no check had
 run.
@@ -19,15 +25,16 @@ run.
 ## Decision
 
 A function that needs it starts its body with a walkthrough. The walkthrough
-opens with what the function does and how. Numbered steps follow. Each step is
-one or more full sentences that say what the step does and, where there is
-one, why it exists or comes at its place. Each step has one back-reference in
-the code, a one-line comment with the step's number and a few words at the
-first line of the step. The back-references appear in ascending order, and a
-step may begin inside the block of the step before it. Any other comment in a
-body is a note, which carries no number and sits directly above the line it
-explains. A function that forwards, passes settings through or maps fields one
-to one has no comment in its body (owner, 2026-11-14).
+opens with what the function does and how. Numbered steps follow. Each step says
+in a sentence what it achieves at the level of the problem and leaves its
+values, names and calls to the code. It adds a fact only where the code does not
+show it, such as why the step exists or comes at its place (owner, 2026-11-16).
+Each step has one back-reference in the code, a one-line comment with the step's
+number and a few words at the first line of the step. The back-references appear
+in ascending order, and a step may begin inside the block of the step before it.
+Any other comment in a body is a note, which carries no number and sits directly
+above the line it explains. A function that forwards, passes settings through or
+maps fields one to one has no comment in its body (owner, 2026-11-14).
 
 A comment is written for a senior engineer who reads a diff cold. That reader
 knows the language, its standard library and the common algorithms by name.

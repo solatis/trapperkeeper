@@ -2,7 +2,7 @@
 """Check that the step numbers of walkthrough comments match their back-references.
 
 A walkthrough is a comment block at the top of a function body that lists the
-steps of the function as "1. ...", "2. ...", each in full sentences. Each step
+steps of the function as "1. ...", "2. ...", each a sentence. Each step
 has a one-line back-reference such as "// 2. run the query" at the first line
 of its code. A note may follow the back-reference on the lines below it. The
 check reads line comments, knows how each language writes strings and
@@ -797,7 +797,7 @@ def check_item_text(path, block, refs):
         # so the "." in "a.len()" is none.
         if not re.search(r"[.!?:](\s|$)", item.text):
             out.append(Finding(path, item.no, "W2", "step %d holds no sentence end. "
-                               "Say what the step does and why" % item.number))
+                               "Say what the step achieves" % item.number))
         elif ref is not None and normalized(item.text) == normalized(ref.words):
             out.append(Finding(path, item.no, "W2", "step %d says no more than its "
                                "back-reference" % item.number))
@@ -823,8 +823,8 @@ def check_numbered_blocks(path, blocks, notes):
                                "(a walkthrough starts at 1 and has two items or more)"))
         if b.kind == "title-list" and b.first not in noted:
             out.append(Finding(path, b.items[0].no, "N7", "walkthrough items without "
-                               "sentence ends. Each step is a full sentence that says "
-                               "what the step does and why"))
+                               "sentence ends. Each step is a sentence that says "
+                               "what the step achieves"))
     return out
 
 

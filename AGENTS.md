@@ -133,11 +133,11 @@ walkthrough, and notes at single lines.
      constant says where it came from.
 3. The walkthrough is the first comment in the body. It opens with a
    sentence or a short paragraph on what the function does and how. Numbered
-   items follow, one per step, counting up from 1. Each item says in full
-   sentences what its step does and, where there is one, why the step exists
-   or why it comes at its place. Two steps that share one loop are one step.
-   The walkthrough says what each step achieves and leaves the statements of
-   the step to the code.
+   items follow, one per step, counting up from 1. Each item says in a
+   sentence what its step achieves at the level of the problem, and leaves
+   its values, names and calls to the code. Two steps that share one loop are
+   one step. An item adds a fact only where the code does not show it, such
+   as why the step exists or why it comes at its place.
 4. Two kinds of walkthrough have no numbered items and no back-references.
    The walkthrough of a standard algorithm names the algorithm and its
    variant and states its invariant. A body that tests a chain of independent
