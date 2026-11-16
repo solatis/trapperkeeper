@@ -1,12 +1,16 @@
--- One row per changing request under /api/v1, written after the handler
--- answered. A row is a record, not an entity: nothing deletes or prunes it,
--- so there is no deleted_at.
+-- The middleware writes one row for every non-GET request under /api/v1 that
+-- matched a route, after the handler answered (ADR-0031). The table has no
+-- deleted_at, because an audit row records a request and is no entity, and
+-- ADR-0024 gives deleted_at to entity tables. Nothing in the server deletes
+-- or prunes a row (ADR-0031).
 CREATE TABLE audit (
-    -- A version 7 UUID, so ORDER BY audit_id is time order and the id is the
-    -- paging cursor (doc/adr/0020).
+    -- audit_id holds a version 7 UUID, so ORDER BY audit_id gives time order
+    -- and the id serves as the paging cursor (ADR-0020).
     audit_id       TEXT PRIMARY KEY,
-    -- The tenant the request acted on: the one in its path when it had one,
-    -- else the caller's. NULL for an anonymous request that named no user.
+    -- The tenant that the request acted on. The middleware takes the tenant
+    -- that the route resolved from its path when there is one, and the
+    -- caller's tenant otherwise (ADR-0031). NULL for an anonymous request
+    -- that names no existing user.
     tenant_id      TEXT,
     -- Who did it. By id alone, without the tenant, because the actor may be
     -- the superadmin of $tk acting on a customer tenant. NULL for an
@@ -23,7 +27,8 @@ CREATE TABLE audit (
     peer_address   TEXT NOT NULL,
     -- X-Forwarded-For as received when present, else the peer.
     client_address TEXT NOT NULL,
-    -- Epoch microseconds in UTC, as every time column (doc/adr/0019).
+    -- recorded_at holds the time of the request in epoch microseconds in UTC,
+    -- as every time column does (ADR-0019).
     recorded_at    BIGINT NOT NULL
 );
 
