@@ -17,14 +17,15 @@ does not store. The header carries `kid`, the id of the key that signed the
 token. The header also carries `typ`, the kind of token. An access token has the
 `typ` `at+jwt` (RFC 9068). A refresh token has `tk-refresh+jwt`, a type of our
 own. The two types differ, so a token of one kind never passes as the other. The
-claims are `sub`, the user id, `tid`, the tenant id, `iat` with a microsecond
-fraction, and `exp`. An access token lives one hour and is sent as
-`Authorization: Bearer`, or in the `tk_access` cookie. A refresh token lives 7
-days from login, and the same keys sign it. The caller sends it in the body of
-the refresh route or in the `tk_refresh` cookie. The server sends that cookie to
-the refresh route alone. Both cookies are `HttpOnly`, `SameSite=Strict` and
-`Secure`. A header or body is read first, for the CLI and the agent, and the
-cookie second, for the browser (owner, 2026-11-05).
+token carries four claims: `sub` holds the user id, `tid` the tenant id, `iat`
+the issue time with a microsecond fraction, and `exp` the expiry. An access
+token lives one hour and is sent as `Authorization: Bearer`, or in the
+`tk_access` cookie. A refresh token lives 7 days from login, and the same keys
+sign it. The caller sends it in the body of the refresh route or in the
+`tk_refresh` cookie. The server sends that cookie to the refresh route alone.
+Both cookies are `HttpOnly`, `SameSite=Strict` and `Secure`. A header or body is
+read first, for the CLI and the agent, and the cookie second, for the browser
+(owner, 2026-11-05).
 The `tk_access` cookie goes to `/api/v1` alone, the prefix of the routes that
 read it (owner, 2026-11-16).
 
@@ -39,7 +40,8 @@ password change needs the current password. It sets `tokens_valid_after` to the
 current time and clears the must-change flag. It hands the caller fresh tokens,
 so the caller stays logged in while every other session ends (owner,
 2026-11-05). `iat` carries a microsecond fraction so that a token issued in the
-same second as the cutoff compares exactly in both directions.
+same second as the cutoff fails when it was issued before the cutoff and passes
+otherwise.
 
 The signing keys are two passphrases typed by hand into the configuration, each
 at least 32 characters: `auth.signing_key`, which is required and signs, and
@@ -48,12 +50,13 @@ what each key does, and a rotation reads as moving one to the other. Neither has
 a command line flag, because `doc/adr/0013` warns on any secret given as a flag
 (owner, 2026-11-05). The server stretches each passphrase with Argon2id, at the
 parameters of `doc/adr/0022`, under a random salt. The step that applies the
-migrations writes the salt once, when the installation has none, whether `serve`
-or `migrate` applies them. The salt gives every installation its own keys. The
-stretching makes each offline guess at a passphrase cost one Argon2id run, where
-an HS256 signature alone would cost one HMAC. A key's `kid` is a fingerprint of
-the derived key, so nobody types an id. The server checks a token with the key
-that its `kid` names (owner, 2026-11-05).
+migrations writes the salt once into the `installation` table, when the
+installation has none, whether `serve` or `migrate` applies them. The salt gives
+every installation its own keys. The stretching makes each offline guess at a
+passphrase cost one Argon2id run, where an HS256 signature alone would cost one
+HMAC. A key's `kid` is a fingerprint of the derived key, the first 8 bytes of
+its SHA-256, so nobody types an id. The server checks a token with the key that
+its `kid` names (owner, 2026-11-05).
 
 To rotate, an operator moves `signing_key` to `previous_signing_key` and sets
 a new `signing_key` on every instance. After 7 days, the refresh token
