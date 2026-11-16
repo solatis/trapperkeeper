@@ -245,9 +245,9 @@ impl Keyring {
 async fn derive(passphrase: String, salt: String) -> (String, [u8; 32]) {
     // Each derivation runs one Argon2id hash with 64 MiB of memory, which
     // must not block the runtime, so it runs on the blocking pool (ADR-0014).
-    // The derivations take no permit of the hashing limit. serve builds the
-    // keyring once, before it accepts a request, and `from_store` runs them
-    // one after the other.
+    // The derivations take no permit. The hashing limit guards against a
+    // flood of logins (ADR-0022), and serve runs the derivations once, one
+    // after the other, before it accepts a request.
     task::spawn_blocking(move || {
         let mut key = [0_u8; 32];
         // The derivation uses the parameters of the password hasher
@@ -263,8 +263,7 @@ async fn derive(passphrase: String, salt: String) -> (String, [u8; 32]) {
         // (ADR-0025). It is a hash, so the `kid` in the header of a token
         // shows no byte of the key.
         let fingerprint = Sha256::digest(key);
-        // The id is the first 8 bytes of the fingerprint, as 16 hex
-        // characters. The length is a choice that no measurement backs.
+        // The length of the id is a choice that no measurement backs.
         let kid = fingerprint
             .iter()
             .take(8)
