@@ -1,4 +1,5 @@
-# Per-issue plans of the tk-* workflow; never committed (.claude/skills/tk-workflow)
+# The per-issue plans of the tk-* workflow (.claude/skills/tk-workflow). No plan
+# is ever committed.
 .plans/
 
 /target/
