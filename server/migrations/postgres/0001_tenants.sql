@@ -1,5 +1,5 @@
--- This file creates the same table, index and seed row as sqlite/0001_tenants.sql, whose
--- comments explain them.
+-- This file creates the same table, index and seed row as
+-- sqlite/0001_tenants.sql, whose comments explain them.
 CREATE TABLE tenants (
     tenant_id    TEXT PRIMARY KEY,
     tenant_name  TEXT NOT NULL CHECK (tenant_name = lower(tenant_name)),

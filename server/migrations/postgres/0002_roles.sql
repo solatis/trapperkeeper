@@ -1,5 +1,5 @@
--- This file creates the same table, index and seed row as sqlite/0002_roles.sql, whose
--- comments explain them.
+-- This file creates the same table, index and seed row as
+-- sqlite/0002_roles.sql, whose comments explain them.
 CREATE TABLE roles (
     role_id    TEXT PRIMARY KEY,
     tenant_id  TEXT NOT NULL REFERENCES tenants (tenant_id),
