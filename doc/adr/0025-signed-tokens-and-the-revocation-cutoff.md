@@ -1,6 +1,6 @@
 # 0025. Signed tokens and the revocation cutoff
 
-Date: 2026-11-05.
+Date: 2026-11-16.
 
 ## Context
 
@@ -24,6 +24,8 @@ keys, and is sent in the body of the refresh route or in the `tk_refresh`
 cookie, which goes to that route alone. Both cookies are `HttpOnly`,
 `SameSite=Strict` and `Secure`. A header or body is read first, for the CLI
 and the agent, and the cookie second, for the browser (owner, 2026-11-05).
+The `tk_access` cookie goes to `/api/v1` alone, the prefix of the routes that
+read it (owner, 2026-11-16).
 
 A refresh returns a new access token and keeps the refresh token, so a login
 ends 7 days after it began, however often it refreshes.
