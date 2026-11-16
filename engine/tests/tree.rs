@@ -1,6 +1,6 @@
 //! The properties in this file check the JSON form of the tree over
-//! generated trees. A tree round-trips, and a node that is not of the form is
-//! refused.
+//! generated trees. A tree round-trips, and a node with an unknown key or an
+//! extra property is refused.
 
 mod common;
 
@@ -36,6 +36,8 @@ proptest! {
         // The tree stands under a `not`, so the node is an object with a
         // key also when the tree is `None`, which is a bare string.
         let node = serde_json::to_value(Expr::Not(Box::new(tree))).expect("a tree serializes");
+        // The operand under `nott` is the JSON of a valid tree, so only the
+        // unknown key can fail the parse.
         let misspelled = json!({ "nott": node["not"] });
         prop_assert!(serde_json::from_value::<Expr>(misspelled).is_err());
     }
@@ -44,6 +46,8 @@ proptest! {
     #[test]
     fn a_node_with_an_extra_property_is_refused((test, then, otherwise) in (expr(), expr(), expr())) {
         let (test, then, otherwise) = (Box::new(test), Box::new(then), Box::new(otherwise));
+        // An `if` is a kind whose JSON is an object of named properties, so
+        // one more property can be added to it.
         let conditional = Expr::If { test, then, otherwise };
         let mut node = serde_json::to_value(conditional).expect("a tree serializes");
         // `deny_unknown_fields` on `Expr` makes serde refuse the property.
