@@ -11,10 +11,10 @@ pub const MAX_SCOPE_TAGS: usize = 8;
 pub const MAX_TAG_LENGTH: usize = 64;
 
 /// Characters in a rule's text, at most, counted as Unicode scalar values
-/// (ADR-0042). The parser's work grows with the length of the text only
-/// while no two alternatives of a choice read the same bracketed text. Where
-/// two do, each level of brackets is read twice, the work doubles per level,
-/// and `MAX_PARSE_STEPS` refuses the text.
+/// (ADR-0042). The cap on length bounds the parser's work only while no two
+/// alternatives of a choice read the same bracketed text. Where two do, each
+/// level of brackets is read twice, the work doubles per level, and
+/// `MAX_PARSE_STEPS` refuses the text.
 pub const MAX_TEXT_LENGTH: usize = 4096;
 
 /// Levels of nesting in a rule's text, at most (ADR-0042). A bracket, a
@@ -28,4 +28,7 @@ pub const MAX_NESTING: usize = 32;
 /// there because a system without limits is open to abuse (ADR-0033). The cap
 /// is reached only when two alternatives of the grammar read the same
 /// bracketed text, and then the rule is refused and the parser does not hang.
+/// The grammar keeps the rule that no two alternatives do
+/// (`engine/src/text/AGENTS.md`), so the cap guards against a defect of the
+/// grammar.
 pub const MAX_PARSE_STEPS: usize = 1_000_000;
