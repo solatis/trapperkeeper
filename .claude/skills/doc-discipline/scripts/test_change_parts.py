@@ -308,7 +308,6 @@ class Paths(unittest.TestCase):
     def test_word_is_paths(self):
         self.assertEqual(cp.parse_paths("a,b"), ["a", "b"])
         self.assertIsNone(cp.parse_paths("a,,b"))
-        self.assertIsNone(cp.parse_paths("-a"))
 
     def test_whole_files_in_git_order(self):
         # git lists dir/a.py before tail.py, although the word names tail.py first.
@@ -380,6 +379,14 @@ class Paths(unittest.TestCase):
         self.assertEqual((status, lines), (2, []))
         self.assertTrue(err.startswith("change_parts: git ls-files failed: "), err)
         self.assertEqual(err.count("\n"), 1)
+
+    def test_path_that_starts_with_a_dash(self):
+        # The paths follow "--" in the call of git, so git reads "-b" as a path
+        # that names no tracked file, and not as an option.
+        status, lines, err = self.run_main("dir,-b")
+        self.assertEqual((status, lines), (2, []))
+        self.assertTrue(err.startswith("change_parts: git ls-files failed: "), err)
+        self.assertIn("-b", err)
 
     def test_tracked_file_missing_from_disk(self):
         os.remove(os.path.join(self.repo, "tail.py"))

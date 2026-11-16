@@ -68,13 +68,9 @@ def parse_range(text):
 
 
 def parse_paths(text):
-    """Return the paths of a word "<path>[,<path>]...", or None when a path is empty or starts
-    with "-"."""
+    """Return the paths of a word "<path>[,<path>]...", or None when a path is empty."""
     paths = text.split(",")
-    # A word such as "a,-b" is a usage error, as a range with such a side is.
-    if any(not p or p.startswith("-") for p in paths):
-        return None
-    return paths
+    return None if "" in paths else paths
 
 
 def new_side(header):
