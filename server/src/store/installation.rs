@@ -16,13 +16,19 @@ pub async fn ensure_salt(tx: &mut Tx) -> Result<(), sqlx::Error> {
     if salt(tx).await?.is_some() {
         return Ok(());
     }
-    // 16 random bytes as hex. The CHECK on singleton keeps a second row out.
+    // The salt is 16 random bytes written as 32 hex characters, which the TEXT
+    // column holds. The size of 16 bytes is a choice that no measurement
+    // backs.
     let salt = rand::random::<[u8; 16]>()
         .iter()
         .fold(String::new(), |mut hex, byte| {
+            // Writing to a `String` cannot fail, so the result is dropped.
             let _ = write!(hex, "{byte:02x}");
             hex
         });
+    // The insert always writes singleton 1, so the primary key on `singleton`
+    // refuses a second row, and the match below receives that refusal as a
+    // unique violation.
     let insert = sql(
         tx,
         "INSERT INTO installation (singleton, signing_salt) VALUES (1, $1)",
@@ -32,6 +38,8 @@ pub async fn ensure_salt(tx: &mut Tx) -> Result<(), sqlx::Error> {
             .bind(&salt)
             .execute(conn)
             .await
+            // Each backend's `execute` returns its own result type, and
+            // dropping it gives the three arms of `on_tx` one type.
             .map(|_| ())
     });
     match inserted {
@@ -42,7 +50,8 @@ pub async fn ensure_salt(tx: &mut Tx) -> Result<(), sqlx::Error> {
     }
 }
 
-/// The installation's signing salt, or `None` before migrate has written it.
+/// The installation's signing salt, or `None` when `migrate::apply` has not
+/// run on this database. The migrate command and the first serve both run it.
 ///
 /// # Errors
 ///
