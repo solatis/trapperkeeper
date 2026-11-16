@@ -95,9 +95,11 @@ fn reset_superadmin_sets_a_new_one_time_password() {
     // 1. We open a missing database as reset-superadmin does, which never
     //    creates one, and expect `Error::Open`.
     // 2. We set the database up and reset twice. Each reset must replace the
-    //    hash and move the cutoff.
+    //    hash and move `tokens_valid_after`, so the old password and every
+    //    earlier token stop working.
     // 3. We mark the superadmin deleted and reset once more, which must create
-    //    it again, as after a first run that stopped before it existed.
+    //    it again, as after a first run that stopped before it existed. A name
+    //    is unique among the rows that are not deleted, so it can be reused.
     on_each_backend(|backend| {
         // 1. open a missing database
         let database = TestDatabase::fresh(backend);
