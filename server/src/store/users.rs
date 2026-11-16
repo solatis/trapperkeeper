@@ -36,8 +36,8 @@ pub struct User {
 /// filtered to live users and live roles of the tenant bound as `$1`. Each
 /// caller appends a condition whose placeholders start at `$2`, or an ORDER
 /// BY. The macro does not join tenants, so it does not check that the tenant
-/// is live, and a live user whose role is deleted is not found. A macro,
-/// because `concat!` takes only literals.
+/// is live. Its join on live roles leaves out a live user whose role is
+/// deleted. A macro, because `concat!` takes only literals.
 macro_rules! SELECT_USER {
     () => {
         "SELECT u.user_id, u.tenant_id, u.user_name, r.role_name, u.password_hash, \
@@ -157,10 +157,10 @@ pub async fn list(tx: &mut Tx, tenant_id: &str) -> Result<Vec<User>, sqlx::Error
 ///
 /// Fails when the database cannot be read.
 pub async fn count_admins(tx: &mut Tx, tenant_id: &str) -> Result<i64, sqlx::Error> {
-    // The route that deletes a user calls this count before `delete`, where
-    // a condition in the WHERE of that UPDATE could make the same check. Zero
-    // rows affected by the UPDATE then always means a missing user, and the
-    // route tells a last admin apart before the write.
+    // The route that deletes a user calls this count first and refuses the
+    // delete of a last admin. `delete` then needs no such condition in the
+    // WHERE of its UPDATE, so zero rows affected by that UPDATE always means
+    // a missing user.
     let select = sql(
         tx,
         "SELECT COUNT(*) FROM users u \
@@ -393,7 +393,7 @@ pub struct PasswordSet<'a> {
 }
 
 /// Replaces the user's password hash, sets the must-change flag, and sets
-/// `tokens_valid_after` to `now`, which ends every session that began before
+/// `tokens_valid_after` to `now`, which revokes every token issued before
 /// the change (ADR-0025). When no live user of the tenant has the id, it
 /// changes nothing and returns `Ok`.
 ///
