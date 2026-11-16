@@ -1,5 +1,9 @@
-//! Users and their roles in the relational store: creating, listing, finding,
-//! re-roling and deleting them. Every read ignores deleted rows.
+//! Users and their roles in the relational store: creating and listing
+//! users, finding one by name, by tenant name or by id, counting the live
+//! admins, changing a role, deleting softly, revoking tokens and setting a
+//! password. Every read ignores deleted users except `find_id_any`, which
+//! also finds deleted users, so that the audit trail of a deleted user can
+//! still be asked for by name.
 
 use std::fmt;
 
@@ -19,13 +23,19 @@ pub struct User {
     pub name: String,
     pub role_name: String,
     pub password_hash: String,
+    /// Tells the client at login that the user is to replace the password,
+    /// so that a client such as the UI asks for a new one. The server
+    /// restricts nothing because of it.
     pub password_must_change: bool,
+    /// The user's revocation cutoff in epoch microseconds in UTC. A token
+    /// whose issue time lies before it is refused.
     pub tokens_valid_after: i64,
 }
 
-/// The columns of `User`, joined with the user's live role and filtered to
-/// the tenant, for each `find` to narrow. A macro, because `concat!` takes
-/// only literals.
+/// The columns of `User`, from users joined with the user's live role,
+/// filtered to live users and live roles of the tenant bound as `$1`. Each
+/// caller appends a condition whose placeholders start at `$2`, or an ORDER
+/// BY. A macro, because `concat!` takes only literals.
 macro_rules! SELECT_USER {
     () => {
         "SELECT u.user_id, u.tenant_id, u.user_name, r.role_name, u.password_hash, \
@@ -66,10 +76,11 @@ impl std::error::Error for CreateError {}
 
 impl From<sqlx::Error> for CreateError {
     fn from(error: sqlx::Error) -> Self {
-        // The live-only unique index on the name is the only unique
-        // constraint an insert can break: the id is fresh, and the role is
-        // looked up.
         match error {
+            // The users table has two unique constraints, the primary key on
+            // `user_id` and the live-only unique index on (tenant_id,
+            // user_name). The id is a fresh version 7 UUID, so a unique
+            // violation can only come from the name.
             sqlx::Error::Database(database) if database.is_unique_violation() => Self::NameTaken,
             error => Self::Database(error),
         }
@@ -81,15 +92,16 @@ impl From<sqlx::Error> for CreateError {
 ///
 /// # Errors
 ///
-/// `NameTaken` when a live user of the tenant has the name; `Database`
-/// otherwise.
+/// Returns `NameTaken` when a live user of the tenant has the name. Returns
+/// `Database` for any other failure, including a role name that names no
+/// live role of the tenant.
 pub async fn create(tx: &mut Tx, new: NewUser<'_>) -> Result<(), CreateError> {
     let user_id = Uuid::now_v7().to_string();
-    // tokens_valid_after starts at created_at, so no token can predate the
-    // user.
     let now = now_micros();
-    // The role id comes from a subselect on the tenant and the role name,
-    // filtered to live roles, so callers never hold role ids.
+    // The subselect looks up the role id from the tenant and the role name
+    // among live roles, so callers never hold role ids (ADR-0023). When the
+    // tenant holds no live role of that name, the subselect yields NULL and
+    // the NOT NULL `role_id` refuses the insert.
     let insert = sql(
         tx,
         "INSERT INTO users (user_id, tenant_id, user_name, role_id, password_hash, \
@@ -103,6 +115,9 @@ pub async fn create(tx: &mut Tx, new: NewUser<'_>) -> Result<(), CreateError> {
             .bind(&user_id)
             .bind(new.tenant_id)
             .bind(new.user_name)
+            // Each placeholder number appears once and in ascending order,
+            // because MariaDB's `?` binds by position, so a value used twice
+            // gets two numbers and two binds (ADR-0019).
             .bind(new.tenant_id)
             .bind(new.role_name)
             .bind(new.password_hash)
@@ -111,8 +126,9 @@ pub async fn create(tx: &mut Tx, new: NewUser<'_>) -> Result<(), CreateError> {
             .bind(now)
             .execute(conn)
             .await
-            // Each backend has a result type of its own; nothing in it is
-            // needed.
+            // `on_tx` is a match whose arms run the body once per backend,
+            // each with its own query result type, so the closure discards
+            // the result to give every arm the type `()`.
             .map(|_| ())
     })?;
     Ok(())
@@ -133,15 +149,15 @@ pub async fn list(tx: &mut Tx, tenant_id: &str) -> Result<Vec<User>, sqlx::Error
     })
 }
 
-/// How many live users of `tenant_id` hold the role `admin`: the read behind
-/// the 409 of a delete or a demotion. A read of its own rather than a
-/// condition in the UPDATE's WHERE, so that zero rows affected still tells a
-/// missing user from a last admin.
+/// How many live users of `tenant_id` hold the live role `admin`.
 ///
 /// # Errors
 ///
 /// Fails when the database cannot be read.
 pub async fn count_admins(tx: &mut Tx, tenant_id: &str) -> Result<i64, sqlx::Error> {
+    // The count is a read of its own and no condition in the WHERE of the
+    // UPDATE in `delete`. Zero rows affected by that UPDATE then still means
+    // a missing user, and a last admin is told apart before the write.
     let select = sql(
         tx,
         "SELECT COUNT(*) FROM users u \
@@ -159,20 +175,23 @@ pub async fn count_admins(tx: &mut Tx, tenant_id: &str) -> Result<i64, sqlx::Err
 }
 
 /// Gives the live user `user_id` of `tenant_id` the tenant's live role named
-/// `role_name`, which the caller has checked the tenant holds.
+/// `role_name`, which the caller has checked the tenant holds. When no live
+/// user of the tenant has the id, it changes nothing and returns `Ok`.
 ///
 /// # Errors
 ///
-/// Fails when the database cannot be written, which a role the tenant does
-/// not hold causes through the NOT NULL role id.
+/// Fails when the database cannot be written, and also when the tenant holds
+/// no live role of that name.
 pub async fn set_role(
     tx: &mut Tx,
     tenant_id: &str,
     user_id: &str,
     role_name: &str,
 ) -> Result<(), sqlx::Error> {
-    // The role id comes from the subselect the insert uses, so callers never
-    // hold role ids (ADR-0023).
+    // The subselect looks up the role id from the tenant and the role name
+    // among live roles, so callers never hold role ids (ADR-0023). A role
+    // name that the tenant does not hold yields NULL, which the NOT NULL
+    // `role_id` refuses.
     let update = sql(
         tx,
         "UPDATE users SET role_id = \
@@ -183,6 +202,8 @@ pub async fn set_role(
         sqlx::query(AssertSqlSafe(update))
             .bind(tenant_id)
             .bind(role_name)
+            // Each placeholder number appears once and in ascending order,
+            // because MariaDB's `?` binds by position (ADR-0019).
             .bind(tenant_id)
             .bind(user_id)
             .execute(conn)
@@ -203,15 +224,13 @@ pub async fn delete(
     user_id: &str,
     now: i64,
 ) -> Result<bool, sqlx::Error> {
-    // A soft delete, because events and the audit trail keep naming the user
-    // (ADR-0024).
+    // The UPDATE sets `deleted_at` and keeps the row, because events, the
+    // audit trail and reports keep naming the user (ADR-0024).
     let update = sql(
         tx,
         "UPDATE users SET deleted_at = $1 \
          WHERE tenant_id = $2 AND user_id = $3 AND deleted_at IS NULL",
     );
-    // Zero rows means the user was deleted between the caller's read and
-    // this write, which the route answers as 404.
     let affected = on_tx!(tx, |conn| {
         sqlx::query(AssertSqlSafe(update))
             .bind(now)
@@ -255,8 +274,10 @@ pub async fn find_in(
     tenant_name: &str,
     user_name: &str,
 ) -> Result<Option<User>, sqlx::Error> {
-    // The join on tenants filters its deleted_at too, so the users of a
-    // deleted tenant are not found (ADR-0024).
+    // The join on tenants filters `deleted_at` too, so the users of a deleted
+    // tenant are not found (ADR-0024). The query does not use `SELECT_USER`,
+    // because that macro binds the tenant id as `$1`, and this query knows
+    // the tenant only by name.
     let select = sql(
         tx,
         "SELECT u.user_id, u.tenant_id, u.user_name, r.role_name, u.password_hash, \
@@ -287,9 +308,10 @@ pub async fn find_id_any(
     tenant_id: &str,
     user_name: &str,
 ) -> Result<Option<String>, sqlx::Error> {
-    // Deleted users count, because the audit trail of one is still asked
-    // for, and a name is reused after a delete, so the live user comes first
-    // (ADR-0024).
+    // Deleted users count, because the audit trail of a deleted user is
+    // still asked for by name. A name can be used again after a delete
+    // (ADR-0024), so the ORDER BY puts the live user first and then the most
+    // recently created.
     let select = sql(
         tx,
         "SELECT user_id FROM users WHERE tenant_id = $1 AND user_name = $2 \
@@ -357,7 +379,7 @@ pub struct PasswordSet<'a> {
     pub tenant_id: &'a str,
     pub user_id: &'a str,
     pub password_hash: &'a str,
-    /// Whether the user must change the password at the next login.
+    /// The new `password_must_change`.
     pub must_change: bool,
     /// The new `tokens_valid_after`.
     pub now: i64,
