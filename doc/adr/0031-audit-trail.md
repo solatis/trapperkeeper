@@ -4,8 +4,9 @@ Date: 2026-11-07.
 
 ## Context
 
-The management API owns the audit trail (`adr/0001`), and M2 wants every
-changing request recorded where a tenant's admins can read it.
+The management API owns the audit trail (`adr/0001`). The milestone M2
+requires that every changing request is recorded where a tenant's admins can
+read it.
 
 ## Decision
 
@@ -28,7 +29,9 @@ one, and under the caller's tenant otherwise, so a tenant's admins see what
 the superadmin did to their tenant, with the superadmin named as the caller
 (owner, 2026-11-07).
 
-Nothing prunes the table in M2 (owner, 2026-11-06).
+Audit retention is deferred, and nothing prunes the table in M2 (owner,
+2026-11-06). The project may build a TTL mechanism later, and that is not
+decided (owner, 2026-11-07).
 
 ## Rejected alternatives
 
@@ -43,9 +46,10 @@ and the client would retry it.
 
 ## Consequences
 
-A row is written outside the handler's transaction, so a gap is possible,
-and the error log marks it. A forged header on a server with no proxy is
-recorded as the client, next to the true peer. The table grows without
-bound until retention is decided (owner, 2026-11-07: a TTL later). The
-superadmin's own trail in `$tk` holds only what it did outside a tenant's
-path, such as creating tenants.
+The middleware writes the row in a transaction of its own after the handler has
+committed. A change can therefore land without its audit row. When that happens,
+the middleware logs an error that names the route. A forged header on a server
+with no proxy is recorded as the client, next to the true peer. The table grows
+without bound until retention is decided (owner, 2026-11-07: a TTL later). The
+superadmin's own trail in `$tk` holds only what it did outside a tenant's path,
+such as creating tenants.

@@ -27,11 +27,11 @@ The tokio runtime is shared by the whole test process, because a sqlx
 connection belongs to the runtime that opened it. It is an executor and holds
 no test's state.
 
-A resource the process shares is either locked for the case or used by a
-single test in its binary: the settings property changes the environment
-inside figment's jail, which holds a global lock and restores the environment
-after, and the log test installs the global tracing subscriber and is the only
-test of its binary.
+A resource the process shares is locked for each case, or a single test of
+its binary uses it. The settings property changes the environment inside
+figment's jail, which holds a global lock and restores the environment
+afterwards. The log test installs the global tracing subscriber and is the
+only test of its binary.
 
 Tests that will run against a live TrapperKeeper server, such as the SDKs'
 integration tests, are expected to follow the same rule at the level that
@@ -52,7 +52,5 @@ need a database that does not exist yet.
 
 The admin URL of a server backend must belong to a user allowed to create and
 drop databases. A test that is killed before its drop leaves a database named
-`tk_test_*` behind, which the next run does not reuse. Postgres databases are
-dropped by force, because a stopped server's connections may not have closed
-yet. Every test pays a database creation per backend, which is why the store
-property runs fewer cases than proptest's default.
+`tk_test_*` behind, which the next run does not reuse. Every test pays a
+database creation per backend.

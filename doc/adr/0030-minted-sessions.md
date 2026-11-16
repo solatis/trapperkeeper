@@ -4,20 +4,21 @@ Date: 2026-11-07.
 
 ## Context
 
-M2 wants the superadmin to act as any user of any tenant. The ladder puts
-the superadmin at the top (`adr/0029`), and the tokens a login hands out
-exist (`adr/0025`).
+The milestone M2 includes a superadmin who acts as any user of any tenant.
+The ladder puts the superadmin at the top (`adr/0029`). Login already hands
+out an access token and a refresh token (`adr/0025`).
 
 ## Decision
 
 A superadmin route, `POST /api/v1/tenants/{tenant}/users/{name}/session`,
 returns an ordinary access token and refresh token for the named user, as
-a login body without cookies. The claims stay `sub`, `tid`, `iat` and
-`exp`, and the client, a CLI or the web UI, decides how to use the tokens
-(owner, 2026-11-07).
+a login body without cookies. The minted tokens carry the same claims as the
+tokens of a login: `sub`, `tid`, `iat` and `exp`. The client, a CLI or the web
+UI, decides how to use the tokens (owner, 2026-11-07).
 
-The route lives under `/tenants/{tenant}/users/{name}`, the one model every
-tenant-scoped route follows (owner, 2026-11-07).
+Every tenant-scoped route lives under `/api/v1/tenants/{tenant}/...`, and the
+mint route follows that pattern under `/tenants/{tenant}/users/{name}` (owner,
+2026-11-07).
 
 ## Rejected alternatives
 

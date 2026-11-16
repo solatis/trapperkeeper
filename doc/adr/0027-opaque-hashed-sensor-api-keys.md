@@ -31,5 +31,5 @@ SDK would need canonical requests (owner, 2026-11-05).
 
 Each sensor request costs one lookup by key id, which a cache can absorb. M5
 manages the keys through the management API, and M6 checks them at the
-sensor API. `doc/architecture.md` states the design under Sensor API and
-Identity.
+sensor API. `doc/architecture.md` cites this record under Sensor API and
+under Identity, and this record alone states the design.
