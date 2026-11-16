@@ -81,9 +81,9 @@ pub(super) fn lex(text: &str) -> Vec<Token> {
             // The error becomes the last token, and the rest of the text is
             // not read. In `amount > 100;` the list is `amount`, `>`, `100`
             // and the bad `;`.
-            Err(SyntaxError { at, reason }) => {
+            Err(SyntaxError { at: span, reason }) => {
                 let kind = Tok::Bad(reason);
-                tokens.push(Token { kind, at });
+                tokens.push(Token { kind, at: span });
                 return tokens;
             }
         }
