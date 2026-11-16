@@ -10,7 +10,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use common::{
     ADMIN, SYSTEM_TENANT, SYSTEM_TENANT_ID, TEST_KEY, TEST_PREVIOUS_KEY, backends, block_on, call,
-    on_each_backend, on_pool, placeholders, request, serve_in_process,
+    on_each_backend, on_pool, placeholders, request, serve_in_process, superadmin_token,
 };
 use proptest::prelude::*;
 use serde_json::{Value, json};
@@ -238,20 +238,18 @@ fn admin_id(database: &common::TestDatabase) -> String {
     })
 }
 
-/// Sets `column` of the admin to `value`, as a route will once one writes it.
-fn set_admin(database: &common::TestDatabase, column: &'static str, value: i64) {
+/// Sets `deleted_at` of the superadmin's row to `at`. The test writes the row
+/// itself, because no route reaches the superadmin of the system tenant
+/// (ADR-0028).
+fn delete_admin(database: &common::TestDatabase, at: i64) {
     let update = placeholders(
         database.backend,
-        match column {
-            "tokens_valid_after" => "UPDATE users SET tokens_valid_after = $1 WHERE user_id = $2",
-            "deleted_at" => "UPDATE users SET deleted_at = $1 WHERE user_id = $2",
-            _ => unreachable!("only two columns are written"),
-        },
+        "UPDATE users SET deleted_at = $1 WHERE user_id = $2",
     );
     let id = admin_id(database);
     on_pool!(database, |pool| {
         sqlx::query(AssertSqlSafe(update))
-            .bind(value)
+            .bind(at)
             .bind(&id)
             .execute(&pool)
             .await
@@ -305,10 +303,11 @@ proptest! {
             )
             .expect("a small number");
             if has(Defect::BeforeCutoff) {
-                set_admin(server.database(), "tokens_valid_after", now_micros + 1);
+                let response = call(&server, &superadmin_token(&server), "POST", "/api/v1/logout", None);
+                prop_assert_eq!(response.status, 200, "{:?} on {}: {}", defects, backend, response.body);
             }
             if has(Defect::DeletedUser) {
-                set_admin(server.database(), "deleted_at", now_micros);
+                delete_admin(server.database(), now_micros);
             }
 
             let bearer = format!("Bearer {token}");
