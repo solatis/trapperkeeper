@@ -22,9 +22,9 @@ The tree is written in JSON with one key that names the kind of each node, as in
 `{"gt": [{"field": ["amount"]}, {"int": 100}]}` (owner, 2026-11-13). The tree
 keeps the operators as the author wrote them (owner, 2026-11-14). A field is one
 node with a path of keys and indexes (owner, 2026-11-14). `and` and `or` hold a
-list of operands. The pattern of a pattern function is a text in its node. The
-`Rule` type of the engine crate holds the tree and not the text, because the
-text can be printed from the tree (owner, 2026-11-14).
+list of operands. The pattern of `re.search`, `re.match` and `re.fullmatch` is a
+text in its node. The `Rule` type of the engine crate holds the tree and not the
+text, because the text can be printed from the tree (owner, 2026-11-14).
 
 The actions are `observe`, `drop` and `throw`. `throw` raises into the
 pipeline. A rule has one action (owner, 2026-11-11, 2026-11-13).
