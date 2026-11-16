@@ -139,7 +139,7 @@ fn next_token(text: &str, at: usize) -> Result<Token, SyntaxError> {
         // literal is read raw either way, so the refusal covers all of it:
         // bytes 0 to 6 of `f"{a}" == "x"`. A literal that cannot be read,
         // such as one that is never closed, gets its own error instead.
-        let literal = self::text(text, at, end, true)?;
+        let literal = quoted_text(text, at, end, true)?;
         // `r"\d"` is one token, from the `r` to the closing quote.
         if word.eq_ignore_ascii_case("r") {
             return Ok(literal);
@@ -155,7 +155,7 @@ fn next_token(text: &str, at: usize) -> Result<Token, SyntaxError> {
     }
     // 3. `"paid"` and `'paid'`, read with their escapes.
     if c == '"' || c == '\'' {
-        return self::text(text, at, at, false);
+        return quoted_text(text, at, at, false);
     }
     // 4. The error covers the comment to the end of its line: bytes 13 to
     //    23 of `amount > 100 # big ones`.
@@ -308,7 +308,7 @@ fn number(text: &str, at: usize) -> Result<Token, SyntaxError> {
 /// `raw` keeps backslashes as they are.
 // `at` and `open` differ by the prefix: for `r"\d"` they are the bytes of
 // the `r` and of the quote, and for `"paid"` both are the quote.
-fn text(text: &str, at: usize, open: usize, raw: bool) -> Result<Token, SyntaxError> {
+fn quoted_text(text: &str, at: usize, open: usize, raw: bool) -> Result<Token, SyntaxError> {
     let refuse = |at: Range<usize>, reason| Err(SyntaxError { at, reason });
     // The quote that opens the text also closes it, so `"it's"` holds an
     // apostrophe.
