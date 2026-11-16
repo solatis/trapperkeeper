@@ -11,14 +11,18 @@ use super::{Tx, on_tx, sql};
 ///
 /// # Errors
 ///
-/// Fails when the database cannot be read or written.
+/// Fails when the database cannot be read or written. When another instance
+/// writes its salt first, the call returns `Ok`. On Postgres that lost race
+/// has aborted the transaction of `tx`, so a later commit of it ends as a
+/// rollback without an error, and whatever else the transaction wrote is
+/// lost.
 pub async fn ensure_salt(tx: &mut Tx) -> Result<(), sqlx::Error> {
     if salt(tx).await?.is_some() {
         return Ok(());
     }
-    // The salt is 16 random bytes written as 32 hex characters, which the TEXT
-    // column holds. The size of 16 bytes is a choice that no measurement
-    // backs.
+    // The salt is 16 random bytes written as 32 hex characters, which the
+    // `signing_salt` column holds on every backend. The size of 16 bytes is
+    // a choice that no measurement backs.
     let salt = rand::random::<[u8; 16]>()
         .iter()
         .fold(String::new(), |mut hex, byte| {
@@ -44,10 +48,7 @@ pub async fn ensure_salt(tx: &mut Tx) -> Result<(), sqlx::Error> {
     });
     match inserted {
         // Another instance wrote its salt between the read and the insert,
-        // and that salt is the installation's. On Postgres the violation has
-        // also aborted the transaction of `tx`. A later commit of it then
-        // ends as a rollback without an error, and whatever else the
-        // transaction wrote is lost.
+        // and that salt is the installation's.
         Err(sqlx::Error::Database(database)) if database.is_unique_violation() => Ok(()),
         inserted => inserted,
     }
