@@ -25,9 +25,10 @@ pub(super) const WORDS: [&str; 14] = [
     "math",
 ];
 
-// ADR-0041 reserves `re` and `math` as the names of the two modules.
-// Otherwise a call such as `re.search(` could be told from the field
-// `re.search` only at its fourth token, the `(`. `function_name`
+// ADR-0041 reserves `re` and `math` as the names of the two modules. Its
+// reason is that a call would otherwise need four tokens to tell it from a
+// field: `re.search(` and the field `re.search` differ at the `(`.
+// `function_name`
 // reads one only as the start of a call such as `re.search`, and a bare `re`
 // is refused with `ModuleAlone`.
 const MODULES: [&str; 2] = ["re", "math"];
@@ -1072,9 +1073,10 @@ fn literal(i: &Input<'_>, p: usize) -> Reply<Expr> {
         map(word("None"), |_| Expr::None),
         map(word("True"), |_| Expr::Bool(true)),
         map(word("False"), |_| Expr::Bool(false)),
-        // `100`. `unary` reads a minus and its number before this rule runs,
-        // so a number here has no minus before it. Its magnitude is then too
-        // large above the largest i64, as in `9223372036854775808 > x`.
+        // `100`. `unary` reads a negating minus and its number as one
+        // literal before this rule runs, so a number here is not negated. Its
+        // magnitude is then too large above the largest i64, as in
+        // `9223372036854775808 > x`.
         try_map(int, |_, v, at| {
             let reason = Reason::IntTooLarge;
             i64::try_from(v)
