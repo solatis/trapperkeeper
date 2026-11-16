@@ -506,8 +506,8 @@ pub(super) fn delimited<O, T, C>(
         // to 6.
         let at = i.tok(p - 1).at.clone();
         // The opening token is `(` or `[`, and its one character names it.
-        let open = i.slice(&at).chars().next().unwrap_or_default();
-        let reason = Reason::NeverClosed { open };
+        let bracket = i.slice(&at).chars().next().unwrap_or_default();
+        let reason = Reason::NeverClosed { open: bracket };
         let error = SyntaxError { at, reason };
         // The refusal stands at the end, as the note of `close` does, so
         // `explain` reports the refusal.
