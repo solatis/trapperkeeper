@@ -11,7 +11,6 @@ use std::str::FromStr;
 use figment::Figment;
 use figment::providers::{Env, Format, Serialized, Toml};
 use serde::{Deserialize, Serialize, Serializer};
-use tracing::metadata::ParseLevelFilterError;
 use tracing_subscriber::filter::LevelFilter;
 use url::Url;
 
@@ -197,23 +196,43 @@ impl fmt::Debug for SigningKey {
 
 /// A tracing level filter that reads and writes as its name (`info`,
 /// `debug`), so the file, the environment and the flag all take the same
-/// spelling. It reads any case and writes lowercase, so the logged settings
-/// read as a file would be written. A newtype because `LevelFilter` has no
-/// serde implementation.
+/// spelling. It reads one of the six names in any case, refuses any other
+/// text, and writes lowercase, so the logged settings read as a file would be
+/// written. A newtype because `LevelFilter` has no serde implementation.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(try_from = "String", into = "String")]
 pub struct LogLevel(pub LevelFilter);
 
+/// The names a level reads from.
+const LEVELS: [(&str, LevelFilter); 6] = [
+    ("off", LevelFilter::OFF),
+    ("error", LevelFilter::ERROR),
+    ("warn", LevelFilter::WARN),
+    ("info", LevelFilter::INFO),
+    ("debug", LevelFilter::DEBUG),
+    ("trace", LevelFilter::TRACE),
+];
+
 impl FromStr for LogLevel {
-    type Err = ParseLevelFilterError;
+    type Err = String;
 
     fn from_str(name: &str) -> Result<Self, Self::Err> {
-        name.parse().map(Self)
+        // `LevelFilter`'s own parser also takes the digits 0 to 5 and the
+        // empty string, so the names are matched here.
+        LEVELS
+            .iter()
+            .find(|(known, _)| known.eq_ignore_ascii_case(name))
+            .map(|&(_, level)| Self(level))
+            .ok_or_else(|| {
+                format!(
+                    "unknown log level {name:?}, expected off, error, warn, info, debug or trace"
+                )
+            })
     }
 }
 
 impl TryFrom<String> for LogLevel {
-    type Error = ParseLevelFilterError;
+    type Error = String;
 
     fn try_from(name: String) -> Result<Self, Self::Error> {
         name.parse()
@@ -274,4 +293,25 @@ pub fn load(file: Option<&Path>, overrides: impl Serialize) -> Result<Settings, 
     // 5. extract the settings
     let settings = figment.extract()?;
     Ok(settings)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{LevelFilter, LogLevel};
+
+    #[test]
+    fn a_level_is_one_of_six_names() {
+        assert_eq!(
+            "INFO".parse::<LogLevel>().ok(),
+            Some(LogLevel(LevelFilter::INFO))
+        );
+        // Texts that `LevelFilter`'s own parser takes.
+        for text in ["3", ""] {
+            let Err(error) = text.parse::<LogLevel>() else {
+                panic!("{text:?} is accepted");
+            };
+            assert!(error.contains(&format!("{text:?}")), "{error}");
+            assert!(error.contains("trace"), "{error}");
+        }
+    }
 }
