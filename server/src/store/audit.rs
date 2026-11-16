@@ -33,7 +33,8 @@ pub struct Record<'a> {
 pub async fn append(tx: &mut Tx, record: Record<'_>) -> Result<(), sqlx::Error> {
     // The id is a version 7 UUID, whose text sorts by creation time, so
     // ordering by `audit_id` orders the trail by time, to the millisecond
-    // (ADR-0020).
+    // (ADR-0020). Rows of one millisecond keep the fixed order that their
+    // ids give them, which need not be the order of their writes.
     let audit_id = Uuid::now_v7().to_string();
     let insert = sql(
         tx,
@@ -90,10 +91,11 @@ macro_rules! SELECT_ROWS_BEFORE {
         // Neither LEFT JOIN filters on `deleted_at`, so the trail still names
         // a user deleted since (ADR-0024). The join on users matches on
         // `user_id` alone, because a row filed under a customer tenant can
-        // name the superadmin, who is a user of `$tk` (ADR-0031). An id holds
-        // only hex digits and hyphens at fixed places, which the collation
-        // of a Postgres database orders as bytes do, so the comparison with
-        // `$2` and the ORDER BY of a caller keep the time order.
+        // name the superadmin, who is a user of `$tk` (ADR-0031). Every id
+        // has the same layout of hex digits and hyphens, so two ids differ
+        // first at a hex digit, which the collation of a Postgres database
+        // orders as bytes do. The comparison with `$2` and the ORDER BY of
+        // a caller therefore keep the time order.
         "SELECT a.audit_id, u.user_name, t.tenant_name AS user_tenant, a.method, a.route, \
          a.path_params, a.status, a.peer_address, a.client_address, a.recorded_at \
          FROM audit a \
