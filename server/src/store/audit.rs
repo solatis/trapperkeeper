@@ -1,13 +1,16 @@
-//! The audit trail in the relational store: appending a row and paging a
-//! tenant's trail. A row is a record, never deleted, so no read filters on
-//! `deleted_at`.
+//! The audit trail in the relational store. The file appends a row and
+//! pages a tenant's trail. Nothing deletes an audit row, so the audit table
+//! has no `deleted_at`.
 
 use sqlx::{AssertSqlSafe, FromRow};
 use uuid::Uuid;
 
 use super::{Tx, now_micros, on_tx, sql};
 
-/// What one request leaves in the trail.
+/// What one changing request leaves in the trail. Each field fills the
+/// column of the same name in `audit`, and the comments in
+/// `server/migrations/sqlite/0005_audit.sql` say what each column holds and
+/// when it is NULL. `append` adds the id and the time.
 pub struct Record<'a> {
     pub tenant_id: Option<&'a str>,
     pub user_id: Option<&'a str>,
@@ -19,13 +22,15 @@ pub struct Record<'a> {
     pub client_address: &'a str,
 }
 
-/// Appends `record` with a new id and now as its time. Does not commit.
+/// Inserts `record` with a new id and the current time as `recorded_at`. The
+/// caller commits the transaction.
 ///
 /// # Errors
 ///
 /// Fails when the database cannot be written.
 pub async fn append(tx: &mut Tx, record: Record<'_>) -> Result<(), sqlx::Error> {
-    // A version 7 UUID, so the id orders the trail by time (ADR-0020).
+    // The id is a version 7 UUID, whose text sorts by creation time, so
+    // ordering by `audit_id` orders the trail by time (ADR-0020).
     let audit_id = Uuid::now_v7().to_string();
     let insert = sql(
         tx,
@@ -68,10 +73,19 @@ pub struct Row {
     pub recorded_at: i64,
 }
 
-/// The columns of `Row`, joined with the user and the user's tenant, for
-/// `page` to narrow. A macro, because `concat!` takes only literals.
+/// Expands to the SELECT of the columns of `Row`, joined with the user and
+/// the user's own tenant. It ends in a WHERE clause that binds `$1` to the
+/// tenant id and `$2` to the cursor, and it keeps the rows whose id sorts
+/// below `$2`. Those are the older rows, because the ids are time-ordered
+/// (ADR-0020). A caller appends its own conditions from `$3` on, then the
+/// order and the limit. A macro, because `concat!` accepts only literals, so
+/// a `const` would not work.
 macro_rules! SELECT_ROWS_BEFORE {
     () => {
+        // Neither LEFT JOIN filters on `deleted_at`, so the trail still names
+        // a user deleted since (ADR-0024). The join on users matches on
+        // `user_id` alone, because a row filed under a customer tenant can
+        // name the superadmin, who is a user of `$tk` (ADR-0031).
         "SELECT a.audit_id, u.user_name, t.tenant_name AS user_tenant, a.method, a.route, \
          a.path_params, a.status, a.peer_address, a.client_address, a.recorded_at \
          FROM audit a \
@@ -81,13 +95,15 @@ macro_rules! SELECT_ROWS_BEFORE {
     };
 }
 
-/// An id above every version 7 UUID, so a page with no `before` starts at
-/// the newest row through the same statement.
+/// The all-f UUID, whose text sorts above every id the store generates.
+/// `page` uses it as the cursor when the caller gives no `before`, so the
+/// first page runs the same statement as the pages after it and starts at
+/// the newest row.
 const AFTER_EVERY_ROW: &str = "ffffffff-ffff-ffff-ffff-ffffffffffff";
 
-/// The newest `limit` rows of `tenant_id` before the row `before`, or the
-/// newest `limit` when `before` is `None`, narrowed to `user_id` when one is
-/// given.
+/// Returns up to `limit` rows of `tenant_id`, newest first, whose ids sort
+/// below `before`, or the newest rows when `before` is `None`. When `user_id`
+/// is given, it returns only that user's rows.
 ///
 /// # Errors
 ///
@@ -99,18 +115,15 @@ pub async fn page(
     before: Option<&str>,
     limit: u32,
 ) -> Result<Vec<Row>, sqlx::Error> {
-    // The join on users is on the id alone and ignores deleted_at, because
-    // the trail names a user deleted since, and the superadmin's row under a
-    // customer tenant names a user of $tk (ADR-0024).
-    //
-    // The id is time-ordered, so it is the cursor and the order at once
-    // (ADR-0020).
-    //
-    // Two statements rather than a NULL-or-equal trick on the user, because
-    // the placeholders are numbered once each in order and the trick defeats
-    // the user index.
     let before = before.unwrap_or(AFTER_EVERY_ROW);
+    // sqlx encodes no unsigned integer for Postgres, and `i64` holds every
+    // `u32`, which `i32` does not.
     let limit = i64::from(limit);
+    // `page` runs a separate statement when a user is given. One statement
+    // with `$3 IS NULL OR a.user_id = $3` would use `$3` twice, and each
+    // placeholder number appears once, in ascending order, because
+    // MariaDB's `?` binds by position (ADR-0019). The OR form would also
+    // defeat the index `audit_tenant_user_time`.
     if let Some(user_id) = user_id {
         let select = sql(
             tx,
