@@ -5,20 +5,20 @@ Date: 2026-11-15.
 ## Context
 
 A user of a customer tenant holds one of three roles: admin, operator and
-observer. The superadmin of `$tk` holds a fourth role, `superadmin`. The roles
-could be a fixed value on each user or rows in a table of their own. The owner
-decided while the first users were planned (owner, 2026-11-05).
+observer. The superadmin of the system tenant `$tk` holds a fourth role,
+`superadmin`. The roles could be a fixed value on each user or rows in a table
+of their own. The owner decided while the first users were planned (owner,
+2026-11-05).
 
 ## Decision
 
 Roles are rows in a `roles` table, one set per tenant, each with a lowercase
 `role_name` and a display `role_title`. The migration seeds the system tenant's
 one role, `superadmin` (`doc/adr/0028`). Today that role has a fixed id, a
-version 7 UUID with an all-zero timestamp like the tenant's. The id becomes
+version 7 UUID with an all-zero timestamp like the id of `$tk`. The id becomes
 random in a later milestone (owner, 2026-11-15). A tenant the superadmin creates
 gets the roles admin, operator and observer. Nearly every table carries a tenant
-id, and the roles follow that rule (owner,
-2026-11-05).
+id, and the roles follow that rule (owner, 2026-11-05).
 
 A user references its role together with its tenant, through a composite foreign
 key on `(tenant_id, role_id)`, so a user cannot hold another tenant's role. The
