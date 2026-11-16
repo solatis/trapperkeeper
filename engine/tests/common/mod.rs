@@ -116,22 +116,22 @@ pub fn expr() -> BoxedStrategy<Expr> {
     // Every kind of node is generated, and nothing else is constrained. An
     // `And` may hold an `And`, and an `Element` may stand anywhere.
     leaf.prop_recursive(2, 24, 3, move |inner| {
-        let one = || inner.clone().prop_map(Box::new);
+        let operand = || inner.clone().prop_map(Box::new);
         prop_oneof![
-            (select(UNARY.to_vec()), one()).prop_map(|(make, a)| make(a)),
-            (select(BINARY.to_vec()), one(), one()).prop_map(|(make, a, b)| make(a, b)),
+            (select(UNARY.to_vec()), operand()).prop_map(|(make, a)| make(a)),
+            (select(BINARY.to_vec()), operand(), operand()).prop_map(|(make, a, b)| make(a, b)),
             (select(LISTS.to_vec()), vec(inner.clone(), 0..=3))
                 .prop_map(|(make, items)| make(items)),
-            (one(), one(), one()).prop_map(|(test, then, otherwise)| Expr::If {
+            (operand(), operand(), operand()).prop_map(|(test, then, otherwise)| Expr::If {
                 test,
                 then,
                 otherwise
             }),
-            (select(QUANTIFIERS.to_vec()), text(), one(), one())
+            (select(QUANTIFIERS.to_vec()), text(), operand(), operand())
                 .prop_map(|(make, name, list, test)| make(name, list, test)),
-            (one(), vec(select(TYPES.to_vec()), 0..=3))
+            (operand(), vec(select(TYPES.to_vec()), 0..=3))
                 .prop_map(|(value, types)| Expr::IsInstance { value, types }),
-            (select(PATTERNS.to_vec()), text(), one())
+            (select(PATTERNS.to_vec()), text(), operand())
                 .prop_map(|(make, pattern, text)| make(pattern, text)),
         ]
     })
