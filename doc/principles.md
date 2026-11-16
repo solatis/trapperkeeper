@@ -6,11 +6,11 @@ that gives something up says what under "Cost".
 ## 1. Least intrusive by default
 
 An observability tool must be invisible when it works and harmless when it
-breaks. Every default degrades toward pass-through. A value that is not there is
-data and switches nothing off. A rule that meets a fault on a record does not
-apply to that record, and the SDK reports the fault (`adr/0005`). When the
-server is unreachable, the rules are off and records flow. Strictness is opt-in
-per sensor.
+breaks. Every default degrades toward pass-through. A rule treats a value that
+is not there as a null, which turns no rule off. A rule that meets a fault on a
+record does not apply to that record, and the SDK reports the fault
+(`adr/0005`). When the server is unreachable, the rules are off and records
+flow. Strictness is opt-in per sensor.
 
 Cost: events can be lost. A crash of the native core is an exception to
 "harmless when it breaks". The loops of the core read the memory of a source in
@@ -67,11 +67,10 @@ own.
 Build the simple thing, record what was deferred as a decision, revisit on
 evidence. We work incrementally and make no large upfront plans, and a design
 question is settled when the code that needs it is written. The plan for one
-issue is written right before its code and deleted once the code lands, and
-such a plan does not count as an upfront plan. Each component gets the kind of
-test `adr/0018` assigns it, unit, integration or end-to-end, and property,
-behavioral and data-driven tests are preferred. Each concern has one
-convention.
+issue is written right before its code and deleted once the code lands, and such
+a plan does not count as an upfront plan. Each component gets the kind of test
+that `adr/0018` assigns it: unit, integration or end-to-end. We prefer property,
+behavioral and data-driven tests. Each concern has one convention.
 
 ## 8. Backwards compatibility is not a concern
 
