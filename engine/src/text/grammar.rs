@@ -583,10 +583,10 @@ fn build_comparison(
     if ordering && let Some(error) = none_operand(i, &left, &op_at, &right) {
         return Err(error);
     }
-    // `x in None` could never match either. Only the right operand is
-    // tested, so `None in x` parses. A `None` in a list, as in
-    // `x in ("paid", None)`, still matches a null, and `x in y` gives
-    // unknown when `y` holds a null in place of a list.
+    // `x in None` could never match either. `None in x` parses, because it
+    // is true when the list `x` holds a null (ADR-0005). A `None` in a
+    // list, as in `x in ("paid", None)`, still matches a null, and `x in y`
+    // gives unknown when `y` holds a null in place of a list.
     if membership && matches!(right.0, Expr::None) {
         // The error covers the operator and the `None`: bytes 2 to 9 of
         // `x in None`.
