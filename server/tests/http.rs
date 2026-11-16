@@ -6,6 +6,7 @@ mod common;
 
 use common::{get, on_each_backend, serve_in_process};
 
+/// Liveness is `ok` while the process runs, whatever the store does.
 #[test]
 fn healthz_is_ok() {
     on_each_backend(|backend| {
@@ -23,9 +24,10 @@ fn readyz_is_ok() {
     });
 }
 
-/// The generated document lists the two probes, the account routes and
-/// `/api/v1/tenants`, and not `/openapi.json`, the route that serves it. It
-/// defines the bearer scheme, and `/api/v1/me` requires that scheme.
+/// The generated document lists the two probes, the login, refresh, logout,
+/// password and me routes and `/api/v1/tenants`. It leaves out
+/// `/openapi.json`, which the router adds after it builds the document, and
+/// `/api/v1/me` requires its bearer scheme.
 #[test]
 fn openapi_describes_the_routes() {
     on_each_backend(|backend| {
