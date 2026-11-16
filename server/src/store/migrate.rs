@@ -142,9 +142,8 @@ where
 {
     // The function reads the tracking table and tests it against a chain of
     // mismatches, and it returns the first that applies. The place of three
-    // cases matters: `Dirty` comes first, `Empty` comes before every check
-    // of the applied rows, and `Pending` comes last. The note at each of
-    // them says why.
+    // cases matters: `Dirty` comes first, `Empty` comes before `Pending`,
+    // and `Pending` comes last.
 
     // A database without a tracking table gets an empty one here, so it
     // reads as `Empty` below.
