@@ -77,9 +77,11 @@ store, whose engine is still open (see `doc/decisions.md`).
 - Entities are deleted softly, with a `deleted_at` column, so reports and
   references keep working after a delete (owner, 2026-11-05):
   `doc/adr/0024-soft-deletes.md`.
-- serve and migrate create a missing database on every backend, so the
-  first run is the same everywhere. On Postgres and MariaDB the user of the
-  first run therefore needs the right to create databases.
+- serve and migrate create the database when it does not exist yet, also on
+  Postgres and MariaDB, so that one command sets up an install (owner,
+  2026-11-16): `doc/adr/0028-system-tenant-and-first-run.md`. On Postgres and
+  MariaDB the user of the first run therefore needs the right to create
+  databases.
 
 **How to**:
 
