@@ -9,8 +9,9 @@ use uuid::Uuid;
 use super::{SYSTEM_TENANT_ID, Tx, on_tx, sql};
 
 /// The `role_name` of the admin role that `create` gives every tenant it
-/// makes. The first user of a created tenant holds it, and the rule that a
-/// tenant keeps at least one live admin counts the users who hold it.
+/// makes. The first user of a created tenant holds it. The user routes keep
+/// at least one live admin in a tenant, and they count the users who hold
+/// this role.
 pub const ADMIN_ROLE: &str = "admin";
 
 /// The roles every created tenant holds, each as a `role_name` and a
@@ -22,7 +23,8 @@ const ROLES: [(&str, &str); 3] = [
     ("observer", "Observer"),
 ];
 
-/// A live tenant, as listed and as found by name.
+/// A live tenant, which is one whose `deleted_at` is NULL, as listed and as
+/// found by name.
 #[derive(FromRow, Debug)]
 pub struct Tenant {
     #[sqlx(rename = "tenant_id")]
@@ -40,8 +42,8 @@ pub struct NewTenant<'a> {
     /// `create` then fails with `Database` and not with `NameTaken`.
     pub name: &'a str,
     /// A display name that keeps its case. The MariaDB column holds at most
-    /// 255 characters, and `create` does not check the length, so the caller
-    /// does.
+    /// 255 characters, where the TEXT columns of SQLite and Postgres have no
+    /// limit. `create` does not check the length, so the caller does.
     pub title: &'a str,
 }
 
@@ -105,8 +107,9 @@ pub async fn create(tx: &mut Tx, new: NewTenant<'_>) -> Result<String, CreateErr
             // needs nothing from the result, so the closure drops it.
             .map(|_| ())
     })?;
-    // Roles are rows per tenant, because nearly every table carries a tenant
-    // id, and so that a tenant may hold roles of its own (ADR-0023).
+    // Each tenant gets role rows of its own. Nearly every table carries a
+    // tenant id, and the roles follow that rule, so that a tenant may hold
+    // roles of its own (ADR-0023).
     for (name, title) in ROLES {
         let insert = sql(
             tx,
@@ -132,8 +135,9 @@ pub async fn create(tx: &mut Tx, new: NewTenant<'_>) -> Result<String, CreateErr
 ///
 /// Fails when the database cannot be read.
 pub async fn list(tx: &mut Tx) -> Result<Vec<Tenant>, sqlx::Error> {
-    // The query leaves out `$tk`, because `$tk` holds only the superadmin and
-    // is not a customer (ADR-0028).
+    // The query leaves out the system tenant `$tk`, whose id is
+    // `SYSTEM_TENANT_ID`, because `$tk` holds only the superadmin and is not
+    // a customer (ADR-0028).
     let select = sql(
         tx,
         "SELECT tenant_id, tenant_name, tenant_title FROM tenants \
