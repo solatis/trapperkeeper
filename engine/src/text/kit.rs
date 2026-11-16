@@ -94,7 +94,7 @@ impl<'t> Input<'t> {
     /// Notes that a test at token `p` wanted `what`. A note further in the
     /// text replaces the nearer ones, and a note at the same token joins
     /// them.
-    pub fn note(&self, p: usize, what: &str) {
+    fn note(&self, p: usize, what: &str) {
         let mut log = self.log.borrow_mut();
         // In `x not y` the tests after `x` note "an operator" and "`in`" at
         // index 1. Then the test for `in` after `not` fails at index 2. The
