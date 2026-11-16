@@ -1,16 +1,25 @@
-//! The printer: a tree as rule text, with the fewest parentheses. A
-//! canonical tree, which is a tree the parser can build, prints to a text
-//! that parses back to the same tree. Any other tree prints as well as it
-//! can.
+//! The printer writes a tree as rule text, and it puts a node in parentheses
+//! where the grammar would otherwise read the text as another tree. A number
+//! under a minus and a number before a method always get parentheses,
+//! whatever their sign or kind, as in `-(-5)` and `(0.5).upper()`.
+//!
+//! A canonical tree, which is a tree the parser can build, prints to a text
+//! that parses back to the same tree. `Display` also writes a tree that the
+//! parser cannot build, such as an `and` directly under an `and`, or a path
+//! that is empty or starts with an index, which prints as `record` or
+//! `record[0]`. The parser may refuse that text or read it back as another
+//! tree.
 
 use std::fmt;
 
 use super::grammar::WORDS;
 use crate::expr::{Expr, Segment, TypeName};
 
-// How tightly a node binds. The levels are those of the grammar, from the
-// conditional up to an atom. A node is written bare where a level at most
-// its own is wanted, and in parentheses elsewhere.
+// These constants say how tightly each kind of node binds, in the order of
+// the grammar's levels from the conditional up to an atom. The grammar's
+// postfix forms, such as `a.upper()` and `items[0]`, share ATOM with the
+// atoms. A node is written bare where a level at most its own is wanted, and
+// in parentheses elsewhere.
 // `a if b else c`.
 const CONDITIONAL: u8 = 1;
 // `a or b`.
@@ -29,12 +38,11 @@ const TERM: u8 = 7;
 const UNARY: u8 = 8;
 // `a`, `5`, `"paid"`, `(a, b)`, `len(a)` and `a.upper()`.
 const ATOM: u8 = 9;
-// A level that no node has, so the node is always put in parentheses. A
-// number is written this way under a minus, as `-(5)`, and before a method,
-// as `(5).upper()`.
+// PARENTHESES lies above the level of every node, so `write_expr` always
+// puts a node in parentheses when asked for it.
 const PARENTHESES: u8 = 10;
 
-/// How tightly `e` binds, from 1 for the conditional to 9 for an atom.
+/// How tightly `e` binds, from CONDITIONAL, the loosest, up to ATOM.
 fn level(e: &Expr) -> u8 {
     match e {
         Expr::If { .. } => CONDITIONAL,
@@ -93,8 +101,9 @@ fn write_expr(
         Expr::None => f.write_str("None"),
         Expr::Bool(true) => f.write_str("True"),
         Expr::Bool(false) => f.write_str("False"),
-        // A negative value prints as `-5`, and `unary` folds that minus
-        // back into the literal, also for `-9223372036854775808`.
+        // A negative value prints as `-5`, and the grammar's rule `unary`
+        // reads that minus and the number as one negative literal. This also
+        // holds for the smallest integer, `-9223372036854775808`.
         Expr::Int(v) => write!(f, "{v}"),
         // `{:?}` gives the shortest text that parses back to the same value,
         // and it always has a `.` or an `e`, so it reads back as a float.
@@ -115,13 +124,11 @@ fn write_expr(
                 f.write_str(key)?;
                 write_steps(&path[1..], f)
             }
-            // `record.key` under an element of the same name, and
-            // `record["key"]` for a key that is no plain name. Under
-            // `any(i > record.i for i in items)` a bare `i` reads back as
-            // the element. `record["unit price"]` has a space in its key,
-            // and `record["in"]` a word of the language. A path that is
-            // empty or starts with an index prints as `record` or
-            // `record[0]`, which the parser refuses.
+            // A first key that an element in scope also has is written as
+            // `record.key`, because a bare `i` under
+            // `any(i > record.i for i in items)` reads back as the element.
+            // A first key that is no plain name needs `record` before its
+            // bracket, as in `record["unit price"]`.
             _ => {
                 f.write_str("record")?;
                 write_steps(path, f)
@@ -175,11 +182,13 @@ fn write_expr(
         Expr::Mod(l, r) => write_infix(l, "%", r, multiplied, scope, f),
         Expr::Neg(x) => {
             f.write_str("-")?;
-            // A number under a `Neg` goes in parentheses, because `-5` reads
-            // back as a negative literal. `Neg(Int(5))` prints as `-(5)`.
-            // Any other operand is written at the level of a minus: `-a`,
-            // `--a` and `-(a + b)`.
+            // Every number under a `Neg` goes in parentheses, whatever its
+            // sign, so `Neg(Int(5))` prints as `-(5)` and `Neg(Int(-5))` as
+            // `-(-5)`. For a number that is not negative the reason is that
+            // `-5` reads back as a negative literal.
             let number = matches!(**x, Expr::Int(_) | Expr::Float(_));
+            // Any other operand is written at the level of a minus, as in
+            // `-a`, `--a` and `-(a + b)`.
             write_expr(x, if number { PARENTHESES } else { UNARY }, scope, f)
         }
         Expr::If {
@@ -187,10 +196,11 @@ fn write_expr(
             then,
             otherwise,
         } => {
-            // The first branch and the test are written at the level of
-            // `or`, and the branch after `else` at the level of the
-            // conditional, because it groups to the right. A conditional as
-            // the first branch prints as `(a if b else c) if d else e`.
+            // The grammar reads the first branch and the test with
+            // `or_expr`, so a conditional in either place needs parentheses,
+            // as in `(a if b else c) if d else e`. The branch after `else`
+            // may be a conditional itself, because the conditional groups to
+            // the right.
             write_expr(then, OR, scope, f)?;
             f.write_str(" if ")?;
             write_expr(test, OR, scope, f)?;
@@ -253,9 +263,7 @@ fn write_joined(
 }
 
 /// Writes `l op r`, with the left operand at `mins.0` or tighter and the
-/// right operand at `mins.1` or tighter. `Sub` passes `(ADDITIVE, TERM)`, so
-/// `a - b - c` keeps `a - b` bare on the left and `a - (b - c)` gets
-/// parentheses on the right.
+/// right operand at `mins.1` or tighter.
 fn write_infix(
     l: &Expr,
     op: &str,
@@ -279,12 +287,13 @@ fn write_quantifier(
     f: &mut fmt::Formatter<'_>,
 ) -> fmt::Result {
     write!(f, "{function}(")?;
-    // The test is written with the name in scope and the list without it.
-    // `scope` decides whether a field is written as `record.i`, so the
-    // name stays in it only while the test is written. It leaves before
-    // `?` returns an error, so `scope` is the same on every way out.
+    // The name is in scope only while the test is written, because the
+    // parser resolves the list outside the name and the test inside it.
+    // `scope` decides whether a field is written as `record.i`.
     scope.push(name.to_owned());
     let written = write_expr(test, CONDITIONAL, scope, f);
+    // The name is popped before `?` can return the error of the test, so
+    // `scope` is the same on every way out.
     scope.pop();
     written?;
     write!(f, " for {name} in ")?;
@@ -306,12 +315,15 @@ fn write_call(
 ) -> fmt::Result {
     write!(f, "{function}(")?;
     if let Some(pattern) = pattern {
-        // The pattern is written raw where it can be, as `r"^\d{5}$"`,
-        // because the escaped form doubles every backslash. It is escaped
-        // otherwise, as `"a\"b"`. Both forms read back to the same pattern.
-        // The raw form cannot hold a `"` or a line break, and a backslash at
-        // its end would take the closing quote with it.
+        // A raw text ends at the first `"` that no backslash escapes, it
+        // cannot hold a line break, and a backslash at its end would take
+        // the closing quote with it. The check is stricter than the
+        // tokenizer: it rejects any `"`, also one after a backslash, which a
+        // raw text could hold.
         let raw = !pattern.contains(['"', '\n', '\r']) && !pattern.ends_with('\\');
+        // The pattern is written raw where it can be, as `r"^\d{5}$"`,
+        // because the escaped form doubles every backslash. Both forms read
+        // back to the same pattern, and the escaped one looks like `"a\"b"`.
         if raw {
             write!(f, "r\"{pattern}\"")?;
         } else {
@@ -346,9 +358,9 @@ fn write_method(
     f.write_str(")")
 }
 
-/// Writes the steps of a path after its start. A key that is a plain name is
-/// written after a dot, and any other key in brackets: `.lines`, `[2]` and
-/// `["unit price"]`.
+/// Writes each segment of `path` as a step after a name or after `record`: a
+/// plain key after a dot, any other key in brackets and an index in brackets,
+/// as in `.lines`, `["unit price"]` and `[2]`.
 fn write_steps(path: &[Segment], f: &mut fmt::Formatter<'_>) -> fmt::Result {
     for step in path {
         match step {
@@ -389,6 +401,9 @@ fn write_text(s: &str, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             // The tokenizer refuses a line break inside a text, so `\n` and
             // `\r` are always escaped.
             '\n' => f.write_str("\\n")?,
+            // A tab is a control character and gets the short escape `\t`,
+            // which the tokenizer reads. Without this arm the arm for control
+            // characters below would write it as `\x09`.
             '\t' => f.write_str("\\t")?,
             '\r' => f.write_str("\\r")?,
             // Any other control character is written as an escape, so that
