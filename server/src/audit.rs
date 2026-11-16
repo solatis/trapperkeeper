@@ -26,16 +26,13 @@ use crate::scope;
 use crate::store::audit::{self, Record, Row};
 use crate::store::users;
 
-/// Who a request turned out to be from, and which tenant it acted on. The
-/// `Caller` extractor, and `AtLeast` through it, and the refresh handler set
-/// the caller with its user. The login handler sets the named user's tenant
-/// with no user. `scope::tenant` and the mint handler set the tenant acted
-/// on. Each value stands only when its setter is the first.
+/// Who a request turned out to be from, and which tenant it acted on.
+/// `Caller`, `AtLeast` and the refresh handler set the caller with its user,
+/// and the login handler sets a tenant with no user. `scope::tenant` and the
+/// mint handler set the tenant acted on. The first setter of each wins.
 #[derive(Clone, Default)]
 pub struct Identity {
-    /// The caller's tenant, and its user id when the setter gave one. A login
-    /// sets the named user's tenant and no user, even when the password is
-    /// right.
+    /// The caller's tenant, and its user id when the setter gave one.
     caller: Arc<OnceLock<(String, Option<String>)>>,
     /// The tenant a tenant-scoped route resolved from its path.
     scope: Arc<OnceLock<String>>,
@@ -63,10 +60,8 @@ impl<S: Send + Sync> FromRequestParts<S> for Identity {
         parts: &mut Parts,
         _state: &S,
     ) -> impl Future<Output = Result<Self, Infallible>> + Send {
-        // When `record` put no cell into the request, as for a GET or a path
-        // outside `/api/v1`, the extractor returns a new cell that nothing
-        // reads. The rejection is `Infallible`, so the audit trail never
-        // makes a handler fail.
+        // When `record` put no cell in, as for a GET, the extractor returns a
+        // new cell that nothing reads, so the trail never fails a handler.
         ready(Ok(parts
             .extensions
             .get::<Self>()
@@ -85,43 +80,27 @@ pub async fn record(
     request: Request,
     next: Next,
 ) -> Response {
-    // The middleware lets the request through to its handler and, for a
-    // changing request under `/api/v1`, writes one audit row afterwards. It
-    // builds the row from what it read from the request before passing it
-    // on, from the identity cell that extractors and handlers fill while the
-    // handler runs, and from the status of the response.
+    // The middleware runs the handler and then writes one audit row for a
+    // changing request under `/api/v1`.
     //
-    // 1. We decide whether the request is recorded: only a non-GET request
-    //    whose matched route template starts with `/api/v1`. A GET changes
-    //    nothing, a request that matched no route has no template to record,
-    //    and the prefix keeps out the probes and `/openapi.json`, which sit at
-    //    the root.
-    // 2. We read what the row needs from the request: the method, the
-    //    X-Forwarded-For header and the path parameters as a JSON object. The
-    //    row holds no body and no query string. The request moves into the
-    //    handler in step 4 and is gone afterwards, so this step comes first.
-    // 3. We put an empty identity cell into the request's extensions. Clones
-    //    of `Identity` share the cell through `Arc`, so the values that
-    //    extractors and handlers set during step 4 are visible here
-    //    afterwards.
-    // 4. We run the handler and keep its response. The handler commits its
-    //    own transaction before it returns, so the row is written after the
-    //    response and outside the handler's transaction.
-    // 5. We build the row from the identity cell, the peer address and the
-    //    response status. The row's tenant is the one the route resolved
-    //    from its path when there is one, and the caller's otherwise, so a
-    //    tenant's admins see what the superadmin did to their tenant.
-    // 6. We append the row in a transaction of its own, log a failure at
-    //    error, and return the handler's response whatever happened to the
-    //    row. The handler's change is already committed, and a 500 would lead
-    //    the client to retry it.
+    // 1. We record only a matched route under `/api/v1` with a method other
+    //    than GET. The prefix keeps out the probes and `/openapi.json`.
+    // 2. We read the method, X-Forwarded-For and the path parameters, never a
+    //    body or a query string. The handler takes the request in step 4.
+    // 3. We put an empty identity cell into the request. Its clones share it,
+    //    so what extractors and handlers set in step 4 is visible afterwards.
+    // 4. We run the handler, which commits its own transaction.
+    // 5. We build the row. Its tenant is the one the route resolved, else the
+    //    caller's, so a tenant's admins see what the superadmin did there.
+    // 6. We append the row in a transaction of its own and only log a
+    //    failure, because the handler's change is committed and a 500 would
+    //    make the client retry it.
 
     // 1. decide whether it is recorded
     let route = matched
         .as_ref()
         .map(MatchedPath::as_str)
-        // Every method other than GET is recorded, as ADR-0031 sets, so a
-        // HEAD or an OPTIONS request that matches a route leaves a row too.
+        // As ADR-0031 sets, a HEAD or an OPTIONS request leaves a row too.
         .filter(|route| route.starts_with(API_PREFIX) && request.method() != Method::GET);
     let Some(route) = route else {
         return next.run(request).await;
@@ -131,15 +110,12 @@ pub async fn record(
     let forwarded = request
         .headers()
         .get("x-forwarded-for")
-        // A value that is not visible ASCII counts as absent, so the client
-        // address falls back to the peer.
+        // A value that is not visible ASCII counts as absent.
         .and_then(|value| value.to_str().ok())
         .map(|value| value.trim().to_owned());
-    // `RawPathParams` has no optional form, and as an argument of the
-    // middleware its rejection would answer the request before the handler
-    // runs. The router gives every matched route its parameters, an empty
-    // list for a route without any, so the one rejection left is a parameter
-    // that is not UTF-8 after percent-decoding, which `.ok()` records as `{}`.
+    // As a middleware argument, `RawPathParams` would answer the request when
+    // it fails. Here it fails only on a parameter that is not UTF-8, which
+    // `.ok()` records as `{}`.
     let (mut parts, body) = request.into_parts();
     let params = RawPathParams::from_request_parts(&mut parts, &())
         .await
@@ -161,12 +137,10 @@ pub async fn record(
         .get()
         .or(caller.map(|(tenant_id, _)| tenant_id));
     let user_id = caller.and_then(|(_, user_id)| user_id.as_deref());
-    // The row stores the peer's IP without its port, because the port
-    // identifies one TCP connection and the row records the host.
+    // The port names one TCP connection, and the row records the host.
     let peer_address = peer.ip().to_string();
-    // The client address is X-Forwarded-For as received when the header is
-    // present, and the peer otherwise. One proxy is assumed, so a chain such
-    // as `a, b` is stored whole (ADR-0031).
+    // One proxy is assumed, so a chain such as `a, b` is stored whole
+    // (ADR-0031).
     let client_address = forwarded.as_deref().unwrap_or(&peer_address);
     let record = Record {
         tenant_id: tenant_id.map(String::as_str),
@@ -212,9 +186,8 @@ pub struct AuditView {
     id: String,
     /// Epoch microseconds in UTC.
     recorded_at: i64,
-    /// The name of the user who made the request. It is null when the row
-    /// names no user, which holds for every login row, a successful one
-    /// included, and for a request refused before authentication.
+    /// The name of the user who made the request. Null for a login and for a
+    /// request refused before authentication.
     user: Option<String>,
     /// The user's own tenant, which is `$tk` when the superadmin acted on
     /// this tenant. It is null whenever `user` is null.
@@ -222,9 +195,7 @@ pub struct AuditView {
     method: String,
     /// The matched route template.
     route: String,
-    /// An object that maps each parameter name of the route template to its
-    /// value from the request path, as strings, and `{}` when the route has
-    /// none.
+    /// Each parameter of the route template with its value from the path.
     path_params: Value,
     status: i32,
     /// The IP address of the TCP peer, without its port.
@@ -243,9 +214,7 @@ fn view(row: Row) -> AuditView {
         user_tenant: row.user_tenant,
         method: row.method,
         route: row.route,
-        // Only `record` writes this column, through `params_json`, which
-        // always gives a JSON object, so the value parses and the fallback to
-        // null is not reached.
+        // Only `params_json` writes this column, so the value always parses.
         path_params: serde_json::from_str(&row.path_params).unwrap_or(Value::Null),
         status: row.status,
         peer_address: row.peer_address,
@@ -257,12 +226,10 @@ fn view(row: Row) -> AuditView {
 #[derive(Deserialize, IntoParams)]
 #[into_params(parameter_in = Query)]
 pub struct Page {
-    /// The name of a user. The page holds only that user's rows. The name
-    /// matches in any case and also matches a deleted user, and an unknown
-    /// name gives an empty page.
+    /// The name of a user whose rows alone are listed. It matches in any case
+    /// and a deleted user too, and an unknown name gives an empty page.
     user: Option<String>,
-    /// The id of the last row seen. The page holds the rows older than that
-    /// row.
+    /// The id of the last row seen. The page holds the older rows.
     before: Option<String>,
     /// How many rows at most: 100 by default, 1000 at most.
     limit: Option<u32>,
@@ -288,17 +255,15 @@ pub async fn list(
     Path(tenant): Path<String>,
     Query(page): Query<Page>,
 ) -> Response {
-    // The cap of 1000 keeps one response bounded, and a client that wants
-    // more rows pages with `before`. The default of 100 and the cap of 1000
-    // are choices that no measurement backs.
+    // A client that wants more rows pages with `before`. Both values are
+    // choices that no measurement backs.
     let limit = page.limit.unwrap_or(100).min(1000);
     let listed = async {
         let mut tx = state.store.begin().await?;
         let tenant = scope::tenant(&mut tx, &caller.user, &caller.identity, &tenant).await?;
         let user_id = match &page.user {
             Some(name) => {
-                // The store keeps user names in lowercase, so the filter
-                // matches a name in any case (ADR-0020).
+                // The store keeps user names lowercase (ADR-0020).
                 match users::find_id_any(&mut tx, &tenant.id, &name.to_lowercase()).await? {
                     Some(user_id) => Some(user_id),
                     None => return Ok(Vec::new()),
@@ -315,8 +280,7 @@ pub async fn list(
         )
         .await?;
         // The block's error type is `scope::Refused`, so `?` turns a store
-        // error into `Refused::Store`, which answers 500 like any store
-        // failure of a tenant route.
+        // error into a 500.
         Ok::<_, scope::Refused>(rows)
     }
     .await;
