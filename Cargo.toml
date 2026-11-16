@@ -1,7 +1,9 @@
 [workspace]
 resolver = "3"
-# Members are listed one by one: components sit in top-level directories
-# beside non-Rust ones, so no glob describes the Rust members.
+# The workspace lists its members by name. A glob does not fit, because the
+# top-level directories hold Rust crates beside directories that are not
+# crates, such as doc/ today and web/, conformance/ and the SDKs in other
+# languages later.
 members = ["engine", "server"]
 
 [workspace.package]
@@ -15,7 +17,6 @@ publish = false
 # `[lints] workspace = true`. The decision and what it rejected are in
 # ADR-0011.
 [workspace.lints.rust]
-# rustc warnings fail every build, local or CI.
 warnings = "deny"
 
 [workspace.lints.clippy]
@@ -25,9 +26,11 @@ warnings = "deny"
 all = { level = "deny", priority = -1 }
 pedantic = { level = "deny", priority = -1 }
 
-# Argon2id at 64 MiB and three passes takes about a second unoptimized and
-# tens of milliseconds optimized, and every reset-superadmin run and login
-# hashes once. The dev profile optimizes that crate alone, so tests and local
-# runs pay the optimized cost.
+# Each Argon2id hash runs over 64 MiB in three passes. The login check, the
+# creation and the reset of an account, a password change and the derivation of
+# each token key when serve starts each run one hash, and the tests run all of
+# them. The dev profile optimizes the argon2 crate alone, so tests and local
+# runs pay the optimized cost of each hash. Level 3 is a choice that no
+# measurement backs.
 [profile.dev.package.argon2]
 opt-level = 3
