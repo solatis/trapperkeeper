@@ -23,7 +23,7 @@ fn superadmin_creates_a_tenant_whose_admin_logs_in() {
     // 3. We log the admin in, who must change the password and hold the role
     //    admin.
     // 4. We create the same tenant again, which must get 409, because a name
-    //    is unique among live tenants.
+    //    is unique among the tenants that are not deleted.
     on_each_backend(|backend| {
         let server = serve_in_process(backend);
         let token = superadmin_token(&server);
@@ -73,6 +73,7 @@ fn valid_tenant(name: &str) -> bool {
 /// to 254 characters with one `@` and text on both sides, no whitespace and no
 /// leading `$`.
 fn valid_user(name: &str) -> bool {
+    // Counts bytes, as `names::user_name` does.
     (3..=254).contains(&name.len())
         && !name.chars().any(char::is_whitespace)
         && !name.starts_with('$')
@@ -82,7 +83,7 @@ fn valid_user(name: &str) -> bool {
 }
 
 /// A tenant name in mixed case. One in three breaks the rule: a character
-/// outside it, the reserved prefix, no characters, or too many.
+/// outside it, a leading `$`, no characters, or too many.
 fn tenant_name() -> impl Strategy<Value = String> {
     let valid = "[a-zA-Z0-9._-]{1,64}";
     let invalid = prop_oneof![
@@ -166,10 +167,10 @@ fn rank(role: &str) -> Option<u8> {
 
 /// Every route that checks a role, with its minimum, and the routes of the
 /// caller's own account, `me`, the password change and logout, with `None`.
-/// The user routes act on `acme`, and the three that name a user name one that
-/// does not exist, so the calls change nothing that the test reads later. The
-/// password change goes without a body, so the server refuses it after it
-/// accepts the caller.
+/// The user routes act on `acme`. The delete, role and password routes name a
+/// user that does not exist, so the calls change nothing that the test reads
+/// later. The password change goes without a body, so the server refuses it
+/// after it accepts the caller.
 const ROUTES: [(&str, &str, Option<&str>); 12] = [
     ("GET", "/api/v1/tenants", Some("superadmin")),
     ("POST", "/api/v1/tenants", Some("superadmin")),
@@ -191,8 +192,9 @@ const ROUTES: [(&str, &str, Option<&str>); 12] = [
         "/api/v1/tenants/acme/users/nobody@example.com/password",
         Some("admin"),
     ),
-    // Step 3 creates this user, so the superadmin's mint succeeds. A mint
-    // writes no user row.
+    // Step 3 of `every_role_meets_each_route_minimum` creates this user, so
+    // the superadmin's mint of a session succeeds. A mint writes no user row,
+    // so it changes nothing that later calls read.
     (
         "POST",
         "/api/v1/tenants/acme/users/admin@example.com/session",
@@ -205,9 +207,9 @@ const ROUTES: [(&str, &str, Option<&str>); 12] = [
     ("POST", "/api/v1/logout", None),
 ];
 
-/// The body route `n`, `method` on `path`, takes from caller `role`, or
-/// `None`. Each create names a tenant or a user of its own, so a permitted
-/// create succeeds.
+/// The request body that caller `role` sends as call `n`, `method` on `path`,
+/// or `None`. Each create names a tenant or a user of its own, so no two
+/// creates collide.
 fn body_for(n: usize, role: &str, method: &str, path: &str) -> Option<Value> {
     // The last segment tells the routes with a body apart. `rsplit` yields at
     // least one segment, so the `?` never returns.
@@ -232,8 +234,8 @@ fn every_role_meets_each_route_minimum() {
     // The test covers every pair of the five callers and the 12 routes,
     // because the set is small and fixed (ADR-0018).
     //
-    // 1. We create `acme`, which seeds admin, operator and observer, and read
-    //    its id, which the create response does not return.
+    // 1. We create `acme`, which seeds the roles admin, operator and observer,
+    //    and read its id, which the create response does not return.
     // 2. We add the role `auditor`, which is not on the ladder, through sqlx,
     //    because no route creates a role.
     // 3. We create and log in one user per role through the user route.
@@ -295,11 +297,12 @@ fn every_role_meets_each_route_minimum() {
                 let body = body_for(n, role, method, path);
                 let response = call(&server, token, method, path, body.as_ref());
                 // The off-ladder role has no rank, so it counts as below
-                // every minimum.
+                // every minimum. Every minimum in `ROUTES` has a rank.
                 let below = minimum.is_some_and(|m| rank(role).is_none_or(|r| Some(r) < rank(m)));
                 let context = format!("{role} on {method} {path} on {backend}: {}", response.body);
                 if below {
                     assert_eq!(response.status, 403, "{context}");
+                    // Every route refuses a role through `Refusal::Forbidden`.
                     assert_eq!(response.body, "forbidden", "{context}");
                 } else {
                     // A permitted call may still be refused on its content, as
