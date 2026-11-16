@@ -74,8 +74,8 @@ fn migrate_builds_a_database_that_serve_accepts() {
         assert_eq!(
             tenants,
             [(
-                "00000000-0000-7000-8000-000000000000".to_owned(),
-                "$tk".to_owned(),
+                SYSTEM_TENANT_ID.to_owned(),
+                SYSTEM_TENANT.to_owned(),
                 "TrapperKeeper".to_owned()
             )]
         );
