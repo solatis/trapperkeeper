@@ -30,13 +30,16 @@ fn hashing() -> &'static Semaphore {
 
 /// The PHC string of `password`, hashed with a fresh random salt.
 pub async fn hash(password: String) -> String {
-    let _permit = hashing()
+    let permit = hashing()
         .acquire()
         .await
         .expect("the semaphore is never closed");
     // A hash takes tens of milliseconds of CPU or more, which must not block
     // the runtime (ADR-0014).
     task::spawn_blocking(move || {
+        // The blocking task holds the permit, so a caller that drops this
+        // future does not free it while the hash still runs.
+        let _permit = permit;
         hasher()
             .hash_password(password.as_bytes())
             .expect("argon2 hashes any password")
@@ -49,12 +52,15 @@ pub async fn hash(password: String) -> String {
 /// Whether `password` hashes to `phc` under the salt and parameters that `phc`
 /// carries. A string that does not parse matches nothing.
 pub async fn verify(password: String, phc: String) -> bool {
-    let _permit = hashing()
+    let permit = hashing()
         .acquire()
         .await
         .expect("the semaphore is never closed");
     // argon2 compares the two outputs in constant time.
     task::spawn_blocking(move || {
+        // The blocking task holds the permit, so a caller that drops this
+        // future does not free it while the hash still runs.
+        let _permit = permit;
         hasher()
             .verify_password(password.as_bytes(), phc.as_str())
             .is_ok()
@@ -68,4 +74,38 @@ pub fn generate() -> String {
     // 16 characters from 62 symbols are about 95 bits, enough for a password
     // its holder replaces at the first login.
     Alphanumeric.sample_string(&mut rand::rng(), 16)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{hash, hashing};
+
+    #[tokio::test]
+    async fn a_dropped_hash_keeps_its_permit() {
+        // The test drops a caller of `hash` while its hash still runs, and
+        // checks that the hash keeps its permit.
+        //
+        // 1. We start a hash in a task of its own and wait until it has taken
+        //    a permit.
+        // 2. We abort the task and wait for it to end, which drops the future
+        //    of `hash`. The hash goes on in its blocking thread, because
+        //    tokio does not stop a blocking task that has started.
+        // 3. We check that the permit is still taken.
+
+        let free = hashing().available_permits();
+        // 1. start a hash
+        let caller = tokio::spawn(hash(String::new()));
+        while hashing().available_permits() == free {
+            tokio::task::yield_now().await;
+        }
+        // 2. abort the caller
+        caller.abort();
+        // The task ends with the error of a cancelled task, which is the
+        // outcome that the test asked for.
+        let _ = caller.await;
+        // 3. check the permit
+        // One Argon2id hash takes far longer than the abort, so the hash is
+        // still running here.
+        assert!(hashing().available_permits() < free);
+    }
 }
