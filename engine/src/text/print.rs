@@ -6,9 +6,9 @@
 //! A canonical tree, which is a tree the parser can build, prints to a text
 //! that parses back to the same tree. `Display` also writes a tree that the
 //! parser cannot build, such as an `and` directly under an `and`, or a path
-//! that is empty or starts with an index, which prints as `record` or
-//! `record[0]`. The parser may refuse that text or read it back as another
-//! tree.
+//! that is empty or starts with an index. Such a path prints as `record` or
+//! `record[0]`, which the parser refuses as `BareRecord`. The parser may
+//! refuse the text of such a tree or read it back as another tree.
 
 use std::fmt;
 
@@ -105,8 +105,9 @@ fn write_expr(
         // reads that minus and the number as one negative literal. This also
         // holds for the smallest integer, `-9223372036854775808`.
         Expr::Int(v) => write!(f, "{v}"),
-        // `{:?}` gives the shortest text that parses back to the same value,
-        // and it always has a `.` or an `e`, so it reads back as a float.
+        // `{:?}` gives the shortest text that parses back to the same value.
+        // A float in a tree is finite, and for a finite value that text
+        // always has a `.` or an `e`, so it reads back as a float.
         Expr::Float(v) => write!(f, "{v:?}"),
         Expr::Text(s) => write_text(s, f),
         Expr::List(items) => {
@@ -185,7 +186,8 @@ fn write_expr(
             // Every number under a `Neg` goes in parentheses, whatever its
             // sign, so `Neg(Int(5))` prints as `-(5)` and `Neg(Int(-5))` as
             // `-(-5)`. For a number that is not negative the reason is that
-            // `-5` reads back as a negative literal.
+            // `-5` reads back as a negative literal. A negative number would
+            // read back the same without them and gets them all the same.
             let number = matches!(**x, Expr::Int(_) | Expr::Float(_));
             // Any other operand is written at the level of a minus, as in
             // `-a`, `--a` and `-(a + b)`.
@@ -304,8 +306,8 @@ fn write_quantifier(
     f.write_str(")")
 }
 
-/// Writes `function(argument)`, or `function(pattern, argument)` for a
-/// pattern function.
+/// Writes `function(argument)`, or `function(pattern, argument)` for
+/// `re.search`, `re.match` and `re.fullmatch`.
 fn write_call(
     function: &str,
     pattern: Option<&str>,
@@ -323,7 +325,8 @@ fn write_call(
         let raw = !pattern.contains(['"', '\n', '\r']) && !pattern.ends_with('\\');
         // The pattern is written raw where it can be, as `r"^\d{5}$"`,
         // because the escaped form doubles every backslash. Both forms read
-        // back to the same pattern, and the escaped one looks like `"a\"b"`.
+        // back to the same pattern. The pattern `a"b` cannot be raw and is
+        // written `"a\"b"`.
         if raw {
             write!(f, "r\"{pattern}\"")?;
         } else {
@@ -344,8 +347,9 @@ fn write_method(
     f: &mut fmt::Formatter<'_>,
 ) -> fmt::Result {
     // A number goes in parentheses. The tokenizer reads `5.upper` as a
-    // malformed float, and in `-0.5.upper()` the minus folds into the
-    // literal and no step is read after it.
+    // malformed float. In `-0.5.upper()` the grammar reads the minus and the
+    // number as one literal and reads no step after it, so the text is
+    // refused at the second `.`.
     let number = matches!(receiver, Expr::Int(_) | Expr::Float(_));
     // Any other receiver is an atom or in parentheses. `Upper(Add(a, b))`
     // prints as `(a + b).upper()`, because `a + b.upper()` reads back as
