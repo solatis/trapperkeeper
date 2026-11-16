@@ -125,7 +125,9 @@ step check covers every file a branch changed.
 
 The build stage starts one subagent per part in each reader round and one for
 the audit, and its questions to the owner go out as one Inbox message per
-issue.
+issue. The first reader round of a repair starts one subagent per part of the
+whole files under its paths, which are more parts than its changed lines
+alone would give.
 
 The step check cannot see a back-reference at the wrong line, a function that
 needs a walkthrough and has none, or a comment that is false. The reader and
