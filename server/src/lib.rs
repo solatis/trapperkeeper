@@ -81,9 +81,8 @@ pub async fn run() -> ExitCode {
     for flag in cli.overrides.secrets() {
         tracing::warn!(flag, "a secret setting was given on the command line");
     }
-    // The settings field holds JSON, which a reader can parse, where Debug
-    // text is Rust syntax. Each value is a string, a table or a null, so the
-    // serialization cannot fail.
+    // The settings field holds JSON, so a tool such as `jq` can parse it. Each
+    // value is a string, a table or a null, so the serialization cannot fail.
     let json = serde_json::to_string(&settings).expect("the settings serialize");
     tracing::debug!(settings = %json, "settings resolved");
 
@@ -95,8 +94,8 @@ pub async fn run() -> ExitCode {
     }
 }
 
-/// Serves the API until a signal stops it, after it sets up an empty
-/// database. It prints any error on stderr and returns failure.
+/// Serves the API until a signal stops it, setting up the database first when
+/// it is empty. It prints any error on stderr and returns failure.
 async fn serve(settings: &Settings) -> ExitCode {
     // Every refusal comes before the listener binds, so a refused server is
     // never reachable.
@@ -109,7 +108,8 @@ async fn serve(settings: &Settings) -> ExitCode {
 
     // 1. check the signing key
     // The check runs before the database is touched, so a refused start
-    // leaves the database as it was.
+    // leaves the database as it was, and the first start that succeeds sets
+    // it up and logs the one-time password.
     let Some(signing) = &settings.auth.signing_key else {
         eprintln!(
             "auth.signing_key is not set; serve needs a passphrase of at least 32 characters, \
@@ -166,7 +166,8 @@ async fn serve(settings: &Settings) -> ExitCode {
 /// Logs what a set-up did: the migration count, and the superadmin's one-time
 /// password when the set-up created it, each as one INFO event.
 fn log_set_up(set_up: &SetUp) {
-    // At info, so an operator sees what the command did.
+    // The count goes out at INFO, the default level, so an operator sees what
+    // the command did.
     tracing::info!(count = set_up.applied, "migrations applied");
     // The password goes out as a field of a log event, so a piped log stream
     // stays JSON lines.
@@ -198,13 +199,14 @@ async fn migrate(settings: &Settings) -> ExitCode {
 }
 
 /// Gives the superadmin a new one-time password, creating the superadmin when
-/// it is missing, and prints it. It opens the database without creating it.
+/// it is missing, and prints the password. It opens the database without
+/// creating it.
 async fn reset_superadmin_command(settings: &Settings) -> ExitCode {
     let store = match setup::open_checked(settings.database.url.expose()).await {
         Ok(store) => store,
-        // The hint stays out of `setup::Error`. serve prints the `Display` of
-        // `Open` when it cannot tell whether the database exists, and it
-        // creates a missing database itself.
+        // The hint is added here and not in the `Display` of `setup::Error`,
+        // because serve prints the same `Open` text and creates a missing
+        // database itself.
         Err(error @ setup::Error::Open(_)) => {
             eprintln!(
                 "{error}\nthe database does not open; when it does not exist, \
