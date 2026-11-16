@@ -405,7 +405,7 @@ pub async fn me(caller: Caller) -> Json<Me> {
 
 /// The one refusal every authentication failure gets, so a response does not
 /// say which name exists or why a check failed.
-pub fn unauthorized() -> Response {
+fn unauthorized() -> Response {
     (StatusCode::UNAUTHORIZED, "unauthorized").into_response()
 }
 
