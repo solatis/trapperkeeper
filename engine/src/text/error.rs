@@ -173,10 +173,9 @@ pub struct SyntaxError {
 /// unchanged, and an empty slice gives an empty string.
 fn one_of(items: &[String]) -> String {
     match items {
-        // This arm never runs. The `Expected` arm of `Display for Reason` is
-        // the only caller, and it writes the "unexpected ..." sentence
-        // without a list when the list is empty. The arm is here because the
-        // slice patterns must cover the empty slice.
+        // This arm never runs. The only caller, the `Expected` arm of
+        // `Display for Reason`, writes no list when the list is empty. The
+        // slice patterns must still cover the empty slice.
         [] => String::new(),
         [one] => one.clone(),
         [first @ .., last] => format!("{} or {last}", first.join(", ")),
@@ -231,9 +230,9 @@ impl fmt::Display for Reason {
             Reason::FloatTooLarge => write!(f, "this number is too large for a float"),
             Reason::Empty => write!(f, "a rule is empty; write an expression"),
             // The sentence reads "expected a, b or c after `x`, found `y`".
-            // The hints that `with_words` in `grammar.rs` filled in follow
-            // it: how to name a field that is a word of the language, and the
-            // nearest word.
+            // Two hints of `with_words` in `grammar.rs` follow it: how to
+            // name a field that is a word of the language, and the nearest
+            // word.
             Reason::Expected {
                 expected,
                 found,
