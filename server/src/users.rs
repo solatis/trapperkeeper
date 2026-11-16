@@ -23,12 +23,10 @@ use crate::store::tenants::{self, ADMIN_ROLE};
 use crate::store::users;
 use crate::superadmin;
 
-/// Why a user route refused a request or failed. Each variant converts into
-/// the response the caller gets. The list route, which writes nothing, also
-/// returns it.
+/// Why a user route refused a request or failed. It converts into the
+/// response the caller gets.
 enum Refused {
-    /// The tenant in the path failed the tenant rule, and `scope::Refused`
-    /// gives the response: 404, 403 or 500.
+    /// The tenant in the path failed the tenant rule: 404, 403 or 500.
     Scope(scope::Refused),
     /// The request's content breaks a rule: 400 with the rule.
     BadRequest(&'static str),
@@ -93,8 +91,7 @@ pub struct UserView {
     tenant_id: String,
     name: String,
     role: String,
-    /// True while the user still has to replace a generated password at the
-    /// next login.
+    /// Whether the UI should ask for a new password at the next login.
     password_must_change: bool,
 }
 
@@ -182,14 +179,12 @@ pub async fn create(
     Path(tenant): Path<String>,
     Json(request): Json<NewUserRequest>,
 ) -> Response {
-    // `names::user_name` checks the shape and returns the name lowercased,
-    // which is the form the store keeps and the response returns.
+    // The checked name comes back lowercased, as the store keeps it.
     let name = match names::user_name(&request.name) {
         Ok(name) => name,
         Err(refused) => return Refused::BadRequest(refused.0).into_response(),
     };
-    // `superadmin` is refused by name before any read, because `$tk` holds
-    // the role alone and a second superadmin was rejected (ADR-0028).
+    // `$tk` holds the role `superadmin` alone (ADR-0028).
     if request.role == superadmin::ROLE {
         return Refused::BadRequest("no route gives the role superadmin").into_response();
     }
@@ -197,15 +192,12 @@ pub async fn create(
     let created = async {
         let mut tx = state.store.begin().await?;
         let tenant = scope::tenant(&mut tx, &caller.user, &caller.identity, &tenant).await?;
-        // A role the tenant does not hold would fail the insert on the NOT
-        // NULL role id, which surfaces as a 500, so the route refuses it with
-        // 400 first.
+        // A role the tenant does not hold would fail the insert with a 500.
         if !tenants::role_exists(&mut tx, &tenant.id, &request.role).await? {
             return Err(Refused::BadRequest("the tenant does not hold this role"));
         }
-        // The handler creates the user through `accounts::create`, so the
-        // user gets a generated password that must be changed at the first
-        // login.
+        // `accounts::create` gives the user a generated password that must be
+        // changed.
         let password = accounts::create(
             &mut tx,
             NewAccount {
@@ -221,8 +213,7 @@ pub async fn create(
     .await;
 
     match created {
-        // The generated password reaches the person who created the user
-        // only in this response (ADR-0028).
+        // No other response returns the generated password (ADR-0028).
         Ok((tenant_id, password)) => (
             StatusCode::CREATED,
             Json(CreatedUser {
@@ -238,10 +229,9 @@ pub async fn create(
 }
 
 /// Deletes the named user of the tenant. Needs admin of that tenant, the
-/// superadmin, or the user itself. Answers 404 for a name that no live user
-/// has only to a caller at admin or above, and any other caller gets 403
-/// whether or not the name exists. Answers 409 when the user is the tenant's
-/// last live admin, also when the user deletes itself.
+/// superadmin, or the user itself. Answers 404 for an unknown name to an admin
+/// or the superadmin and 403 to anyone else, and 409 for the tenant's last
+/// live admin.
 #[utoipa::path(
     delete,
     path = "/tenants/{tenant}/users/{name}",
@@ -263,30 +253,18 @@ pub async fn delete(
     State(state): State<AppState>,
     Path((tenant, name)): Path<(String, String)>,
 ) -> Response {
-    // The handler deletes the named user of the tenant when the caller may.
-    // A caller at admin or above, the superadmin included, deletes any live
-    // user, and any other user of the tenant deletes only itself. It takes
-    // `Caller` instead of `AtLeast<Admin>`, because a user below admin may
-    // delete itself. It decides the permission after the lookup, refuses the
-    // delete of the last live admin, and writes and commits last, so every
-    // refusal writes nothing.
+    // The handler takes `Caller` rather than `AtLeast<Admin>`, because a user
+    // below admin may delete itself.
     //
-    // 1. We open the transaction, resolve the tenant and find the live
-    //    target by its lowercased name. `scope::tenant` refuses a member of
-    //    another tenant with 403, so `Caller` admits no one outside the
-    //    tenant.
-    // 2. We decide from the caller's rank and the target. A caller at admin
-    //    or above gets the target or 404, and any other caller gets its own
-    //    user or 403, so a caller below admin cannot tell whether another
-    //    name exists. This comes after the lookup, because only the found
-    //    user's id shows whether the caller is the target.
-    // 3. We refuse with 409 when the target holds the role admin and the
-    //    tenant has at most one live admin, also when the target is the
-    //    caller, because the user routes refuse a change that would leave
-    //    the tenant without a live admin.
-    // 4. We mark the user deleted at now and commit. The user's tokens need
-    //    no revocation, because every request reads the user and refuses a
-    //    deleted one (ADR-0025).
+    // 1. We resolve the tenant, which refuses another tenant's member, and
+    //    find the target.
+    // 2. We decide the permission. It needs the target's id, so it comes
+    //    after the lookup, and a caller below admin gets 403 for any other
+    //    name, so it cannot tell whether that name exists.
+    // 3. We refuse to delete the tenant's last live admin.
+    // 4. We mark the user deleted and commit, so a refusal writes nothing.
+    //    Its tokens need no revocation, because every request reads the
+    //    user (ADR-0025).
 
     let deleted = async {
         // 1. resolve the tenant and the target
@@ -297,8 +275,7 @@ pub async fn delete(
         let found = users::find(&mut tx, &tenant.id, &name.to_lowercase()).await?;
 
         // 2. decide the permission
-        // A role that is not on the ladder ranks below admin, so its holder
-        // may delete only itself.
+        // A role off the ladder ranks below admin.
         let deletes_anyone =
             Rank::of(&caller.user.role_name).is_some_and(|rank| rank >= Rank::Admin);
         let target = match found {
@@ -308,16 +285,14 @@ pub async fn delete(
         };
 
         // 3. refuse the last admin
-        // The count runs in the write's transaction as a statement of its own,
-        // so two concurrent deletes on Postgres or MariaDB can both count two
-        // and both pass.
+        // The count is a statement of its own, so two concurrent deletes on
+        // Postgres or MariaDB can both pass it.
         if target.role_name == ADMIN_ROLE && users::count_admins(&mut tx, &tenant.id).await? <= 1 {
             return Err(Refused::LastAdmin);
         }
 
         // 4. delete and commit
-        // Zero rows changed means that another request deleted the user
-        // between the find and this write, which the route answers as 404.
+        // False when another request deleted the user since the find.
         if !users::delete(&mut tx, &tenant.id, &target.id, now_micros()).await? {
             return Err(Refused::NoSuchUser);
         }
@@ -339,8 +314,8 @@ pub struct RoleChange {
 
 /// Gives the named user of the tenant one of the tenant's roles. Needs admin
 /// of that tenant, or superadmin. Answers 400 for `superadmin` or a role the
-/// tenant does not hold, 404 for a name that no live user has, and 409 when
-/// the change would demote the last live admin.
+/// tenant does not hold, 404 for an unknown name, and 409 when the change
+/// would demote the last live admin.
 #[utoipa::path(
     put,
     path = "/tenants/{tenant}/users/{name}/role",
@@ -365,24 +340,14 @@ pub async fn change_role(
     Path((tenant, name)): Path<(String, String)>,
     Json(change): Json<RoleChange>,
 ) -> Response {
-    // The handler gives the named user one of the tenant's roles. It runs its
-    // checks in the order that decides which refusal a caller sees, writes
-    // the role and commits last, and returns the user with the new role
-    // without reading it again.
+    // The order of the checks decides which refusal a caller sees.
     //
-    // 1. We refuse the role superadmin by name with 400 before any read,
-    //    because `$tk` holds the role alone and a second superadmin was
-    //    rejected (ADR-0028).
-    // 2. We open the transaction, resolve the tenant, find the live user by
-    //    its lowercased name, and then check that the tenant holds the role.
-    //    The user is found before the role is checked, so an unknown name is
+    // 1. We refuse `superadmin` before any read, because `$tk` holds that
+    //    role alone (ADR-0028).
+    // 2. We find the user before we check the role, so an unknown name is
     //    404 whatever role the body names.
-    // 3. We refuse with 409 when the change demotes an admin and the tenant
-    //    has at most one live admin. Only a demotion from admin can leave the
-    //    tenant without a live admin, so a promotion or a change between two
-    //    other roles skips the count.
-    // 4. We write the role, commit, and set the role on the user that step 2
-    //    read, so the response shows the new role.
+    // 3. We refuse to demote the tenant's last live admin.
+    // 4. We write the role, commit, and return the user with its new role.
 
     // 1. refuse superadmin
     if change.role == superadmin::ROLE {
@@ -401,18 +366,16 @@ pub async fn change_role(
         }
 
         // 3. refuse the last admin's demotion
-        // The count runs in the write's transaction as a statement of its own,
-        // so two concurrent demotions, or a demotion and a delete, on Postgres
-        // or MariaDB can both count two and both pass.
+        // The count is a statement of its own, so two concurrent demotions on
+        // Postgres or MariaDB can both pass it.
         let demotion = target.role_name == ADMIN_ROLE && change.role != ADMIN_ROLE;
         if demotion && users::count_admins(&mut tx, &tenant.id).await? <= 1 {
             return Err(Refused::LastAdmin);
         }
 
         // 4. set the role and commit
-        // The new role takes effect at the user's next request, because every
-        // request reads the user's role from the store (ADR-0025). That is why
-        // no token is revoked.
+        // No token is revoked, because every request reads the role from the
+        // store (ADR-0025).
         users::set_role(&mut tx, &tenant.id, &target.id, &change.role).await?;
         tx.commit().await?;
         target.role_name = change.role;
