@@ -360,9 +360,9 @@ fn quoted_text(text: &str, at: usize, open: usize, raw: bool) -> Result<Token, S
         let end = n + 1 + escaped.len_utf8();
         // The error covers the escape from its backslash up to `end`: bytes
         // 10 to 12, the `\q`, of `name == 'a\qb'`.
-        let bad = |end: usize| {
-            let found = text[n..end].to_owned();
-            refuse(n..end, Reason::BadEscape { found })
+        let bad = |stop: usize| {
+            let found = text[n..stop].to_owned();
+            refuse(n..stop, Reason::BadEscape { found })
         };
         value.push(match escaped {
             '\\' | '\'' | '"' => escaped,
