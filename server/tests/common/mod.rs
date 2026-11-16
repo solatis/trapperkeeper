@@ -110,7 +110,7 @@ fn admin_url_var(backend: Backend) -> Option<&'static str> {
 /// URL is absent.
 pub fn backends() -> Vec<Backend> {
     let all = [Backend::Sqlite, Backend::Postgres, Backend::MariaDb];
-    let reachable: Vec<Backend> = all
+    let configured: Vec<Backend> = all
         .into_iter()
         .filter(|b| admin_url_var(*b).is_none_or(|var| env::var_os(var).is_some()))
         .collect();
@@ -119,11 +119,11 @@ pub fn backends() -> Vec<Backend> {
     let expected = env::var("TK_TEST_EXPECT").unwrap_or_default();
     for name in expected.split(',').map(str::trim).filter(|n| !n.is_empty()) {
         assert!(
-            reachable.iter().any(|b| b.to_string() == name),
+            configured.iter().any(|b| b.to_string() == name),
             "TK_TEST_EXPECT names {name}, and its admin URL is not set"
         );
     }
-    reachable
+    configured
 }
 
 /// Runs `body` once per backend from `backends`. Each run first prints the
