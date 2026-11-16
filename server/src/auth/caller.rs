@@ -135,9 +135,7 @@ fn bearer(parts: &Parts) -> Option<&str> {
 /// The value of the `tk_access` cookie, or `None`.
 async fn cookie<S: Send + Sync>(parts: &mut Parts, state: &S) -> Option<String> {
     // The jar's extraction cannot fail; its rejection type is `Infallible`.
-    let jar = CookieJar::from_request_parts(parts, state)
-        .await
-        .unwrap_or_default();
+    let Ok(jar) = CookieJar::from_request_parts(parts, state).await;
     jar.get(ACCESS_COOKIE)
         .map(|cookie| cookie.value().to_owned())
 }
