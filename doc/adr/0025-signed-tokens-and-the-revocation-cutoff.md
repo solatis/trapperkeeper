@@ -4,11 +4,10 @@ Date: 2026-11-16.
 
 ## Context
 
-People log in to the server from the browser UI, which the server renders
-and which sends cookies, and from the CLI and the AI agent, which send
-headers. The owner chose
-the token design, the key handling and the revocation rule while the login
-unit was planned (owner, 2026-11-05).
+People log in to the server from the browser UI, which the server renders and
+which sends cookies, and from the CLI and the AI agent, which send headers. The
+owner chose the token design, the key handling and the revocation rule while the
+login unit was planned (owner, 2026-11-05).
 
 ## Decision
 
