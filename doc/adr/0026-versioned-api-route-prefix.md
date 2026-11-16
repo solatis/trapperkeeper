@@ -14,13 +14,15 @@ Management routes live under `/api/v1`. The probes and the API document
 stay at the root, where orchestrators and tools look for them (owner,
 2026-11-05).
 
-The `v1` reserves a namespace. Under `doc/principles.md` 8 a breaking change
+The `v1` follows the convention that clients expect a version in an API path.
+Under `doc/principles.md` 8 the prefix stays `v1`, because a breaking change
 replaces routes in place and does not add a `v2` beside `v1`.
 
 ## Rejected alternatives
 
-`/api` without a version, and `/v1` without `api`, under which the API and
-the UI's page paths would share the root (owner, 2026-11-05).
+`/api` without a version, because clients expect a version in an API path by
+convention, and `/v1` without `api`, under which the API and the UI's page
+paths would share the root (owner, 2026-11-05).
 
 ## Consequences
 

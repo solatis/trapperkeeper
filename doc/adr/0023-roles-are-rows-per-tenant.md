@@ -1,27 +1,30 @@
 # 0023. Roles are rows per tenant
 
-Date: 2026-11-05.
+Date: 2026-11-15.
 
 ## Context
 
-A user holds one of three roles: admin, operator and observer. The roles
-could be a fixed value on each user or rows in a table of their own. The
-owner decided while the first users were planned (owner, 2026-11-05).
+A user of a customer tenant holds one of three roles: admin, operator and
+observer. The superadmin of `$tk` holds a fourth role, `superadmin`. The roles
+could be a fixed value on each user or rows in a table of their own. The owner
+decided while the first users were planned (owner, 2026-11-05).
 
 ## Decision
 
 Roles are rows in a `roles` table, one set per tenant, each with a lowercase
 `role_name` and a display `role_title`. The migration seeds the system tenant's
-one role, `superadmin`, with a fixed id, a version 7 UUID with an all-zero
-timestamp like the tenant's, so code and tests can name it (`doc/adr/0028`). A tenant
-the superadmin creates gets the roles admin, operator and observer. Nearly
-every table carries a tenant id, and the roles follow that rule (owner,
+one role, `superadmin` (`doc/adr/0028`). Today that role has a fixed id, a
+version 7 UUID with an all-zero timestamp like the tenant's. The id becomes
+random in a later milestone (owner, 2026-11-15). A tenant the superadmin creates
+gets the roles admin, operator and observer. Nearly every table carries a tenant
+id, and the roles follow that rule (owner,
 2026-11-05).
 
-A user references its role together with its tenant, through a composite
-foreign key on `(tenant_id, role_id)`, so a user cannot hold another
-tenant's role. Code names roles by `role_name` and looks the id up in the
-same statement, so callers never hold role ids.
+A user references its role together with its tenant, through a composite foreign
+key on `(tenant_id, role_id)`, so a user cannot hold another tenant's role. The
+store functions that write a user's role, `store::users::create` and
+`store::users::set_role`, take the role's name. A subselect in the same
+statement looks up the role id, so their callers never hold role ids.
 
 ## Rejected alternatives
 

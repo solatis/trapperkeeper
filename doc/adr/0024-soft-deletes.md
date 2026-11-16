@@ -1,6 +1,6 @@
 # 0024. Soft deletes with a deleted_at column
 
-Date: 2026-11-05.
+Date: 2026-11-15.
 
 ## Context
 
@@ -12,12 +12,16 @@ the question while the users table was planned (owner, 2026-11-05).
 
 Every entity table has a `deleted_at` column, epoch microseconds in UTC like
 every time column, and a deleted row stays in the table with it set. Every
-read filters on `deleted_at IS NULL` next to its `tenant_id` filter. A name
-is unique among live rows only, so a deleted entity's name can be used again:
-a partial unique index on SQLite and Postgres, and on MariaDB, which has no
-partial index, a unique key over a virtual generated `live` column that is 1
-for a live row and NULL for a deleted one, because a unique key treats NULLs
-as distinct (owner, 2026-11-05).
+read of a live entity filters on `deleted_at IS NULL` next to its `tenant_id`
+filter (owner, 2026-11-05). The reads that resolve the user and the tenant of
+an audit row do not filter, so the trail still names a user or a tenant that
+was deleted later: `users::find_id_any` and the joins of `audit::page` (owner,
+2026-11-15).
+
+A name is unique among live rows only, so a deleted entity's name can be used
+again. On SQLite and Postgres a partial unique index enforces this. MariaDB has
+no partial index, so a unique key over a virtual generated `live` column
+enforces it there (owner, 2026-11-05).
 
 ## Rejected alternatives
 
