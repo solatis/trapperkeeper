@@ -90,7 +90,8 @@ const WORDS: [&str; 14] = [
 const MOST_FIELD_STEPS: usize = 2;
 
 /// A name that an author can write bare: a letter or `_`, then letters,
-/// digits or `_`, and no word of the language.
+/// digits or `_`, and no word of the language. A Python keyword such as
+/// `class` and a miscased word such as `AND` are names too.
 fn name() -> impl Strategy<Value = String> {
     "[a-zA-Z_][a-zA-Z0-9_]{0,7}"
         .prop_filter("a word of the language", |n| !WORDS.contains(&n.as_str()))
@@ -177,7 +178,8 @@ fn canonical_in(scope: &[String], depth: u32) -> BoxedStrategy<Expr> {
     // bare name reads back as a field, as `amount` does.
     if !scope.is_empty() {
         // An element gets at most two steps, which is a choice that no
-        // measurement backs.
+        // measurement backs. It prints shorter than a field of three keys,
+        // so the bound on the length of a printed tree holds.
         let element = (select(scope.to_vec()), steps(2));
         leaves.push(
             element
@@ -263,7 +265,8 @@ fn canonical_in(scope: &[String], depth: u32) -> BoxedStrategy<Expr> {
         quantifier(false),
         quantifier(true),
         // The strategy generates one to three types, because the parser
-        // refuses `isinstance(x, ())`.
+        // refuses `isinstance(x, ())`. Three is the bound of every list
+        // here, and a repeated type reads back as written.
         (one(), vec(select(TYPES.to_vec()), 1..=3))
             .prop_map(|(value, types)| Expr::IsInstance { value, types }),
         pattern(|pattern, text| Expr::ReSearch { pattern, text }),
@@ -340,7 +343,7 @@ const VALID: &[(&str, &str)] = &[
     // A lowercase `null` or `true` is a field.
     ("status == null", "status == null"),
     ("active == true", "active == true"),
-    // Python's other keywords are fields.
+    // A Python keyword that is no word of the language is a field.
     (
         "from == \"AMS\" and class == 1",
         "from == \"AMS\" and class == 1",
@@ -348,12 +351,13 @@ const VALID: &[(&str, &str)] = &[
     // The bracket form, at the record and at a later step.
     ("record[\"unit price\"] > 2", "record[\"unit price\"] > 2"),
     ("flows[\"in\"] > flows.out", "flows[\"in\"] > flows.out"),
-    // `record` is written only where a key needs it.
+    // The printer writes `record` only before a key that cannot stand as a
+    // bare name. `null` can, and `in` is a word of the language.
     (
         "record.null == 1 and record[\"in\"] == 2",
         "null == 1 and record[\"in\"] == 2",
     ),
-    // One chain of `and` is one list, however it is grouped.
+    // One chain of `and` is one `And` node, however it is grouped.
     ("(a and b) and (c or d) and e", "a and b and (c or d) and e"),
     // A list in square brackets, and a text in single quotes.
     ("x in [expected, 'paid']", "x in (expected, \"paid\")"),
@@ -377,7 +381,8 @@ const VALID: &[(&str, &str)] = &[
     ),
     // The smallest integer.
     ("-9223372036854775808 < x", "-9223372036854775808 < x"),
-    // The minus as a literal and as `Neg`.
+    // A minus directly before a number is part of the literal, as in `-5`.
+    // Any other minus is a `Neg`, also the one before `(5)`.
     (
         "a - -5 > -(5) and -a * b > 0",
         "a - -5 > -(5) and -a * b > 0",
@@ -408,7 +413,8 @@ const VALID: &[(&str, &str)] = &[
         "(a,) == () or isinstance(x, (int,))",
         "(a,) == () or isinstance(x, int)",
     ),
-    // A pattern that cannot be written raw.
+    // A pattern that holds a `"` cannot be written raw, because a raw text
+    // ends at the first `"`. The printer writes it with escapes.
     ("re.match(\"a\\\"b\", x)", "re.match(\"a\\\"b\", x)"),
     (
         "any(i.price > 100 for i in items)",
@@ -663,9 +669,9 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
             Reason::BareRecord,
             "`record` is the whole record; name a field, as in `record[\"key\"]`",
         ),
-        // After a whole condition the error names the condition it follows.
-        // Where no rule recorded the text before the place, the error names the
-        // token before it.
+        // After a whole condition the error names the condition it follows,
+        // because the grammar records that text there. In the other rows the
+        // error names the token before the place.
         (
             "a > 1 b < 2",
             6..7,
@@ -693,6 +699,9 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
             },
             "unknown function `lenn`; did you mean `len`?",
         ),
+        // `abs` is two edits from `all` and `any`, over the limit of one edit
+        // for a name of three characters, so the error lists the functions
+        // and makes no guess.
         (
             "abs(a - b) > 1",
             0..3,
@@ -773,6 +782,8 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
             "expected a value after `and`, found `or`; to name a field `or`, write \
              `record[\"or\"]`",
         ),
+        // A swap of two neighbours counts as one edit, so `adn` is one edit
+        // from `and`.
         (
             "a adn b",
             2..5,
@@ -794,9 +805,9 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
             "expected an operator, `and`, `or`, `if` or the end of the rule after `x`, found `iz`",
         ),
         // `iss` is one edit from `is` and two edits from `in` and `if`, so `is`
-        // is the one nearest word within the limit of one edit. `with_words`
-        // looks for a guess among all the words that a test wanted at this
-        // place, and `is` is among them behind the label "an operator".
+        // is the one nearest word within the limit of one edit. The guess
+        // comes from every word that the grammar could have read at this
+        // place. `is` is one of them, and the error lists it as "an operator".
         (
             "x iss None",
             2..5,
@@ -1005,6 +1016,8 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
             "the pattern of `re.search` must be a text literal, as in \
              `re.search(r\"^a\", name)`",
         ),
+        // A `KeyOnValue` error covers the whole step, the dot and the key. A
+        // `WordAfterDot` error, as for `flows.in`, covers the word alone.
         (
             "\"abc\".x == 1",
             5..7,
@@ -1112,6 +1125,8 @@ fn the_limits_hold_at_their_edges() {
     // and the spaces fill the rest.
     let conditions = format!("a > 1{}", " and a > 1".repeat(400));
     let longest = format!("{conditions:<MAX_TEXT_LENGTH$}");
+    // The rows of `faulty` hold the refused side of each cap. This
+    // assertion and the one for `MAX_NESTING` below hold the accepted side.
     assert!(parse(&longest).is_ok());
     // One more space is the first character past the cap. The text is
     // ASCII, so each character takes one byte, and that character starts at
@@ -1164,10 +1179,11 @@ fn the_largest_canonical_tree_fits_the_text_cap() {
 
 #[test]
 fn a_deep_faulty_text_is_refused_for_its_own_mistake() {
-    // (what opens a level, what closes it, how many levels of nesting one
-    // level of the form takes). In `not (`, `-(` and `(a if b else ` the
-    // `not`, the minus and the branch after `else` each open a level of
-    // their own beside the `(`.
+    // Each form holds what opens a level, what closes it, and how many
+    // levels of nesting one copy of the opening takes. In `not (`, `-(` and
+    // `(a if b else ` the `not`, the minus and the branch after `else` each
+    // open a level of their own beside the `(`, because the grammar calls
+    // itself there.
     let forms = [
         ("(", ")", 1),
         ("[", "]", 1),
@@ -1202,7 +1218,8 @@ fn a_deep_faulty_text_is_refused_for_its_own_mistake() {
         // `TooComplex` means that the parse passed `MAX_PARSE_STEPS` token
         // tests. That happens only when two alternatives of a choice read
         // the same bracketed text, which the invariant in
-        // `engine/src/text/AGENTS.md` forbids.
+        // `engine/src/text/AGENTS.md` forbids. The next assertion would fail
+        // too, and this one names the cause.
         assert_ne!(error.reason, Reason::TooComplex, "{open:?}");
         assert_eq!(error.at, mistake..mistake + 1, "{open:?}");
     }
