@@ -61,7 +61,8 @@ pub async fn mint(
     Json(login_body(
         &state,
         &user,
-        // The flag restricts no route, so it passes through as stored.
+        // A password change passes `false` here. A mint passes the flag as
+        // stored, because the flag restricts no route.
         user.password_must_change,
         SystemTime::now(),
     ))
