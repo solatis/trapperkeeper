@@ -44,23 +44,23 @@ Two companion skills run in a new subagent of their own. The subagent sees
 none of the conversation, and its last message comes back to the caller.
 
 - `/doc-read` takes the range of a change, or one or more paths joined by
-  commas, and the number of one part, and nothing else. For paths, the reader
-  reads those files whole. A change is read in parts of about
-  300 changed lines, one reader per part. A reader who has not seen the change
-  reads the changed files as they are on disk. It returns one row for each
-  line where it stopped, each function whose plan it had to rebuild, each
-  comment that told it nothing, each statement it believes false, and each
-  term or statement in a document it could not place.
+  commas, and the number of one part, and nothing else. For paths, the parts
+  together cover every line of the files under them. A change is read in parts
+  of about 300 changed lines, one reader per part. A reader who has not seen
+  the change reads the changed files as they are on disk. It returns one row
+  for each line where it stopped, each function whose plan it had to rebuild,
+  each comment that told it nothing, each statement it believes false, and
+  each term or statement in a document it could not place.
 - `/doc-audit <scope> [plan: <plan>] [focus: ...] [also: ...]` takes a range
   or paths. It may also take a plan to reconcile against, a focus that limits
   the checks, and the paths of documents that belong to the task. It returns
   the report of the "Report" section below, with each change it proposes as
   a row.
 
-The caller of `/doc-read` passes the range and the part number alone, because
-the reader is useful only while it does not know what the author knows. The
-caller of `/doc-audit` adds facts about the task, and never its view of the
-result.
+The caller of `/doc-read` passes the range or the paths and the part number
+alone, because the reader is useful only while it does not know what the
+author knows. The caller of `/doc-audit` adds facts about the task, and never
+its view of the result.
 
 ## Who writes
 
@@ -119,10 +119,10 @@ works as follows:
    changes a non-comment token and redo it by hand. Run the step check over
    the changed files and fix each finding until it reports none. Run the
    build or tests when that is cheap.
-5. Follow `checks.md` over the commits of the repair. In step 2 of
-   `checks.md`, a repair lists the parts of the repaired paths in place of the
-   range, so that a reader also reads the functions that the repair left as
-   they were.
+5. Follow `checks.md` over the commits of the repair. Step 2 of `checks.md`
+   lists the parts of the range of a change. A repair lists the parts of the
+   paths that it audited in step 2 above in place of that range, so that a
+   reader also reads the functions that the repair left as they were.
 6. Report, in the form of the "Report" section, with the rows applied and
    declined.
 
