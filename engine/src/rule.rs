@@ -21,7 +21,8 @@ pub enum Action {
 }
 
 /// A rule: one expression with its identity, action, sample rate and scope.
-/// A rule is immutable, and an edit is a new rule with a new id.
+/// ADR-0033 makes a rule immutable, so an edit is a new rule with a new id.
+/// The type does not enforce that.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 // A JSON property that the rule does not know, such as a misspelled one, fails
 // the parse and does not silently take its default.
