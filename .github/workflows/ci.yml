@@ -1,8 +1,8 @@
 name: ci
 
-# Every push on every branch, and no pull_request trigger: the milestone asks
-# for every push, and a second trigger would run each commit twice. A pull
-# request from a fork therefore gets no run.
+# The workflow runs on every push to every branch. It has no pull_request
+# trigger, because a second trigger would run each commit twice. A pull request
+# from a fork therefore gets no run.
 on:
   push:
 
@@ -11,28 +11,30 @@ permissions:
 
 jobs:
   check:
+    # The job name is the status check that the master ruleset requires. The
+    # owner keeps that list by hand, so renaming a job means editing it.
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
     strategy:
       # One red platform must not hide the result of the others.
       fail-fast: false
-      # Native runners per platform, because the tests must execute there;
-      # cross-compiling the arm targets would build and lint only. Labels are
-      # pinned to a release, not -latest, so the matrix changes only when
-      # edited. The job name is the status check name the master ruleset
-      # requires; the owner keeps that list by hand. `backends` names the
-      # server databases the entry's tests must reach. Windows aarch64 tests
-      # SQLite only, because neither Postgres nor MariaDB ships a build for it
-      # and the runner has no Docker (ADR-0021).
+      # Each platform gets a native runner, because the tests must execute
+      # there. Cross-compiling the arm targets would build and lint only.
+      # Labels are pinned to a release, not -latest, so the matrix changes
+      # only when edited.
       matrix:
         include:
           - { name: linux-amd64, runner: ubuntu-24.04, backends: "postgres,mariadb" }
           - { name: linux-aarch64, runner: ubuntu-24.04-arm, backends: "postgres,mariadb" }
           - { name: windows-amd64, runner: windows-2025, backends: "postgres,mariadb" }
+          # Windows aarch64 tests SQLite only, because neither Postgres nor
+          # MariaDB ships a build for it and the runner has no Docker
+          # (ADR-0021).
           - { name: windows-aarch64, runner: windows-11-arm, backends: "" }
           - { name: macos-aarch64, runner: macos-15, backends: "postgres,mariadb" }
-    # The test helpers fail the run when a backend named here is unreachable,
-    # because a skipped test passes.
+    # `backends` names the server databases that the entry's tests must
+    # reach. The test helpers fail the run when TK_TEST_EXPECT names a backend
+    # whose admin URL variable is not set.
     env:
       TK_TEST_EXPECT: ${{ matrix.backends }}
     steps:
@@ -44,9 +46,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       # Postgres and MariaDB run on every platform that has a build of them,
       # at the latest Postgres major and the latest MariaDB LTS
-      # (ADR-0021). Each step below starts both, prints their versions so
-      # the log shows what the run tested, and writes the admin URLs the tests
-      # read. The steps time out, because each waits in a loop for a server.
+      # (ADR-0021). Each of the three steps that install or start them starts
+      # both, prints their versions so the log shows what the run tested, and
+      # writes the admin URLs the tests read. These steps time out, because
+      # each waits in a loop for a server.
       #
       # Linux starts them with docker run, guarded per entry, because
       # services: applies to the whole job and would break the other entries.
@@ -57,8 +60,9 @@ jobs:
         run: |
           docker run -d --name pg -e POSTGRES_PASSWORD=tk -p 5432:5432 postgres:latest
           docker run -d --name maria -e MARIADB_ROOT_PASSWORD=tk -p 3306:3306 mariadb:lts
-          # TCP to 127.0.0.1, because both images first run a socket-only
-          # server that initializes the database and then restarts.
+          # The loops connect over TCP to 127.0.0.1, because both images first
+          # run a socket-only server that initializes the database and then
+          # restarts.
           until docker exec -e PGPASSWORD=tk pg psql -h 127.0.0.1 -U postgres -tAc 'select version()'; do sleep 1; done
           until docker exec maria mariadb -h 127.0.0.1 -uroot -ptk -NBe 'select version()'; do sleep 1; done
           echo "TK_TEST_POSTGRES_URL=postgres://postgres:tk@127.0.0.1:5432/postgres" >> "$GITHUB_ENV"
@@ -70,13 +74,13 @@ jobs:
         shell: bash
         run: |
           lts=$(curl -fsSL https://downloads.mariadb.org/rest-api/mariadb/ | jq -r '[.major_releases[] | select(.release_status == "Stable" and .release_support_type == "Long Term Support") | .release_id] | sort_by(split(".") | map(tonumber)) | last')
+          # The latest endpoint answers one release, so keys[0] is that
+          # release and not the oldest of several.
           release=$(curl -fsSL "https://downloads.mariadb.org/rest-api/mariadb/$lts/latest" | jq -r '.releases | keys[0]')
           echo "MARIADB_LTS=$lts" >> "$GITHUB_ENV"
           echo "MARIADB_LTS_RELEASE=$release" >> "$GITHUB_ENV"
       # Homebrew has one formula per Postgres major, and the highest is the
-      # latest. The formula's setup trusts local connections for the runner's
-      # user, and the MariaDB setup gives that user a socket login, which
-      # creates the password user the tests connect with over TCP.
+      # latest.
       - name: Install Postgres and MariaDB
         if: runner.os == 'macOS'
         timeout-minutes: 15
@@ -88,12 +92,16 @@ jobs:
           brew services start "$maria"
           until "$(brew --prefix "$pg")/bin/psql" -h 127.0.0.1 -d postgres -tAc 'select version()'; do sleep 1; done
           until "$(brew --prefix "$maria")/bin/mariadb" -NBe 'select version()'; do sleep 1; done
+          # The MariaDB setup gives the runner's user a socket login. The step
+          # uses it to create the password user tk, which the tests connect
+          # with over TCP.
           "$(brew --prefix "$maria")/bin/mariadb" -e "CREATE USER tk@'127.0.0.1' IDENTIFIED BY 'tk'; GRANT ALL ON *.* TO tk@'127.0.0.1'"
+          # The formula's setup trusts local connections for the runner's
+          # user, so the URL carries no password.
           echo "TK_TEST_POSTGRES_URL=postgres://$(whoami)@127.0.0.1:5432/postgres" >> "$GITHUB_ENV"
           echo "TK_TEST_MARIADB_URL=mariadb://tk:tk@127.0.0.1:3306/mysql" >> "$GITHUB_ENV"
       # Chocolatey has one package per Postgres major, and the latest version
-      # of its postgresql package names the latest major. Postgres listens on
-      # 5433, because the image ships an older Postgres on 5432.
+      # of its postgresql package names the latest major.
       - name: Install Postgres and MariaDB
         if: runner.os == 'Windows' && matrix.backends != ''
         timeout-minutes: 15
@@ -101,19 +109,24 @@ jobs:
         run: |
           pgversion=$(curl -fsSL "https://community.chocolatey.org/api/v2/Packages()?\$filter=Id%20eq%20'postgresql'%20and%20IsLatestVersion" | grep -o '<d:Version>[^<]*' | sed 's/.*>//')
           pgmajor=${pgversion%%.*}
+          # Postgres listens on 5433, because the image ships an older
+          # Postgres on 5432.
           choco install -y --no-progress "postgresql$pgmajor" --params "/Password:tk /Port:5433"
           choco install -y --no-progress mariadb --version "$MARIADB_LTS_RELEASE"
           pgbin="/c/Program Files/PostgreSQL/$pgmajor/bin"
           mariabin="/c/Program Files/MariaDB $MARIADB_LTS/bin"
           until PGPASSWORD=tk "$pgbin/psql" -h 127.0.0.1 -p 5433 -U postgres -d postgres -tAc 'select version()'; do sleep 1; done
           until "$mariabin/mariadb" -h 127.0.0.1 -uroot -NBe 'select version()'; do sleep 1; done
+          # The step creates the user tk with a password, so the MariaDB URL
+          # has the same form as on the other runners, and the tests do not
+          # connect as a root without a password.
           "$mariabin/mariadb" -h 127.0.0.1 -uroot -e "CREATE USER tk@'127.0.0.1' IDENTIFIED BY 'tk'; GRANT ALL ON *.* TO tk@'127.0.0.1'"
           echo "TK_TEST_POSTGRES_URL=postgres://postgres:tk@127.0.0.1:5433/postgres" >> "$GITHUB_ENV"
           echo "TK_TEST_MARIADB_URL=mariadb://tk:tk@127.0.0.1:3306/mysql" >> "$GITHUB_ENV"
       - run: cargo fmt --all --check
-      # No -D warnings here: the workspace lints table in Cargo.toml denies
-      # them, so CI and a local build fail the same way.
+      # Clippy gets no -D warnings, because the workspace lints table in
+      # Cargo.toml denies warnings. With --locked, clippy, build and test fail
+      # when Cargo.lock is missing or would change, instead of updating it.
       - run: cargo clippy --workspace --all-targets --locked
       - run: cargo build --workspace --locked
-      # --locked builds the committed Cargo.lock and never resolves anew.
       - run: cargo test --workspace --locked
