@@ -1,5 +1,6 @@
-//! Probes the HTTP endpoints on each backend the environment names, on the
-//! router served in this process.
+//! Tests of the two probes, the API document and an unknown route on the
+//! router served in this process. Each test runs on SQLite always, and on
+//! Postgres and MariaDB when the environment sets their admin URLs.
 
 mod common;
 
@@ -22,9 +23,9 @@ fn readyz_is_ok() {
     });
 }
 
-/// The generated document describes the two probes, the management routes
-/// under `/api/v1` with their bearer scheme, and not the route that serves
-/// the document.
+/// The generated document lists the two probes, the account routes and
+/// `/api/v1/tenants`, and not `/openapi.json`, the route that serves it. It
+/// defines the bearer scheme, and `/api/v1/me` requires that scheme.
 #[test]
 fn openapi_describes_the_routes() {
     on_each_backend(|backend| {
@@ -43,10 +44,14 @@ fn openapi_describes_the_routes() {
         assert!(paths.contains_key("/api/v1/me"));
         assert!(paths.contains_key("/api/v1/tenants"));
         assert!(!paths.contains_key("/openapi.json"));
+        // The key is the name that routes cite in `security`, and the value is
+        // the HTTP scheme registered under it.
         assert_eq!(
             document["components"]["securitySchemes"]["bearer"]["scheme"],
             "bearer"
         );
+        // A security requirement maps a scheme to the scopes it needs, and
+        // the bearer scheme needs none.
         assert_eq!(
             document["paths"]["/api/v1/me"]["get"]["security"][0]["bearer"],
             serde_json::json!([])
