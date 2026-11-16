@@ -7,162 +7,143 @@ use std::ops::Range;
 use super::grammar::{FUNCTIONS, METHODS, TYPES, names};
 
 /// Why a text is no rule. Each case holds what its sentence needs, and
-/// `Display` writes the sentence.
+/// `Display` writes the sentence. A sentence names the mistake first. Where
+/// a reason knows what the author of the rule should write instead, its
+/// sentence says that next, in the author's words.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Reason {
     // Found by the tokenizer.
-    // A text of more than `MAX_TEXT_LENGTH` characters.
-    TooLong {
-        max: usize,
-    },
-    // The `;` of `amount > 100;`, a character that starts no token.
-    UnexpectedCharacter {
-        found: char,
-    },
-    // An operator of another language and ours for it, as `&&` and `and`.
+    /// A text of more than `MAX_TEXT_LENGTH` characters.
+    TooLong { max: usize },
+    /// The `;` of `amount > 100;`, a character that starts no token.
+    UnexpectedCharacter { found: char },
+    /// An operator of another language and ours for it, as `&&` and `and`.
     ForeignOperator {
         found: &'static str,
         write: &'static str,
     },
-    // The `# big ones` of `amount > 100 # big ones`.
+    /// The `# big ones` of `amount > 100 # big ones`.
     Comment,
-    // The `"abc` of `name == "abc`.
+    /// The `"abc` of `name == "abc`.
     UnclosedText,
-    // The `"""` of `"""abc""" == x`.
+    /// The `"""` of `"""abc""" == x`.
     TripleQuote,
-    // One of Python's letters before the opening quote other than `r`, as in
-    // an f-string.
-    TextPrefix {
-        prefix: String,
-    },
-    // The `\q` of `name == 'a\qb'`, and the `\u12` of `name == "\u12"`,
-    // which has too few digits.
-    BadEscape {
-        found: String,
-    },
-    // The `1_` of `amount > 1_`, and `0x` with no digits.
+    /// One or two of Python's prefix letters `r`, `b`, `u` and `f`, in
+    /// either case, before the opening quote, as the `f` of `f"{a}"` or the
+    /// `rb` of `rb"x"`. Every such prefix except `r` and `R` is refused.
+    TextPrefix { prefix: String },
+    /// The `\q` of `name == 'a\qb'`, and the `\u12` of `name == "\u12"`,
+    /// which has too few digits.
+    BadEscape { found: String },
+    /// The `1_` of `amount > 1_`, and `0x` with no digits.
     MalformedNumber,
-    // The tokenizer refuses `99999999999999999999`, which no u64 holds. The
-    // grammar refuses `9223372036854775808` without a minus before it,
-    // which no i64 holds.
+    /// The tokenizer refuses `99999999999999999999`, which no u64 holds. The
+    /// grammar refuses `9223372036854775808` without a minus before it,
+    /// which no i64 holds.
     IntTooLarge,
-    // The `1e999` of `amount > 1e999`, which no f64 holds.
+    /// The `1e999` of `amount > 1e999`, which no f64 holds.
     FloatTooLarge,
 
-    // Found by the grammar, generic.
-    // The empty text, or a text of spaces.
+    // Found by the grammar.
+    /// The empty text, or a text of spaces.
     Empty,
-    // What could have stood at the place, what stands there, and the text
-    // before it. `nearest` is the expected word nearest to a name that
-    // stands at the place, when it is near enough to be a typo.
+    /// What could have stood at the place, what stands there, and the text
+    /// before it. `nearest` is the word of the language nearest to the name
+    /// at the place. It is chosen from every word that some token test
+    /// wanted there, so the error may not list it, as `is` for `x iss None`.
+    /// It is set only when the word is near enough to be a typo, and it is
+    /// not set when the name is itself a word of the language.
     Expected {
         expected: Vec<String>,
         found: Found,
         after: Option<String>,
         nearest: Option<&'static str>,
     },
-    // A text that opens more than `MAX_NESTING` levels, such as 33
-    // parentheses around `x`.
-    TooDeep {
-        max: usize,
-    },
-    // The parser gave up at the cap on its work. No rule an author writes
-    // reaches it.
+    /// A text that opens more than `MAX_NESTING` levels, such as 33
+    /// parentheses around `x`.
+    TooDeep { max: usize },
+    /// The parser gives up after `MAX_PARSE_STEPS` token tests. Only a
+    /// grammar in which two alternatives read the same bracketed text
+    /// reaches that cap, so no text an author writes should get this reason.
     TooComplex,
 
-    // Found by the grammar, targeted.
-    // The `(` of `(a > 1 and b < 2`, when the text ends inside it.
-    NeverClosed {
-        open: char,
-    },
-    // The `)` of `a > 1) and b`.
-    ClosesNothing {
-        close: char,
-    },
-    // A name that differs from a word of the language only in case, where
-    // that word could stand.
+    // Found by the grammar.
+    /// The `(` of `(a > 1 and b < 2`, when the text ends inside it.
+    NeverClosed { open: char },
+    /// The `)` of `a > 1) and b`.
+    ClosesNothing { close: char },
+    /// A name that differs from a word of the language only in case, where
+    /// that word could stand.
     KeywordCase {
         found: String,
         keyword: &'static str,
     },
-    // A Python keyword outside the language, when the parse fails right
-    // after it.
-    NotInLanguage {
-        word: String,
-    },
-    // `write` is the bracket form of the same key.
-    WordAfterDot {
-        word: String,
-        write: String,
-    },
-    // `record == 1` and `record[0] == 1`, where `record` stands for the
-    // whole record.
+    /// A Python keyword outside the language, when the parse fails right
+    /// after it.
+    NotInLanguage { word: String },
+    /// A word of the language after a dot, as the `in` of `flows.in > 3`.
+    /// `write` is the bracket form of the same key, `flows["in"]`.
+    WordAfterDot { word: String, write: String },
+    /// `record == 1` and `record[0] == 1`, where `record` stands for the
+    /// whole record.
     BareRecord,
-    // `re` or `math` without a function after it. Its sentence also says how
-    // to name a field of that name.
-    ModuleAlone {
-        word: &'static str,
-    },
-    // The `.x` of `"abc".x == 1`, a key on a value that is no field.
+    /// `re` or `math` without a function after it. Its sentence also says how
+    /// to name a field of that name.
+    ModuleAlone { word: &'static str },
+    /// The `.x` of `"abc".x == 1`, a key on a value that is no field.
     KeyOnValue,
-    // The `-1` of `items[-1].price > 5`.
+    /// The `-1` of `items[-1].price > 5`.
     NegativeIndex,
-    // `write` is the two comparisons joined with `and`, when both operators
-    // are comparisons of two operands.
-    ChainedComparison {
-        write: Option<String>,
-    },
-    // The `< None` of `x < None`. `op` is the operator beside the `None`,
-    // also the minus of `-None`.
-    NoneOperand {
-        op: String,
-    },
-    // The second text of `"abc" "def" == name`, which Python would join.
+    /// A second comparison operator after a comparison, as the second `<` of
+    /// `0 < amount < 10`. `write` is the two comparisons joined with `and`,
+    /// `0 < amount and amount < 10`. It is `None` after `is None` and when
+    /// the third operand is missing, as in `a < b <`.
+    ChainedComparison { write: Option<String> },
+    /// The `< None` of `x < None`. `op` is the operator beside the `None`,
+    /// and for `-None` it is the minus.
+    NoneOperand { op: String },
+    /// The second text of `"abc" "def" == name`, which Python would join.
     AdjacentTexts,
-    // The `lenn` of `lenn(name) > 3`. `nearest` is the known name nearest
-    // to it, `len` here, when one is near enough to be a typo.
+    /// The `lenn` of `lenn(name) > 3`. `nearest` is the known name nearest
+    /// to it, `len` here, when one is near enough to be a typo.
     UnknownFunction {
         name: String,
         nearest: Option<&'static str>,
     },
-    // The `startwith` of `name.startwith("a")`, with `nearest` as above.
+    /// The `startwith` of `name.startwith("a")`, with `nearest` as above.
     UnknownMethod {
         name: String,
         nearest: Option<&'static str>,
     },
-    // The `number` of `isinstance(price, number)`, with `nearest` as above.
+    /// The `number` of `isinstance(price, number)`, with `nearest` as above.
     UnknownType {
         name: String,
         nearest: Option<&'static str>,
     },
-    // The `(a, b)` of `len(a, b) > 1`, and the `("x")` of
-    // `name.upper("x")`.
+    /// The `(a, b)` of `len(a, b) > 1`, and the `("x")` of
+    /// `name.upper("x")`.
     WrongArgumentCount {
         name: &'static str,
         takes: usize,
         given: usize,
     },
-    // The `pattern` of `re.search(pattern, x)`, which is no text literal.
-    PatternNotLiteral {
-        function: &'static str,
-    },
-    // The `)` of `any(i.price > 100)`, where `for` should stand.
-    QuantifierNeedsFor {
-        function: &'static str,
-    },
-    // The end of `price if price > 0`, where `else` should stand.
+    /// The `pattern` of `re.search(pattern, x)`, which is no text literal.
+    PatternNotLiteral { function: &'static str },
+    /// The `)` of `any(i.price > 100)`, where `for` should stand.
+    QuantifierNeedsFor { function: &'static str },
+    /// The end of `price if price > 0`, where `else` should stand.
     ConditionalNeedsElse,
 }
 
 /// What stands at the place of an `Expected` error.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Found {
-    // A word of the language. Its sentence also says how to name a field of
-    // that name, as `record["in"]`.
+    /// A word of the language. Its sentence also says how to name a field of
+    /// that name, as `record["in"]`.
     Word(&'static str),
-    // Any other token, as the `y` of `x not y`.
+    /// Any other token, as the `y` of `x not y`.
     Token(String),
-    // The end of the text, as in `amount >`.
+    /// The end of the text, as in `amount >`.
     End,
 }
 
@@ -183,11 +164,15 @@ pub struct SyntaxError {
     pub reason: Reason,
 }
 
-/// "a", "a or b", "a, b or c".
+/// Joins `items` into a list for a sentence, with ", " between them and
+/// " or " before the last one, as "a, b or c". One item comes back
+/// unchanged, and an empty slice gives an empty string.
 fn one_of(items: &[String]) -> String {
-    // `Display` writes no list when `items` is empty, so the first arm
-    // gives nothing.
     match items {
+        // This arm never runs. The `Expected` arm of `Display for Reason` is
+        // the only caller, and it writes the "unexpected ..." sentence
+        // without a list when the list is empty. The arm is here because the
+        // slice patterns must cover the empty slice.
         [] => String::new(),
         [one] => one.clone(),
         [first @ .., last] => format!("{} or {last}", first.join(", ")),
@@ -203,8 +188,6 @@ fn unknown(
     nearest: Option<&str>,
     known: &[&str],
 ) -> fmt::Result {
-    // "unknown function `lenn`; did you mean `len`?", and with no name
-    // near enough, the whole list, as for `abs`.
     match nearest {
         Some(nearest) => write!(f, "unknown {what} `{name}`; did you mean `{nearest}`?"),
         None => write!(
@@ -216,8 +199,6 @@ fn unknown(
 }
 
 impl fmt::Display for Reason {
-    // A sentence names the mistake first and then what to write, in the
-    // words of an author. `faulty` in `tests/text.rs` pins the sentences.
     #[expect(clippy::too_many_lines, reason = "one sentence per reason")]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -245,8 +226,10 @@ impl fmt::Display for Reason {
             Reason::IntTooLarge => write!(f, "this number is too large for an integer"),
             Reason::FloatTooLarge => write!(f, "this number is too large for a float"),
             Reason::Empty => write!(f, "a rule is empty; write an expression"),
-            // "expected a, b or c after `x`, found `y`", then what to write
-            // when the grammar knows it.
+            // The sentence reads "expected a, b or c after `x`, found `y`".
+            // The hints that `with_words` in `grammar.rs` filled in follow
+            // it: how to name a field that is a word of the language, and the
+            // nearest word.
             Reason::Expected {
                 expected,
                 found,
@@ -262,11 +245,13 @@ impl fmt::Display for Reason {
                 } else {
                     write!(f, "expected {}{after}, found {found}", one_of(expected))?;
                 }
-                // `a and or b` adds how to name a field `or`.
+                // For `a and or b` the sentence adds how to name a field
+                // `or`, because `or` is a word of the language and `found` is
+                // then `Found::Word`.
                 if let Found::Word(word) = found {
                     write!(f, "; to name a field `{word}`, write `record[\"{word}\"]`")?;
                 }
-                // `a adn b` adds "did you mean `and`?".
+                // For `a adn b` the sentence adds "did you mean `and`?".
                 if let Some(nearest) = nearest {
                     write!(f, "; did you mean `{nearest}`?")?;
                 }
@@ -299,8 +284,8 @@ impl fmt::Display for Reason {
                 "`record` is the whole record; name a field, as in `record[\"key\"]`"
             ),
             Reason::ModuleAlone { word } => {
-                // `re` names the pattern functions and `math` the math
-                // functions.
+                // `word` is `re` or `math`, the only words in `MODULES`, so
+                // every word other than `re` is `math`.
                 let functions = if *word == "re" { "pattern" } else { "math" };
                 write!(
                     f,
@@ -337,8 +322,6 @@ impl fmt::Display for Reason {
                 write!(f, "`{name}` takes no arguments")
             }
             Reason::WrongArgumentCount { name, takes, given } => {
-                // "`len` takes 1 argument, and 2 were given", and
-                // "`isinstance` takes 2 arguments, and 1 was given".
                 let arguments = if *takes == 1 { "argument" } else { "arguments" };
                 let were = if *given == 1 { "was" } else { "were" };
                 write!(
