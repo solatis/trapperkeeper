@@ -1369,14 +1369,14 @@ fn types(i: &Input<'_>, p: usize) -> Reply<Vec<TypeName>> {
 ///
 /// Reads the `(r"^a", name)` of `re.search(r"^a", name)`.
 fn pattern_arguments(function: &'static str, make: Pattern) -> impl Parser<Expr> {
-    let text = token("a pattern", |t| match &t.kind {
+    let text_token = token("a pattern", |t| match &t.kind {
         Tok::Text(s) => Some(s.clone()),
         _ => None,
     });
     // The pattern is a text token and no expression, so it can be checked
     // when the rule is created (ADR-0041). `re.search(pattern, x)` is
     // refused at `pattern`, bytes 10 to 17.
-    let pattern = require(Reason::PatternNotLiteral { function }, text);
+    let pattern = require(Reason::PatternNotLiteral { function }, text_token);
     // `body` reads the pattern, a comma, the text to search, and a comma at
     // the end.
     let body = then(pattern, right(punct(","), left(expr, opt(punct(",")))));
