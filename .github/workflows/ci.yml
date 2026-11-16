@@ -130,5 +130,7 @@ jobs:
       # Cargo.toml denies warnings. With --locked, clippy, build and test fail
       # when Cargo.lock is missing or would change, instead of updating it.
       - run: cargo clippy --workspace --all-targets --locked
+      # This step builds the binary outside the test build, so a build failure
+      # shows as a step of its own.
       - run: cargo build --workspace --locked
       - run: cargo test --workspace --locked
