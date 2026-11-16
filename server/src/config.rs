@@ -219,7 +219,7 @@ impl TryFrom<String> for LogLevel {
 
 impl From<LogLevel> for String {
     fn from(level: LogLevel) -> Self {
-        level.0.to_string().to_lowercase()
+        level.0.to_string()
     }
 }
 
