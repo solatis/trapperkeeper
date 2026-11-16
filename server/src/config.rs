@@ -260,12 +260,6 @@ pub fn load(file: Option<&Path>, overrides: impl Serialize) -> Result<Settings, 
 
     // 2. merge the file
     if let Some(path) = file {
-        if !path.is_file() {
-            return Err(Box::new(figment::Error::from(format!(
-                "configuration file {} does not exist",
-                path.display()
-            ))));
-        }
         // `file` would also search the parent directories of a relative path.
         figment = figment.merge(Toml::file_exact(path));
     }
