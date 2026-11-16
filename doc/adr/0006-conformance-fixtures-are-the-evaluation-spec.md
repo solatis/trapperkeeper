@@ -37,7 +37,7 @@ types (`adr/0041`).
 
 ## Rejected alternatives
 
-A prose specification, because it contradicted itself.
+A prose specification, because a specification in prose can contradict itself.
 
 One file per case, because the same rule would repeat in dozens of files.
 
