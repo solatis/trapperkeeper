@@ -20,6 +20,7 @@ use crate::expr::{Expr, Segment, TypeName};
 // postfix forms, such as `a.upper()` and `items[0]`, share ATOM with the
 // atoms. A node is written bare where a level at most its own is wanted, and
 // in parentheses elsewhere.
+
 // `a if b else c`.
 const CONDITIONAL: u8 = 1;
 // `a or b`.
@@ -106,9 +107,8 @@ fn write_expr(
         // holds for the smallest integer, `-9223372036854775808`.
         Expr::Int(v) => write!(f, "{v}"),
         // `{:?}` gives the shortest text that parses back to the same value.
-        // A float in a tree must be finite, as `Expr::Float` says, and for a
-        // finite value that text always has a `.` or an `e`, so it reads
-        // back as a float.
+        // For a finite value, which `Expr::Float` requires, that text always
+        // has a `.` or an `e`, so it reads back as a float.
         Expr::Float(v) => write!(f, "{v:?}"),
         Expr::Text(s) => write_text(s, f),
         Expr::List(items) => {
@@ -187,8 +187,8 @@ fn write_expr(
             // Every number under a `Neg` goes in parentheses, whatever its
             // sign, so `Neg(Int(5))` prints as `-(5)` and `Neg(Int(-5))` as
             // `-(-5)`. For a number that is not negative the reason is that
-            // `-5` reads back as a negative literal. A negative number would
-            // read back the same without them and gets them all the same.
+            // `-5` reads back as a negative literal. A negative number gets
+            // them too, although `--5` reads back as the same tree.
             let number = matches!(**x, Expr::Int(_) | Expr::Float(_));
             // Any other operand is written at the level of a minus, as in
             // `-a`, `--a` and `-(a + b)`.
@@ -201,13 +201,13 @@ fn write_expr(
         } => {
             // The grammar reads the first branch and the test with
             // `or_expr`, so a conditional in either place needs parentheses,
-            // as in `(a if b else c) if d else e`. The branch after `else`
-            // may be a conditional itself, because the conditional groups to
-            // the right.
+            // as in `(a if b else c) if d else e`.
             write_expr(then, OR, scope, f)?;
             f.write_str(" if ")?;
             write_expr(test, OR, scope, f)?;
             f.write_str(" else ")?;
+            // The branch after `else` may be a conditional itself, because
+            // the conditional groups to the right.
             write_expr(otherwise, CONDITIONAL, scope, f)
         }
         Expr::Any { name, list, test } => write_quantifier("any", name, list, test, scope, f),
@@ -318,19 +318,18 @@ fn write_call(
 ) -> fmt::Result {
     write!(f, "{function}(")?;
     if let Some(pattern) = pattern {
-        // A raw text ends at the first `"` that no backslash escapes, it
-        // cannot hold a line break, and a backslash at its end would take
-        // the closing quote with it. The check is stricter than the
-        // tokenizer: it rejects any `"`, also one after a backslash, which a
-        // raw text could hold.
+        // A raw text ends at the first `"` that no backslash escapes, holds
+        // no line break, and a backslash at its end would take the closing
+        // quote. The check also rejects a `"` after a backslash, which a raw
+        // text could hold.
         let raw = !pattern.contains(['"', '\n', '\r']) && !pattern.ends_with('\\');
         // The pattern is written raw where it can be, as `r"^\d{5}$"`,
         // because the escaped form doubles every backslash. Both forms read
-        // back to the same pattern. The pattern `a"b` cannot be raw and is
-        // written `"a\"b"`.
+        // back to the same pattern.
         if raw {
             write!(f, "r\"{pattern}\"")?;
         } else {
+            // The pattern `a"b` cannot be raw and is written `"a\"b"`.
             write_text(pattern, f)?;
         }
         f.write_str(", ")?;
@@ -348,9 +347,8 @@ fn write_method(
     f: &mut fmt::Formatter<'_>,
 ) -> fmt::Result {
     // A number goes in parentheses. The tokenizer reads `5.upper` as a
-    // malformed float. In `-0.5.upper()` the grammar reads the minus and the
-    // number as one literal and reads no step after it, so the text is
-    // refused at the second `.`.
+    // malformed float, and the grammar reads `-0.5` as one literal with no
+    // step after it, so `-0.5.upper()` is refused at the second `.`.
     let number = matches!(receiver, Expr::Int(_) | Expr::Float(_));
     // Any other receiver is an atom or in parentheses. `Upper(Add(a, b))`
     // prints as `(a + b).upper()`, because `a + b.upper()` reads back as
