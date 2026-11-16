@@ -230,7 +230,7 @@ pub async fn create(
 /// Deletes the named user of the tenant. Needs admin of that tenant, the
 /// superadmin, or the user itself. Answers 404 for an unknown name to an admin
 /// or the superadmin and 403 to anyone else, and 409 for the tenant's last
-/// live admin.
+/// live admin, also when that admin deletes itself.
 #[utoipa::path(
     delete,
     path = "/tenants/{tenant}/users/{name}",
@@ -252,15 +252,17 @@ pub async fn delete(
     State(state): State<AppState>,
     Path((tenant, name)): Path<(String, String)>,
 ) -> Response {
-    // The handler takes `Caller` rather than `AtLeast<Admin>`, because a user
-    // below admin may delete itself.
+    // The handler deletes the user when the caller may, and commits last, so
+    // every refusal writes nothing. It takes `Caller` rather than
+    // `AtLeast<Admin>`, because a user below admin may delete itself.
     //
     // 1. We resolve the tenant, which refuses another tenant's member, and
     //    find the target.
     // 2. We decide the permission. It needs the target's id, so it comes
     //    after the lookup, and a caller below admin gets 403 for any other
     //    name, so it cannot tell whether that name exists.
-    // 3. We refuse to delete the tenant's last live admin.
+    // 3. We refuse to delete the tenant's last live admin, also when that
+    //    admin is the caller.
     // 4. We mark the user deleted and commit. Its tokens need no revocation,
     //    because every request reads the user (ADR-0025).
 
@@ -268,8 +270,8 @@ pub async fn delete(
         // 1. resolve the tenant and the target
         let mut tx = state.store.begin().await?;
         let tenant = scope::tenant(&mut tx, &caller.user, &caller.identity, &tenant).await?;
-        // The name is lowercased as the store keeps it and not checked for
-        // shape, because a name that fails the shape matches no row (ADR-0020).
+        // The store keeps names lowercase (ADR-0020). A name that fails the
+        // user-name rule matches no row, so no shape is checked.
         let found = users::find(&mut tx, &tenant.id, &name.to_lowercase()).await?;
 
         // 2. decide the permission
@@ -290,7 +292,8 @@ pub async fn delete(
         }
 
         // 4. delete and commit
-        // False when another request deleted the user since the find.
+        // `users::delete` returns false when another request deleted the user
+        // since the find.
         if !users::delete(&mut tx, &tenant.id, &target.id, now_micros()).await? {
             return Err(Refused::NoSuchUser);
         }
@@ -365,9 +368,9 @@ pub async fn change_role(
         }
 
         // 3. refuse the last admin's demotion
-        // The count is a statement of its own, so two concurrent demotions on
-        // Postgres or MariaDB can both pass it.
         let demotion = target.role_name == ADMIN_ROLE && change.role != ADMIN_ROLE;
+        // The count is a statement of its own, so two concurrent demotions, or
+        // a demotion and a delete, on Postgres or MariaDB can both pass it.
         if demotion && users::count_admins(&mut tx, &tenant.id).await? <= 1 {
             return Err(Refused::LastAdmin);
         }
