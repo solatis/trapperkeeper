@@ -22,7 +22,7 @@ the issue time with a microsecond fraction, and `exp` the expiry. An access
 token lives one hour and is sent as `Authorization: Bearer`, or in the
 `tk_access` cookie. A refresh token lives 7 days from login, and the same keys
 sign it. The caller sends it in the body of the refresh route or in the
-`tk_refresh` cookie. The server sends that cookie to the refresh route alone.
+`tk_refresh` cookie. The browser sends that cookie to the refresh route alone.
 Both cookies are `HttpOnly`, `SameSite=Strict` and `Secure`. A header or body is
 read first, for the CLI and the agent, and the cookie second, for the browser
 (owner, 2026-11-05).
