@@ -1,8 +1,8 @@
-//! Logs in on the router served in this process, on each backend the
-//! environment names, and uses what login hands out: a scenario of the
-//! happy path and one refusal each, a property over defective tokens, and a
-//! property over sequences of logins, refreshes, logouts and password
-//! changes against a model of which tokens are live.
+//! Logs in on the router served in this process, on each backend, and uses
+//! what login hands out: a scenario that uses both tokens and checks four
+//! kinds of wrong credentials, a property over defective tokens, and a
+//! property over sequences of logins, refreshes, logouts and password changes
+//! against a model of which tokens are live.
 
 mod common;
 
@@ -17,27 +17,33 @@ use serde_json::{Value, json};
 use sqlx::AssertSqlSafe;
 use trapperkeeper_server::{Keyring, Kind};
 
-/// A login with the superadmin's tenant and name, in any case, and its
-/// password returns a bearer access token that lives an hour and a refresh
-/// token that lives a week, and says the password must change. Both tokens
-/// come in the body and in cookies page scripts and other sites cannot use,
-/// and the refresh cookie goes to the refresh route alone. The access token
-/// reads the superadmin back on the bearer header and on the cookie alone. An
-/// unknown tenant, the superadmin's name and password under another tenant, a
-/// wrong password and an unknown name get the same refusal.
+/// A login with the superadmin's tenant and name in any case returns an
+/// access token of an hour, a refresh token of a week and the must-change
+/// flag, in the body and in cookies marked `HttpOnly`, `SameSite=Strict` and
+/// `Secure`. Each token works through the header and through its cookie
+/// alone, and a request without a token gets 401 with
+/// `WWW-Authenticate: Bearer`. Four kinds of wrong credentials get the same
+/// refusal.
 #[test]
 fn login_then_me() {
-    // 1. log in with the tenant and the name in upper case
-    // 2. check the body and the two cookies
-    // 3. read me with the bearer header, then with the cookie alone
-    // 4. refresh with the refresh cookie alone
-    // 5. read me with no token
-    // 6. try four logins that must fail
+    // The test logs the superadmin in, uses both tokens through each channel
+    // that a client uses, and tries wrong credentials.
+    //
+    // 1. We log in in upper case, which login lowercases (ADR-0020).
+    // 2. We check the body and the two cookies. 3600 and 604800 are the hour
+    //    and the week that the tokens live.
+    // 3. We read `me` with the header, as the CLI does, and with the cookie
+    //    alone, as the browser does.
+    // 4. We refresh with the refresh cookie alone, as the browser does.
+    // 5. We read `me` with no token, which gets the 401 that asks for a
+    //    bearer token (RFC 6750, 3).
+    // 6. We create a second tenant and try four wrong logins under it and
+    //    `$tk`. All four get the same body, so a response does not say which
+    //    part was wrong.
     on_each_backend(|backend| {
         let server = serve_in_process(backend);
 
-        // 1. Upper case, so the test sees that login lowercases the tenant
-        //    and the name before it looks them up (ADR-0020).
+        // 1. log in in upper case
         let response = post_login(
             &server,
             &SYSTEM_TENANT.to_uppercase(),
@@ -46,9 +52,7 @@ fn login_then_me() {
         );
         assert_eq!(response.status, 200, "{}", response.body);
 
-        // 2. The lifetimes are the access token's hour and the refresh
-        //    token's week, and the superadmin's generated password must
-        //    change.
+        // 2. check the body and the cookies
         let login: Value = serde_json::from_str(&response.body).expect("a JSON body");
         assert_eq!(login["token_type"], "Bearer");
         assert_eq!(login["expires_in"], 3600);
@@ -56,7 +60,7 @@ fn login_then_me() {
         assert_eq!(login["password_must_change"], true);
         let token = login["access_token"].as_str().expect("an access token");
         let refresh = login["refresh_token"].as_str().expect("a refresh token");
-        // Three base64url parts, as a JWT is.
+        // A signed JWT in compact form has three base64url parts.
         assert_eq!(token.split('.').count(), 3);
         assert_eq!(refresh.split('.').count(), 3);
         let set_cookie = response.header_values("set-cookie");
@@ -74,8 +78,7 @@ fn login_then_me() {
             "Max-Age=604800",
         );
 
-        // 3. The CLI sends the header and the browser sends the cookie, so
-        //    each one alone must authenticate.
+        // 3. read me with the header, then the cookie
         let bearer = format!("Bearer {token}");
         let response = me(&server, &[("Authorization", &bearer)]);
         assert_eq!(response.status, 200, "{}", response.body);
@@ -87,7 +90,7 @@ fn login_then_me() {
         let cookie = format!("tk_access={token}");
         assert_eq!(me(&server, &[("Cookie", &cookie)]).status, 200);
 
-        // 4. The refresh cookie alone yields a new access token that works.
+        // 4. refresh with the cookie
         let cookie = format!("tk_refresh={refresh}");
         let response = request(
             server.addr,
@@ -102,20 +105,15 @@ fn login_then_me() {
         let bearer = format!("Bearer {fresh}");
         assert_eq!(me(&server, &[("Authorization", &bearer)]).status, 200);
 
-        // 5. A request with no token gets the 401 that asks for a bearer
-        //    token (RFC 6750, 3).
+        // 5. read me with no token
         let response = me(&server, &[]);
         assert_eq!(response.status, 401);
         assert_eq!(response.header_values("www-authenticate"), ["Bearer"]);
 
-        // 6. A second tenant, so the superadmin's credentials are refused
-        //    under its name.
+        // 6. create a second tenant, then try four logins
         let other = json!({ "name": "other", "title": "Other", "admin": "boss@other" });
         let response = call(&server, token, "POST", "/api/v1/tenants", Some(&other));
         assert_eq!(response.status, 201, "{}", response.body);
-        // An unknown tenant, another tenant, a wrong password and an unknown
-        // name. All four get the same body, so a response does not say which
-        // part was wrong.
         let admin_password = server.admin_password.as_str();
         for (tenant, name, password) in [
             ("nowhere", ADMIN, admin_password),
@@ -147,7 +145,8 @@ fn post_login(
     )
 }
 
-/// Reads me with `headers` and returns the response.
+/// Sends `GET /api/v1/me` with `headers` and returns the response, whatever
+/// its status.
 fn me(server: &common::InProcess, headers: &[(&str, &str)]) -> common::Response {
     request(server.addr, "GET", "/api/v1/me", headers, None)
 }
@@ -177,14 +176,18 @@ enum Defect {
     FlippedSignature,
     /// Signed by a key the server's ring does not hold.
     UnknownKey,
-    /// Issued two hours ago, past the one-hour lifetime and the leeway.
+    /// Issued two hours ago, past its one-hour lifetime and the 60 seconds of
+    /// leeway that the check allows for clock skew.
     Expired,
-    /// The user's cutoff was moved past the token's issue time.
+    /// The user logged out after the token was issued, which revokes every
+    /// earlier token.
     BeforeCutoff,
     /// The user was deleted after the token was issued.
     DeletedUser,
 }
 
+/// Every variant of `Defect`. The property draws its subsets from this list,
+/// so a variant left out is never tested.
 const DEFECTS: [Defect; 5] = [
     Defect::FlippedSignature,
     Defect::UnknownKey,
@@ -222,13 +225,15 @@ fn flip_signature_keeps_a_valid_last_character() {
     }
 }
 
-/// The admin's user id, read beside the server.
+/// The user id of the superadmin `ADMIN` of the system tenant, read from the
+/// server's database. Panics when the read fails.
 fn admin_id(database: &common::TestDatabase) -> String {
     let select = placeholders(
         database.backend,
         "SELECT user_id FROM users WHERE tenant_id = $1 AND user_name = $2",
     );
     on_pool!(database, |pool| {
+        // The statement is a literal, so no outside text reaches the SQL.
         sqlx::query_scalar(AssertSqlSafe(select))
             .bind(SYSTEM_TENANT_ID)
             .bind(ADMIN)
@@ -248,6 +253,7 @@ fn delete_admin(database: &common::TestDatabase, at: i64) {
     );
     let id = admin_id(database);
     on_pool!(database, |pool| {
+        // The statement is a literal, so no outside text reaches the SQL.
         sqlx::query(AssertSqlSafe(update))
             .bind(at)
             .bind(&id)
@@ -258,30 +264,46 @@ fn delete_admin(database: &common::TestDatabase, at: i64) {
 }
 
 proptest! {
-    // 12 cases rather than proptest's 256: each case builds a server and
-    // derives three keyrings, with a 64 MiB hash each, on every backend. No
-    // regression file, so a failure leaves nothing untracked in the tree; the
-    // failing seed is in the output.
     #![proptest_config(ProptestConfig {
+        // 12 cases, because each serves a router on every backend and runs
+        // Argon2id six times or more.
         cases: 12,
+        // No regression file is left in the tree. The panic message shows the
+        // minimal failing input.
         failure_persistence: None,
         .. ProptestConfig::default()
     })]
 
     /// A token passes only when its signature, key, expiry, user and cutoff
-    /// are all valid: the server answers `me` with 200 when the token has no
-    /// defect and 401 otherwise. A ring that holds the old key as previous
-    /// still checks the old key's tokens, and a ring without it does not.
+    /// are all valid, so `me` answers 200 for a token without a defect and 401
+    /// for one with any. A ring that holds the server's key as its previous
+    /// key still accepts the tokens that key signed, and a ring without it
+    /// refuses them.
     #[test]
     fn a_token_passes_only_when_every_check_holds(
+        // Any subset of the five defects, from none to all.
         defects in proptest::sample::subsequence(DEFECTS.to_vec(), 0..=DEFECTS.len())
     ) {
+        // The test mints a token with the drawn defects, applies the user
+        // defects to the admin's row, and checks the token on the server and
+        // on two rings.
+        //
+        // 1. We serve a router and derive three rings: the server's own, one
+        //    of another passphrase, and one that signs with the other and
+        //    still checks with the server's key.
+        // 2. We issue the token with its token defects.
+        // 3. We apply the user defects. The logout comes before the deletion,
+        //    because a deleted user cannot log in.
+        // 4. We send the token to `me`, which must answer 200 only without a
+        //    defect.
+        // 5. We check the token on the rotated and the other ring, which read
+        //    no user row, so only the signature, the key and the expiry
+        //    decide.
         let has = |defect: Defect| defects.contains(&defect);
         for backend in backends() {
+            // 1. serve and derive three rings
             let server = serve_in_process(backend);
             let user_id = admin_id(server.database());
-            // The server's own ring, the ring of another passphrase, and a
-            // ring that signs with the other and still checks the server's.
             let (own, other, rotated) = block_on(async {
                 let store = &server.store;
                 (
@@ -291,6 +313,7 @@ proptest! {
                 )
             });
 
+            // 2. issue the token
             let now = SystemTime::now();
             let issued = if has(Defect::Expired) { now - Duration::from_hours(2) } else { now };
             let signer = if has(Defect::UnknownKey) { &other } else { &own };
@@ -298,6 +321,7 @@ proptest! {
             if has(Defect::FlippedSignature) {
                 token = flip_signature(&token);
             }
+            // 3. apply the user defects
             let now_micros = i64::try_from(
                 now.duration_since(UNIX_EPOCH).expect("the clock is past 1970").as_micros(),
             )
@@ -310,15 +334,18 @@ proptest! {
                 delete_admin(server.database(), now_micros);
             }
 
+            // 4. send the token to me
             let bearer = format!("Bearer {token}");
             let response = request(server.addr, "GET", "/api/v1/me", &[("Authorization", &bearer)], None);
             let expected = if defects.is_empty() { 200 } else { 401 };
             prop_assert_eq!(response.status, expected, "{:?} on {}: {}", defects, backend, response.body);
 
-            // The rings see the token itself, not the user, so only the
-            // signature, the key and the expiry matter to them.
+            // 5. check the token on two rings
             let intact = !has(Defect::FlippedSignature) && !has(Defect::Expired);
+            // The rotated ring holds both keys, so it accepts an intact token
+            // of either signer.
             prop_assert_eq!(rotated.check(Kind::Access, &token).is_ok(), intact, "{:?} on {}", defects, backend);
+            // The other ring holds its own key alone.
             prop_assert_eq!(other.check(Kind::Access, &token).is_ok(), intact && has(Defect::UnknownKey), "{:?} on {}", defects, backend);
         }
     }
@@ -330,8 +357,9 @@ proptest! {
 struct Held {
     value: String,
     kind: Kind,
-    /// The revocation epoch the token was issued in; a logout or a password
-    /// change starts the next one.
+    /// The epoch the token was issued in. The epoch counts the moves of the
+    /// admin's cutoff that the model has seen: a logout or a password change
+    /// moves the cutoff, which revokes every earlier token.
     epoch: u32,
     expired: bool,
 }
@@ -355,16 +383,19 @@ enum Op {
         right_current: bool,
         new_len: usize,
     },
-    /// Mint a token of a kind that expired long ago, as if a week had passed.
+    /// Mint a token of the chosen kind issued eight days ago, past even the
+    /// refresh token's week and the leeway.
     Expired { refresh: bool },
 }
 
 fn op() -> impl Strategy<Value = Op> {
+    // The weights are a choice.
     prop_oneof![
         3 => any::<bool>().prop_map(|right_password| Op::Login { right_password }),
         3 => any::<usize>().prop_map(|token| Op::Me { token }),
         2 => any::<usize>().prop_map(|token| Op::Refresh { token }),
         1 => any::<usize>().prop_map(|token| Op::Logout { token }),
+        // Lengths on both sides of the server's minimum of 12.
         1 => (any::<usize>(), any::<bool>(), 8_usize..=20).prop_map(|(token, right_current, new_len)| {
             Op::ChangePassword { token, right_current, new_len }
         }),
@@ -372,8 +403,9 @@ fn op() -> impl Strategy<Value = Op> {
     ]
 }
 
-/// The model: the admin's password, whether it must still be changed, the
-/// current revocation epoch, and every token held.
+/// The model predicts the server's status for each request and the
+/// must-change flag that `me` reports. It holds the admin's password, that
+/// flag, the current epoch and every held token.
 struct Model {
     password: String,
     must_change: bool,
@@ -382,15 +414,19 @@ struct Model {
 }
 
 impl Model {
-    /// The held token at `index`, or a garbage token when none is held.
+    /// The held token that `index` picks modulo the number held, or a garbage
+    /// token when none is held.
     fn token(&self, index: usize) -> Held {
         self.held
+            // With no token held, `max(1)` avoids a division by zero, and
+            // `get` returns `None`.
             .get(index % self.held.len().max(1))
             .cloned()
             .unwrap_or(Held {
                 value: "not.a.token".to_owned(),
                 kind: Kind::Access,
                 epoch: 0,
+                // Live for no kind and no epoch, so every route refuses it.
                 expired: true,
             })
     }
@@ -403,33 +439,36 @@ impl Model {
 
 proptest! {
     #![proptest_config(ProptestConfig {
+        // 12 cases, because each serves a router on every backend and derives
+        // one more ring.
         cases: 12,
+        // No regression file is left in the tree.
         failure_persistence: None,
         .. ProptestConfig::default()
     })]
 
-    /// For any sequence of logins, refreshes, logouts, password changes and
-    /// reads of me, each token is accepted exactly when the model says it is
-    /// live: of the kind the route asks for, issued in the current revocation
-    /// epoch, and not expired. A refresh hands out an access token of the
-    /// current epoch. A logout starts the next epoch, so every token held
-    /// before it dies, and clears both cookies. A password change needs the
-    /// current password and a new one of 12 to 1024 characters; it starts the
-    /// next epoch, clears the must-change flag, and hands out tokens of the
-    /// new epoch.
+    /// For any sequence of logins, refreshes, logouts, password changes, reads
+    /// of `me` and minted expired tokens, each route accepts a token exactly
+    /// when the model says it is live.
     #[test]
+    // The cap of 8 ops is a choice.
     fn tokens_follow_the_model(ops in proptest::collection::vec(op(), 0..=8)) {
         for backend in backends() {
             let server = serve_in_process(backend);
             let user_id = admin_id(server.database());
+            // Derived as the server's ring is, so the tokens it mints fail on
+            // their expiry alone.
             let own = block_on(Keyring::from_store(&server.store, TEST_KEY, None))
                 .expect("the keys derive");
             let mut model = Model {
                 password: server.admin_password.clone(),
+                // The superadmin starts with a generated password.
                 must_change: true,
                 epoch: 0,
                 held: Vec::new(),
             };
+            // Each op expects the status that the model predicts, and on
+            // success the model records what changed.
             for op in &ops {
                 match op {
                     Op::Login { right_password } => {
@@ -468,6 +507,8 @@ proptest! {
                         let bearer = format!("Bearer {}", held.value);
                         let body = json!({ "current_password": current, "new_password": new_password }).to_string();
                         let response = request(server.addr, "POST", "/api/v1/password", &[("Authorization", &bearer)], Some(&body));
+                        // 401 wins over 400, because the token and the
+                        // current password are checked before the length.
                         let expected = if !model.live(&held, Kind::Access) || !*right_current {
                             401
                         } else if *new_len < 12 {
@@ -477,6 +518,8 @@ proptest! {
                         };
                         prop_assert_eq!(response.status, expected, "{:?} {:?} on {}: {}", op, held, backend, response.body);
                         if response.status == 200 {
+                            // The server issues the new tokens after it moves
+                            // the cutoff, so they belong to the next epoch.
                             model.epoch += 1;
                             model.password = new_password;
                             model.must_change = false;
@@ -500,6 +543,8 @@ proptest! {
                         prop_assert_eq!(response.status, expected, "{:?} {:?} on {}: {}", op, held, backend, response.body);
                         if response.status == 200 {
                             let refreshed: Value = serde_json::from_str(&response.body).expect("a JSON body");
+                            // A refresh hands out an access token and keeps
+                            // the refresh token.
                             model.held.push(Held {
                                 value: refreshed["access_token"].as_str().expect("a token").to_owned(),
                                 kind: Kind::Access,
@@ -515,16 +560,20 @@ proptest! {
                         let expected = if model.live(&held, Kind::Access) { 200 } else { 401 };
                         prop_assert_eq!(response.status, expected, "{:?} {:?} on {}: {}", op, held, backend, response.body);
                         if response.status == 200 {
+                            // A logout clears both cookies with `Max-Age=0`.
                             let set_cookie = response.header_values("set-cookie");
                             prop_assert_eq!(set_cookie.len(), 2, "{:?}", set_cookie);
                             for header in &set_cookie {
                                 prop_assert!(header.contains("Max-Age=0"), "{header:?}");
                             }
+                            // A logout moves the cutoff, so every token held
+                            // before it dies.
                             model.epoch += 1;
                         }
                     }
                     Op::Expired { refresh } => {
                         let kind = if *refresh { Kind::Refresh } else { Kind::Access };
+                        // Past the refresh token's week and the leeway.
                         let issued = SystemTime::now() - Duration::from_hours(8 * 24);
                         model.held.push(Held {
                             value: own.issue(kind, &user_id, SYSTEM_TENANT_ID, issued),
