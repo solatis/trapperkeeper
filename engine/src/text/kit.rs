@@ -31,7 +31,7 @@ struct Log {
     // These are the words of the error. In `x not y` it ends as "`in`".
     wanted: Vec<String>,
     // The notes that `label` and `hidden` took out of `wanted`. An error
-    // does not list them, and they still say what could stand at the place.
+    // does not list them, and they still say what could stand at `pos`.
     replaced: Vec<String>,
     // The text that the place comes after, when `then_after` recorded it.
     after: Option<Range<usize>>,
@@ -129,14 +129,15 @@ impl<'t> Input<'t> {
         let mut log = self.log.borrow_mut();
         // Notes past `p` are about a later token, and they stay, whoever
         // made them: the body, or an earlier alternative that read further
-        // before the combinator started. In `x not y` the `hidden(stray)` of
-        // `end_of_rule` starts at index 1 while the log already stands at
-        // index 2, from the `in` test of `compare_op`.
+        // before the combinator started. In `x not y` a hidden test of the
+        // grammar starts at index 1, after `x`, while the log already stands
+        // at index 2, where the test for `in` after `not` did not match.
         if log.pos > p {
             return;
         }
         // When the log stands before `p`, it moves to `p` and starts empty
-        // there.
+        // there. No rule of the grammar gets here today, because a body that
+        // gives no match has noted at `p` or further.
         if log.pos < p {
             *log = Log {
                 pos: p,
@@ -144,9 +145,10 @@ impl<'t> Input<'t> {
             };
         }
         // When the mark stood at `p`, the first `count` notes there are older
-        // than the body, and they stay. In `a adn b` the hidden test for a
-        // closing bracket after `a` starts at index 1 with the mark (1, 5):
-        // an operator, `and`, `or`, `if` and the end of the rule.
+        // than the body, and they stay. In `a adn b` the grammar's hidden
+        // test for a stray closing bracket starts at index 1 with the mark
+        // (1, 5). The five notes are the label "an operator" of a comparison,
+        // `and`, `or`, `if` and the end of the rule.
         let kept = if at == p { count } else { 0 };
         // The body's notes leave the error and move to `replaced`, where
         // `furthest` still finds them.
@@ -230,8 +232,8 @@ pub(super) fn token<T>(what: impl Into<String>, f: impl Fn(&Token) -> Option<T>)
     }
 }
 
-/// The value of `a` through `f`: `compare_op` turns the tokens `not in` of
-/// `x not in (1, 2)` into the builder `Expr::NotIn`.
+/// The value of `a` through `f`: the grammar turns the tokens `not in` of
+/// `x not in (1, 2)` into `Expr::NotIn`, the function that builds the node.
 pub(super) fn map<T, U>(a: impl Parser<T>, f: impl Fn(T) -> U) -> impl Parser<U> {
     move |i: &Input<'_>, p: usize| Ok(a(i, p)?.map(|(x, q)| (f(x), q)))
 }
@@ -249,8 +251,9 @@ pub(super) fn try_map<T, U>(
             return Ok(None);
         };
         // The refusal stands at `q`, the index after the tokens that `a`
-        // read. There it is at least as far as the notes that the tests of
-        // `a` left, so `explain` reports it unless a note lies further. In
+        // read. There it is as far as every note up to `q`, so `explain`
+        // reports it unless a note lies past `q`. A part of `a` leaves such a
+        // note when it reads further and then does not match. In
         // `0 < amount < 10` the refusal and the furthest notes both stand at
         // index 5.
         let value = f(i, x, i.span(p, q)).map_err(|error| Refusal { pos: q, error })?;
@@ -287,8 +290,8 @@ pub(super) fn then_after<A, B>(a: impl Parser<A>, b: impl Parser<B>) -> impl Par
         };
         let Some((second, end)) = b(i, mid)? else {
             // When `b` fails right after `a`, the notes at `mid` stand after
-            // the bytes of `a`, as the missing end of `a > 1 b < 2` stands
-            // after `a > 1`.
+            // the bytes of `a`. In `a > 1 b < 2` the note "the end of the
+            // rule" at `b` stands after `a > 1`.
             i.note_after(mid, i.span(p, mid));
             return Ok(None);
         };
@@ -348,8 +351,9 @@ pub(super) fn many<T>(a: impl Parser<T>) -> impl Parser<Vec<T>> {
 pub(super) fn or<T>(a: impl Parser<T>, b: impl Parser<T>) -> impl Parser<T> {
     move |i: &Input<'_>, p: usize| match a(i, p)? {
         // `b` starts at `p`, however far `a` read before it failed. In
-        // `x not y` the alternative `binary` of `compare_tail` reads `not`
-        // at index 1 and fails at `y`, and `is_none` starts again at index 1.
+        // `x not y` the alternative for an operator and its operand reads
+        // `not` at index 1 and fails at `y`, and the alternative for
+        // `is None` starts again at index 1.
         None => b(i, p),
         matched => Ok(matched),
     }
@@ -378,8 +382,9 @@ pub(super) fn chain_left<T, O>(
         };
         while let Some((o, q)) = op(i, pos)? {
             // In `a and or b` the `and` matches and no operand follows it.
-            // The reply ends before the `and`, and the note "a value" at
-            // `or` lies furthest and becomes the error.
+            // The reply ends before the `and`. The grammar labels an operand
+            // "a value", and that note at `or` lies furthest and becomes the
+            // error.
             let Some((right, r)) = x(i, q)? else {
                 break;
             };
@@ -397,8 +402,9 @@ pub(super) fn chain_left<T, O>(
 pub(super) fn label<T>(name: &'static str, a: impl Parser<T>) -> impl Parser<T> {
     move |i: &Input<'_>, p: usize| {
         // In `amount >`, `unary` is labelled "a value" and starts at index
-        // 2, the end. Its mark is (1, 0), because the notes at index 1 were
-        // all hidden.
+        // 2, the end. Its mark is (1, 0): the log still stands at index 1,
+        // the `>`, where the tests for a step and for an arithmetic operator
+        // were all hidden.
         let mark = i.mark();
         // The body fails at index 2 and notes there what can start a
         // value: "`-`", "a name", "`record`", "`None`", "a literal", "`(`"
@@ -422,8 +428,8 @@ pub(super) fn label<T>(name: &'static str, a: impl Parser<T>) -> impl Parser<T> 
 pub(super) fn hidden<T>(a: impl Parser<T>) -> impl Parser<T> {
     move |i: &Input<'_>, p: usize| {
         // In `a > 1 b < 2`, `term` hides its operator test at index 3, the
-        // `b`. The mark is (3, 0), because the steps of `postfix` at index
-        // 3 were hidden too.
+        // `b`. The mark is (3, 0), because the tests for a `.` and a `[` at
+        // index 3 were hidden too.
         let mark = i.mark();
         // The test notes "an operator" at index 3.
         let reply = a(i, p)?;
@@ -495,8 +501,8 @@ pub(super) fn nested<O, T>(open: impl Parser<O>, body: impl Parser<T>) -> impl P
         }
         // 3. run the body one level deeper
         i.nesting.set(level + 1);
-        // A refusal also restores the level, because `reply` holds it and no
-        // `?` returns early.
+        // No `?` stands here, so the level is set back for every reply. A
+        // refusal would not need it, because it ends the parse.
         let reply = body(i, q);
         i.nesting.set(level);
         reply
@@ -531,6 +537,7 @@ pub(super) fn delimited<O, T, C>(
         // to 6.
         let at = i.tok(p - 1).at.clone();
         // The opening token is `(` or `[`, and its one character names it.
+        // The slice is never empty, so the default character is never used.
         let bracket = i.slice(&at).chars().next().unwrap_or_default();
         let reason = Reason::NeverClosed { open: bracket };
         let error = SyntaxError { at, reason };
@@ -554,8 +561,9 @@ pub(super) fn explain(i: &Input<'_>, refusal: Option<Refusal>) -> SyntaxError {
     // the refusal and the furthest notes both stand at index 5, the `;`,
     // and the error is the chained comparison, which the text holds first.
     if let Some(Refusal { pos, error }) = refusal
-        // A refusal is the error unless a note lies further, as the note "a
-        // name" after the dot of `record.` does. `TooComplex` wins over any
+        // A refusal is the error unless a note lies further. For `record.`
+        // the refusal `BareRecord` stands at the dot, and the note "a name"
+        // after the dot lies further and is the error. `TooComplex` wins over any
         // note, because the parse stopped there.
         && (pos >= log.pos || error.reason == Reason::TooComplex)
     {
@@ -572,6 +580,8 @@ pub(super) fn explain(i: &Input<'_>, refusal: Option<Refusal>) -> SyntaxError {
             return SyntaxError { at, reason };
         }
         Tok::End => Found::End,
+        // A word of the language is a `Found::Token` here too. `with_words`
+        // in the grammar turns it into `Found::Word`.
         _ => Found::Token(i.slice(&at).to_owned()),
     };
     // The first token has no token before it.
