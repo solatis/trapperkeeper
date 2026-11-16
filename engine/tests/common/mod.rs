@@ -78,6 +78,7 @@ const PATTERNS: [fn(String, Box<Expr>) -> Expr; 3] = [
     |pattern, text| Expr::ReFullmatch { pattern, text },
 ];
 
+/// Every variant of `TypeName`, the types that `isinstance` tests for.
 const TYPES: [TypeName; 5] = [
     TypeName::Int,
     TypeName::Float,
@@ -86,10 +87,12 @@ const TYPES: [TypeName; 5] = [
     TypeName::List,
 ];
 
-/// Any tree the type can hold, of at most three levels, with finite floats.
+/// Generates every kind of node, in trees of at most three levels, with
+/// finite floats, texts of at most eight characters and lists and paths of at
+/// most three items.
 pub fn expr() -> BoxedStrategy<Expr> {
-    // Lists of at most three and texts of at most eight characters, so a
-    // failing case shrinks to something a person can read.
+    // The strategy keeps lists and paths to three items and texts to eight
+    // characters, so a failing case shrinks to something a person can read.
     let text = || ".{0,8}";
     let path = || {
         let segment = prop_oneof![
@@ -98,8 +101,9 @@ pub fn expr() -> BoxedStrategy<Expr> {
         ];
         vec(segment, 0..=3)
     };
-    // Finite values only, because a NaN is not equal to itself and JSON has
-    // no form for it.
+    // The flags leave out `INFINITE`, `QUIET_NAN` and `SIGNALING_NAN`, so
+    // every generated float is finite. JSON has no form for a NaN or an
+    // infinity, and the round trip compares a NaN unequal to itself.
     let float = {
         use proptest::num::f64::{NEGATIVE, NORMAL, POSITIVE, SUBNORMAL, ZERO};
         NEGATIVE | NORMAL | POSITIVE | SUBNORMAL | ZERO
@@ -113,8 +117,11 @@ pub fn expr() -> BoxedStrategy<Expr> {
         path().prop_map(Expr::Field),
         (text(), path()).prop_map(|(name, path)| Expr::Element { name, path }),
     ];
-    // Every kind of node is generated, and nothing else is constrained. An
-    // `And` may hold an `And`, and an `Element` may stand anywhere.
+    // The strategy does not hold the trees to the shapes the parser builds.
+    // An `And` may hold an `And` or fewer than two operands, and an `Element`
+    // may stand outside a quantifier that names it. A depth of 2 recursions
+    // above the leaves gives the three levels. The desired size 24 and the
+    // expected branch size 3 are choices that no measurement backs.
     leaf.prop_recursive(2, 24, 3, move |inner| {
         let operand = || inner.clone().prop_map(Box::new);
         prop_oneof![
@@ -159,8 +166,13 @@ pub fn scope() -> impl Strategy<Value = BTreeMap<String, String>> {
 /// A rule that `validate` accepts: a version 7 UUID as its id, a sample rate
 /// in (0, 1], a scope within the caps and any expression.
 pub fn rule() -> impl Strategy<Value = Rule> {
+    // The bound of 40 characters on a title is a choice that no measurement
+    // backs.
     let title = proptest::option::of(".{0,40}");
     let action = select(vec![Action::Observe, Action::Drop, Action::Throw]);
+    // `prop_oneof` draws `Just(1.0)` in about half of the cases, because a
+    // draw from the range alone almost never gives 1.0, and that share is a
+    // choice. The range starts at `f64::MIN_POSITIVE`, so 0 is never drawn.
     let sample_rate = prop_oneof![Just(1.0), f64::MIN_POSITIVE..=1.0];
     (rule_id(), title, action, sample_rate, scope(), expr()).prop_map(
         |(rule_id, rule_title, action, sample_rate, scope, expression)| Rule {
