@@ -190,7 +190,6 @@ fn canonical_in(scope: &[String], depth: u32) -> BoxedStrategy<Expr> {
         );
     }
     let leaf = proptest::strategy::Union::new(leaves);
-    // At depth 0 there are only leaves, so the recursion ends.
     let Some(below) = depth.checked_sub(1) else {
         return leaf.boxed();
     };
@@ -461,10 +460,11 @@ fn found_token(wanted: &[&str], token: &str, after: Option<&str>) -> Reason {
 /// the rows of `faulty` hold `&'static str`.
 static OVER_THE_CAPS: LazyLock<[String; 4]> = LazyLock::new(|| {
     [
-        // One character more than the cap: a condition, padded with spaces.
+        // The text pads a condition with spaces to one character more than
+        // the cap.
         format!("{:<width$}", "a > 1", width = MAX_TEXT_LENGTH + 1),
         format!("a rule is at most {MAX_TEXT_LENGTH} characters long"),
-        // `x` in one pair of parentheses more than the cap.
+        // The text nests `x` in one pair of parentheses more than the cap.
         format!(
             "{}x{}",
             "(".repeat(MAX_NESTING + 1),
@@ -673,8 +673,8 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
             "`record` is the whole record; name a field, as in `record[\"key\"]`",
         ),
         // After a whole condition the error names the condition it follows,
-        // as `a > 1` here. In the other rows the error names the token
-        // before the place.
+        // as `a > 1` here. Where no whole expression stands before the
+        // place, the error names the token before it.
         (
             "a > 1 b < 2",
             6..7,
