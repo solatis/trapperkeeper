@@ -45,12 +45,12 @@ jobs:
           components: clippy, rustfmt
       # The cache keys on the installed rustc, so the toolchain comes first.
       - uses: Swatinem/rust-cache@v2
-      # Postgres and MariaDB run on every platform that has a build of them,
-      # at the latest Postgres major and the latest MariaDB LTS
-      # (ADR-0021). Each of the three steps that install or start them starts
-      # both, prints their versions so the log shows what the run tested, and
-      # writes the admin URLs the tests read. These steps time out, because
-      # each waits in a loop for a server.
+      # Postgres and MariaDB run on every platform that has a build of them, at
+      # the latest Postgres major and the latest MariaDB LTS (ADR-0021). Each of
+      # the three steps that install or start them starts both, prints their
+      # versions so the log shows what the run tested, and writes the admin
+      # URLs the tests read. Each of these steps has a timeout, because it waits
+      # in a loop for a server.
       #
       # Linux starts them with docker run, guarded per entry, because
       # services: applies to the whole job and would break the other entries.
