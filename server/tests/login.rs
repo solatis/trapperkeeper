@@ -38,7 +38,7 @@ fn login_then_me() {
 
         // 1. Upper case, so the test sees that login lowercases the tenant
         //    and the name before it looks them up (ADR-0020).
-        let response = log_in(
+        let response = post_login(
             &server,
             &SYSTEM_TENANT.to_uppercase(),
             &ADMIN.to_uppercase(),
@@ -123,7 +123,7 @@ fn login_then_me() {
             (SYSTEM_TENANT, ADMIN, "not the password"),
             (SYSTEM_TENANT, "nobody", admin_password),
         ] {
-            let response = log_in(&server, tenant, name, password);
+            let response = post_login(&server, tenant, name, password);
             assert_eq!(response.status, 401);
             assert_eq!(response.body, "unauthorized");
         }
@@ -131,7 +131,7 @@ fn login_then_me() {
 }
 
 /// Logs in to `tenant` as `name` with `password` and returns the response.
-fn log_in(
+fn post_login(
     server: &common::InProcess,
     tenant: &str,
     name: &str,
@@ -417,7 +417,7 @@ proptest! {
                 match op {
                     Op::Login { right_password } => {
                         let password = if *right_password { model.password.clone() } else { "wrong".to_owned() };
-                        let response = log_in(&server, SYSTEM_TENANT, ADMIN, &password);
+                        let response = post_login(&server, SYSTEM_TENANT, ADMIN, &password);
                         if !*right_password {
                             prop_assert_eq!(response.status, 401, "{:?} on {}", op, backend);
                             continue;
