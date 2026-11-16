@@ -63,7 +63,8 @@ this meaning. `a == b` on two fields that both hold a null gives unknown.
 The parser refuses the literal `None` beside an ordering or an arithmetic
 operator, and after `in` and `not in`, because such a rule could never match.
 A field that holds a null there is data, so `x + 1` is a null and `x < y` is
-unknown (owner, 2026-11-14, 2026-11-16).
+unknown (owner, 2026-11-14). `x in y` gives unknown only when `y` is a field
+that should hold a list and holds a null (owner, 2026-11-16).
 
 A rule differs from SQL in three places. The first is the literal `None`.
 Under `==`, under `!=` and in a membership list it tests for a null, and
@@ -204,10 +205,7 @@ test is unknown. On Spark a rule is translated into a Spark expression
 `WHEN test IS NULL` arm. Each difference from SQL is held by a fixture
 (`adr/0006`).
 
-The parser refuses `x in None` and `x not in None`, as it refuses the
-literal `None` beside an ordering. `x in y` gives unknown only when `y` is a
-field that should hold a list and holds a null (owner, 2026-11-16). The
-literal `None` still parses as an argument of a function and as the receiver
+The literal `None` parses as an argument of a function and as the receiver
 of a method, as in `len(None)` and `None.upper()`. Such a rule gives unknown
 for every record and matches nothing in silence. The parser does not refuse
 these two forms, because each needs a check of its own in another rule of the
