@@ -92,7 +92,9 @@ fn changing_requests_leave_rows_and_reads_do_not() {
     //    the tenant of the user it found, so only the unknown user's row has
     //    no tenant, and the test reads it from the store.
     // 5. We mint a session for ada, which is filed under her tenant.
-    // 6. We read the trail of `acme` through the route.
+    // 6. We read the trail of `acme` through the route. The creates sit
+    //    under `$tk`, and the unknown user's login has no tenant, so the
+    //    trail holds the mint and ada's login, newest first.
     on_each_backend(|backend| {
         let server = serve_in_process(backend);
 
@@ -187,8 +189,6 @@ fn changing_requests_leave_rows_and_reads_do_not() {
         assert_eq!(response.status, 200, "{} on {backend}", response.body);
 
         // 6. read the trail of acme
-        // The creates sit under `$tk`, and the unknown user's login has no
-        // tenant, so the trail holds the mint and ada's login, newest first.
         let listed = trail(&server, &token, "acme", "");
         assert_eq!(listed.len(), 2, "{listed:?} on {backend}");
         assert_eq!(
