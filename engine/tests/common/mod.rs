@@ -120,16 +120,16 @@ pub fn expr() -> BoxedStrategy<Expr> {
         path().prop_map(Expr::Field),
         (text(), path()).prop_map(|(name, path)| Expr::Element { name, path }),
     ];
-    // The strategy does not hold the trees to the shapes the parser builds.
-    // An `And` may hold an `And` or fewer than two operands, and an `Element`
-    // may stand outside a quantifier that names it. A depth of 2 recursions
-    // above the leaves gives the three levels. The desired size 24 and the
-    // expected branch size 3 are choices that no measurement backs. No test
-    // fails when a variant of `Expr` is missing from the lists below, so
-    // `engine/AGENTS.md` asks that a new kind of node is added to this
-    // strategy.
+    // A depth of 2 recursions above the leaves gives the three levels. The
+    // desired size 24 and the expected branch size 3 are choices that no
+    // measurement backs.
     leaf.prop_recursive(2, 24, 3, move |inner| {
         let operand = || inner.clone().prop_map(Box::new);
+        // The strategy does not hold the trees to the shapes the parser
+        // builds. An `And` may hold an `And` or fewer than two operands, and
+        // an `Element` may stand outside a quantifier that names it. No test
+        // fails when a variant of `Expr` is missing from these arms, so
+        // `engine/AGENTS.md` asks that a new kind of node is added here.
         prop_oneof![
             (select(UNARY.to_vec()), operand()).prop_map(|(make, a)| make(a)),
             (select(BINARY.to_vec()), operand(), operand()).prop_map(|(make, a, b)| make(a, b)),
