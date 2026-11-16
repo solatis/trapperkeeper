@@ -1,53 +1,53 @@
 # TrapperKeeper
 
-Data-quality rule engine for data pipelines. Pipeline code embeds a sensor that
-evaluates centrally managed rules against records in-process and reports matches
-to a central server. Rules change without redeploying pipelines, the server
-never needs to know the shape of the data, and a broken TrapperKeeper never
-breaks the pipeline.
+TrapperKeeper is a data-quality rule engine for data pipelines. Pipeline code
+embeds a sensor that evaluates centrally managed rules against records
+in-process and reports matches to a central server. A rule change reaches the
+pipelines without a redeploy. The server does not need to know the shape of the
+data. By default a broken TrapperKeeper does not break the pipeline, and a
+sensor can opt into stricter behavior.
 
 ## Where to look
 
-| Question                                      | Read                    |
-| --------------------------------------------- | ----------------------- |
-| What is the product, for whom, vocabulary     | `doc/overview.md`       |
-| Which components exist, how they talk         | `doc/architecture.md`   |
-| What trade-offs do we always make the same    | `doc/principles.md`     |
-| What is open, not yet decided                 | `doc/decisions.md`      |
-| Why we decided something, what lost           | `doc/adr/`              |
-| How does component X work, how do I change it | `<component>/AGENTS.md` |
+| Question                                                                                                                             | Read                    |
+| ------------------------------------------------------------------------------------------------------------------------------------ | ----------------------- |
+| How does component X work, how do I change it                                                                                        | `<component>/AGENTS.md` |
+| What spans components or has no code yet: the product, the architecture, the principles, the open decisions and the decision records | `doc/AGENTS.md`         |
 
 ## Layout
 
-One top-level directory per component. The server side is a Cargo workspace
-whose members are listed one by one in the root `Cargo.toml`. Only directories
-that have code exist; the others are named here so the layout is fixed before
-they arrive. A component directory has its own `AGENTS.md`, and inside
-`server/` each module directory gets one as it appears.
+Each component has one top-level directory. The Rust crates form one Cargo
+workspace whose members are the engine and the server, and the root
+`Cargo.toml` lists them. Only directories that have code exist. The table names
+the other directories so that the layout is fixed before they arrive. A
+component directory has its own `AGENTS.md`, and inside `server/` each module
+directory gets one as it appears. M4, M7, M8 and M9 in the table are the
+milestones of this repository on GitHub.
 
-| Directory      | What                                               | Exists                       |
-| -------------- | -------------------------------------------------- | ---------------------------- |
-| `server/`      | the server binary: APIs, store, `serve`, `migrate` | yes, see `server/AGENTS.md`  |
-| `engine/`      | the rule engine crate, embeddable by pipelines     | yes, see `engine/AGENTS.md`  |
-| `sdk/<lang>/`  | one sensor SDK per language                        | Rust with M7, Python with M9 |
-| `web/`         | the browser UI                                     | with M8                      |
-| `conformance/` | the language-neutral evaluation fixtures           | with M4                      |
+| Directory      | What                                                                   | Exists                       |
+| -------------- | ---------------------------------------------------------------------- | ---------------------------- |
+| `server/`      | the server binary: APIs, store, `serve`, `migrate`, `reset-superadmin` | yes, see `server/AGENTS.md`  |
+| `engine/`      | the rule engine crate, embeddable by pipelines                         | yes, see `engine/AGENTS.md`  |
+| `sdk/<lang>/`  | one sensor SDK per language                                            | Rust with M7, Python with M9 |
+| `web/`         | the browser UI                                                         | with M8                      |
+| `conformance/` | the language-neutral evaluation fixtures                               | with M4                      |
+| `agent/`       | the AI agent, a client of the management API                           | not scheduled                |
 
 ## How to
 
-- Toolchain: rustup with the `stable` channel. `rust-toolchain.toml` pins the
-  channel and the clippy and rustfmt components.
+- Toolchain: rustup with the `stable` channel. `rust-toolchain.toml` names the
+  `stable` channel with no version, and the clippy and rustfmt components.
 - Format: `cargo fmt --all --check`.
 - Lint: `cargo clippy --workspace --all-targets`. The workspace lints table in
-  `Cargo.toml` denies clippy `all`, clippy `pedantic` and rustc warnings, so a
-  lint failure is a build failure locally as in CI.
+  the root `Cargo.toml` sets the lint level (`doc/adr/0011`).
 - Test: `cargo test --workspace`.
-- CI (`.github/workflows/ci.yml`) runs those four on every push, on five
-  native runners: Linux amd64 and aarch64, Windows amd64 and aarch64, macOS
-  aarch64, always on the current stable. Its five job names are the required
-  status checks of the `master` ruleset, which the owner keeps by hand. Each
-  runner except Windows aarch64 also starts Postgres and MariaDB, so the tests
-  run against all three backends; why is `doc/adr/0021`.
+- CI (`.github/workflows/ci.yml`) runs four commands on every push:
+  `cargo fmt --all --check`, then clippy, build and test over the workspace
+  with `--locked`. It runs them on five native runners, Linux amd64 and
+  aarch64, Windows amd64 and aarch64, and macOS aarch64, always with the
+  current stable toolchain. On every runner except Windows aarch64, CI starts
+  Postgres and MariaDB, so the tests run against SQLite, Postgres and MariaDB.
+  `doc/adr/0021` gives the reason.
 - The reasons behind the layout, the toolchain policy and the lint level are
   records `0010`, `0009` and `0011` in `doc/adr/`.
 
