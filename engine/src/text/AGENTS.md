@@ -1,9 +1,9 @@
 # engine/src/text/
 
-**What**: the module turns the text of a rule into the expression tree, `Expr` in
-`engine/src/expr.rs`, and prints a tree back as rule text. It holds the tokenizer, the kit of parser
-combinators, the grammar written with the kit, the error that a faulty text
-gets, and the printer.
+**What**: the module turns the text of a rule into the expression tree,
+`Expr` in `engine/src/expr.rs`, and prints a tree back as rule text. It holds
+the tokenizer, the kit of parser combinators, the grammar written with the
+kit, the error that a faulty text gets, and the printer.
 
 **Map**:
 
@@ -33,8 +33,8 @@ gets, and the printer.
   up in every "expected" error.
 - Every form that makes the grammar call itself goes through `nested` or
   `delimited`: a bracketed form, the operand of `not` or of a minus, and the
-  branch after `else`. `nested` checks `MAX_NESTING` before it runs the body, and
-  `delimited` goes through `nested`. A form that bypasses both escapes
+  branch after `else`. `nested` checks `MAX_NESTING` before it runs the body,
+  and `delimited` goes through `nested`. A form that bypasses both escapes
   `MAX_NESTING`.
 - Every rule of the grammar says its form and gives an example of the text it
   reads, and every alternative of a choice says which text it is for. Every
@@ -47,8 +47,8 @@ gets, and the printer.
   text that parses back to the same tree. An `and` directly under an `and`
   is a tree that the parser cannot build. The property
   `a_printed_tree_parses_back_to_itself` in `engine/tests/text.rs` checks
-  this over the trees that the strategy `canonical_in` generates. A change to the grammar or to the
-  printer keeps that property passing.
+  this over the trees that the strategy `canonical_in` generates. A change to
+  the grammar or to the printer keeps that property passing.
 
 **Why**:
 
