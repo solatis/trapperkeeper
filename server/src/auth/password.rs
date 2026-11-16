@@ -67,7 +67,9 @@ pub async fn verify(password: String, phc: String) -> bool {
         // The blocking task holds the permit, so a caller that drops this
         // future does not free it while the hash still runs.
         let _permit = permit;
-        // argon2 compares the two outputs in constant time.
+        // `verify_password` takes the algorithm, the parameters and the salt
+        // from `phc`, so the parameters of `hasher` do not count here. argon2
+        // compares the two outputs in constant time.
         hasher()
             .verify_password(password.as_bytes(), phc.as_str())
             .is_ok()
@@ -100,6 +102,9 @@ mod tests {
         //    tokio does not stop a blocking task that has started.
         // 3. We check that the permit is still taken.
 
+        // The limit is at least one permit, and no other test of this binary
+        // hashes, so `free` is at least 1 and only this test moves the
+        // permits.
         let free = hashing().available_permits();
         // 1. start a hash
         let caller = tokio::spawn(hash(String::new()));
