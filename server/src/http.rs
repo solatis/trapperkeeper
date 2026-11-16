@@ -38,7 +38,8 @@ pub struct AppState {
     pub keyring: Arc<Keyring>,
 }
 
-// Written by hand, so axum's macros feature stays off.
+// `readyz` takes the store alone, and the other handlers take the whole
+// `AppState`. Written by hand, so axum's macros feature stays off.
 impl FromRef<AppState> for Store {
     fn from_ref(state: &AppState) -> Self {
         state.store.clone()
@@ -126,6 +127,7 @@ pub fn router(state: AppState) -> Router {
     //    the trace span also covers the audit write.
 
     // 1. register the management routes
+    // Each `routes!` takes the handlers of one path, one per method.
     let management = OpenApiRouter::new()
         .routes(routes!(login::login))
         .routes(routes!(login::refresh))
@@ -170,13 +172,14 @@ pub fn router(state: AppState) -> Router {
 ///
 /// # Errors
 ///
-/// Returns the I/O error of a signal handler, the bind or serving, and prints
-/// nothing.
+/// Returns the I/O error of a signal handler, the bind or serving, and does
+/// not print it, so the caller reports it.
 pub async fn serve(settings: &Settings, state: AppState) -> io::Result<()> {
     // `serve` runs the router until a signal and stops it cleanly.
     //
-    // 1. We install the signal handlers before the bind, so a signal sent once
-    //    the "listening" line shows stops the server through the drain.
+    // 1. We install the signal handlers before the bind. A signal kills the
+    //    process until they are installed, so once the "listening" line
+    //    shows, a signal stops the server through the drain.
     // 2. We bind the listen address and log it.
     // 3. We serve until a signal and then drain the in-flight requests, so a
     //    SIGTERM does not cut connections.
@@ -187,6 +190,7 @@ pub async fn serve(settings: &Settings, state: AppState) -> io::Result<()> {
 
     // 2. bind and say so
     let listener = TcpListener::bind(settings.listen).await?;
+    // The bound address shows the port that the system picked for port 0.
     tracing::info!(address = %listener.local_addr()?, "listening");
 
     // 3. serve and drain
