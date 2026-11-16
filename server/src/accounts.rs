@@ -58,7 +58,8 @@ pub async fn reset(tx: &mut Tx, tenant_id: &str, user_id: &str) -> Result<String
             user_id,
             password_hash: &password_hash,
             must_change: true,
-            // This revokes every token issued before the reset.
+            // Setting the revocation cutoff, `tokens_valid_after`, to now
+            // revokes every token issued before the reset.
             now: now_micros(),
         },
     )
