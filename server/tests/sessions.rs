@@ -29,10 +29,12 @@ fn superadmin_mints_a_session_that_acts_as_the_user() {
     // it as the admin and then logs out from it.
     //
     // 1. We create `acme` and log its admin in on her own, for step 4.
-    // 2. We mint a session for the admin, which must be a login body.
+    // 2. We mint a session for the admin, which must be a login body with a
+    //    token type, the must-change flag and both tokens.
     // 3. We call `me` and `refresh` with the minted tokens.
     // 4. We log out from the minted session, which must also end the admin's
-    //    own session, because the cutoff is per user (ADR-0025).
+    //    own session. A logout moves the user's cutoff, the time before which
+    //    every token of the user is refused (ADR-0025).
     on_each_backend(|backend| {
         let server = serve_in_process(backend);
         let token = superadmin_token(&server);
@@ -80,6 +82,8 @@ fn superadmin_mints_a_session_that_acts_as_the_user() {
         // 4. log out from the minted session
         let response = call(&server, access, "POST", "/api/v1/logout", None);
         assert_eq!(response.status, 200, "{} on {backend}", response.body);
+        // Several requests lie between the admin's login and the logout, so
+        // the cutoff falls after the issue time of `own`.
         assert_eq!(call(&server, &own, "GET", "/api/v1/me", None).status, 401);
         assert_eq!(call(&server, access, "GET", "/api/v1/me", None).status, 401);
     });
