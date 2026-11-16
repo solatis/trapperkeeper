@@ -1,6 +1,8 @@
 -- The same version and columns as the SQLite and Postgres files, in the
 -- MariaDB forms 0001_tenants.sql explains: VARCHAR columns and the
--- utf8mb4_bin collation. No live column, because a row is never deleted.
+-- utf8mb4_bin collation. The table has no live column, because the live
+-- column derives from deleted_at, which the audit table does not have, and
+-- serves the uniqueness of a name, which an audit row does not have.
 CREATE TABLE audit (
     audit_id       VARCHAR(36)  PRIMARY KEY,
     tenant_id      VARCHAR(36),
