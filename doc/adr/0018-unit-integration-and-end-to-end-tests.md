@@ -73,13 +73,13 @@ today.
 The tests drive the server crate as a library. The crate exports what the
 integration tests need, and `server/src/lib.rs` says which items those are.
 
-No test covers exit codes, the usage text, terminal detection (JSON under a
-pipe against the compact format on a terminal), the place of the signing-key
-check before the database, the signal handlers, sqlx's own refusals of a
+No test covers exit codes, the usage text, terminal detection (JSON under a pipe
+against the compact format on a terminal), that serve checks the signing key
+before it opens the database, the signal handlers, sqlx's own refusals of a
 database such as a half-applied migration, or the 503 answer of readiness. A
 test of the 503 would have to break a live store.
 
 proptest and figment's `test` feature are development dependencies.
 
-The tests of an SDK are expected to run against a real server. Each SDK
-records this choice for itself.
+The tests of an SDK are expected to run against a real server. Each SDK records
+this choice in a record of its own.
