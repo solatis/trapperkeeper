@@ -11,7 +11,7 @@ use super::{Tx, now_micros, on_tx, sql};
 /// column of the same name in `audit`, and the comments in
 /// `server/migrations/sqlite/0005_audit.sql` say what each column holds and
 /// when it is NULL. `user_id` is `None` for an anonymous request, and
-/// `tenant_id` is `None` when such a request names no existing user. `append`
+/// `tenant_id` is `None` when such a request names no live user. `append`
 /// adds the id and the time.
 pub struct Record<'a> {
     pub tenant_id: Option<&'a str>,
@@ -83,19 +83,18 @@ pub struct Row {
 /// the user's own tenant. It ends in a WHERE clause that binds `$1` to the
 /// tenant id and `$2` to the cursor, and it keeps the rows whose id sorts
 /// below `$2`. Those are the older rows, because the ids are time-ordered
-/// (ADR-0020). A caller appends its own conditions from `$3` on, then the
-/// order and the limit. A macro, because `concat!` accepts only literals, so
-/// a `const` would not work.
+/// (ADR-0020). Every id has the same layout of hex digits and hyphens, so
+/// two ids differ first at a hex digit, which the collation of a Postgres
+/// database orders as bytes do, and the comparison with `$2` and the ORDER
+/// BY of a caller keep the time order. A caller appends its own conditions
+/// from `$3` on, then the order and the limit. It is a macro, because
+/// `concat!` accepts only literals, so a `const` would not work.
 macro_rules! SELECT_ROWS_BEFORE {
     () => {
         // Neither LEFT JOIN filters on `deleted_at`, so the trail still names
         // a user deleted since (ADR-0024). The join on users matches on
         // `user_id` alone, because a row filed under a customer tenant can
-        // name the superadmin, who is a user of `$tk` (ADR-0031). Every id
-        // has the same layout of hex digits and hyphens, so two ids differ
-        // first at a hex digit, which the collation of a Postgres database
-        // orders as bytes do. The comparison with `$2` and the ORDER BY of
-        // a caller therefore keep the time order.
+        // name the superadmin, who is a user of `$tk` (ADR-0031).
         "SELECT a.audit_id, u.user_name, t.tenant_name AS user_tenant, a.method, a.route, \
          a.path_params, a.status, a.peer_address, a.client_address, a.recorded_at \
          FROM audit a \
