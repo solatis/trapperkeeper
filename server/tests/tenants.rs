@@ -21,7 +21,8 @@ fn superadmin_creates_a_tenant_whose_admin_logs_in() {
     //    the response must show lowercased and trimmed, as they are stored.
     // 2. We list the tenants.
     // 3. We log the admin in, who must change the password and hold the role
-    //    admin.
+    //    admin. The create gives the admin a generated password, as every new
+    //    user gets.
     // 4. We create the same tenant again, which must get 409, because a name
     //    is unique among the tenants that are not deleted.
     on_each_backend(|backend| {
@@ -116,8 +117,8 @@ fn admin_name() -> impl Strategy<Value = String> {
 
 proptest! {
     #![proptest_config(ProptestConfig {
-        // 16 cases, because each serves a router on a fresh database on every
-        // backend and hashes Argon2id passwords.
+        // The property runs 16 cases, because each serves a router on a fresh
+        // database on every backend and hashes Argon2id passwords.
         cases: 16,
         // No regression file is left in the tree. The panic message shows the
         // minimal failing input.
@@ -192,9 +193,9 @@ const ROUTES: [(&str, &str, Option<&str>); 12] = [
         "/api/v1/tenants/acme/users/nobody@example.com/password",
         Some("admin"),
     ),
-    // Step 3 of `every_role_meets_each_route_minimum` creates this user, so
-    // the superadmin's mint of a session finds a user. A mint writes no user
-    // row, so it changes nothing that later calls read.
+    // The matrix test creates this user before it calls the routes, so the
+    // superadmin's mint of a session finds a user. A mint writes no user row,
+    // so it changes nothing that later calls read.
     (
         "POST",
         "/api/v1/tenants/acme/users/admin@example.com/session",
@@ -203,7 +204,8 @@ const ROUTES: [(&str, &str, Option<&str>); 12] = [
     ("GET", "/api/v1/tenants/acme/audit", Some("admin")),
     ("GET", "/api/v1/me", None),
     ("POST", "/api/v1/password", None),
-    // Last, because it revokes the token that the earlier calls use.
+    // Logout comes last, because it revokes the token that the earlier calls
+    // use.
     ("POST", "/api/v1/logout", None),
 ];
 
