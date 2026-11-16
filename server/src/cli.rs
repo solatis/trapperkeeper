@@ -28,9 +28,9 @@ pub struct Cli {
 
 /// Settings a flag may override, nested as in `config::Settings`, so figment
 /// merges each flag over the setting of the same key. An absent flag leaves
-/// the value below in place. `Default` is the "no flags" value the tests pass.
-/// The signing keys have no flag, because ADR-0013 warns on a secret given as
-/// a flag (ADR-0025).
+/// the value of the file, the environment or the defaults in place. `Default`
+/// is the "no flags" value the tests pass. ADR-0025 gives the two signing
+/// keys no flag, because ADR-0013 warns on a secret given as a flag.
 #[derive(Args, Serialize, Default)]
 pub struct Overrides {
     /// Address the server listens on, an IP address and a port, such as
@@ -62,7 +62,7 @@ impl Overrides {
 }
 
 /// Overrides of the `log` table. With no flag set it serializes to an empty
-/// table, which the merge unions into the layer below without changing it.
+/// table, which figment merges into the lower layers without changing them.
 #[derive(Args, Serialize, Default)]
 pub struct LogOverrides {
     /// Lowest log level written: trace, debug, info, warn, error or off.
@@ -87,8 +87,8 @@ pub struct DatabaseOverrides {
 /// The subcommands.
 #[derive(Subcommand)]
 pub enum Command {
-    /// Run the server, creating and setting up the database when it is
-    /// missing or empty. Needs `auth.signing_key`.
+    /// Run the server, creating the database when it is missing and setting
+    /// up an empty one as migrate does. Needs `auth.signing_key`.
     Serve,
     /// Create the database when it is missing, apply the pending migrations,
     /// and create the superadmin and log its one-time password when it is
