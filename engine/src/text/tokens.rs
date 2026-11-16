@@ -130,8 +130,8 @@ fn next_token(text: &str, at: usize) -> Result<Token, SyntaxError> {
         // The prefixes are Python's letters. Any other word before a quote
         // is a name, so `x in"a"` reads as it does in Python.
         let quoted = text[end..].starts_with(['"', '\'']);
-        let prefix = quoted && word.len() <= 2 && word.chars().all(|c| "rbufRBUF".contains(c));
-        if !prefix {
+        let prefixed = quoted && word.len() <= 2 && word.chars().all(|c| "rbufRBUF".contains(c));
+        if !prefixed {
             let kind = Tok::Name(word.to_owned());
             return Ok(Token { kind, at: at..end });
         }
