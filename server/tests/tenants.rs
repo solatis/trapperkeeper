@@ -193,8 +193,8 @@ const ROUTES: [(&str, &str, Option<&str>); 12] = [
         Some("admin"),
     ),
     // Step 3 of `every_role_meets_each_route_minimum` creates this user, so
-    // the superadmin's mint of a session succeeds. A mint writes no user row,
-    // so it changes nothing that later calls read.
+    // the superadmin's mint of a session finds a user. A mint writes no user
+    // row, so it changes nothing that later calls read.
     (
         "POST",
         "/api/v1/tenants/acme/users/admin@example.com/session",
