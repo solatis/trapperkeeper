@@ -73,11 +73,11 @@ Validation holds an expression to 32 nodes from its top to a leaf, with both
 counted (owner, 2026-11-16). It prints the expression and refuses a rule whose
 printed text is longer than 4096 characters, the cap that the parser holds a
 text to, so a rule that validates can be printed and parsed again (owner,
-2026-11-16). The walk of the depth refuses a tree that is too deep before
-anything prints it, because the printer calls itself once per level and would
-overflow its stack on a deep tree (owner, 2026-11-17). Validation does not test
-whether the parser could have built a tree, such as whether an `and` has two
-operands (owner, 2026-11-16).
+2026-11-16). Validation checks the depth of a tree before anything prints it,
+because the printer calls itself once per level and would overflow its stack on
+a deep tree (owner, 2026-11-17). Validation does not test whether the parser
+could have built a tree, such as whether an `and` has two operands (owner,
+2026-11-16).
 
 ## Rejected alternatives
 
@@ -111,11 +111,12 @@ server validated each of them before it stored it.
 A depth of 60, about the deepest tree that the JSON reader reads (owner,
 2026-11-16). A cap for each dimension of a tree, which are the nodes, the items
 of a list, the characters of a text and the steps of a path, because it needs
-four numbers where the cap on a text already exists. Caps derived from the text
-cap, such as at most 4096 nodes, because a valid rule could still print to a
-text that the parser refuses. A check in validation for each shape that the
-grammar builds, and printing a tree and parsing it back, because validation does
-not care about a tree that the parser cannot build (owner, 2026-11-16).
+four new numbers, where the printed length alone bounds every dimension. Caps
+derived from the text cap, such as at most 4096 nodes, because a valid rule
+could still print to a text that the parser refuses. A check in validation for
+each shape that the grammar builds, and printing a tree and parsing it back,
+because validation does not care about a tree that the parser cannot build, also
+when one arrives as JSON (owner, 2026-11-16).
 
 Limits that the caller passes to validation, because a rule's validity would
 then differ per install. No limits, because an AI client will abuse an
