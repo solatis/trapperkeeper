@@ -109,14 +109,19 @@ in an SDK, because an SDK executes only rules that the server returned, and the
 server validated each of them before it stored it.
 
 A depth of 60, about the deepest tree that the JSON reader reads (owner,
-2026-11-16). A cap for each dimension of a tree, which are the nodes, the items
-of a list, the characters of a text and the steps of a path, because it needs
-four new numbers, where the printed length alone bounds every dimension. Caps
-derived from the text cap, such as at most 4096 nodes, because a valid rule
-could still print to a text that the parser refuses. A check in validation for
-each shape that the grammar builds, and printing a tree and parsing it back,
-because validation does not care about a tree that the parser cannot build, also
-when one arrives as JSON (owner, 2026-11-16).
+2026-11-16). A check of the depth in the parser, because the parser's cap on
+nesting bounds its own stack and the depth of a tree is no condition of parsing
+(owner, 2026-11-16).
+
+A cap for each dimension of a tree: the nodes, the items of a list, the
+characters of a text and the steps of a path. It needs four new numbers, and
+the printed length alone bounds every dimension. Caps derived from the text
+cap, such as at most 4096 nodes, because a valid rule could still print to a
+text that the parser refuses.
+
+A check in validation for each shape that the grammar builds, and printing a
+tree and parsing it back, because validation does not care about a tree that
+the parser cannot build, also when one arrives as JSON (owner, 2026-11-16).
 
 Limits that the caller passes to validation, because a rule's validity would
 then differ per install. No limits, because an AI client will abuse an
