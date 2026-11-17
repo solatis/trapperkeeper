@@ -229,8 +229,8 @@ fn frame(inner: Expr) -> BoxedStrategy<Expr> {
 }
 
 /// Generates a tree that holds `defect` exactly once, under zero to two
-/// generated nodes, together with the number of those nodes. A test puts a
-/// defect at a place that it did not choose by hand.
+/// generated nodes of any kind that holds an operand, together with the
+/// number of those nodes.
 pub fn around(defect: Expr) -> BoxedStrategy<(Expr, usize)> {
     // Each of the `n` rounds wraps the tree so far in one more node of
     // `frame`, so the defect ends `n` nodes below the top. With the three
