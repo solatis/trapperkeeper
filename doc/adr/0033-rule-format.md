@@ -74,9 +74,10 @@ counted (owner, 2026-11-16). It prints the expression and refuses a rule whose
 printed text is longer than 4096 characters, the cap that the parser holds a
 text to, so a rule that validates can be printed and parsed again (owner,
 2026-11-16). The walk of the depth refuses a tree that is too deep before
-anything prints it (owner, 2026-11-17). Validation checks the rules it knows,
-and it does not test whether the parser could have built a tree (owner,
-2026-11-16).
+anything prints it, because the printer calls itself once per level and would
+overflow its stack on a deep tree (owner, 2026-11-17). Validation does not test
+whether the parser could have built a tree, such as whether an `and` has two
+operands (owner, 2026-11-16).
 
 ## Rejected alternatives
 
@@ -108,12 +109,13 @@ in an SDK, because an SDK executes only rules that the server returned, and the
 server validated each of them before it stored it.
 
 A depth of 60, about the deepest tree that the JSON reader reads (owner,
-2026-11-16). A cap per dimension of a tree, because it needs four numbers where
-one exists. Caps derived from the text cap, such as at most 4096 nodes, because
-a valid rule could still print to a text that the parser refuses. A check per
-shape of the grammar in validation, and printing a tree and parsing it back,
-because validation does not care about a tree that the parser cannot build
-(owner, 2026-11-16).
+2026-11-16). A cap for each dimension of a tree, which are the nodes, the items
+of a list, the characters of a text and the steps of a path, because it needs
+four numbers where the cap on a text already exists. Caps derived from the text
+cap, such as at most 4096 nodes, because a valid rule could still print to a
+text that the parser refuses. A check in validation for each shape that the
+grammar builds, and printing a tree and parsing it back, because validation does
+not care about a tree that the parser cannot build (owner, 2026-11-16).
 
 Limits that the caller passes to validation, because a rule's validity would
 then differ per install. No limits, because an AI client will abuse an
@@ -144,7 +146,8 @@ would silently become the default.
 A schema version field on a rule, because nothing is kept backwards
 compatible (`principles.md`, 8).
 
-Every refusal of a rule in one answer (owner, 2026-11-17). A range of bytes in
+Every refusal of a rule in one answer, because validation answers like the
+parser, which reports its first error (owner, 2026-11-17). A range of bytes in
 the text as the place of a refusal inside the expression, because validation
 reports the refusal and validation sees the tree. A refusal with a free-text
 message only, because the UI could not point at the place of the error.
@@ -156,8 +159,8 @@ same tree. A limit changes by a commit, and the change invalidates the stored
 rules that exceed it. The event query shows a title that may repeat, and the
 unique-name rule of `adr/0020` does not apply to rules. No code executes `drop`
 or `throw` until a sensor SDK exists. An author with two mistakes in a rule sees
-them one at a time. A sum of more than 31 terms needs parentheses that group it.
-A text that the parser accepts can fail validation for its printed length,
-because the printer writes spaces that the author left out. `validate` does not
-vouch for the shape of a tree that arrives as JSON, such as an `and` with one
-operand. The engine component cites this record.
+them one at a time. A sum of more than 31 terms in a comparison needs
+parentheses that group it. A text that the parser accepts can fail validation
+for its printed length, because the printer writes spaces that the author left
+out. `validate` does not vouch for the shape of a tree that arrives as JSON,
+such as an `and` with one operand. The engine component cites this record.
