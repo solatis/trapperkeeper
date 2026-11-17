@@ -11,7 +11,7 @@ use proptest::prelude::*;
 use proptest::sample::select;
 use serde_json::Value;
 use trapperkeeper_engine::expr::{Expr, Segment};
-use trapperkeeper_engine::limits::{MAX_DEPTH, MAX_SCOPE_TAGS, MAX_TAG_LENGTH};
+use trapperkeeper_engine::limits::{MAX_DEPTH, MAX_SCOPE_TAGS, MAX_TAG_LENGTH, MAX_TEXT_LENGTH};
 use trapperkeeper_engine::{Error, Reason, Rule, validate};
 use uuid::Uuid;
 
@@ -29,13 +29,14 @@ enum Defect {
     TagKeyEmpty,
     TagKeyTooLong,
     TagValueTooLong,
+    TextTooLong,
 }
 
 /// Every variant of `Defect`. The defect property draws its defect from this
 /// array alone. The compiler checks the match in `apply` for completeness and
 /// does not check this array, so a variant that is missing here is never
 /// tested.
-const DEFECTS: [Defect; 9] = [
+const DEFECTS: [Defect; 10] = [
     Defect::SampleRateZero,
     Defect::SampleRateAboveOne,
     Defect::SampleRateNan,
@@ -45,6 +46,7 @@ const DEFECTS: [Defect; 9] = [
     Defect::TagKeyEmpty,
     Defect::TagKeyTooLong,
     Defect::TagValueTooLong,
+    Defect::TextTooLong,
 ];
 
 /// The scope with one tag.
@@ -130,6 +132,16 @@ fn apply(d: Defect, rule: &mut Rule) -> (String, Reason) {
                 Reason::TagValueLength { len, max },
             )
         }
+        Defect::TextTooLong => {
+            // A text literal of `MAX_TEXT_LENGTH - 1` characters prints with
+            // its two quotes as `MAX_TEXT_LENGTH + 1` characters, so the rule
+            // sits directly past the cap.
+            rule.expression = Expr::Text("x".repeat(MAX_TEXT_LENGTH - 1));
+            let (len, max) = (MAX_TEXT_LENGTH + 1, MAX_TEXT_LENGTH);
+            // The refusal concerns the whole expression, so it points at the
+            // expression.
+            ("/expression".to_owned(), Reason::TextTooLong { len, max })
+        }
     }
 }
 
@@ -142,6 +154,7 @@ fn field(d: Defect) -> usize {
         | Defect::TagKeyEmpty
         | Defect::TagKeyTooLong
         | Defect::TagValueTooLong => 2,
+        Defect::TextTooLong => 3,
     }
 }
 

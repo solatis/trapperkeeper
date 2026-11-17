@@ -70,8 +70,13 @@ The refusal names its place in the rule document as a JSON pointer, also
 inside the expression, as in `/expression/and/1` (owner, 2026-11-16).
 
 Validation holds an expression to 32 nodes from its top to a leaf, with both
-counted (owner, 2026-11-16). Validation checks the rules it knows, and it does
-not test whether the parser could have built a tree (owner, 2026-11-16).
+counted (owner, 2026-11-16). It prints the expression and refuses a rule whose
+printed text is longer than 4096 characters, the cap that the parser holds a
+text to, so a rule that validates can be printed and parsed again (owner,
+2026-11-16). The walk of the depth refuses a tree that is too deep before
+anything prints it (owner, 2026-11-17). Validation checks the rules it knows,
+and it does not test whether the parser could have built a tree (owner,
+2026-11-16).
 
 ## Rejected alternatives
 
@@ -103,9 +108,12 @@ in an SDK, because an SDK executes only rules that the server returned, and the
 server validated each of them before it stored it.
 
 A depth of 60, about the deepest tree that the JSON reader reads (owner,
-2026-11-16). A check per shape of the grammar in validation, and printing a
-tree and parsing it back, because validation does not care about a tree that
-the parser cannot build (owner, 2026-11-16).
+2026-11-16). A cap per dimension of a tree, because it needs four numbers where
+one exists. Caps derived from the text cap, such as at most 4096 nodes, because
+a valid rule could still print to a text that the parser refuses. A check per
+shape of the grammar in validation, and printing a tree and parsing it back,
+because validation does not care about a tree that the parser cannot build
+(owner, 2026-11-16).
 
 Limits that the caller passes to validation, because a rule's validity would
 then differ per install. No limits, because an AI client will abuse an
@@ -147,8 +155,9 @@ The web UI edits a rule as text. The engine, the server and every SDK read the
 same tree. A limit changes by a commit, and the change invalidates the stored
 rules that exceed it. The event query shows a title that may repeat, and the
 unique-name rule of `adr/0020` does not apply to rules. No code executes `drop`
-or `throw` until a sensor SDK exists. An author with two mistakes in a rule
-sees them one at a time. A sum of more than 31 terms needs parentheses that
-group it. `validate` does not vouch for the shape of a tree that arrives as
-JSON, such as an `and` with one operand. The engine component cites this
-record.
+or `throw` until a sensor SDK exists. An author with two mistakes in a rule sees
+them one at a time. A sum of more than 31 terms needs parentheses that group it.
+A text that the parser accepts can fail validation for its printed length,
+because the printer writes spaces that the author left out. `validate` does not
+vouch for the shape of a tree that arrives as JSON, such as an `and` with one
+operand. The engine component cites this record.

@@ -1,11 +1,12 @@
 # engine/
 
 **What**: the rule engine crate, `trapperkeeper-engine`, with the library
-`trapperkeeper_engine`, which a pipeline can embed. It holds the rule model,
-the tree of a rule's expression, their JSON form and the validation of a
-rule. Validation checks the rule's own fields and holds its expression to a
-depth. The crate also parses a rule's text into the tree and prints a tree as
-text. It does not evaluate rules. It depends on no server, store or HTTP code.
+`trapperkeeper_engine`, which a pipeline can embed. It holds the rule model, the
+tree of a rule's expression, their JSON form and the validation of a rule.
+Validation checks the rule's own fields and holds its expression to a depth and
+a printed length. The crate also parses a rule's text into the tree and prints a
+tree as text. It does not evaluate rules. It depends on no server, store or HTTP
+code.
 
 **Map**:
 
@@ -27,8 +28,8 @@ text. It does not evaluate rules. It depends on no server, store or HTTP code.
 
 - The code that stores a rule, sends it to a sensor or evaluates it assumes
   that `validate` accepted the rule. `validate` checks the id, the sample
-  rate and the scope tags, and it holds the expression to `MAX_DEPTH`. It
-  returns the first refusal.
+  rate and the scope tags, and it holds the expression to `MAX_DEPTH` and its
+  printed text to `MAX_TEXT_LENGTH`. It returns the first refusal.
 - A new kind of node gets an arm in `Expr::key` and in `Expr::children`. The
   compiler asks for both arms. It does not check that the name in `key` is the
   JSON key, and the property `a_node_past_the_depth_cap_is_refused_at_its_place`

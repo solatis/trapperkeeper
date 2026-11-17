@@ -95,7 +95,8 @@ lies further in the text. The refusal for too much work (`TooComplex`) wins
 over any note, because the parse stopped there.
 
 The cap on nesting bounds the parser's stack and not the depth of a tree.
-Validation holds the depth of a tree (`adr/0033`).
+Validation holds the depth of a tree and the length of its printed text
+(`adr/0033`).
 
 Whoever shows an error works out the line and the column from the byte range.
 Every new reason is a new variant of the public enum `text::Reason` of the

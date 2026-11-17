@@ -4,7 +4,10 @@
 //! whatever their sign or kind, as in `-(-5)` and `(0.5).upper()`.
 //!
 //! A canonical tree, which is a tree the parser can build, prints to a text
-//! that parses back to the same tree. `Display` also writes a tree that the
+//! that parses back to the same tree, as long as the printed text stays within
+//! the parser's caps on length and nesting. The printer writes spaces and
+//! parentheses that an author can leave out, so a printed text can be longer
+//! than the text it came from. `Display` also writes a tree that the
 //! parser cannot build, such as an `and` directly under an `and`, or a path
 //! that is empty or starts with an index. Such a path prints as `record` or
 //! `record[0]`, which the parser refuses as `BareRecord`. The parser may

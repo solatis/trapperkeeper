@@ -1,10 +1,13 @@
 //! Validation of a rule before it is stored or sent to a sensor: the rule's
-//! own fields, and the depth of its expression (ADR-0033).
+//! own fields, and the depth and the printed length of its expression
+//! (ADR-0033).
+
+use std::fmt::{self, Write as _};
 
 use serde::Serialize;
 
 use crate::expr::Expr;
-use crate::limits::{MAX_DEPTH, MAX_SCOPE_TAGS, MAX_TAG_LENGTH};
+use crate::limits::{MAX_DEPTH, MAX_SCOPE_TAGS, MAX_TAG_LENGTH, MAX_TEXT_LENGTH};
 use crate::rule::Rule;
 
 /// Why a part of a rule was refused.
@@ -29,6 +32,9 @@ pub enum Reason {
     /// A node lies more than `max` nodes below the top of the expression, the
     /// cap `MAX_DEPTH`. The refusal points at that node.
     TooDeep { max: usize },
+    /// The expression prints as `len` characters of rule text, which is more
+    /// than `max`, the cap `MAX_TEXT_LENGTH`.
+    TextTooLong { len: usize, max: usize },
 }
 
 /// One refusal: where in the rule document, as a JSON pointer (RFC 6901),
@@ -55,6 +61,28 @@ fn refuse(at: &str, reason: Reason) -> Result<(), Error> {
     })
 }
 
+/// Counts the characters that are written to it and keeps none of them.
+struct Counter(usize);
+
+impl fmt::Write for Counter {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        // Characters are Unicode scalar values, as `MAX_TEXT_LENGTH` counts
+        // them.
+        self.0 += s.chars().count();
+        Ok(())
+    }
+}
+
+/// The number of characters of `e` printed as rule text.
+fn printed_length(e: &Expr) -> usize {
+    let mut counter = Counter(0);
+    // The printer writes into the counter, so a text of any length is counted
+    // and never held in memory. `Counter` never returns an error, so the
+    // write cannot fail and its result is dropped.
+    let _ = write!(counter, "{e}");
+    counter.0
+}
+
 /// Checks `e` and then every node under it, and returns the first refusal.
 /// `at` is the JSON pointer of `e`, and `depth` counts the nodes from the
 /// top of the expression down to `e`.
@@ -74,7 +102,8 @@ fn check_nodes(e: &Expr, at: &str, depth: usize) -> Result<(), Error> {
 }
 
 /// Checks the id, the sample rate, the scope tags and the expression of
-/// `rule`. It does not test whether the parser could have built the
+/// `rule`: the depth of the expression and the length of its printed text.
+/// It does not test whether the parser could have built the
 /// expression (ADR-0033).
 ///
 /// # Errors
@@ -87,7 +116,8 @@ pub fn validate(rule: &Rule) -> Result<(), Error> {
     // `validate` runs its checks in the order in which the JSON form of a
     // rule holds the fields, and it returns the refusal of the first check
     // that fails. The fixed order gives a rule with several defects the same
-    // answer every time.
+    // answer every time. The check of the printed text comes last, and the
+    // note there says why.
     let version = rule.rule_id.get_version_num();
     // The server issues version 7 UUIDs, and a format that admits any
     // version would admit ids that the server never issues (ADR-0033). The
@@ -128,5 +158,13 @@ pub fn validate(rule: &Rule) -> Result<(), Error> {
         }
     }
     // The top of the expression is the first node, so its depth is 1.
-    check_nodes(&rule.expression, "/expression", 1)
+    check_nodes(&rule.expression, "/expression", 1)?;
+    // The walk has refused a tree that is too deep. The printer calls itself
+    // once per level, so it runs only on a tree within `MAX_DEPTH`.
+    let len = printed_length(&rule.expression);
+    if len > MAX_TEXT_LENGTH {
+        let max = MAX_TEXT_LENGTH;
+        return refuse("/expression", Reason::TextTooLong { len, max });
+    }
+    Ok(())
 }

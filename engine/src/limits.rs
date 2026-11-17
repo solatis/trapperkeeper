@@ -14,7 +14,8 @@ pub const MAX_TAG_LENGTH: usize = 64;
 /// (ADR-0042). The cap on length bounds the parser's work only while no two
 /// alternatives of a choice read the same bracketed text. Where two do, each
 /// level of brackets is read twice, the work doubles per level, and
-/// `MAX_PARSE_STEPS` refuses the text.
+/// `MAX_PARSE_STEPS` refuses the text. Validation holds the printed text of a
+/// rule's expression to the same cap (ADR-0033).
 pub const MAX_TEXT_LENGTH: usize = 4096;
 
 /// Levels of nesting in a rule's text, at most (ADR-0042). A bracket, a
