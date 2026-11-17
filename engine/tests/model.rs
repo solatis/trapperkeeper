@@ -215,6 +215,18 @@ const CHAINS: [(&str, Chain); 5] = [
     ("else", |n| format!("{}1", "1 if x else ".repeat(n))),
 ];
 
+/// A valid rule whose expression is `e`.
+fn rule_with(e: Expr) -> Rule {
+    Rule {
+        rule_id: uuid::Builder::from_unix_timestamp_millis(0, &[0; 10]).into_uuid(),
+        rule_title: None,
+        action: Action::Observe,
+        sample_rate: 1.0,
+        scope: BTreeMap::new(),
+        expression: e,
+    }
+}
+
 proptest! {
     // Without a regression file a failure leaves no untracked file in the
     // working tree. A failure prints the minimal failing input.
@@ -364,18 +376,6 @@ proptest! {
         // back to the same tree.
         let printed = parse(&tree.to_string()).expect("the printed text parses");
         prop_assert_eq!(&printed, &tree);
-    }
-}
-
-/// A valid rule whose expression is `e`.
-fn rule_with(e: Expr) -> Rule {
-    Rule {
-        rule_id: uuid::Builder::from_unix_timestamp_millis(0, &[0; 10]).into_uuid(),
-        rule_title: None,
-        action: Action::Observe,
-        sample_rate: 1.0,
-        scope: BTreeMap::new(),
-        expression: e,
     }
 }
 
