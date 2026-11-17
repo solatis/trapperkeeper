@@ -201,9 +201,10 @@ fn pointer_to(document: &Value, wanted: &Value) -> Option<String> {
 type Chain = fn(usize) -> String;
 
 /// The chains of the property `a_chain_that_validates_reads_back`, each with
-/// its name, which proptest prints in a failing input. Each row is one way in which a text nests a tree, without a
-/// bracket or with one: a sum, a chain of methods, parentheses, a chain of
-/// `not`, and a conditional in the branch after the `else` of a conditional.
+/// its name, which proptest prints in a failing input. Each row is one way in
+/// which a text nests a tree. A sum and a chain of methods open no level of
+/// the parser's nesting. Parentheses, a chain of `not` and a conditional in
+/// the branch after `else` open one level per link.
 const CHAINS: [(&str, Chain); 5] = [
     ("sum", |n| vec!["1"; n + 1].join(" + ")),
     ("methods", |n| format!("x{}", ".upper()".repeat(n))),
@@ -334,13 +335,15 @@ proptest! {
     #[test]
     fn a_chain_that_validates_reads_back(
         (_, chain) in select(CHAINS.to_vec()),
-        // The JSON reader stops at 128 levels and first fails on a sum of 65
-        // terms. The range crosses both the depth cap and that limit, and
+        // The JSON reader stops at 128 levels. A node of `+` takes two of
+        // them, an object and the array of its operands, so the reader first
+        // fails on a sum of 65 terms. The range crosses both the depth cap and that limit, and
         // past the cap validation refuses every chain.
         n in 1..=80usize,
     ) {
         // The parser refuses the chains of parentheses, of `not` and of `else`
-        // past its cap on nesting, and those are not the subject.
+        // past its cap of 32 levels of nesting, and those are not the
+        // subject. A sum and a chain of methods open no level.
         let Ok(tree) = parse(&chain(n)) else {
             return Ok(());
         };
@@ -354,10 +357,11 @@ proptest! {
         let json = serde_json::to_string(&tree).expect("a tree serializes");
         let back: Expr = serde_json::from_str(&json).expect("the JSON reads back");
         prop_assert_eq!(&back, &tree);
-        // The printer writes each chain as it was written, with no bracket
-        // that opens a level of nesting, and the printed text of a valid rule
-        // is within the parser's cap on length. So it parses back to the same
-        // tree.
+        // The printer writes the chains of `not` and of `else` as they were
+        // written, and the parentheses chain as its bare name, which it holds
+        // as one node. So the printed text opens no more levels of nesting
+        // than the text did, and within the parser's cap on length it parses
+        // back to the same tree.
         let printed = parse(&tree.to_string()).expect("the printed text parses");
         prop_assert_eq!(&printed, &tree);
     }
@@ -404,8 +408,8 @@ fn the_limits_of_the_expression_hold_at_their_edges() {
 
     // The parser groups a chain of `+` to the left, so the deepest leaf of a
     // sum of 31 terms lies under 30 nodes of `+`. With the comparison on top
-    // the tree is 32 nodes deep. The chain opens no level of nesting in the
-    // parser.
+    // the tree is 32 nodes deep. The chain opens no level of nesting, so the
+    // parser reads a sum of any length and only validation refuses it.
     assert_eq!(refusal(parsed(&format!("{} > 0", sum(31)))), None);
     assert_eq!(refusal(parsed(&format!("{} > 0", sum(32)))), too_deep);
 
