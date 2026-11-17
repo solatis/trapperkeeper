@@ -1,7 +1,7 @@
 //! Tests of the JSON form of a rule and of `validate`, which returns the
-//! first refusal of a rule, as properties over generated rules: the defects
-//! of the fields, and the defects of the expression at generated places.
-//! ADR-0018 prefers property tests.
+//! first refusal of a rule. Most tests are properties over generated rules
+//! and texts, because ADR-0018 prefers property tests. The edges of the
+//! limits of an expression are tested on trees built in code.
 
 mod common;
 
@@ -32,8 +32,8 @@ enum Defect {
     TextTooLong,
 }
 
-/// Every variant of `Defect`. The defect property draws its defect from this
-/// array alone. The compiler checks the match in `apply` for completeness and
+/// Every variant of `Defect`. The two defect properties draw their defects
+/// from this array alone. The compiler checks the match in `apply` for completeness and
 /// does not check this array, so a variant that is missing here is never
 /// tested.
 const DEFECTS: [Defect; 10] = [
@@ -160,11 +160,10 @@ fn field(d: Defect) -> usize {
 }
 
 /// The key of the field that marks the place of a defect. It is longer than
-/// any text that the strategies generate, so no generated node equals the
-/// marker.
+/// any text that `expr()` generates, so no generated node equals the marker.
 const MARKER: &str = "the defect stands here";
 
-/// The field `record["the defect stands here"]`.
+/// The field whose path is the one key `MARKER`.
 fn marker() -> Expr {
     Expr::Field(vec![Segment::Key(MARKER.to_owned())])
 }
@@ -215,9 +214,11 @@ const CHAINS: [(&str, Chain); 5] = [
     ("else", |n| format!("{}1", "1 if x else ".repeat(n))),
 ];
 
-/// A valid rule whose expression is `e`.
+/// A rule with valid fields whose expression is `e`.
 fn rule_with(e: Expr) -> Rule {
     Rule {
+        // A timestamp of 0 and zero random bytes still give a version 7
+        // UUID, which `validate` accepts.
         rule_id: uuid::Builder::from_unix_timestamp_millis(0, &[0; 10]).into_uuid(),
         rule_title: None,
         action: Action::Observe,
@@ -349,13 +350,13 @@ proptest! {
         (_, chain) in select(CHAINS.to_vec()),
         // The JSON reader stops at 128 levels. A node of `+` takes two of
         // them, an object and the array of its operands, so the reader first
-        // fails on a sum of 65 terms. The range crosses both the depth cap and that limit, and
-        // past the cap validation refuses every chain.
+        // fails on a sum of 65 terms. The range crosses both the depth cap
+        // and that limit, and past the cap validation refuses every chain.
         n in 1..=80usize,
     ) {
         // The parser refuses the chains of parentheses, of `not` and of `else`
-        // past its cap of 32 levels of nesting, and those are not the
-        // subject. A sum and a chain of methods open no level.
+        // past `MAX_NESTING`, and those are not the subject. A sum and a
+        // chain of methods open no level.
         let Ok(tree) = parse(&chain(n)) else {
             return Ok(());
         };
@@ -370,8 +371,8 @@ proptest! {
         let back: Expr = serde_json::from_str(&json).expect("the JSON reads back");
         prop_assert_eq!(&back, &tree);
         // The printer writes the chains of `not` and of `else` as they were
-        // written, and the parentheses chain as its bare name, which it holds
-        // as one node. So the printed text opens no more levels of nesting
+        // written. The parser reads the parentheses chain as the one field
+        // `x`, which the printer writes bare. So the printed text opens no more levels of nesting
         // than the text did, and within the parser's cap on length it parses
         // back to the same tree.
         let printed = parse(&tree.to_string()).expect("the printed text parses");
@@ -408,9 +409,10 @@ fn the_limits_of_the_expression_hold_at_their_edges() {
 
     // The parser groups a chain of `+` to the left, so the deepest leaf of a
     // sum of 31 terms lies under 30 nodes of `+`. With the comparison on top
-    // the tree is 32 nodes deep. The chain opens no level of nesting, so the
-    // parser reads a sum of any length and only validation refuses it.
+    // the tree is 32 nodes deep.
     assert_eq!(refusal(parsed(&format!("{} > 0", sum(31)))), None);
+    // The chain opens no level of nesting, so the parser reads a sum of any
+    // number of terms within the text cap, and only validation refuses it.
     assert_eq!(refusal(parsed(&format!("{} > 0", sum(32)))), too_deep);
 
     // The same 32 terms in two groups of parentheses are 18 nodes deep: the
