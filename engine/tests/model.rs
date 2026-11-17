@@ -196,6 +196,23 @@ fn pointer_to(document: &Value, wanted: &Value) -> Option<String> {
     }
 }
 
+/// The text of a chain with `n` links.
+type Chain = fn(usize) -> String;
+
+/// The chains of the property `a_chain_that_validates_reads_back`, each with
+/// its name. Each row is one way in which a text nests a tree, without a
+/// bracket or with one: a sum, a chain of methods, parentheses, a chain of
+/// `not`, and a conditional in the branch after the `else` of a conditional.
+const CHAINS: [(&str, Chain); 5] = [
+    ("sum", |n| vec!["1"; n + 1].join(" + ")),
+    ("methods", |n| format!("x{}", ".upper()".repeat(n))),
+    ("parentheses", |n| {
+        format!("{}x{}", "(".repeat(n), ")".repeat(n))
+    }),
+    ("not", |n| format!("{}x", "not ".repeat(n))),
+    ("else", |n| format!("{}1", "1 if x else ".repeat(n))),
+];
+
 proptest! {
     // Without a regression file a failure leaves no untracked file in the
     // working tree. A failure prints the minimal failing input.
@@ -309,6 +326,37 @@ proptest! {
         // `pointer_to` searched the expression alone, so the step
         // `/expression` goes in front.
         prop_assert_eq!(error.at, format!("/expression{found}"));
+    }
+
+    /// A chain that parses and validates reads back from its JSON and from
+    /// its printed text.
+    #[test]
+    fn a_chain_that_validates_reads_back(
+        (_, chain) in select(CHAINS.to_vec()),
+        // The JSON reader gives up on a sum of 70 terms, so the range crosses
+        // both the depth cap and the reader's limit.
+        n in 1..=80usize,
+    ) {
+        // The parser refuses some chains for its own caps, and those are not
+        // the subject.
+        let Ok(tree) = parse(&chain(n)) else {
+            return Ok(());
+        };
+        // A chain that validation refuses is not the subject either. The
+        // property says what a valid rule can rely on.
+        if validate(&rule_with(tree.clone())).is_err() {
+            return Ok(());
+        }
+        // The JSON reader stops at 128 levels, and the depth cap keeps a
+        // valid tree under that. Without the cap this check fails for a sum
+        // of 70 terms.
+        let json = serde_json::to_string(&tree).expect("a tree serializes");
+        let back: Expr = serde_json::from_str(&json).expect("the JSON reads back");
+        prop_assert_eq!(&back, &tree);
+        // The printed text of a valid rule is within the parser's cap on
+        // length, so it parses back to the same tree.
+        let printed = parse(&tree.to_string()).expect("the printed text parses");
+        prop_assert_eq!(&printed, &tree);
     }
 }
 
