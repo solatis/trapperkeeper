@@ -186,8 +186,10 @@ impl Expr {
         // serde derives these names from the attributes on `Expr` and gives
         // no way to ask for the name of a variant. The property
         // `a_node_past_the_depth_cap_is_refused_at_its_place` in
-        // `tests/model.rs` fails when the name of a kind that holds a node
-        // differs from the JSON form.
+        // `tests/model.rs` puts nodes of every kind that holds a node above a
+        // defect. It fails when the pointer that `children` builds from these
+        // names differs from the place of the defect in serde's own JSON. The
+        // name of a kind without a node appears in no pointer.
         match self {
             Expr::None => "none",
             Expr::Bool(_) => "bool",
@@ -322,9 +324,9 @@ impl Expr {
         }
     }
 
-    /// The nodes directly under this one, in written order. `children` gives
-    /// them in the order of the JSON form, with their pointer steps, for a
-    /// caller that only reads.
+    /// The nodes directly under this one, in the order of the rule text.
+    /// `children` gives the same nodes in the order of the JSON form, with the
+    /// steps of their pointers.
     pub(crate) fn children_mut(&mut self) -> Vec<&mut Expr> {
         // `resolve` in `text/grammar.rs` is the only caller. It resolves each
         // child on its own and handles `Any` and `All` itself, so no result
