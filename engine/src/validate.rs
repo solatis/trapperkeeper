@@ -31,7 +31,8 @@ pub enum Reason {
     TagValueLength { len: usize, max: usize },
     /// The way from the top of the expression down to a node passes more than
     /// `max` nodes, the cap `MAX_DEPTH`, with the top and the node counted.
-    /// The refusal points at the first node past the cap.
+    /// The refusal points at the node past the cap that the walk meets first,
+    /// in the order of the JSON form.
     TooDeep { max: usize },
     /// The expression prints as `len` characters of rule text, which is more
     /// than `max`, the cap `MAX_TEXT_LENGTH`.
