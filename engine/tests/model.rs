@@ -12,7 +12,7 @@ use proptest::sample::select;
 use serde_json::Value;
 use trapperkeeper_engine::expr::{Expr, Segment};
 use trapperkeeper_engine::limits::{MAX_DEPTH, MAX_SCOPE_TAGS, MAX_TAG_LENGTH, MAX_TEXT_LENGTH};
-use trapperkeeper_engine::{Error, Reason, Rule, validate};
+use trapperkeeper_engine::{Action, Error, Reason, Rule, parse, validate};
 use uuid::Uuid;
 
 use common::{around, rule};
@@ -310,4 +310,74 @@ proptest! {
         // `/expression` goes in front.
         prop_assert_eq!(error.at, format!("/expression{found}"));
     }
+}
+
+/// A valid rule whose expression is `e`.
+fn rule_with(e: Expr) -> Rule {
+    Rule {
+        rule_id: uuid::Builder::from_unix_timestamp_millis(0, &[0; 10]).into_uuid(),
+        rule_title: None,
+        action: Action::Observe,
+        sample_rate: 1.0,
+        scope: BTreeMap::new(),
+        expression: e,
+    }
+}
+
+/// The reason that `validate` refuses the rule with the expression `e` for,
+/// or `None` when the rule validates.
+fn refusal(e: Expr) -> Option<Reason> {
+    validate(&rule_with(e)).err().map(|r| r.reason)
+}
+
+/// The tree of the rule text `t`.
+fn parsed(t: &str) -> Expr {
+    parse(t).expect("the text parses")
+}
+
+/// `1+1+...+1` with `n` terms.
+fn sum(n: usize) -> String {
+    vec!["1"; n].join("+")
+}
+
+/// The depth and the printed length hold at their edges, for a tree built in
+/// code and for a tree parsed from text.
+#[test]
+fn the_limits_of_the_expression_hold_at_their_edges() {
+    let too_deep = Some(Reason::TooDeep { max: MAX_DEPTH });
+
+    // `MAX_DEPTH - 1` nodes of `not` over a literal are `MAX_DEPTH` nodes
+    // deep.
+    assert_eq!(refusal(nots(MAX_DEPTH - 1, Expr::Bool(true))), None);
+    assert_eq!(refusal(nots(MAX_DEPTH, Expr::Bool(true))), too_deep);
+
+    // A chain of `+` opens no level of nesting in the parser, and each `+` is
+    // a node of the tree. The comparison, 30 nodes of `+` and a leaf are 32
+    // nodes.
+    assert_eq!(refusal(parsed(&format!("{} > 0", sum(31)))), None);
+    assert_eq!(refusal(parsed(&format!("{} > 0", sum(32)))), too_deep);
+
+    // Two groups in parentheses halve the depth of the sum.
+    let grouped = format!("({}) + ({}) > 0", sum(16), sum(16));
+    assert_eq!(refusal(parsed(&grouped)), None);
+
+    // With its two quotes a text literal prints as two characters more than
+    // it holds.
+    let max = MAX_TEXT_LENGTH;
+    let text = |n| Expr::Text("x".repeat(n));
+    assert_eq!(refusal(text(max - 2)), None);
+    let len = max + 1;
+    assert_eq!(
+        refusal(text(max - 1)),
+        Some(Reason::TextTooLong { len, max })
+    );
+
+    // The text of 3006 characters is within the parser's cap. The printer
+    // writes a space after each comma, so the tree prints as 4505 characters
+    // and the rule is refused.
+    let list = format!("x in ({})", vec!["1"; 1500].join(","));
+    let tree = parsed(&list);
+    let len = tree.to_string().chars().count();
+    assert_eq!((list.chars().count(), len), (3006, 4505));
+    assert_eq!(refusal(tree), Some(Reason::TextTooLong { len, max }));
 }
