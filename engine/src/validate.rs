@@ -89,8 +89,8 @@ fn printed_length(e: &Expr) -> usize {
 }
 
 /// Checks the depth of `e` and then of every node under it, and returns the
-/// first refusal. `at` is the JSON pointer of `e`, and `depth` counts the nodes from the
-/// top of the expression down to `e`.
+/// first refusal. `at` is the JSON pointer of `e`, and `depth` counts the nodes
+/// from the top of the expression down to `e`.
 fn check_nodes(e: &Expr, at: &str, depth: usize) -> Result<(), Error> {
     // The walk refuses the node and does not go further down. It calls itself
     // once per level, so the cap also bounds its own stack on a tree of any
