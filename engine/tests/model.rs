@@ -32,9 +32,9 @@ enum Defect {
     TextTooLong,
 }
 
-/// Every variant of `Defect`. The two defect properties draw their defects
-/// from this array alone. The compiler checks the match in `apply` for completeness and
-/// does not check this array, so a variant that is missing here is never
+/// Every variant of `Defect`. The two defect properties draw their defects from
+/// this array alone. The compiler checks the match in `apply` for completeness
+/// and does not check this array, so a variant that is missing here is never
 /// tested.
 const DEFECTS: [Defect; 10] = [
     Defect::SampleRateZero,
@@ -371,10 +371,10 @@ proptest! {
         let back: Expr = serde_json::from_str(&json).expect("the JSON reads back");
         prop_assert_eq!(&back, &tree);
         // The printer writes the chains of `not` and of `else` as they were
-        // written. The parser reads the parentheses chain as the one field
-        // `x`, which the printer writes bare. So the printed text opens no more levels of nesting
-        // than the text did, and within the parser's cap on length it parses
-        // back to the same tree.
+        // written. The parser reads the parentheses chain as the one field `x`,
+        // which the printer writes bare. So the printed text opens no more
+        // levels of nesting than the text did, and within the parser's cap on
+        // length it parses back to the same tree.
         let printed = parse(&tree.to_string()).expect("the printed text parses");
         prop_assert_eq!(&printed, &tree);
     }
