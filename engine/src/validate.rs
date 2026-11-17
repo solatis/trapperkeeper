@@ -79,15 +79,17 @@ impl fmt::Write for Counter {
 fn printed_length(e: &Expr) -> usize {
     let mut counter = Counter(0);
     // The printer writes into the counter, so a text of any length is counted
-    // and never held in memory. `Counter` never returns an error, so the
-    // write cannot fail and its result is dropped.
+    // and never held in memory. The counter does not stop at the cap, so
+    // `TextTooLong` holds the whole length, as `TooManyTags` holds its count,
+    // and the author sees how far over the rule is.
+    // `Counter` never returns an error, so the write cannot fail and its
+    // result is dropped.
     let _ = write!(counter, "{e}");
     counter.0
 }
 
 /// Checks the depth of `e` and then of every node under it, and returns the
-/// first refusal.
-/// `at` is the JSON pointer of `e`, and `depth` counts the nodes from the
+/// first refusal. `at` is the JSON pointer of `e`, and `depth` counts the nodes from the
 /// top of the expression down to `e`.
 fn check_nodes(e: &Expr, at: &str, depth: usize) -> Result<(), Error> {
     // The walk refuses the node and does not go further down. It calls itself
@@ -107,15 +109,15 @@ fn check_nodes(e: &Expr, at: &str, depth: usize) -> Result<(), Error> {
 
 /// Checks the id, the sample rate, the scope tags and the expression of
 /// `rule`: the depth of the expression and the length of its printed text.
-/// It does not test whether the parser could have built the
-/// expression (ADR-0033).
+/// It does not test whether the parser could have built the expression
+/// (ADR-0033).
 ///
 /// # Errors
 ///
 /// The first refusal, in the order in which the JSON form of a rule writes
 /// the fields: the id, then the sample rate, then the scope, then each tag
 /// in key order, with a key before its value, then the expression, with a
-/// node before its children.
+/// node before its children, and last the length of its printed text.
 pub fn validate(rule: &Rule) -> Result<(), Error> {
     // `validate` runs its checks in the order in which the JSON form of a
     // rule holds the fields, and it returns the refusal of the first check
@@ -163,8 +165,8 @@ pub fn validate(rule: &Rule) -> Result<(), Error> {
     }
     // The top of the expression is the first node, so its depth is 1.
     check_nodes(&rule.expression, "/expression", 1)?;
-    // The walk has refused a tree that is too deep. The printer calls itself
-    // once per level, so it runs only on a tree within `MAX_DEPTH`.
+    // The printer calls itself once per level, so it runs after the walk,
+    // which has refused every tree deeper than `MAX_DEPTH`.
     let len = printed_length(&rule.expression);
     if len > MAX_TEXT_LENGTH {
         let max = MAX_TEXT_LENGTH;
