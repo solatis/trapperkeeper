@@ -98,10 +98,9 @@ const TEXT: &str = ".{0,8}";
 pub fn expr() -> BoxedStrategy<Expr> {
     // The strategy keeps lists and paths to three items and texts to eight
     // characters, so a failing case shrinks to something a person can read.
-    let text = || TEXT;
     let path = || {
         let segment = prop_oneof![
-            text().prop_map(Segment::Key),
+            TEXT.prop_map(Segment::Key),
             any::<u32>().prop_map(Segment::Index),
         ];
         vec(segment, 0..=3)
@@ -119,9 +118,9 @@ pub fn expr() -> BoxedStrategy<Expr> {
         any::<bool>().prop_map(Expr::Bool),
         any::<i64>().prop_map(Expr::Int),
         float.prop_map(Expr::Float),
-        text().prop_map(Expr::Text),
+        TEXT.prop_map(Expr::Text),
         path().prop_map(Expr::Field),
-        (text(), path()).prop_map(|(name, path)| Expr::Element { name, path }),
+        (TEXT, path()).prop_map(|(name, path)| Expr::Element { name, path }),
     ];
     // A depth of 2 recursions above the leaves gives the three levels. The
     // desired size 24 and the expected branch size 3 are choices that no
@@ -143,13 +142,13 @@ pub fn expr() -> BoxedStrategy<Expr> {
                 then,
                 otherwise
             }),
-            (select(QUANTIFIERS.to_vec()), text(), operand(), operand())
+            (select(QUANTIFIERS.to_vec()), TEXT, operand(), operand())
                 .prop_map(|(make, name, list, test)| make(name, list, test)),
             (operand(), vec(select(TYPES.to_vec()), 0..=3))
                 .prop_map(|(value, types)| Expr::IsInstance { value, types }),
             // The pattern is any text, because the engine does not check a
             // pattern.
-            (select(PATTERNS.to_vec()), text(), operand())
+            (select(PATTERNS.to_vec()), TEXT, operand())
                 .prop_map(|(make, pattern, text)| make(pattern, text)),
         ]
     })
@@ -160,79 +159,71 @@ pub fn expr() -> BoxedStrategy<Expr> {
 /// generated node of any kind. The other operands come from `expr()`.
 fn frame(inner: Expr) -> BoxedStrategy<Expr> {
     let operand = || expr().prop_map(Box::new);
-    // Each closure below owns a copy of `inner`, and proptest calls it once
-    // per generated case.
-    let held = move || {
-        let inner = inner.clone();
-        move || Box::new(inner.clone())
-    };
+    let held = Just(Box::new(inner));
     // Every kind of node that holds an operand stands in one of the arms,
     // from the same lists as in `expr()`, so a pointer through any kind is
     // tested.
     prop_oneof![
-        select(UNARY.to_vec()).prop_map({
-            let inner = held();
-            move |make| make(inner())
-        }),
+        (select(UNARY.to_vec()), held.clone()).prop_map(|(make, inner)| make(inner)),
         // The flag puts `inner` on the left or on the right.
-        (select(BINARY.to_vec()), operand(), any::<bool>()).prop_map({
-            let inner = held();
-            move |(make, other, left)| {
+        (
+            select(BINARY.to_vec()),
+            held.clone(),
+            operand(),
+            any::<bool>()
+        )
+            .prop_map(|(make, inner, other, left)| {
                 if left {
-                    make(inner(), other)
+                    make(inner, other)
                 } else {
-                    make(other, inner())
+                    make(other, inner)
                 }
-            }
-        }),
+            }),
         // `inner` goes in at a generated index among zero to two generated
         // items.
-        (select(LISTS.to_vec()), vec(expr(), 0..=2), any::<Index>()).prop_map({
-            let inner = held();
-            move |(make, mut items, at)| {
-                items.insert(at.index(items.len() + 1), *inner());
+        (
+            select(LISTS.to_vec()),
+            held.clone(),
+            vec(expr(), 0..=2),
+            any::<Index>()
+        )
+            .prop_map(|(make, inner, mut items, at)| {
+                items.insert(at.index(items.len() + 1), *inner);
                 make(items)
-            }
-        }),
+            }),
         // The index picks the property that holds `inner`: the test, the
         // first branch or the branch after `else`.
-        (operand(), operand(), 0..3usize).prop_map({
-            let inner = held();
-            move |(a, b, at)| {
-                let (test, then, otherwise) = match at {
-                    0 => (inner(), a, b),
-                    1 => (a, inner(), b),
-                    _ => (a, b, inner()),
-                };
-                Expr::If {
-                    test,
-                    then,
-                    otherwise,
-                }
+        (held.clone(), operand(), operand(), 0..3usize).prop_map(|(inner, a, b, at)| {
+            let (test, then, otherwise) = match at {
+                0 => (inner, a, b),
+                1 => (a, inner, b),
+                _ => (a, b, inner),
+            };
+            Expr::If {
+                test,
+                then,
+                otherwise,
             }
         }),
         // The flag puts `inner` in the list or in the test.
-        (select(QUANTIFIERS.to_vec()), TEXT, operand(), any::<bool>()).prop_map({
-            let inner = held();
-            move |(make, name, other, in_list)| {
+        (
+            select(QUANTIFIERS.to_vec()),
+            TEXT,
+            held.clone(),
+            operand(),
+            any::<bool>()
+        )
+            .prop_map(|(make, name, inner, other, in_list)| {
                 if in_list {
-                    make(name, inner(), other)
+                    make(name, inner, other)
                 } else {
-                    make(name, other, inner())
+                    make(name, other, inner)
                 }
-            }
-        }),
-        vec(select(TYPES.to_vec()), 0..=3).prop_map({
-            let inner = held();
-            move |types| Expr::IsInstance {
-                value: inner(),
-                types,
-            }
-        }),
-        (select(PATTERNS.to_vec()), TEXT).prop_map({
-            let inner = held();
-            move |(make, pattern)| make(pattern, inner())
-        }),
+            }),
+        (held.clone(), vec(select(TYPES.to_vec()), 0..=3))
+            .prop_map(|(value, types)| Expr::IsInstance { value, types }),
+        (select(PATTERNS.to_vec()), TEXT, held)
+            .prop_map(|(make, pattern, text)| make(pattern, text)),
     ]
     .boxed()
 }
