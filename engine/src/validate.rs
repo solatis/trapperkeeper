@@ -29,8 +29,9 @@ pub enum Reason {
     /// A tag value is empty or longer than `max`. `len` counts the characters
     /// of the value, and the accepted range is 1 to `max`.
     TagValueLength { len: usize, max: usize },
-    /// A node lies more than `max` nodes below the top of the expression, the
-    /// cap `MAX_DEPTH`. The refusal points at that node.
+    /// The way from the top of the expression down to a node passes more than
+    /// `max` nodes, the cap `MAX_DEPTH`, with the top and the node counted.
+    /// The refusal points at the first node past the cap.
     TooDeep { max: usize },
     /// The expression prints as `len` characters of rule text, which is more
     /// than `max`, the cap `MAX_TEXT_LENGTH`.
@@ -83,7 +84,8 @@ fn printed_length(e: &Expr) -> usize {
     counter.0
 }
 
-/// Checks `e` and then every node under it, and returns the first refusal.
+/// Checks the depth of `e` and then of every node under it, and returns the
+/// first refusal.
 /// `at` is the JSON pointer of `e`, and `depth` counts the nodes from the
 /// top of the expression down to `e`.
 fn check_nodes(e: &Expr, at: &str, depth: usize) -> Result<(), Error> {
@@ -94,8 +96,9 @@ fn check_nodes(e: &Expr, at: &str, depth: usize) -> Result<(), Error> {
         return refuse(at, Reason::TooDeep { max: MAX_DEPTH });
     }
     for (steps, child) in e.children() {
-        // Each step is a key of the tree's JSON form or an index, so none
-        // holds a `~` or a `/` that would need escaping.
+        // The steps are keys of the tree's JSON form and indexes, joined by
+        // `/`. No key and no index holds a `~` or a `/` that would need
+        // escaping.
         check_nodes(child, &format!("{at}/{steps}"), depth + 1)?;
     }
     Ok(())
