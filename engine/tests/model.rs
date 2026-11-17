@@ -145,7 +145,8 @@ fn apply(d: Defect, rule: &mut Rule) -> (String, Reason) {
     }
 }
 
-/// The position, in the JSON form of a rule, of the field that `d` breaks.
+/// The rank of the field that `d` breaks among the fields that `validate`
+/// checks, in the order in which the JSON form of a rule writes them.
 fn field(d: Defect) -> usize {
     match d {
         Defect::NilRuleId | Defect::RandomRuleId => 0,
@@ -200,7 +201,7 @@ fn pointer_to(document: &Value, wanted: &Value) -> Option<String> {
 type Chain = fn(usize) -> String;
 
 /// The chains of the property `a_chain_that_validates_reads_back`, each with
-/// its name. Each row is one way in which a text nests a tree, without a
+/// its name, which proptest prints in a failing input. Each row is one way in which a text nests a tree, without a
 /// bracket or with one: a sum, a chain of methods, parentheses, a chain of
 /// `not`, and a conditional in the branch after the `else` of a conditional.
 const CHAINS: [(&str, Chain); 5] = [
@@ -333,12 +334,13 @@ proptest! {
     #[test]
     fn a_chain_that_validates_reads_back(
         (_, chain) in select(CHAINS.to_vec()),
-        // The JSON reader gives up on a sum of 70 terms, so the range crosses
-        // both the depth cap and the reader's limit.
+        // The JSON reader stops at 128 levels and first fails on a sum of 65
+        // terms. The range crosses both the depth cap and that limit, and
+        // past the cap validation refuses every chain.
         n in 1..=80usize,
     ) {
-        // The parser refuses some chains for its own caps, and those are not
-        // the subject.
+        // The parser refuses the chains of parentheses, of `not` and of `else`
+        // past its cap on nesting, and those are not the subject.
         let Ok(tree) = parse(&chain(n)) else {
             return Ok(());
         };
@@ -347,14 +349,15 @@ proptest! {
         if validate(&rule_with(tree.clone())).is_err() {
             return Ok(());
         }
-        // The JSON reader stops at 128 levels, and the depth cap keeps a
-        // valid tree under that. Without the cap this check fails for a sum
-        // of 70 terms.
+        // The depth cap keeps a valid tree under the JSON reader's limit.
+        // Without the cap this check would fail for a sum of 65 terms.
         let json = serde_json::to_string(&tree).expect("a tree serializes");
         let back: Expr = serde_json::from_str(&json).expect("the JSON reads back");
         prop_assert_eq!(&back, &tree);
-        // The printed text of a valid rule is within the parser's cap on
-        // length, so it parses back to the same tree.
+        // The printer writes each chain as it was written, with no bracket
+        // that opens a level of nesting, and the printed text of a valid rule
+        // is within the parser's cap on length. So it parses back to the same
+        // tree.
         let printed = parse(&tree.to_string()).expect("the printed text parses");
         prop_assert_eq!(&printed, &tree);
     }
@@ -399,13 +402,15 @@ fn the_limits_of_the_expression_hold_at_their_edges() {
     assert_eq!(refusal(nots(MAX_DEPTH - 1, Expr::Bool(true))), None);
     assert_eq!(refusal(nots(MAX_DEPTH, Expr::Bool(true))), too_deep);
 
-    // A chain of `+` opens no level of nesting in the parser, and each `+` is
-    // a node of the tree. The comparison, 30 nodes of `+` and a leaf are 32
-    // nodes.
+    // The parser groups a chain of `+` to the left, so the deepest leaf of a
+    // sum of 31 terms lies under 30 nodes of `+`. With the comparison on top
+    // the tree is 32 nodes deep. The chain opens no level of nesting in the
+    // parser.
     assert_eq!(refusal(parsed(&format!("{} > 0", sum(31)))), None);
     assert_eq!(refusal(parsed(&format!("{} > 0", sum(32)))), too_deep);
 
-    // Two groups in parentheses halve the depth of the sum.
+    // The same 32 terms in two groups of parentheses are 18 nodes deep: the
+    // comparison, the `+` between the groups, and a group of 16 terms.
     let grouped = format!("({}) + ({}) > 0", sum(16), sum(16));
     assert_eq!(refusal(parsed(&grouped)), None);
 
@@ -421,8 +426,9 @@ fn the_limits_of_the_expression_hold_at_their_edges() {
     );
 
     // The text of 3006 characters is within the parser's cap. The printer
-    // writes a space after each comma, so the tree prints as 4505 characters
-    // and the rule is refused.
+    // writes the list in parentheses as the text does, with a space after
+    // each of the 1499 commas, so the tree prints as 4505 characters and the
+    // rule is refused.
     let list = format!("x in ({})", vec!["1"; 1500].join(","));
     let tree = parsed(&list);
     let len = tree.to_string().chars().count();
