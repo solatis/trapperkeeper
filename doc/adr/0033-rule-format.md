@@ -1,6 +1,6 @@
 # 0033. The rule format
 
-Date: 2026-11-14.
+Date: 2026-11-17.
 
 ## Context
 
@@ -62,8 +62,9 @@ type does not have. This refusal concerns the properties of the rule document.
 It does not concern the fields of the records that a rule reads. A rule has no
 schema version field.
 
-Validation returns every refusal of a rule and does not stop at the first.
-Each refusal names its place in the rule document, as a JSON pointer.
+Validation stops at the first refusal and returns it, as the parser does
+(`adr/0042`) (owner, 2026-11-17). The refusal names its place in the rule
+document, as a JSON pointer.
 
 ## Rejected alternatives
 
@@ -123,9 +124,9 @@ would silently become the default.
 A schema version field on a rule, because nothing is kept backwards
 compatible (`principles.md`, 8).
 
-Stopping at the first refusal, because the author would then fix a rule one
-round trip at a time. A refusal with a free-text message only, because the
-UI could not point at the place of the error.
+Every refusal of a rule in one answer (owner, 2026-11-17). A refusal with a
+free-text message only, because the UI could not point at the place of the
+error.
 
 ## Consequences
 
@@ -133,4 +134,5 @@ The web UI edits a rule as text. The engine, the server and every SDK read the
 same tree. A limit changes by a commit, and the change invalidates the stored
 rules that exceed it. The event query shows a title that may repeat, and the
 unique-name rule of `adr/0020` does not apply to rules. No code executes `drop`
-or `throw` until a sensor SDK exists. The engine component cites this record.
+or `throw` until a sensor SDK exists. An author with two mistakes in a rule
+sees them one at a time. The engine component cites this record.

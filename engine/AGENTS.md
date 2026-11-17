@@ -27,7 +27,8 @@ depends on no server, store or HTTP code.
 
 - The code that stores a rule, sends it to a sensor or evaluates it assumes
   that `validate` accepted the rule. `validate` checks the id, the sample
-  rate and the scope tags, and it accepts every expression.
+  rate and the scope tags, and it accepts every expression. It returns the
+  first refusal.
 - The crate depends on serde, serde_json and uuid only.
 - Every struct of the model and every node of the tree refuses an unknown
   JSON property.
@@ -36,8 +37,7 @@ depends on no server, store or HTTP code.
 - The engine never generates a `rule_id`.
 - A new refusal reason of `validate` gets a variant of `Defect` in
   `tests/model.rs`. The property `a_defect_is_refused_at_its_place` checks
-  that a valid rule with only this defect gets only this refusal, at its
-  place.
+  that a valid rule with this defect is refused for it, at its place.
 
 **Why**:
 

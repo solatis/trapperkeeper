@@ -1,5 +1,6 @@
-//! Tests of the JSON form of a rule and of `validate`, as properties over
-//! generated rules. ADR-0018 prefers property tests.
+//! Tests of the JSON form of a rule and of `validate`, which returns the
+//! first refusal of a rule, as properties over generated rules. ADR-0018
+//! prefers property tests.
 
 mod common;
 
@@ -49,10 +50,10 @@ fn one_tag(key: &str, value: &str) -> BTreeMap<String, String> {
 }
 
 /// Changes `rule` by the defect `d` and returns the JSON pointer and the
-/// reason of the only refusal that `validate` must report. Every defect of
-/// the scope replaces the whole scope, so that the returned refusal is the
-/// only one, because the generated scope may already hold `MAX_SCOPE_TAGS`
-/// tags, and one more tag would also be refused as too many.
+/// reason of the refusal that `validate` must return. Every defect of the
+/// scope replaces the whole scope, because the generated scope may already
+/// hold `MAX_SCOPE_TAGS` tags, and with one more tag `validate` would refuse
+/// the scope as too many first.
 fn apply(d: Defect, rule: &mut Rule) -> (String, Reason) {
     let too_long = MAX_TAG_LENGTH + 1;
 
@@ -129,6 +130,18 @@ fn apply(d: Defect, rule: &mut Rule) -> (String, Reason) {
     }
 }
 
+/// The position, in the JSON form of a rule, of the field that `d` breaks.
+fn field(d: Defect) -> usize {
+    match d {
+        Defect::NilRuleId | Defect::RandomRuleId => 0,
+        Defect::SampleRateZero | Defect::SampleRateAboveOne | Defect::SampleRateNan => 1,
+        Defect::TooManyTags
+        | Defect::TagKeyEmpty
+        | Defect::TagKeyTooLong
+        | Defect::TagValueTooLong => 2,
+    }
+}
+
 proptest! {
     // Without a regression file a failure leaves no untracked file in the
     // working tree. A failure prints the minimal failing input.
@@ -162,19 +175,48 @@ proptest! {
         prop_assert!(serde_json::from_value::<Rule>(document).is_err());
     }
 
-    /// A rule with one defect is refused with that defect's reason at the
-    /// JSON pointer of the defective field, and no other refusal is reported.
+    /// A rule with one defect is refused with that defect's reason, at the
+    /// JSON pointer of the defective field.
     #[test]
     fn a_defect_is_refused_at_its_place(mut rule in rule(), d in select(DEFECTS.to_vec())) {
         let (at, reason) = apply(d, &mut rule);
-        let errors = validate(&rule).expect_err("a defective rule is refused");
-        // The test compares the errors as JSON values, because `Reason`
+        let error = validate(&rule).expect_err("a defective rule is refused");
+        // The test compares the refusal as a JSON value, because `Reason`
         // holds a NaN sample rate for one defect and a NaN is not equal to
         // itself. serde_json writes a NaN as null on both sides.
         prop_assert_eq!(
-            serde_json::to_value(&errors).expect("the errors serialize"),
-            serde_json::to_value([Error { at, reason }]).expect("the error serializes"),
+            serde_json::to_value(&error).expect("the error serializes"),
+            serde_json::to_value(Error { at, reason }).expect("the error serializes"),
             "{:?}", d
+        );
+    }
+
+    /// A rule with defects in two fields is refused for the field that the
+    /// JSON form writes first.
+    #[test]
+    fn the_earlier_field_is_refused_first(
+        mut rule in rule(),
+        (a, b) in (select(DEFECTS.to_vec()), select(DEFECTS.to_vec())),
+    ) {
+        // Two defects of one field would overwrite each other, because each
+        // defect replaces its field whole.
+        prop_assume!(field(a) != field(b));
+        // Each call changes its own field alone, so the order of the calls
+        // does not count.
+        let (at_a, reason_a) = apply(a, &mut rule);
+        let (at_b, reason_b) = apply(b, &mut rule);
+        let (at, reason) = if field(a) < field(b) {
+            (at_a, reason_a)
+        } else {
+            (at_b, reason_b)
+        };
+        let error = validate(&rule).expect_err("a defective rule is refused");
+        // As in the property above, the refusal is compared as a JSON value
+        // because of the NaN sample rate.
+        prop_assert_eq!(
+            serde_json::to_value(&error).expect("the error serializes"),
+            serde_json::to_value(Error { at, reason }).expect("the error serializes"),
+            "{:?} and {:?}", a, b
         );
     }
 }
