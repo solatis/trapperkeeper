@@ -285,7 +285,7 @@ impl Expr {
             | Expr::IsLower(x)
             | Expr::IsAscii(x) => vec![(key.to_owned(), x)],
             // The types of `IsInstance` and the pattern of a pattern function
-            // are no nodes, so the value and the text are the only children.
+            // are not nodes, so the value and the text are the only children.
             // JSON writes these kinds as an object of named properties.
             Expr::IsInstance { value: x, .. } => vec![(format!("{key}/value"), x)],
             Expr::ReSearch { text: x, .. }
