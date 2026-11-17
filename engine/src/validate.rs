@@ -1,9 +1,10 @@
-//! Validation of a rule's own fields, before the rule is stored or sent to a
-//! sensor. It does not check the expression.
+//! Validation of a rule before it is stored or sent to a sensor: the rule's
+//! own fields, and the depth of its expression (ADR-0033).
 
 use serde::Serialize;
 
-use crate::limits::{MAX_SCOPE_TAGS, MAX_TAG_LENGTH};
+use crate::expr::Expr;
+use crate::limits::{MAX_DEPTH, MAX_SCOPE_TAGS, MAX_TAG_LENGTH};
 use crate::rule::Rule;
 
 /// Why a part of a rule was refused.
@@ -25,6 +26,9 @@ pub enum Reason {
     /// A tag value is empty or longer than `max`. `len` counts the characters
     /// of the value, and the accepted range is 1 to `max`.
     TagValueLength { len: usize, max: usize },
+    /// A node lies more than `max` nodes below the top of the expression, the
+    /// cap `MAX_DEPTH`. The refusal points at that node.
+    TooDeep { max: usize },
 }
 
 /// One refusal: where in the rule document, as a JSON pointer (RFC 6901),
@@ -51,14 +55,34 @@ fn refuse(at: &str, reason: Reason) -> Result<(), Error> {
     })
 }
 
-/// Checks the id, the sample rate and the scope tags of `rule`. It accepts
-/// every expression.
+/// Checks `e` and then every node under it, and returns the first refusal.
+/// `at` is the JSON pointer of `e`, and `depth` counts the nodes from the
+/// top of the expression down to `e`.
+fn check_nodes(e: &Expr, at: &str, depth: usize) -> Result<(), Error> {
+    // The walk refuses the node and does not go further down. It calls itself
+    // once per level, so the cap also bounds its own stack on a tree of any
+    // depth.
+    if depth > MAX_DEPTH {
+        return refuse(at, Reason::TooDeep { max: MAX_DEPTH });
+    }
+    for (steps, child) in e.children() {
+        // Each step is a key of the tree's JSON form or an index, so none
+        // holds a `~` or a `/` that would need escaping.
+        check_nodes(child, &format!("{at}/{steps}"), depth + 1)?;
+    }
+    Ok(())
+}
+
+/// Checks the id, the sample rate, the scope tags and the expression of
+/// `rule`. It does not test whether the parser could have built the
+/// expression (ADR-0033).
 ///
 /// # Errors
 ///
 /// The first refusal, in the order in which the JSON form of a rule writes
 /// the fields: the id, then the sample rate, then the scope, then each tag
-/// in key order, with a key before its value.
+/// in key order, with a key before its value, then the expression, with a
+/// node before its children.
 pub fn validate(rule: &Rule) -> Result<(), Error> {
     // `validate` runs its checks in the order in which the JSON form of a
     // rule holds the fields, and it returns the refusal of the first check
@@ -103,5 +127,6 @@ pub fn validate(rule: &Rule) -> Result<(), Error> {
             return refuse(&at, Reason::TagValueLength { len, max });
         }
     }
-    Ok(())
+    // The top of the expression is the first node, so its depth is 1.
+    check_nodes(&rule.expression, "/expression", 1)
 }

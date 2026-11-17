@@ -94,9 +94,8 @@ The parser reports a refusal of a grammar rule unless a note of a token test
 lies further in the text. The refusal for too much work (`TooComplex`) wins
 over any note, because the parse stopped there.
 
-The cap on nesting bounds the parser's stack and not the depth of a tree. The
-limits of a tree belong to the validation of the expression. `validate` does
-not check the expression yet, so no limit holds a tree.
+The cap on nesting bounds the parser's stack and not the depth of a tree.
+Validation holds the depth of a tree (`adr/0033`).
 
 Whoever shows an error works out the line and the column from the byte range.
 Every new reason is a new variant of the public enum `text::Reason` of the

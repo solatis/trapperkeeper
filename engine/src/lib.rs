@@ -1,7 +1,6 @@
 //! The rule model: what a rule is, the tree of its expression, their JSON
 //! form, the parser and the printer of a rule's text, and the validation of
-//! a rule's own fields. `validate` accepts every expression, and no code of
-//! this crate evaluates a rule.
+//! a rule. No code of this crate evaluates a rule.
 
 pub mod expr;
 pub mod limits;

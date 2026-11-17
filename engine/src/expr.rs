@@ -179,7 +179,152 @@ pub enum Expr {
 }
 
 impl Expr {
-    /// The nodes directly under this one, in written order.
+    /// The key that names the kind of this node in its JSON form, as `gt` for
+    /// `Gt` and `re_search` for `ReSearch`. For `None` it is `none`, the bare
+    /// string that `None` is written as.
+    pub(crate) fn key(&self) -> &'static str {
+        // serde derives these names from the attributes on `Expr` and gives
+        // no way to ask for the name of a variant. The property
+        // `a_node_past_the_depth_cap_is_refused_at_its_place` in
+        // `tests/model.rs` fails when the name of a kind that holds a node
+        // differs from the JSON form.
+        match self {
+            Expr::None => "none",
+            Expr::Bool(_) => "bool",
+            Expr::Int(_) => "int",
+            Expr::Float(_) => "float",
+            Expr::Text(_) => "text",
+            Expr::List(_) => "list",
+            Expr::Field(_) => "field",
+            Expr::Element { .. } => "element",
+            Expr::Not(_) => "not",
+            Expr::And(_) => "and",
+            Expr::Or(_) => "or",
+            Expr::Eq(..) => "eq",
+            Expr::Ne(..) => "ne",
+            Expr::Lt(..) => "lt",
+            Expr::Le(..) => "le",
+            Expr::Gt(..) => "gt",
+            Expr::Ge(..) => "ge",
+            Expr::In(..) => "in",
+            Expr::NotIn(..) => "not_in",
+            Expr::IsNone(_) => "is_none",
+            Expr::IsNotNone(_) => "is_not_none",
+            Expr::Add(..) => "add",
+            Expr::Sub(..) => "sub",
+            Expr::Mul(..) => "mul",
+            Expr::Div(..) => "div",
+            Expr::Mod(..) => "mod",
+            Expr::Neg(_) => "neg",
+            Expr::If { .. } => "if",
+            Expr::Any { .. } => "any",
+            Expr::All { .. } => "all",
+            Expr::Len(_) => "len",
+            Expr::IsInstance { .. } => "isinstance",
+            Expr::ReSearch { .. } => "re_search",
+            Expr::ReMatch { .. } => "re_match",
+            Expr::ReFullmatch { .. } => "re_fullmatch",
+            Expr::IsNan(_) => "math_isnan",
+            Expr::StartsWith(..) => "startswith",
+            Expr::EndsWith(..) => "endswith",
+            Expr::Upper(_) => "upper",
+            Expr::Lower(_) => "lower",
+            Expr::Strip(_) => "strip",
+            Expr::LStrip(_) => "lstrip",
+            Expr::RStrip(_) => "rstrip",
+            Expr::IsDigit(_) => "isdigit",
+            Expr::IsAlpha(_) => "isalpha",
+            Expr::IsAlnum(_) => "isalnum",
+            Expr::IsSpace(_) => "isspace",
+            Expr::IsUpper(_) => "isupper",
+            Expr::IsLower(_) => "islower",
+            Expr::IsAscii(_) => "isascii",
+        }
+    }
+
+    /// The nodes directly under this one, in the order of the JSON form. Each
+    /// comes with the steps of a JSON pointer that lead to it from this node,
+    /// as `gt/1` for the right operand of a `Gt`.
+    pub(crate) fn children(&self) -> Vec<(String, &Expr)> {
+        let key = self.key();
+        match self {
+            Expr::None
+            | Expr::Bool(_)
+            | Expr::Int(_)
+            | Expr::Float(_)
+            | Expr::Text(_)
+            | Expr::Field(_)
+            | Expr::Element { .. } => Vec::new(),
+            // JSON writes the operands as an array, so the steps are the key
+            // and the index.
+            Expr::List(items) | Expr::And(items) | Expr::Or(items) => items
+                .iter()
+                .enumerate()
+                .map(|(i, x)| (format!("{key}/{i}"), x))
+                .collect(),
+            // The JSON of such a node is an object whose one value is the
+            // operand, so the step is the key alone.
+            Expr::Not(x)
+            | Expr::IsNone(x)
+            | Expr::IsNotNone(x)
+            | Expr::Neg(x)
+            | Expr::Len(x)
+            | Expr::IsNan(x)
+            | Expr::Upper(x)
+            | Expr::Lower(x)
+            | Expr::Strip(x)
+            | Expr::LStrip(x)
+            | Expr::RStrip(x)
+            | Expr::IsDigit(x)
+            | Expr::IsAlpha(x)
+            | Expr::IsAlnum(x)
+            | Expr::IsSpace(x)
+            | Expr::IsUpper(x)
+            | Expr::IsLower(x)
+            | Expr::IsAscii(x) => vec![(key.to_owned(), x)],
+            // The types of `IsInstance` and the pattern of a pattern function
+            // are no nodes, so the value and the text are the only children.
+            // JSON writes these kinds as an object of named properties.
+            Expr::IsInstance { value: x, .. } => vec![(format!("{key}/value"), x)],
+            Expr::ReSearch { text: x, .. }
+            | Expr::ReMatch { text: x, .. }
+            | Expr::ReFullmatch { text: x, .. } => vec![(format!("{key}/text"), x)],
+            // As for a list, the steps are the key and the index.
+            Expr::Eq(l, r)
+            | Expr::Ne(l, r)
+            | Expr::Lt(l, r)
+            | Expr::Le(l, r)
+            | Expr::Gt(l, r)
+            | Expr::Ge(l, r)
+            | Expr::In(l, r)
+            | Expr::NotIn(l, r)
+            | Expr::Add(l, r)
+            | Expr::Sub(l, r)
+            | Expr::Mul(l, r)
+            | Expr::Div(l, r)
+            | Expr::Mod(l, r)
+            | Expr::StartsWith(l, r)
+            | Expr::EndsWith(l, r) => vec![(format!("{key}/0"), l), (format!("{key}/1"), r)],
+            // JSON writes the conditional and the quantifiers as an object of
+            // named properties, in the order of the fields of the variant.
+            Expr::If {
+                test,
+                then,
+                otherwise,
+            } => vec![
+                (format!("{key}/test"), test),
+                (format!("{key}/then"), then),
+                (format!("{key}/else"), otherwise),
+            ],
+            Expr::Any { list, test, .. } | Expr::All { list, test, .. } => {
+                vec![(format!("{key}/list"), list), (format!("{key}/test"), test)]
+            }
+        }
+    }
+
+    /// The nodes directly under this one, in written order. `children` gives
+    /// them in the order of the JSON form, with their pointer steps, for a
+    /// caller that only reads.
     pub(crate) fn children_mut(&mut self) -> Vec<&mut Expr> {
         // `resolve` in `text/grammar.rs` is the only caller. It resolves each
         // child on its own and handles `Any` and `All` itself, so no result

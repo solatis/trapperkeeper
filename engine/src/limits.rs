@@ -19,8 +19,17 @@ pub const MAX_TEXT_LENGTH: usize = 4096;
 
 /// Levels of nesting in a rule's text, at most (ADR-0042). A bracket, a
 /// `not`, a negating minus and the branch after `else` each open a level. The
-/// parser calls itself once per level, so the cap bounds its stack.
+/// parser calls itself once per level, so the cap bounds its stack. The cap
+/// does not bound the depth of a tree, because a chain of operators such as
+/// `a + b + c` nests without a bracket. `MAX_DEPTH` bounds that.
 pub const MAX_NESTING: usize = 32;
+
+/// Nodes on the way from the top of a rule's expression down to a leaf, at
+/// most, with the top and the leaf counted (ADR-0033). A node takes up to two
+/// levels of JSON, and the JSON reader stops at 128 levels, so a tree within
+/// the cap reads back from its JSON. Code that walks a tree calls itself once
+/// per level, so the cap also bounds its stack.
+pub const MAX_DEPTH: usize = 32;
 
 /// Token tests while parsing one text, at most (ADR-0042). A token test is
 /// one comparison of a token with what a rule of the grammar wants at its

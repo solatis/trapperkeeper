@@ -3,45 +3,52 @@
 **What**: the rule engine crate, `trapperkeeper-engine`, with the library
 `trapperkeeper_engine`, which a pipeline can embed. It holds the rule model,
 the tree of a rule's expression, their JSON form and the validation of a
-rule's own fields. It also parses a rule's text into the tree and prints a
-tree as text. It does not check an expression and does not evaluate rules. It
-depends on no server, store or HTTP code.
+rule. Validation checks the rule's own fields and holds its expression to a
+depth. The crate also parses a rule's text into the tree and prints a tree as
+text. It does not evaluate rules. It depends on no server, store or HTTP code.
 
 **Map**:
 
-| File                  | What                                                                                                                    | When to read                                                                                                                                                   |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Cargo.toml`          | the package name; the dependencies and their features                                                                   | changing a dependency; why floats parse exactly; why no UUID generator; why the package name ends in `-engine`                                                 |
-| `src/lib.rs`          | the modules and what the crate exports                                                                                  | what a user of the crate can reach; why `text::Reason` is not exported at the crate root                                                                       |
-| `src/expr.rs`         | the expression tree, a path segment and the type names                                                                  | the JSON key of a kind of node; adding a function or a method                                                                                                  |
-| `src/rule.rs`         | the rule and the action types                                                                                           | the JSON form of a rule; the value of a field that JSON omits; why a rule holds the tree and no text                                                           |
-| `src/limits.rs`       | the limits as constants, each with where its number came from                                                           | how many scope tags, how long a tag; how long a rule's text may be and how deep it may nest; the cap on token tests in one parse; why the limits are constants |
-| `src/validate.rs`     | `validate`, the refusal reasons and the JSON pointer of a refusal                                                       | which fields of a rule are checked; why a rule was refused                                                                                                     |
-| `src/text/`           | the parser and the printer of rule text                                                                                 | parsing or printing rule text; a syntax error and its sentence; see `src/text/AGENTS.md`                                                                       |
-| `tests/common/mod.rs` | the strategies for trees and for rules                                                                                  | generating trees or rules in another test; adding a kind of node to the generated trees                                                                        |
-| `tests/tree.rs`       | the round trip and the refusals of the tree's JSON, as properties over generated trees                                  | how the JSON form of the tree is tested                                                                                                                        |
-| `tests/text.rs`       | valid and faulty rule texts, the sentence of every reason but `TooComplex`, the round trip and the limits of the parser | what an error says for a mistake; adding a faulty text                                                                                                         |
-| `tests/model.rs`      | the defects, and the round-trip and refusal properties of a rule                                                        | how the JSON form of a rule and validation are tested; adding a refusal reason and its defect                                                                  |
+| File                  | What                                                                                                                    | When to read                                                                                                                                                                           |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Cargo.toml`          | the package name; the dependencies and their features                                                                   | changing a dependency; why floats parse exactly; why no UUID generator; why the package name ends in `-engine`                                                                         |
+| `src/lib.rs`          | the modules and what the crate exports                                                                                  | what a user of the crate can reach; why `text::Reason` is not exported at the crate root                                                                                               |
+| `src/expr.rs`         | the expression tree, a path segment, the type names, the JSON key of a kind and the pointer steps to a child            | the JSON key of a kind of node; the JSON pointer of a node; adding a function or a method                                                                                              |
+| `src/rule.rs`         | the rule and the action types                                                                                           | the JSON form of a rule; the value of a field that JSON omits; why a rule holds the tree and no text                                                                                   |
+| `src/limits.rs`       | the limits as constants, each with where its number came from                                                           | how many scope tags, how long a tag; how long a rule's text may be and how deep it may nest; how deep a tree may be; the cap on token tests in one parse; why the limits are constants |
+| `src/validate.rs`     | `validate`, the refusal reasons and the JSON pointer of a refusal                                                       | which fields of a rule and what of its expression are checked, and in which order; why a rule was refused; adding a check of the expression                                            |
+| `src/text/`           | the parser and the printer of rule text                                                                                 | parsing or printing rule text; a syntax error and its sentence; see `src/text/AGENTS.md`                                                                                               |
+| `tests/common/mod.rs` | the strategies for trees and for rules, and the strategy that puts a defect under generated nodes                       | generating trees or rules in another test; adding a kind of node to the generated trees                                                                                                |
+| `tests/tree.rs`       | the round trip and the refusals of the tree's JSON, as properties over generated trees                                  | how the JSON form of the tree is tested                                                                                                                                                |
+| `tests/text.rs`       | valid and faulty rule texts, the sentence of every reason but `TooComplex`, the round trip and the limits of the parser | what an error says for a mistake; adding a faulty text                                                                                                                                 |
+| `tests/model.rs`      | the defects of the fields and of the expression, and the round-trip and refusal properties of a rule                    | how the JSON form of a rule and validation are tested; adding a refusal reason and its defect                                                                                          |
 
 **Invariants**:
 
 - The code that stores a rule, sends it to a sensor or evaluates it assumes
   that `validate` accepted the rule. `validate` checks the id, the sample
-  rate and the scope tags, and it accepts every expression. It returns the
-  first refusal.
+  rate and the scope tags, and it holds the expression to `MAX_DEPTH`. It
+  returns the first refusal.
+- A new kind of node gets an arm in `Expr::key` and in `Expr::children`. The
+  compiler asks for both arms. It does not check that the name in `key` is the
+  JSON key, and the property `a_node_past_the_depth_cap_is_refused_at_its_place`
+  in `tests/model.rs` does.
 - The crate depends on serde, serde_json and uuid only.
 - Every struct of the model and every node of the tree refuses an unknown
   JSON property.
 - A new kind of node is added to the strategy `expr` in
   `tests/common/mod.rs`, so the properties of the tree cover it.
 - The engine never generates a `rule_id`.
-- A new refusal reason of `validate` gets a variant of `Defect` in
-  `tests/model.rs`. The property `a_defect_is_refused_at_its_place` checks
-  that a valid rule with this defect is refused for it, at its place.
+- A new refusal reason of `validate` about a field gets a variant of `Defect`
+  in `tests/model.rs`. The property `a_defect_is_refused_at_its_place` checks
+  that a valid rule with this defect is refused for it, at its place. A new
+  refusal reason about a node of the expression gets a property that places
+  its defect with `around` and finds the expected place with `pointer_to`.
 
 **Why**:
 
-- The rule format and the form of the tree: `doc/adr/0033-rule-format.md`.
+- The rule format, the form of the tree, how validation answers and the
+  limits of an expression: `doc/adr/0033-rule-format.md`.
 - The rule language, its kinds of expression and the closed list of functions
   and methods: `doc/adr/0041-the-rule-language.md`.
 - The scope tags, their caps and the seen-scope index:

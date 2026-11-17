@@ -63,8 +63,15 @@ It does not concern the fields of the records that a rule reads. A rule has no
 schema version field.
 
 Validation stops at the first refusal and returns it, as the parser does
-(`adr/0042`) (owner, 2026-11-17). The refusal names its place in the rule
-document, as a JSON pointer.
+(`adr/0042`) (owner, 2026-11-17). It runs its checks in the order in which the
+JSON form writes the fields, and inside the expression it checks a node before
+its children, so a rule with several defects gets the same refusal every time.
+The refusal names its place in the rule document as a JSON pointer, also
+inside the expression, as in `/expression/and/1` (owner, 2026-11-16).
+
+Validation holds an expression to 32 nodes from its top to a leaf, with both
+counted (owner, 2026-11-16). Validation checks the rules it knows, and it does
+not test whether the parser could have built a tree (owner, 2026-11-16).
 
 ## Rejected alternatives
 
@@ -95,6 +102,11 @@ and could meet a text that its version of the parser does not accept. Validation
 in an SDK, because an SDK executes only rules that the server returned, and the
 server validated each of them before it stored it.
 
+A depth of 60, about the deepest tree that the JSON reader reads (owner,
+2026-11-16). A check per shape of the grammar in validation, and printing a
+tree and parsing it back, because validation does not care about a tree that
+the parser cannot build (owner, 2026-11-16).
+
 Limits that the caller passes to validation, because a rule's validity would
 then differ per install. No limits, because an AI client will abuse an
 unbounded system (owner, 2026-11-10).
@@ -124,9 +136,10 @@ would silently become the default.
 A schema version field on a rule, because nothing is kept backwards
 compatible (`principles.md`, 8).
 
-Every refusal of a rule in one answer (owner, 2026-11-17). A refusal with a
-free-text message only, because the UI could not point at the place of the
-error.
+Every refusal of a rule in one answer (owner, 2026-11-17). A range of bytes in
+the text as the place of a refusal inside the expression, because validation
+reports the refusal and validation sees the tree. A refusal with a free-text
+message only, because the UI could not point at the place of the error.
 
 ## Consequences
 
@@ -135,4 +148,7 @@ same tree. A limit changes by a commit, and the change invalidates the stored
 rules that exceed it. The event query shows a title that may repeat, and the
 unique-name rule of `adr/0020` does not apply to rules. No code executes `drop`
 or `throw` until a sensor SDK exists. An author with two mistakes in a rule
-sees them one at a time. The engine component cites this record.
+sees them one at a time. A sum of more than 31 terms needs parentheses that
+group it. `validate` does not vouch for the shape of a tree that arrives as
+JSON, such as an `and` with one operand. The engine component cites this
+record.

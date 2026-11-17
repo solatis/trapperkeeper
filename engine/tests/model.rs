@@ -1,6 +1,7 @@
 //! Tests of the JSON form of a rule and of `validate`, which returns the
-//! first refusal of a rule, as properties over generated rules. ADR-0018
-//! prefers property tests.
+//! first refusal of a rule, as properties over generated rules: the defects
+//! of the fields, and the defects of the expression at generated places.
+//! ADR-0018 prefers property tests.
 
 mod common;
 
@@ -8,11 +9,13 @@ use std::collections::BTreeMap;
 
 use proptest::prelude::*;
 use proptest::sample::select;
-use trapperkeeper_engine::limits::{MAX_SCOPE_TAGS, MAX_TAG_LENGTH};
+use serde_json::Value;
+use trapperkeeper_engine::expr::{Expr, Segment};
+use trapperkeeper_engine::limits::{MAX_DEPTH, MAX_SCOPE_TAGS, MAX_TAG_LENGTH};
 use trapperkeeper_engine::{Error, Reason, Rule, validate};
 use uuid::Uuid;
 
-use common::rule;
+use common::{around, rule};
 
 /// One way to break a valid rule.
 #[derive(Debug, Clone, Copy)]
@@ -142,6 +145,44 @@ fn field(d: Defect) -> usize {
     }
 }
 
+/// The key of the field that marks the place of a defect. It is longer than
+/// any text that the strategies generate, so no generated node equals the
+/// marker.
+const MARKER: &str = "the defect stands here";
+
+/// The field `record["the defect stands here"]`.
+fn marker() -> Expr {
+    Expr::Field(vec![Segment::Key(MARKER.to_owned())])
+}
+
+/// `e` under `n` nodes of `not`.
+fn nots(n: usize, e: Expr) -> Expr {
+    (0..n).fold(e, |e, _| Expr::Not(Box::new(e)))
+}
+
+/// The JSON pointer, from the top of `document`, of the first value in it
+/// that equals `wanted`, or `None` when no value does.
+fn pointer_to(document: &Value, wanted: &Value) -> Option<String> {
+    // The test for equality comes before the descent, so a value that holds
+    // another equal value inside it is found at its outermost place.
+    if document == wanted {
+        return Some(String::new());
+    }
+    match document {
+        Value::Array(items) => items
+            .iter()
+            .enumerate()
+            .find_map(|(i, v)| pointer_to(v, wanted).map(|p| format!("/{i}{p}"))),
+        // The keys of the tree's JSON form hold no `~` and no `/`, so a key
+        // is its step as it is. The tests search the expression alone, never
+        // the scope, whose keys can hold both.
+        Value::Object(fields) => fields
+            .iter()
+            .find_map(|(k, v)| pointer_to(v, wanted).map(|p| format!("/{k}{p}"))),
+        _ => None,
+    }
+}
+
 proptest! {
     // Without a regression file a failure leaves no untracked file in the
     // working tree. A failure prints the minimal failing input.
@@ -218,5 +259,42 @@ proptest! {
             serde_json::to_value(Error { at, reason }).expect("the error serializes"),
             "{:?} and {:?}", a, b
         );
+    }
+
+    /// A node past the depth cap is refused at its own place.
+    #[test]
+    fn a_node_past_the_depth_cap_is_refused_at_its_place(
+        mut rule in rule(),
+        (tree, above) in around(nots(MAX_DEPTH, marker())),
+    ) {
+        // The defect is the marker under `MAX_DEPTH` nodes of `not`, so on
+        // its own the marker is the one node past the cap. `around` puts
+        // `above` more nodes over the defect.
+        //
+        // 1. We make the tree the rule's expression and validate. The
+        //    refusal is `TooDeep`, because the other operands are shallow
+        //    and validate.
+        // 2. We work out which node lies first past the cap. Each node above
+        //    the defect pushes it one level down, so the node at depth
+        //    `MAX_DEPTH + 1` is the marker under `above` nodes of `not`.
+        // 3. We look that node up in the JSON of the rule and compare its
+        //    pointer with the place of the refusal. The pointer comes from
+        //    serde's own output, so the test also fails when `Expr::key` or
+        //    `Expr::children` name a step differently from the JSON form.
+
+        // 1. validate the rule with the defect
+        rule.expression = tree;
+        let error = validate(&rule).expect_err("a tree past the cap is refused");
+        prop_assert_eq!(&error.reason, &Reason::TooDeep { max: MAX_DEPTH });
+
+        // 2. work out the node past the cap
+        let past = serde_json::to_value(nots(above, marker())).expect("a tree serializes");
+
+        // 3. compare the pointer with the place
+        let document = serde_json::to_value(&rule).expect("a rule serializes");
+        let found = pointer_to(&document["expression"], &past).expect("the tree holds the node");
+        // `pointer_to` searched the expression alone, so the step
+        // `/expression` goes in front.
+        prop_assert_eq!(error.at, format!("/expression{found}"));
     }
 }

@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 
 use proptest::collection::{btree_map, vec};
 use proptest::prelude::*;
-use proptest::sample::select;
+use proptest::sample::{Index, select};
 use trapperkeeper_engine::expr::{Expr, Segment, TypeName};
 use trapperkeeper_engine::limits::{MAX_SCOPE_TAGS, MAX_TAG_LENGTH};
 use trapperkeeper_engine::{Action, Rule};
@@ -88,14 +88,17 @@ const TYPES: [TypeName; 5] = [
     TypeName::List,
 ];
 
+/// The pattern of a generated text: at most eight characters, and no line
+/// break, because `.` matches none.
+const TEXT: &str = ".{0,8}";
+
 /// Generates every kind of node, in trees of at most three levels, with
 /// finite floats, texts of at most eight characters and lists and paths of at
 /// most three items.
 pub fn expr() -> BoxedStrategy<Expr> {
     // The strategy keeps lists and paths to three items and texts to eight
     // characters, so a failing case shrinks to something a person can read.
-    // `.` matches no line break, so no generated text holds one.
-    let text = || ".{0,8}";
+    let text = || TEXT;
     let path = || {
         let segment = prop_oneof![
             text().prop_map(Segment::Key),
@@ -153,6 +156,106 @@ pub fn expr() -> BoxedStrategy<Expr> {
     .boxed()
 }
 
+/// Generates a tree that holds `inner` exactly once, as one operand of a
+/// generated node of any kind. The other operands come from `expr()`.
+fn frame(inner: Expr) -> BoxedStrategy<Expr> {
+    let operand = || expr().prop_map(Box::new);
+    // Each closure below owns a copy of `inner`, and proptest calls it once
+    // per generated case.
+    let held = move || {
+        let inner = inner.clone();
+        move || Box::new(inner.clone())
+    };
+    // Every kind of node that holds an operand stands in one of the arms,
+    // from the same lists as in `expr()`, so a pointer through any kind is
+    // tested.
+    prop_oneof![
+        select(UNARY.to_vec()).prop_map({
+            let inner = held();
+            move |make| make(inner())
+        }),
+        // The flag puts `inner` on the left or on the right.
+        (select(BINARY.to_vec()), operand(), any::<bool>()).prop_map({
+            let inner = held();
+            move |(make, other, left)| {
+                if left {
+                    make(inner(), other)
+                } else {
+                    make(other, inner())
+                }
+            }
+        }),
+        // `inner` goes in at a generated index among zero to two generated
+        // items.
+        (select(LISTS.to_vec()), vec(expr(), 0..=2), any::<Index>()).prop_map({
+            let inner = held();
+            move |(make, mut items, at)| {
+                items.insert(at.index(items.len() + 1), *inner());
+                make(items)
+            }
+        }),
+        // The index picks the property that holds `inner`: the test, the
+        // first branch or the branch after `else`.
+        (operand(), operand(), 0..3usize).prop_map({
+            let inner = held();
+            move |(a, b, at)| {
+                let (test, then, otherwise) = match at {
+                    0 => (inner(), a, b),
+                    1 => (a, inner(), b),
+                    _ => (a, b, inner()),
+                };
+                Expr::If {
+                    test,
+                    then,
+                    otherwise,
+                }
+            }
+        }),
+        // The flag puts `inner` in the list or in the test.
+        (select(QUANTIFIERS.to_vec()), TEXT, operand(), any::<bool>()).prop_map({
+            let inner = held();
+            move |(make, name, other, in_list)| {
+                if in_list {
+                    make(name, inner(), other)
+                } else {
+                    make(name, other, inner())
+                }
+            }
+        }),
+        vec(select(TYPES.to_vec()), 0..=3).prop_map({
+            let inner = held();
+            move |types| Expr::IsInstance {
+                value: inner(),
+                types,
+            }
+        }),
+        (select(PATTERNS.to_vec()), TEXT).prop_map({
+            let inner = held();
+            move |(make, pattern)| make(pattern, inner())
+        }),
+    ]
+    .boxed()
+}
+
+/// Generates a tree that holds `defect` exactly once, under zero to two
+/// generated nodes, together with the number of those nodes. A test puts a
+/// defect at a place that it did not choose by hand.
+pub fn around(defect: Expr) -> BoxedStrategy<(Expr, usize)> {
+    // Each of the `n` rounds wraps the tree so far in one more node of
+    // `frame`, so the defect ends `n` nodes below the top. With the three
+    // levels of the other operands, a bound of two keeps the tree far below
+    // `MAX_DEPTH`, so only the defect can be refused.
+    (0..=2usize)
+        .prop_flat_map(move |n| {
+            (0..n)
+                .fold(Just(defect.clone()).boxed(), |tree, _| {
+                    tree.prop_flat_map(frame).boxed()
+                })
+                .prop_map(move |tree| (tree, n))
+        })
+        .boxed()
+}
+
 /// A version 7 UUID from a generated timestamp and generated random bytes.
 pub fn rule_id() -> impl Strategy<Value = Uuid> {
     // A version 7 UUID holds 48 bits of milliseconds.
@@ -174,7 +277,8 @@ pub fn scope() -> impl Strategy<Value = BTreeMap<String, String>> {
 }
 
 /// A rule that `validate` accepts: a version 7 UUID as its id, a sample rate
-/// in (0, 1], a scope within the caps and any expression.
+/// in (0, 1], a scope within the caps and an expression of `expr()`, which
+/// stays within the limits of validation.
 pub fn rule() -> impl Strategy<Value = Rule> {
     // The bound of 40 characters on a title is a choice that no measurement
     // backs.
