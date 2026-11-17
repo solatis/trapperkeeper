@@ -46,12 +46,12 @@ kit, the error that a faulty text gets, and the printer.
   test `a_deep_faulty_text_is_refused_for_its_own_mistake` guards that rule.
   No test checks that every other reason has a row in `faulty`, so the
   sentence of a reason without a row is never run by a test.
-- A canonical tree is a tree that the parser can build, and it prints to a
-  text that parses back to the same tree, as long as the printed text stays
-  within the parser's caps on length and nesting. The printer writes spaces
-  and parentheses that an author can leave out, so a printed text can be
-  longer than the text it came from. An `and` directly under an `and`
-  is a tree that the parser cannot build. The property
+- A canonical tree is a tree that the parser can build. An `and` directly
+  under an `and` is a tree that the parser cannot build. A canonical tree
+  prints to a text that parses back to the same tree, as long as the printed
+  text stays within the parser's caps on length and nesting. The printer
+  writes spaces and parentheses that an author can leave out, so a printed
+  text can be longer than the text it came from. The property
   `a_printed_tree_parses_back_to_itself` in `engine/tests/text.rs` checks
   this over the trees that the strategy `canonical_in` generates. A change to
   the grammar or to the printer keeps that property passing.
