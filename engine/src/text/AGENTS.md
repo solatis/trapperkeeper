@@ -71,7 +71,8 @@ kit, the error that a faulty text gets, and the printer.
   one entry in each of the test files `engine/tests/common/mod.rs` and
   `engine/tests/text.rs`. Each file has a list `UNARY` for a method without
   an argument and a list `BINARY` for a method with one. The lists of
-  `engine/tests/common/mod.rs` feed the strategy `expr`, which generates any
-  tree for the properties of the JSON form. The lists of
+  `engine/tests/common/mod.rs` feed the strategies `expr`, which generates any
+  tree for the properties of the JSON form, and `valid_expr`, which generates
+  trees that validate. The lists of
   `engine/tests/text.rs` feed `canonical_in`, which generates only trees that
   the parser can build.

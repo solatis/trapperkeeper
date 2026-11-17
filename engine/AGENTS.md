@@ -19,7 +19,7 @@ code.
 | `src/limits.rs`       | the limits as constants, each with where its number came from                                                                                                                              | how many scope tags, how long a tag; how long a rule's text may be and how deep it may nest; how deep a tree may be; the cap on token tests in one parse; why the limits are constants |
 | `src/validate.rs`     | `validate`, the refusal reasons and the JSON pointer of a refusal                                                                                                                          | which fields of a rule and what of its expression are checked, and in which order; why a rule was refused; adding a check of the expression                                            |
 | `src/text/`           | the parser and the printer of rule text                                                                                                                                                    | parsing or printing rule text; a syntax error and its sentence; see `src/text/AGENTS.md`                                                                                               |
-| `tests/common/mod.rs` | the strategies for trees and for rules, and the strategy that puts a defect under generated nodes                                                                                          | generating trees or rules in another test; adding a kind of node to the generated trees                                                                                                |
+| `tests/common/mod.rs` | the strategies for any tree, for a tree that validates and for rules, and the strategy that puts a defect under generated nodes                                                            | generating trees or rules in another test; adding a kind of node to the generated trees                                                                                                |
 | `tests/tree.rs`       | the round trip and the refusals of the tree's JSON, as properties over generated trees                                                                                                     | how the JSON form of the tree is tested                                                                                                                                                |
 | `tests/text.rs`       | valid and faulty rule texts, the sentence of every reason but `TooComplex`, the round trip and the limits of the parser                                                                    | what an error says for a mistake; adding a faulty text                                                                                                                                 |
 | `tests/model.rs`      | the defects of the fields and of the expression, the round-trip and refusal properties of a rule, the edges of the depth and the printed length, and the read-back of chains that validate | how the JSON form of a rule and validation are tested; adding a refusal reason and its defect; how the limits of an expression are tested                                              |
@@ -38,8 +38,11 @@ code.
 - The crate depends on serde, serde_json and uuid only.
 - Every struct of the model and every node of the tree refuses an unknown
   JSON property.
-- A new kind of node is added to the strategy `expr` in
+- A new kind of node is added to the strategy `tree` in
   `tests/common/mod.rs`, so the properties of the tree cover it.
+- A strategy that feeds `validate` takes its trees from `valid_expr()`. The
+  JSON tests take theirs from `expr()`, which also builds trees that
+  `validate` refuses.
 - The engine never generates a `rule_id`.
 - A new refusal reason of `validate` about a field gets a variant of `Defect`
   in `tests/model.rs`. The property `a_defect_is_refused_at_its_place` checks

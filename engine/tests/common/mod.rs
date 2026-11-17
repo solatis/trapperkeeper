@@ -73,7 +73,7 @@ const QUANTIFIERS: [Quantifier; 2] = [
 ];
 
 /// The three pattern functions.
-const PATTERNS: [fn(String, Box<Expr>) -> Expr; 3] = [
+pub const PATTERNS: [fn(String, Box<Expr>) -> Expr; 3] = [
     |pattern, text| Expr::ReSearch { pattern, text },
     |pattern, text| Expr::ReMatch { pattern, text },
     |pattern, text| Expr::ReFullmatch { pattern, text },
@@ -92,12 +92,27 @@ const TYPES: [TypeName; 5] = [
 /// line break, so a text never has one.
 const TEXT: &str = ".{0,8}";
 
+/// Generates a pattern that compiles: one of a few realistic patterns, or a
+/// short text of letters, digits and spaces.
+pub fn pattern() -> BoxedStrategy<String> {
+    prop_oneof![
+        // An anchor, a class, a counted repeat and an alternation. The list
+        // has no counted repeat of a Unicode class, such as `^\w{1,64}$`:
+        // that compiles to megabytes and would slow down every test.
+        select(vec!["^ab", "[0-9]+$", "x{2,4}", "cat|dog"]).prop_map(str::to_owned),
+        // Letters, digits and spaces mean nothing special in a pattern, so
+        // any such text compiles.
+        "[a-zA-Z0-9 ]{0,8}",
+    ]
+    .boxed()
+}
+
 /// Generates every kind of node, in trees of at most three levels, with
 /// finite floats, texts of at most eight characters and lists and paths of at
-/// most three items.
-pub fn expr() -> BoxedStrategy<Expr> {
-    // The strategy keeps lists and paths to three items and texts to eight
-    // characters, so a failing case shrinks to something a person can read.
+/// most three items. With `valid` set, the tree passes validation.
+fn tree(valid: bool) -> BoxedStrategy<Expr> {
+    // The small bounds let a failing case shrink to something a person can
+    // read.
     let path = || {
         let segment = prop_oneof![
             TEXT.prop_map(Segment::Key),
@@ -146,22 +161,38 @@ pub fn expr() -> BoxedStrategy<Expr> {
                 .prop_map(|(make, name, list, test)| make(name, list, test)),
             (operand(), vec(select(TYPES.to_vec()), 0..=3))
                 .prop_map(|(value, types)| Expr::IsInstance { value, types }),
-            // The pattern is any text, because the engine does not check a
-            // pattern.
-            (select(PATTERNS.to_vec()), TEXT, operand())
+            // Without `valid` the pattern is any text. The JSON form does not
+            // care whether a pattern compiles, and its tests should cover
+            // that.
+            (
+                select(PATTERNS.to_vec()),
+                if valid { pattern() } else { TEXT.boxed() },
+                operand()
+            )
                 .prop_map(|(make, pattern, text)| make(pattern, text)),
         ]
     })
     .boxed()
 }
 
+/// Generates any tree. A pattern in it is any short text and may not compile.
+pub fn expr() -> BoxedStrategy<Expr> {
+    tree(false)
+}
+
+/// Generates a tree that passes validation.
+pub fn valid_expr() -> BoxedStrategy<Expr> {
+    tree(true)
+}
+
 /// Wraps `inner` in one random node. `inner` becomes one of that node's
-/// operands, and `expr()` fills in the rest.
+/// operands, and `valid_expr()` fills in the rest, so only `inner` can make
+/// validation fail.
 fn frame(inner: Expr) -> BoxedStrategy<Expr> {
-    let operand = || expr().prop_map(Box::new);
+    let operand = || valid_expr().prop_map(Box::new);
     let held = Just(Box::new(inner));
     // The arms cover every kind of node that has an operand, from the same
-    // lists that `expr()` uses. So the tests see a pointer through each kind.
+    // lists that `tree` uses. So the tests see a pointer through each kind.
     prop_oneof![
         (select(UNARY.to_vec()), held.clone()).prop_map(|(make, inner)| make(inner)),
         // `left` says which side `inner` goes on.
@@ -182,7 +213,7 @@ fn frame(inner: Expr) -> BoxedStrategy<Expr> {
         (
             select(LISTS.to_vec()),
             held.clone(),
-            vec(expr(), 0..=2),
+            vec(valid_expr(), 0..=2),
             any::<Index>()
         )
             .prop_map(|(make, inner, mut items, at)| {
@@ -220,7 +251,7 @@ fn frame(inner: Expr) -> BoxedStrategy<Expr> {
             }),
         (held.clone(), vec(select(TYPES.to_vec()), 0..=3))
             .prop_map(|(value, types)| Expr::IsInstance { value, types }),
-        (select(PATTERNS.to_vec()), TEXT, held)
+        (select(PATTERNS.to_vec()), pattern(), held)
             .prop_map(|(make, pattern, text)| make(pattern, text)),
     ]
     .boxed()
@@ -265,8 +296,7 @@ pub fn scope() -> impl Strategy<Value = BTreeMap<String, String>> {
 }
 
 /// A rule that `validate` accepts: a version 7 UUID as its id, a sample rate
-/// in (0, 1], a scope within the caps and an expression from `expr()`, which
-/// is small enough to pass every limit.
+/// in (0, 1], a scope within the caps and an expression from `valid_expr()`.
 pub fn rule() -> impl Strategy<Value = Rule> {
     // The bound of 40 characters on a title is a choice that no measurement
     // backs.
@@ -276,7 +306,7 @@ pub fn rule() -> impl Strategy<Value = Rule> {
     // draw from the range alone almost never gives 1.0, and that share is a
     // choice. The range starts at `f64::MIN_POSITIVE`, so 0 is never drawn.
     let sample_rate = prop_oneof![Just(1.0), f64::MIN_POSITIVE..=1.0];
-    (rule_id(), title, action, sample_rate, scope(), expr()).prop_map(
+    (rule_id(), title, action, sample_rate, scope(), valid_expr()).prop_map(
         |(rule_id, rule_title, action, sample_rate, scope, expression)| Rule {
             rule_id,
             rule_title,
