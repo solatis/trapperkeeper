@@ -1,7 +1,7 @@
-//! Tests of the JSON form of a rule and of `validate`, which returns the
-//! first refusal of a rule. Most tests are properties over generated rules
-//! and texts, because ADR-0018 prefers property tests. The edges of the
-//! limits of an expression are tested on trees built in code.
+//! Tests for the JSON form of a rule and for `validate`, which returns the
+//! first error it finds. Most are property tests over generated rules and
+//! texts (ADR-0018). The exact edges of the limits are tested on trees built
+//! by hand.
 
 mod common;
 
@@ -54,11 +54,10 @@ fn one_tag(key: &str, value: &str) -> BTreeMap<String, String> {
     BTreeMap::from([(key.to_owned(), value.to_owned())])
 }
 
-/// Changes `rule` by the defect `d` and returns the JSON pointer and the
-/// reason of the refusal that `validate` must return. Every defect of the
-/// scope replaces the whole scope, because the generated scope may already
-/// hold `MAX_SCOPE_TAGS` tags, and with one more tag `validate` would refuse
-/// the scope as too many first.
+/// Breaks `rule` with the defect `d`. Returns the JSON pointer and the reason
+/// that `validate` must then give. A scope defect replaces the whole scope:
+/// the generated scope may already be full, and one more tag would get
+/// "too many tags" before the error under test.
 fn apply(d: Defect, rule: &mut Rule) -> (String, Reason) {
     let too_long = MAX_TAG_LENGTH + 1;
 
@@ -133,20 +132,18 @@ fn apply(d: Defect, rule: &mut Rule) -> (String, Reason) {
             )
         }
         Defect::TextTooLong => {
-            // A text literal of `MAX_TEXT_LENGTH - 1` characters prints with
-            // its two quotes as `MAX_TEXT_LENGTH + 1` characters, so the rule
-            // sits directly past the cap.
+            // The text prints with two quotes around it, so it comes out one
+            // character over the cap.
             rule.expression = Expr::Text("x".repeat(MAX_TEXT_LENGTH - 1));
             let (len, max) = (MAX_TEXT_LENGTH + 1, MAX_TEXT_LENGTH);
-            // The refusal concerns the whole expression, so it points at the
-            // expression.
+            // The whole expression is too long, so the error points at it.
             ("/expression".to_owned(), Reason::TextTooLong { len, max })
         }
     }
 }
 
-/// The rank of the field that `d` breaks among the fields that `validate`
-/// checks, in the order in which the JSON form of a rule writes them.
+/// Which field `d` breaks, as a number that follows the order in which
+/// `validate` checks the fields.
 fn field(d: Defect) -> usize {
     match d {
         Defect::NilRuleId | Defect::RandomRuleId => 0,
@@ -159,25 +156,25 @@ fn field(d: Defect) -> usize {
     }
 }
 
-/// The key of the field that marks the place of a defect. It is longer than
-/// any text that `expr()` generates, so no generated node equals the marker.
+/// The key of the marker field, which a test plants so it can find a place
+/// in a tree again. `expr()` never generates a text this long, so no other
+/// node looks like the marker.
 const MARKER: &str = "the defect stands here";
 
-/// The field whose path is the one key `MARKER`.
+/// The marker: a field with the one key `MARKER`.
 fn marker() -> Expr {
     Expr::Field(vec![Segment::Key(MARKER.to_owned())])
 }
 
-/// `e` under `n` nodes of `not`.
+/// `e` wrapped in `n` layers of `not`.
 fn nots(n: usize, e: Expr) -> Expr {
     (0..n).fold(e, |e, _| Expr::Not(Box::new(e)))
 }
 
-/// The JSON pointer, from the top of `document`, of the first value in it
-/// that equals `wanted`, or `None` when no value does.
+/// Finds `wanted` inside `document` and returns the JSON pointer to it, or
+/// `None` when it is not there.
 fn pointer_to(document: &Value, wanted: &Value) -> Option<String> {
-    // The test for equality comes before the descent, so a value that holds
-    // another equal value inside it is found at its outermost place.
+    // Comparing before going deeper finds the outermost match.
     if document == wanted {
         return Some(String::new());
     }
@@ -186,9 +183,9 @@ fn pointer_to(document: &Value, wanted: &Value) -> Option<String> {
             .iter()
             .enumerate()
             .find_map(|(i, v)| pointer_to(v, wanted).map(|p| format!("/{i}{p}"))),
-        // The keys of the tree's JSON form hold no `~` and no `/`, so a key
-        // is its step as it is. The tests search the expression alone, never
-        // the scope, whose keys can hold both.
+        // A key needs no escaping here. The tests only search inside the
+        // expression, and its JSON keys never hold a `~` or a `/`. Scope keys
+        // can, and the tests never search the scope.
         Value::Object(fields) => fields
             .iter()
             .find_map(|(k, v)| pointer_to(v, wanted).map(|p| format!("/{k}{p}"))),
@@ -196,14 +193,14 @@ fn pointer_to(document: &Value, wanted: &Value) -> Option<String> {
     }
 }
 
-/// The text of a chain with `n` links.
+/// Builds the rule text of a chain with `n` links.
 type Chain = fn(usize) -> String;
 
-/// The chains of the property `a_chain_that_validates_reads_back`, each with
-/// its name, which proptest prints in a failing input. Each row is one way in
-/// which a text nests a tree. A sum and a chain of methods open no level of
-/// the parser's nesting. Parentheses, a chain of `not` and a conditional in
-/// the branch after `else` open one level per link.
+/// The chains for `a_chain_that_validates_reads_back`. Each is one way a
+/// text can make a deep tree. The name shows up when proptest prints a
+/// failing input. A sum and a chain of methods do not count toward the
+/// parser's nesting cap. Parentheses, `not` and a nested `else` count one
+/// level per link.
 const CHAINS: [(&str, Chain); 5] = [
     ("sum", |n| vec!["1"; n + 1].join(" + ")),
     ("methods", |n| format!("x{}", ".upper()".repeat(n))),
@@ -214,11 +211,11 @@ const CHAINS: [(&str, Chain); 5] = [
     ("else", |n| format!("{}1", "1 if x else ".repeat(n))),
 ];
 
-/// A rule with valid fields whose expression is `e`.
+/// A rule with the expression `e` and fields that pass validation.
 fn rule_with(e: Expr) -> Rule {
     Rule {
-        // A timestamp of 0 and zero random bytes still give a version 7
-        // UUID, which `validate` accepts.
+        // All zeros still makes a version 7 UUID, which is all `validate`
+        // asks of an id.
         rule_id: uuid::Builder::from_unix_timestamp_millis(0, &[0; 10]).into_uuid(),
         rule_title: None,
         action: Action::Observe,
@@ -261,15 +258,15 @@ proptest! {
         prop_assert!(serde_json::from_value::<Rule>(document).is_err());
     }
 
-    /// A rule with one defect is refused with that defect's reason, at the
-    /// JSON pointer of the defective field.
+    /// A rule with one defect gets that defect's reason, at the JSON pointer
+    /// of the broken field.
     #[test]
     fn a_defect_is_refused_at_its_place(mut rule in rule(), d in select(DEFECTS.to_vec())) {
         let (at, reason) = apply(d, &mut rule);
         let error = validate(&rule).expect_err("a defective rule is refused");
-        // The test compares the refusal as a JSON value, because `Reason`
-        // holds a NaN sample rate for one defect and a NaN is not equal to
-        // itself. serde_json writes a NaN as null on both sides.
+        // The errors are compared as JSON. One defect puts a NaN in the
+        // reason, and a NaN never equals itself. serde_json writes it as null
+        // on both sides.
         prop_assert_eq!(
             serde_json::to_value(&error).expect("the error serializes"),
             serde_json::to_value(Error { at, reason }).expect("the error serializes"),
@@ -277,18 +274,17 @@ proptest! {
         );
     }
 
-    /// A rule with defects in two fields is refused for the field that the
-    /// JSON form writes first.
+    /// When two fields are broken, the error is about the one that comes
+    /// first in the rule's JSON.
     #[test]
     fn the_earlier_field_is_refused_first(
         mut rule in rule(),
         (a, b) in (select(DEFECTS.to_vec()), select(DEFECTS.to_vec())),
     ) {
-        // Two defects of one field would overwrite each other, because each
-        // defect replaces its field whole.
+        // Two defects in the same field would overwrite each other.
         prop_assume!(field(a) != field(b));
-        // Each call changes its own field alone, so the order of the calls
-        // does not count.
+        // Each call touches only its own field, so the order of the two
+        // calls does not matter.
         let (at_a, reason_a) = apply(a, &mut rule);
         let (at_b, reason_b) = apply(b, &mut rule);
         let (at, reason) = if field(a) < field(b) {
@@ -297,8 +293,7 @@ proptest! {
             (at_b, reason_b)
         };
         let error = validate(&rule).expect_err("a defective rule is refused");
-        // As in the property above, the refusal is compared as a JSON value
-        // because of the NaN sample rate.
+        // Compared as JSON because of the NaN, as in the property above.
         prop_assert_eq!(
             serde_json::to_value(&error).expect("the error serializes"),
             serde_json::to_value(Error { at, reason }).expect("the error serializes"),
@@ -306,87 +301,85 @@ proptest! {
         );
     }
 
-    /// A node past the depth cap is refused at its own place.
+    /// A tree that is too deep gets `TooDeep`, pointing at the first node
+    /// past the cap.
     #[test]
     fn a_node_past_the_depth_cap_is_refused_at_its_place(
         mut rule in rule(),
         (tree, above) in around(nots(MAX_DEPTH, marker())),
     ) {
-        // The defect is the marker under `MAX_DEPTH` nodes of `not`, so on
-        // its own the marker is the one node past the cap. `around` puts
-        // `above` more nodes over the defect.
+        // The defect is the marker under `MAX_DEPTH` layers of `not`. On its
+        // own, the marker is the only node that is too deep. `around` then
+        // puts `above` more nodes on top.
         //
-        // 1. We make the tree the rule's expression and validate. The
-        //    refusal is `TooDeep`, because the other operands are shallow
-        //    and validate.
-        // 2. We work out which node lies first past the cap. Each node above
-        //    the defect pushes it one level down, so the node at depth
-        //    `MAX_DEPTH + 1` is the marker under `above` nodes of `not`.
-        // 3. We look that node up in the JSON of the rule and compare its
-        //    pointer with the place of the refusal. The pointer comes from
-        //    serde's own output, so the test also fails when the table `parts!`
-        //    of `src/expr.rs` names a step differently from the JSON form.
+        // 1. We validate the rule with this tree. The error must be
+        //    `TooDeep`, because nothing else in the tree is deep or invalid.
+        // 2. We work out which node is the first one past the cap. Every
+        //    node on top pushes the defect one level down, so that node is
+        //    the marker with `above` layers of `not` still around it.
+        // 3. We find that node in the rule's JSON and compare its pointer
+        //    with the error's. The expected pointer comes from serde's
+        //    output, so the test also fails when the table `parts!` in
+        //    `src/expr.rs` disagrees with the JSON form.
 
         // 1. validate the rule with the defect
         rule.expression = tree;
         let error = validate(&rule).expect_err("a tree past the cap is refused");
         prop_assert_eq!(&error.reason, &Reason::TooDeep { max: MAX_DEPTH });
 
-        // 2. work out the node past the cap
+        // 2. work out the first node past the cap
         let past = serde_json::to_value(nots(above, marker())).expect("a tree serializes");
 
-        // 3. compare the pointer with the place
+        // 3. compare the pointers
         let document = serde_json::to_value(&rule).expect("a rule serializes");
         let found = pointer_to(&document["expression"], &past).expect("the tree holds the node");
-        // `pointer_to` searched the expression alone, so the step
-        // `/expression` goes in front.
+        // `pointer_to` searched inside the expression, so `/expression` goes
+        // in front.
         prop_assert_eq!(error.at, format!("/expression{found}"));
     }
 
-    /// A chain that parses and validates reads back from its JSON and from
-    /// its printed text.
+    /// A chain that parses and validates can be read back, both from its
+    /// JSON and from its printed text.
     #[test]
     fn a_chain_that_validates_reads_back(
         (_, chain) in select(CHAINS.to_vec()),
-        // The JSON reader stops at 128 levels. A node of `+` takes two of
-        // them, an object and the array of its operands, so the reader first
-        // fails on a sum of 65 terms. The range crosses both the depth cap
-        // and that limit, and past the cap validation refuses every chain.
+        // The JSON reader stops at 128 levels. Each `+` takes two of them, an
+        // object and an array, so the reader first fails on a sum of 65
+        // terms. The range goes past both that and the depth cap.
         n in 1..=80usize,
     ) {
-        // The parser refuses the chains of parentheses, of `not` and of `else`
-        // past `MAX_NESTING`, and those are not the subject. A sum and a
-        // chain of methods open no level.
+        // Long chains of parentheses, `not` and `else` hit `MAX_NESTING` and
+        // do not parse. This test is not about those. A sum and a chain of
+        // methods always parse.
         let Ok(tree) = parse(&chain(n)) else {
             return Ok(());
         };
-        // A chain that validation refuses is not the subject either. The
-        // property says what a valid rule can rely on.
+        // Nor is it about chains that fail validation. It checks what a
+        // valid rule can rely on.
         if validate(&rule_with(tree.clone())).is_err() {
             return Ok(());
         }
-        // The depth cap keeps a valid tree under the JSON reader's limit.
-        // Without the cap this check would fail for a sum of 65 terms.
+        // The depth cap is what makes this pass. Without it, a sum of 65
+        // terms would validate and then fail to read back.
         let json = serde_json::to_string(&tree).expect("a tree serializes");
         let back: Expr = serde_json::from_str(&json).expect("the JSON reads back");
         prop_assert_eq!(&back, &tree);
-        // The printer writes the chains of `not` and of `else` as they were
-        // written. The parser reads the parentheses chain as the one field `x`,
-        // which the printer writes bare. So the printed text opens no more
-        // levels of nesting than the text did, and within the parser's cap on
-        // length it parses back to the same tree.
+        // The printed text never nests deeper than the original. `not` and
+        // `else` chains print as they were written, and `((x))` is just the
+        // field `x`, which prints bare. A valid rule also prints within the
+        // length cap, so the printed text parses.
         let printed = parse(&tree.to_string()).expect("the printed text parses");
         prop_assert_eq!(&printed, &tree);
     }
 }
 
-/// The reason that `validate` refuses the rule with the expression `e` for,
-/// or `None` when the rule validates.
+/// The reason `validate` gives for a rule with the expression `e`, or `None`
+/// when the rule is valid.
 fn refusal(e: Expr) -> Option<Reason> {
     validate(&rule_with(e)).err().map(|r| r.reason)
 }
 
-/// The tree of the rule text `t`.
+/// Parses the rule text `t`.
 fn parsed(t: &str) -> Expr {
     parse(t).expect("the text parses")
 }
@@ -396,32 +389,31 @@ fn sum(n: usize) -> String {
     vec!["1"; n].join("+")
 }
 
-/// The depth and the printed length hold at their edges, for a tree built in
-/// code and for a tree parsed from text.
+/// The depth cap and the length cap sit exactly where they should, for trees
+/// built by hand and for trees parsed from text.
 #[test]
 fn the_limits_of_the_expression_hold_at_their_edges() {
     let too_deep = Some(Reason::TooDeep { max: MAX_DEPTH });
 
-    // `MAX_DEPTH - 1` nodes of `not` over a literal are `MAX_DEPTH` nodes
-    // deep.
+    // `MAX_DEPTH - 1` layers of `not` plus the literal are exactly
+    // `MAX_DEPTH` levels.
     assert_eq!(refusal(nots(MAX_DEPTH - 1, Expr::Bool(true))), None);
     assert_eq!(refusal(nots(MAX_DEPTH, Expr::Bool(true))), too_deep);
 
-    // The parser groups a chain of `+` to the left, so the deepest leaf of a
-    // sum of 31 terms lies under 30 nodes of `+`. With the comparison on top
-    // the tree is 32 nodes deep.
+    // `+` groups to the left, so a sum of 31 terms is 30 `+` nodes deep
+    // plus a leaf. With the `>` on top that is 32 levels.
     assert_eq!(refusal(parsed(&format!("{} > 0", sum(31)))), None);
-    // The chain opens no level of nesting, so the parser reads a sum of any
-    // number of terms within the text cap, and only validation refuses it.
+    // A sum does not count toward the parser's nesting cap, so the parser
+    // reads this one. Only validation refuses it.
     assert_eq!(refusal(parsed(&format!("{} > 0", sum(32)))), too_deep);
 
-    // The same 32 terms in two groups of parentheses are 18 nodes deep: the
-    // comparison, the `+` between the groups, and a group of 16 terms.
+    // The same 32 terms split into two groups are only 18 levels deep: the
+    // `>`, the `+` between the groups, and one group of 16 terms.
     let grouped = format!("({}) + ({}) > 0", sum(16), sum(16));
     assert_eq!(refusal(parsed(&grouped)), None);
 
-    // With its two quotes a text literal prints as two characters more than
-    // it holds.
+    // A text prints with two quotes, so it is two characters longer than
+    // its content.
     let max = MAX_TEXT_LENGTH;
     let text = |n| Expr::Text("x".repeat(n));
     assert_eq!(refusal(text(max - 2)), None);
@@ -431,10 +423,9 @@ fn the_limits_of_the_expression_hold_at_their_edges() {
         Some(Reason::TextTooLong { len, max })
     );
 
-    // The text of 3006 characters is within the parser's cap. The printer
-    // writes the list in parentheses as the text does, with a space after
-    // each of the 1499 commas, so the tree prints as 4505 characters and the
-    // rule is refused.
+    // This text is 3006 characters, so it parses. The printer adds a space
+    // after each of the 1499 commas, which makes 4505 characters, and that
+    // is over the cap.
     let list = format!("x in ({})", vec!["1"; 1500].join(","));
     let tree = parsed(&list);
     let len = tree.to_string().chars().count();
