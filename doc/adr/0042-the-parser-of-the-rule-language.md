@@ -113,7 +113,9 @@ Validation holds the depth of a tree and the length of its printed text
 
 The refusals of a `None` beside an operator, of a pattern that does not compile
 and of a tree that is too deep come from validation, with a JSON pointer into
-the tree. Whoever shows such a refusal cannot mark the text.
+the tree. Whoever shows such a refusal cannot mark the text. The rewrite that
+the parser suggests for a chained comparison repeats the operands as written, so
+the rewrite of `None < x < 10` parses and validation then refuses its `None`.
 
 Whoever shows an error works out the line and the column from the byte range.
 Every new reason is a new variant of the public enum `text::Reason` of the

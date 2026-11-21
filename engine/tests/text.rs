@@ -541,6 +541,16 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
             },
             "chained comparisons are not supported; write `0 < amount and amount < 10`",
         ),
+        // The rewrite repeats the operands as they were written, so it keeps
+        // the `None`. It parses, and validation then refuses the `None`.
+        (
+            "None < x < 10",
+            9..10,
+            Reason::ChainedComparison {
+                write: Some("None < x and x < 10".to_owned()),
+            },
+            "chained comparisons are not supported; write `None < x and x < 10`",
+        ),
         (
             "items[-1].price > 5",
             6..8,
@@ -1065,6 +1075,11 @@ fn a_faulty_text_is_refused_at_its_place_with_its_reason() {
         // The sentence is the reason's `Display`, so the row shows an
         // author's whole view of the mistake.
         assert_eq!(error.to_string(), sentence, "{text:?}");
+        // An author who follows a suggested rewrite must not get a second
+        // syntax error.
+        if let Reason::ChainedComparison { write: Some(w) } = &reason {
+            assert!(parse(w).is_ok(), "the rewrite {w:?} of {text:?}");
+        }
     }
 }
 

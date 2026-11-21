@@ -12,6 +12,7 @@ use proptest::sample::select;
 use serde_json::Value;
 use trapperkeeper_engine::expr::{Expr, Segment};
 use trapperkeeper_engine::limits::{MAX_DEPTH, MAX_SCOPE_TAGS, MAX_TAG_LENGTH, MAX_TEXT_LENGTH};
+use trapperkeeper_engine::text::Reason as SyntaxReason;
 use trapperkeeper_engine::{Action, Error, Reason, Rule, parse, validate};
 use uuid::Uuid;
 
@@ -480,6 +481,27 @@ fn parsed(t: &str) -> Expr {
 /// `1+1+...+1` with `n` terms.
 fn sum(n: usize) -> String {
     vec!["1"; n].join("+")
+}
+
+/// The parser's suggested rewrite of a chained comparison with a `None` in
+/// it parses, and validation then refuses the `None`. The author sees the
+/// two mistakes one at a time.
+#[test]
+fn the_rewrite_of_a_chain_with_none_parses_and_fails_validation() {
+    let error = parse("None < x < 10").expect_err("a chain is refused");
+    let SyntaxReason::ChainedComparison {
+        write: Some(rewrite),
+    } = error.reason
+    else {
+        panic!("the chain gets a rewrite");
+    };
+    let rule = rule_with(parsed(&rewrite));
+    let error = validate(&rule).expect_err("the None is refused");
+    assert_eq!(error.reason, Reason::NoneOperand);
+    // The error points at the `None` itself.
+    let document = serde_json::to_value(&rule).expect("a rule serializes");
+    let none = serde_json::to_value(Expr::None).expect("a tree serializes");
+    assert_eq!(document.pointer(&error.at), Some(&none));
 }
 
 /// The depth cap and the length cap sit exactly where they should, for trees

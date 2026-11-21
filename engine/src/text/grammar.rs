@@ -512,7 +512,10 @@ fn build_comparison(
     // arms, which return a complete node, or `x is None is None` would parse
     // as `IsNone` and drop its second `is`.
     if let Some((((), again_at), third)) = chained {
-        // The rewrite needs two comparisons of two operands each.
+        // The rewrite needs two comparisons of two operands each. It repeats
+        // the operands as written and does not judge them. So the rewrite of
+        // `None < x < 10` parses, and validation then refuses its `None`
+        // (ADR-0042).
         let write = match (&tail, third) {
             (Tail::Binary(_, op_at, _, right_at), Some((_, third_at))) => {
                 // `first` is `0 < amount`, written from the three parts.
