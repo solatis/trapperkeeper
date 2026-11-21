@@ -21,12 +21,12 @@ type Unary = fn(Box<Expr>) -> Expr;
 /// The builder of a node with two operands.
 type Binary = fn(Box<Expr>, Box<Expr>) -> Expr;
 
-/// The kinds of node with one operand that the parser builds around any
-/// operand.
-const UNARY: [Unary; 17] = [
+/// The kinds of node with one operand.
+const UNARY: [Unary; 18] = [
     Expr::Not,
     Expr::IsNone,
     Expr::IsNotNone,
+    Expr::Neg,
     Expr::Len,
     Expr::IsNan,
     Expr::Upper,
@@ -43,26 +43,23 @@ const UNARY: [Unary; 17] = [
     Expr::IsAscii,
 ];
 
-/// The kinds of node with two operands that the parser builds around any
-/// two operands.
-const BINARY: [Binary; 4] = [Expr::Eq, Expr::Ne, Expr::StartsWith, Expr::EndsWith];
-
-/// The kinds of node with two operands that refuse the literal `None` as
-/// their right operand.
-const MEMBERSHIP: [Binary; 2] = [Expr::In, Expr::NotIn];
-
-/// The kinds of node with two operands that refuse the literal `None` as an
-/// operand: the orderings and the arithmetic.
-const NUMERIC: [Binary; 9] = [
+/// The kinds of node with two operands.
+const BINARY: [Binary; 15] = [
+    Expr::Eq,
+    Expr::Ne,
     Expr::Lt,
     Expr::Le,
     Expr::Gt,
     Expr::Ge,
+    Expr::In,
+    Expr::NotIn,
     Expr::Add,
     Expr::Sub,
     Expr::Mul,
     Expr::Div,
     Expr::Mod,
+    Expr::StartsWith,
+    Expr::EndsWith,
 ];
 
 /// Every variant of `TypeName`, the types that `isinstance` tests for. The
@@ -133,10 +130,9 @@ fn canonical_in(scope: &[String], depth: u32) -> BoxedStrategy<Expr> {
     //    are built before the guard.
     // 2. We build `sub`, the strategy for operands one level less deep, and
     //    the builders that several kinds of node share: one boxed operand,
-    //    an `and` or `or` chain, an operand that is not the literal `None`,
-    //    a quantifier and a pattern function. The chain and the quantifier
-    //    build the tree in the form the parser builds, so a printed tree
-    //    parses back to itself.
+    //    an `and` or `or` chain, a quantifier and a pattern function. The
+    //    chain and the quantifier build the tree in the form the parser
+    //    builds, so a printed tree parses back to itself.
     // 3. We choose among the leaves, the lists and every kind of node the
     //    parser builds, each over the operands of step 2.
 
@@ -216,7 +212,6 @@ fn canonical_in(scope: &[String], depth: u32) -> BoxedStrategy<Expr> {
             make(spliced.collect())
         })
     };
-    let not_none = || one().prop_filter("the literal None", |e| !matches!(**e, Expr::None));
     // The test of a quantifier is generated with its name added to `scope`,
     // and its list without it. The parser resolves the list outside the
     // name, so `any(t for i in i)` reads its list `i` as a field. The test
@@ -246,16 +241,9 @@ fn canonical_in(scope: &[String], depth: u32) -> BoxedStrategy<Expr> {
         // `()`, `(a,)` and longer lists all read back.
         vec(sub.clone(), 0..=3).prop_map(Expr::List),
         (select(UNARY.to_vec()), one()).prop_map(|(make, a)| make(a)),
+        // Every kind takes any operand, the literal `None` included, because
+        // the parser reads `x < None` and `x in None`.
         (select(BINARY.to_vec()), one(), one()).prop_map(|(make, a, b)| make(a, b)),
-        // The right operand is not the literal `None`, because the parser
-        // refuses `x in None`. `None in x` reads back.
-        (select(MEMBERSHIP.to_vec()), one(), not_none()).prop_map(|(make, a, b)| make(a, b)),
-        // No operand is the literal `None`, because the parser refuses
-        // `x < None` and `None + 1`.
-        (select(NUMERIC.to_vec()), not_none(), not_none()).prop_map(|(make, a, b)| make(a, b)),
-        // The operand is not the literal `None`, because the parser refuses
-        // `-None`.
-        not_none().prop_map(Expr::Neg),
         chain(Expr::And),
         chain(Expr::Or),
         (one(), one(), one()).prop_map(|(test, then, otherwise)| Expr::If {
@@ -333,6 +321,12 @@ const VALID: &[(&str, &str)] = &[
     ("x != None", "x != None"),
     // A `None` in a membership list matches a missing value.
     ("x in (\"paid\", None)", "x in (\"paid\", None)"),
+    // The parser reads the literal `None` beside any operator, and each row
+    // prints back as written. Validation refuses these rules (ADR-0042).
+    ("x < None", "x < None"),
+    ("None + 1 > 0", "None + 1 > 0"),
+    ("-None > 1", "-None > 1"),
+    ("x not in None", "x not in None"),
     // The printer writes every text in double quotes and escapes only the
     // backslash, the double quote and control characters. So the `\'` of the
     // single-quoted text loses its backslash, and the line break stays the
@@ -490,7 +484,6 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
         "the end of the rule",
     ];
     let count = |name, takes, given| Reason::WrongArgumentCount { name, takes, given };
-    let none_operand = |op: &str| Reason::NoneOperand { op: op.to_owned() };
     let [too_long, too_long_sentence, too_deep, too_deep_sentence] = &*OVER_THE_CAPS;
     vec![
         (
@@ -537,52 +530,6 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
             7..9,
             foreign("<>", "!="),
             "`<>` is not an operator here; write `!=`",
-        ),
-        // A `NoneOperand` error covers the operator together with the `None`
-        // beside it, here `< None`.
-        (
-            "x < None",
-            2..8,
-            none_operand("<"),
-            "`<` cannot take `None`; to test for a missing value, write `is None`",
-        ),
-        (
-            "x in None",
-            2..9,
-            none_operand("in"),
-            "`in` cannot take `None`; to test for a missing value, write `is None`",
-        ),
-        (
-            "x not in None",
-            2..13,
-            none_operand("not in"),
-            "`not in` cannot take `None`; to test for a missing value, write `is None`",
-        ),
-        // With `None` on both sides, the error covers the left `None` and the
-        // operator, because the parser tests the left operand first.
-        (
-            "None >= None",
-            0..7,
-            none_operand(">="),
-            "`>=` cannot take `None`; to test for a missing value, write `is None`",
-        ),
-        (
-            "None + 1",
-            0..6,
-            none_operand("+"),
-            "`+` cannot take `None`; to test for a missing value, write `is None`",
-        ),
-        (
-            "x * None",
-            2..8,
-            none_operand("*"),
-            "`*` cannot take `None`; to test for a missing value, write `is None`",
-        ),
-        (
-            "-None > 1",
-            0..5,
-            none_operand("-"),
-            "`-` cannot take `None`; to test for a missing value, write `is None`",
         ),
         // A chained comparison is refused at its second operator, the second
         // `<`.

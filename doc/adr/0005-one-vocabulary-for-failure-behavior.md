@@ -68,15 +68,16 @@ of `in`, as in `None in tags`, the test is true when the list `tags` holds a
 null element (owner, 2026-11-16). Only the literal `None` has this meaning.
 `a == b` on two fields that both hold a null gives unknown.
 
-The parser refuses the literal `None` beside an ordering or an arithmetic
-operator, and after `in` and `not in`, because such a rule could never match.
-A field that holds a null there is data, so `x + 1` is a null and `x < y` is
-unknown (owner, 2026-11-14). `x in y` gives unknown only when `y` is a field
-that should hold a list and holds a null (owner, 2026-11-16).
+Validation (`adr/0033`) refuses the literal `None` beside an ordering or an
+arithmetic operator, under a minus, and after `in` and `not in`, because such a
+rule could never match. A field that holds a null there is data, so `x + 1` is a
+null and `x < y` is unknown (owner, 2026-11-14). `x in y` gives unknown only
+when `y` is a field that should hold a list and holds a null (owner,
+2026-11-16).
 
 A rule differs from SQL in three places. The first is the literal `None`.
 Under `==`, under `!=`, in a membership list and on the left of `in` it tests
-for a null, and beside an ordering or an arithmetic operator the parser
+for a null, and beside an ordering or an arithmetic operator validation
 refuses it. SQL gives unknown in each of these places. The second is a
 conditional with an unknown test, which gives unknown, where SQL's `CASE`
 takes the else branch. The third is the fault. This record says which
@@ -213,11 +214,11 @@ the translation of a conditional needs one more `WHEN test IS NULL` arm. The
 conformance fixtures must hold one fixture for each difference from SQL
 (`adr/0006`).
 
-The literal `None` parses as an argument of a function and as the receiver
-of a method, as in `len(None)` and `None.upper()`. Such a rule gives unknown
-for every record and matches nothing in silence. The parser does not refuse
-these two forms, because each needs a check of its own in another rule of the
-grammar. Validation of the expression can refuse them together.
+The literal `None` parses and validates as an argument of a function and as
+the receiver of a method, as in `len(None)` and `None.upper()`. Such a rule
+gives unknown for every record and matches nothing in silence. A check of
+types, which is to be built together with the planner of `adr/0035`, would
+refuse these forms (owner, 2026-11-16).
 
 An adapter keeps the rows whose value has another type beside the column
 (`adr/0036`), so a rule that reads the column is off for those records alone

@@ -487,35 +487,8 @@ fn comparison(i: &Input<'_>, p: usize) -> Reply<Expr> {
     try_map(then(spanned(additive), tail), build_comparison)(i, p)
 }
 
-/// Returns the refusal of the operator at `op_at` when its left or its right
-/// operand is the literal `None`, and `None` when neither is. The error
-/// covers the operator and that `None`.
-fn none_operand(
-    i: &Input<'_>,
-    left: &Placed<Expr>,
-    op_at: &Range<usize>,
-    right: &Placed<Expr>,
-) -> Option<SyntaxError> {
-    let ((left, left_at), (right, right_at)) = (left, right);
-    // The left operand is tested first, so the error for `None >= None`
-    // covers `None >=`.
-    let at = if matches!(left, Expr::None) {
-        // `None + 1` gives bytes 0 to 6, `None +`.
-        left_at.start..op_at.end
-    } else if matches!(right, Expr::None) {
-        // `x < None` gives bytes 2 to 8, `< None`.
-        op_at.start..right_at.end
-    } else {
-        return None;
-    };
-    let op = i.slice(op_at).to_owned();
-    let reason = Reason::NoneOperand { op };
-    Some(SyntaxError { at, reason })
-}
-
-/// The node of a comparison from its parts, or the reason why the text is
-/// refused: a chain of comparisons, an ordering beside the literal `None`, or
-/// the literal `None` as the right operand of `in` or `not in`.
+/// The node of a comparison from its parts, or the refusal of a chain of
+/// comparisons.
 fn build_comparison(
     i: &Input<'_>,
     ((left, left_at), tail): (Placed<Expr>, Option<(Tail, Chained)>),
@@ -526,10 +499,9 @@ fn build_comparison(
     // The function builds the node of a comparison from the first operand and
     // the tail that `comparison` read, or it refuses the text. It tests these
     // cases in order: no operator followed, a second operator followed, an
-    // `is None` or `is not None` tail, an ordering beside the literal `None`,
-    // and an `in` or `not in` before the literal `None`. A binary tail that
-    // passes them becomes the node. The place of the second case matters, and
-    // the note there says why.
+    // `is None` or `is not None` tail, and a binary tail, which becomes the
+    // node. The place of the second case matters, and the note there says
+    // why.
     let text = |at: &Range<usize>| i.slice(at);
     // No operator followed: `amount` in `amount and x` is the operand alone.
     let Some((tail, chained)) = tail else {
@@ -559,45 +531,14 @@ fn build_comparison(
             reason,
         });
     }
-    // `is None` and `is not None` are complete nodes. A binary tail gives
-    // its parts for the two checks below.
-    let (make, op_at, right) = match tail {
-        Tail::IsNone(false) => return Ok(Expr::IsNone(Box::new(left))),
-        Tail::IsNone(true) => return Ok(Expr::IsNotNone(Box::new(left))),
-        Tail::Binary(make, op_at, right, right_at) => (make, op_at, (right, right_at)),
-    };
-    // The builder is a function pointer, and Rust does not promise that
-    // two pointers to one function compare equal, so the operator is told
-    // by its text.
-    let op = text(&op_at);
-    // `<`, `<=`, `>` and `>=` are the orderings.
-    let ordering = matches!(op, "<" | "<=" | ">" | ">=");
-    // `not` and `in` may stand apart by any spaces, so the words of the
-    // operator's text are compared.
-    let words: Vec<&str> = op.split_whitespace().collect();
-    let membership = matches!(words[..], ["in"] | ["not", "in"]);
-    let left = (left, left_at);
-    // The literal `None` beside an ordering is refused, because `x < None`
-    // could never match (ADR-0005). `x == None` means `x is None`. A field
-    // that holds a null is not refused: `x < y` gives unknown without `y`.
-    if ordering && let Some(error) = none_operand(i, &left, &op_at, &right) {
-        return Err(error);
+    match tail {
+        Tail::IsNone(false) => Ok(Expr::IsNone(Box::new(left))),
+        Tail::IsNone(true) => Ok(Expr::IsNotNone(Box::new(left))),
+        // The literal `None` is an operand like any other here. Validation
+        // refuses it beside an ordering and after `in` and `not in`
+        // (ADR-0042).
+        Tail::Binary(make, _, right, _) => Ok(make(Box::new(left), Box::new(right))),
     }
-    // `x in None` could never match either. `None in x` parses, because it
-    // is true when the list `x` holds a null (ADR-0005). A `None` in a
-    // list, as in `x in ("paid", None)`, still matches a null, and `x in y`
-    // gives unknown when `y` holds a null in place of a list.
-    if membership && matches!(right.0, Expr::None) {
-        // The error covers the operator and the `None`: bytes 2 to 9 of
-        // `x in None`.
-        let at = op_at.start..right.1.end;
-        // The words are joined by one space, so `not   in` is named `not in`.
-        // An ordering is one token, and `none_operand` names it by its text.
-        let op = words.join(" ");
-        let reason = Reason::NoneOperand { op };
-        return Err(SyntaxError { at, reason });
-    }
-    Ok(make(Box::new(left.0), Box::new(right.0)))
 }
 
 // The arithmetic operators of each level, each with the builder of its node.
@@ -606,62 +547,32 @@ fn build_comparison(
 const ADDITIVE: [(&str, Binary); 2] = [("+", Expr::Add), ("-", Expr::Sub)];
 const TERM: [(&str, Binary); 3] = [("*", Expr::Mul), ("/", Expr::Div), ("%", Expr::Mod)];
 
-/// `x (op x)*` for the operators of `ops`, grouped to the left: `a - b + 1`
-/// as `(a - b) + 1`. Refuses the literal `None` as an operand.
-fn arithmetic(
-    // The body uses `x` twice, and a combinator takes its parser by value,
-    // hence the `Copy` bound.
-    x: impl Parser<Expr> + Copy,
-    ops: &'static [(&'static str, Binary)],
-) -> impl Parser<Expr> {
-    // The operators are hidden, because they may follow almost any value
-    // and would bury the keywords in every "expected" error.
-    let op = hidden(symbol(ops));
-    // `rest` gives each operator with its bytes and the operand after it
-    // with its bytes. An operator with no operand after it is left where it
-    // stands, so `price * > 3` gets "expected a value" at `>`.
-    let rest = many(then(spanned(op), spanned(x)));
-    // The last argument is the bytes of the whole chain, which `try_map`
-    // passes. It is dropped, because an error covers one operator and the
-    // `None` beside it.
-    try_map(then(spanned(x), rest), |i, (first, rest), _| {
-        // Each round refuses a `None` beside its operator and then joins
-        // the pair: `a - b`, then `(a - b) + 1`. After the first round the
-        // left operand is a node of this chain and never the literal.
-        let round = |left: Placed<Expr>, ((make, op_at), right): (Placed<Binary>, Placed<Expr>)| {
-            if let Some(error) = none_operand(i, &left, &op_at, &right) {
-                return Err(error);
-            }
-            // The next round takes the joined node as its left operand, so
-            // the node gets a place: from the first operand to the last.
-            let at = left.1.start..right.1.end;
-            Ok((make(Box::new(left.0), Box::new(right.0)), at))
-        };
-        let (joined, _) = rest.into_iter().try_fold(first, round)?;
-        Ok(joined)
-    })
-}
-
 /// `additive := term (("+" | "-") term)*`
 ///
 /// Reads `a - b + 1`, grouped to the left as `(a - b) + 1`.
 fn additive(i: &Input<'_>, p: usize) -> Reply<Expr> {
-    arithmetic(term, &ADDITIVE)(i, p)
+    // The operator is hidden, because an arithmetic operator may follow
+    // almost any value and would bury the keywords in every "expected" error.
+    let op = hidden(symbol(&ADDITIVE));
+    // `make` is the builder that `symbol` found for the operator, as
+    // `Expr::Sub` for the `-` of `a - b`.
+    chain_left(term, op, |l, make, r| make(Box::new(l), Box::new(r)))(i, p)
 }
 
 /// `term := unary (("*" | "/" | "%") unary)*`
 ///
 /// Reads `price * qty % 7`, grouped to the left as `(price * qty) % 7`.
 fn term(i: &Input<'_>, p: usize) -> Reply<Expr> {
-    arithmetic(unary, &TERM)(i, p)
+    let op = hidden(symbol(&TERM));
+    // The same fold as in `additive`, one level tighter.
+    chain_left(unary, op, |l, make, r| make(Box::new(l), Box::new(r)))(i, p)
 }
 
 /// `unary := "-" number | "-" unary | postfix`
 ///
 /// Reads a postfix form, or a leading minus before one. On a number token the
 /// minus gives a negative literal, as in `-5`, and on anything else a `Neg`,
-/// as in `-a` and `-(5)`. Refuses `-None` and an integer below the smallest
-/// i64.
+/// as in `-a` and `-(5)`. Refuses an integer below the smallest i64.
 fn unary(i: &Input<'_>, p: usize) -> Reply<Expr> {
     // `int` gives the magnitude of an integer token, a u64. The tokenizer
     // reads a number without its sign.
@@ -694,16 +605,7 @@ fn unary(i: &Input<'_>, p: usize) -> Reply<Expr> {
         // `-a` and `- -5`. Each minus that this alternative reads opens a
         // level of nesting. In `- -5` only the first does, because the second
         // folds into the literal `-5`.
-        try_map(nested(punct("-"), unary), |_, e, at| match e {
-            // `-None` could never match (ADR-0005). The refusal covers the
-            // minus and the `None`.
-            Expr::None => {
-                let op = "-".to_owned();
-                let reason = Reason::NoneOperand { op };
-                Err(SyntaxError { at, reason })
-            }
-            e => Ok(Expr::Neg(Box::new(e))),
-        }),
+        map(nested(punct("-"), unary), |e| Expr::Neg(Box::new(e))),
         // Anything else binds tighter than a minus.
         postfix,
     );
