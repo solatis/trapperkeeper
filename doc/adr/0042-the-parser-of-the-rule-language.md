@@ -1,6 +1,6 @@
 # 0042. The parser of the rule language
 
-Date: 2026-11-14.
+Date: 2026-11-16.
 
 ## Context
 
@@ -15,6 +15,12 @@ one with combinators of our own 1216, the one with winnow 1300 and the one with
 chumsky 1174.
 
 ## Decision
+
+The parser refuses only a text that the grammar cannot read as a tree, and a
+text that it cannot read within its caps on the length, the nesting and the
+token tests of a parse, which the paragraphs below give. A check of what a rule
+may say belongs to validation alone (`adr/0033`), and the parser and validation
+do not hold the same check twice (owner, 2026-11-16).
 
 The parser is built from parser combinators of our own, with no library
 (owner, 2026-11-14).
@@ -48,6 +54,13 @@ A table of faulty texts with the place and the reason of each error is part
 of the parser's tests.
 
 ## Rejected alternatives
+
+A check of what a rule may say in the parser, such as the refusal of `None`
+beside an ordering, where the author would get the place in the text. The
+parser reads `x < None` into a tree, so refusing it checks what the rule says
+and is no condition of parsing. The same check in the parser and in validation,
+because the owner ruled that parsing and the limits of what a rule may say are
+separate concerns (owner, 2026-11-16).
 
 A parser library. In every prototype a good message was code written for that
 message. winnow's error holds no place and no text. chumsky gives sets of
@@ -97,6 +110,10 @@ over any note, because the parse stopped there.
 The cap on nesting bounds the parser's stack and not the depth of a tree.
 Validation holds the depth of a tree and the length of its printed text
 (`adr/0033`).
+
+The refusals of a `None` beside an operator, of a pattern that does not compile
+and of a tree that is too deep come from validation, with a JSON pointer into
+the tree. Whoever shows such a refusal cannot mark the text.
 
 Whoever shows an error works out the line and the column from the byte range.
 Every new reason is a new variant of the public enum `text::Reason` of the

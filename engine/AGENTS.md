@@ -67,7 +67,8 @@ store or HTTP code.
 - The id of a rule is a version 7 UUID that the server generates, and the
   title has the `_title` form:
   `doc/adr/0020-internal-ids-and-unique-names.md`.
-- The caps on the length and the nesting of a rule's text:
+- The caps on the length and the nesting of a rule's text, and what the parser
+  refuses and what it leaves to validation:
   `doc/adr/0042-the-parser-of-the-rule-language.md`.
 - A missing value is a null, and `==` and `!=` with `None` test for it:
   `doc/adr/0005-one-vocabulary-for-failure-behavior.md`.
