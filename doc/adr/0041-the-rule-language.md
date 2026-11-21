@@ -1,6 +1,6 @@
 # 0041. The rule language
 
-Date: 2026-11-14.
+Date: 2026-11-17.
 
 ## Context
 
@@ -55,7 +55,14 @@ ordinary number (owner, 2026-11-13).
 
 Patterns follow the linear-time dialect of Rust's `regex` crate, which has no
 lookaround and no backreferences. The server refuses a pattern outside it
-(owner, 2026-11-13).
+(owner, 2026-11-13). Validation compiles each pattern with the `regex` crate
+and its defaults, and it refuses a pattern that does not compile, with the
+crate's own error text (owner, 2026-11-16). The dialect is whatever those
+defaults accept (owner, 2026-11-17).
+
+The defaults give a pattern Unicode classes, as in Python, and a cap on its
+compiled size, 10 MiB in `regex` 1.13. Validation sets no cap of its own
+(owner, 2026-11-16).
 
 The engine reads all text as UTF-8. The SDK hands the engine its text as
 UTF-8 (owner, 2026-11-12).
@@ -101,6 +108,29 @@ meaning as a condition. A condition must be a boolean.
 
 Python's full pattern dialect, because a pattern could stall a pipeline.
 
+Checking each pattern with `regex-syntax` alone, the crate's pattern parser,
+without compiling it, because the parser accepts a pattern that is too large to
+compile, such as `(a{1000}){1000}`.
+
+Compiling every pattern with the crate's Unicode mode off, which gives `\w` and
+`\d` ASCII classes, because the crate then refuses ordinary patterns on text,
+such as `.` and `\D+`. Without Unicode mode such a pattern can match a byte that
+is not UTF-8, and the crate's `Regex` matches only on text.
+
+Refusal reasons of our own for lookaround and for backreferences, and a byte
+range inside the pattern in place of the crate's message, because one reason
+that holds the crate's text needs the least code, and the text of a syntax
+error already marks the place inside the pattern.
+
+A constant of ours for the cap on a compiled pattern, because the crate's own
+default is the cap wanted here, and the crate exports no constant that ours
+could name.
+
+A test with a table of patterns that pins which forms the dialect accepts and
+refuses, because the forms of the dialect do not matter here, and safety,
+performance and stability count for more. No test of ours then shows when a new
+version of the crate changes which patterns validate.
+
 A `*` in a path, because it cannot say that one element satisfies several
 conditions.
 
@@ -134,6 +164,13 @@ All of Python's tests of a text's characters, because `isdecimal` and
 `isnumeric` differ from `isdigit` only on unusual digits.
 
 ## Consequences
+
+A counted repeat of a Unicode class is large and slow. `^\w{1,64}$` compiles to
+about 3 MB and matched about 38 times slower than its ASCII form, measured as a
+ratio on the machine that `adr/0035` names. An author writes `(?-u:\w)` for the
+ASCII class inside one pattern. The dialect and the cap on a compiled pattern
+change when the `regex` crate changes its defaults. The engine crate depends on
+`regex`, and so does every SDK.
 
 The language has no timestamp type. `decisions.md` holds the open decision on
 one. A translator for a host engine walks the tree that the server builds and

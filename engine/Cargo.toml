@@ -22,6 +22,9 @@ serde_json = { version = "1", features = ["float_roundtrip"] }
 # generator feature is on, because the server generates the ids and the engine
 # only reads them.
 uuid = { version = "1", features = ["serde"] }
+# regex compiles the pattern of `re.search`, `re.match` and `re.fullmatch`,
+# so validation refuses a pattern that a sensor could not compile (ADR-0041).
+regex = "1"
 
 [dev-dependencies]
 # proptest generates the trees, the rules and the texts that the property

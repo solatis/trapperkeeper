@@ -43,7 +43,9 @@ rule set did not hold it. A record with no rule left is not evaluated at all
 (owner, 2026-11-12).
 
 The limits are constants of the engine crate, and no caller sets them (owner,
-2026-11-10). The caps on scope tags are in `adr/0034`.
+2026-11-10). The cap on a compiled pattern is the exception, because it is the
+default of the `regex` crate (`adr/0041`). The caps on scope tags are in
+`adr/0034`.
 
 A rule's identity is its `rule_id` alone, a version 7 UUID that the server
 generates (`adr/0020`). An edit is a new rule with a new id (owner,

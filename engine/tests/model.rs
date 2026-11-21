@@ -15,7 +15,7 @@ use trapperkeeper_engine::limits::{MAX_DEPTH, MAX_SCOPE_TAGS, MAX_TAG_LENGTH, MA
 use trapperkeeper_engine::{Action, Error, Reason, Rule, parse, validate};
 use uuid::Uuid;
 
-use common::{around, rule};
+use common::{PATTERNS, around, rule, valid_expr};
 
 /// One way to break a valid rule.
 #[derive(Debug, Clone, Copy)]
@@ -164,6 +164,18 @@ const MARKER: &str = "the defect stands here";
 /// The marker: a field with the one key `MARKER`.
 fn marker() -> Expr {
     Expr::Field(vec![Segment::Key(MARKER.to_owned())])
+}
+
+/// A pattern that does not compile, because its group is never closed. No
+/// strategy generates this text, so a test can find it again in a tree.
+const BAD_PATTERN: &str = "(the defect stands here";
+
+/// Generates one of the three pattern functions with `BAD_PATTERN` as its
+/// pattern and a random text to search.
+fn bad_pattern() -> BoxedStrategy<Expr> {
+    (select(PATTERNS.to_vec()), valid_expr())
+        .prop_map(|(make, text)| make(BAD_PATTERN.to_owned(), Box::new(text)))
+        .boxed()
 }
 
 /// `e` wrapped in `n` layers of `not`.
@@ -335,6 +347,36 @@ proptest! {
         let found = pointer_to(&document["expression"], &past).expect("the tree holds the node");
         // `pointer_to` searched inside the expression, so `/expression` goes
         // in front.
+        prop_assert_eq!(error.at, format!("/expression{found}"));
+    }
+
+    /// A pattern that does not compile gets `BadPattern`, pointing at the
+    /// pattern.
+    #[test]
+    fn a_pattern_that_does_not_compile_is_refused_at_its_place(
+        mut rule in rule(),
+        // `around` buries the defect under up to two random nodes. The test
+        // finds the pattern by its text, so it does not need the count.
+        (tree, _) in bad_pattern().prop_flat_map(around),
+    ) {
+        rule.expression = tree;
+        let error = validate(&rule).expect_err("a bad pattern is refused");
+        // Nothing else in the tree is invalid, so the reason is `BadPattern`.
+        // The message is the crate's wording, so the test does not compare
+        // it.
+        prop_assert!(
+            matches!(error.reason, Reason::BadPattern { .. }),
+            "{:?}",
+            error.reason
+        );
+        // The test finds the text of `BAD_PATTERN` in the rule's JSON and
+        // takes the pointer from there. It never spells out the key of the
+        // pattern function or `pattern`, so it also fails when `Expr::key`
+        // disagrees with the JSON form.
+        let document = serde_json::to_value(&rule).expect("a rule serializes");
+        // No strategy generates this text, so the first match is the defect.
+        let wanted = Value::String(BAD_PATTERN.to_owned());
+        let found = pointer_to(&document["expression"], &wanted).expect("the tree holds the pattern");
         prop_assert_eq!(error.at, format!("/expression{found}"));
     }
 

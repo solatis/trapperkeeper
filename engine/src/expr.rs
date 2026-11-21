@@ -302,6 +302,12 @@ impl Expr {
         parts!(self, as_mut, iter_mut)
     }
 
+    /// The JSON key of this kind of node, such as `gt` for `Gt` and
+    /// `re_search` for `ReSearch`.
+    pub(crate) fn key(&self) -> &'static str {
+        self.parts().0
+    }
+
     /// The child nodes in JSON order. Each comes with its path from this
     /// node, in JSON pointer form, such as `gt/1` for the right side of a
     /// `Gt`.

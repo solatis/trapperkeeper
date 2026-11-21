@@ -1,9 +1,10 @@
 //! Checks a rule before it is stored or sent to a sensor. It checks the
-//! rule's own fields, how deep the expression is and how long it prints
-//! (ADR-0033).
+//! rule's own fields, how deep the expression is, how long it prints and
+//! whether its patterns compile (ADR-0033).
 
 use std::fmt::{self, Write as _};
 
+use regex::Regex;
 use serde::Serialize;
 
 use crate::expr::Expr;
@@ -36,6 +37,11 @@ pub enum Reason {
     /// The expression prints as `len` characters of rule text. That is more
     /// than `max`, which is `MAX_TEXT_LENGTH`.
     TextTooLong { len: usize, max: usize },
+    /// The pattern of `re.search`, `re.match` or `re.fullmatch` does not
+    /// compile. `message` is the `regex` crate's own error text. For a syntax
+    /// error it has several lines and marks the place in the pattern. For a
+    /// pattern that compiles too large it is one line.
+    BadPattern { message: String },
 }
 
 /// One refusal: where in the rule document, as a JSON pointer (RFC 6901),
@@ -84,14 +90,29 @@ fn printed_length(e: &Expr) -> usize {
     counter.0
 }
 
-/// Checks `e` and every node below it, and returns the first error. `at` is
-/// the JSON pointer of `e`. `depth` is the level of `e`, where the top node
-/// is level 1.
+/// Checks `e` and every node below it, and returns the first error. For each
+/// node it checks the depth and, if it has one, the pattern. `at` is the JSON
+/// pointer of `e`. `depth` is the level of `e`, where the top node is level 1.
 fn check_nodes(e: &Expr, at: &str, depth: usize) -> Result<(), Error> {
     // Stopping here also keeps this function from overflowing the stack on a
     // very deep tree, because it calls itself once per level.
     if depth > MAX_DEPTH {
         return refuse(at, Reason::TooDeep { max: MAX_DEPTH });
+    }
+    // All three pattern functions call their pattern `pattern`, so one
+    // check covers them.
+    if let Expr::ReSearch { pattern, .. }
+    | Expr::ReMatch { pattern, .. }
+    | Expr::ReFullmatch { pattern, .. } = e
+        // Compiled with the crate's defaults, the same way a sensor will
+        // compile it. That includes the crate's own size cap (ADR-0041).
+        && let Err(error) = Regex::new(pattern)
+    {
+        // The error points at the pattern itself, which sits in the node
+        // under the node's key and `pattern`.
+        let at = format!("{at}/{}/pattern", e.key());
+        let message = error.to_string();
+        return refuse(&at, Reason::BadPattern { message });
     }
     for (steps, child) in e.children() {
         // `steps` needs no escaping: it is made of JSON keys of the tree and
@@ -102,9 +123,9 @@ fn check_nodes(e: &Expr, at: &str, depth: usize) -> Result<(), Error> {
 }
 
 /// Checks the id, the sample rate, the scope tags and the expression of
-/// `rule`. For the expression it checks how deep it is and how long it
-/// prints. It does not check that the parser could have built the tree
-/// (ADR-0033).
+/// `rule`. For the expression it checks how deep it is, whether its patterns
+/// compile and how long it prints. It does not check that the parser could
+/// have built the tree, such as whether an `and` has two operands (ADR-0033).
 ///
 /// # Errors
 ///

@@ -66,13 +66,12 @@ kit, the error that a faulty text gets, and the printer.
 - `cargo test -p trapperkeeper-engine --test text` runs the tables `VALID`
   and `faulty` and the properties of the `proptest!` block, all in
   `engine/tests/text.rs`.
-- Adding a method: a variant of `Expr` in `engine/src/expr.rs` with its row
-  in the table `parts!`, a row in `METHODS`, an arm in the printer, and
-  one entry in each of the test files `engine/tests/common/mod.rs` and
-  `engine/tests/text.rs`. Each file has a list `UNARY` for a method without
-  an argument and a list `BINARY` for a method with one. The lists of
+- Adding a method: a variant of `Expr` in `engine/src/expr.rs` with its row in
+  the table `parts!`, a row in `METHODS`, an arm in the printer, and one entry
+  in each of the test files `engine/tests/common/mod.rs` and
+  `engine/tests/text.rs`. Each file has a list `UNARY` for a method without an
+  argument and a list `BINARY` for a method with one. The lists of
   `engine/tests/common/mod.rs` feed the strategies `expr`, which generates any
   tree for the properties of the JSON form, and `valid_expr`, which generates
-  trees that validate. The lists of
-  `engine/tests/text.rs` feed `canonical_in`, which generates only trees that
-  the parser can build.
+  trees that validate. The lists of `engine/tests/text.rs` feed `canonical_in`,
+  which generates only trees that the parser can build.
