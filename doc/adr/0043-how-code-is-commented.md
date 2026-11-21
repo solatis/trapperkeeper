@@ -1,6 +1,6 @@
 # 0043. How code is commented
 
-Date: 2026-11-16.
+Date: 2026-11-21.
 
 ## Context
 
@@ -69,14 +69,16 @@ it can name, and it asks the owner where it has none. After its last code
 commit, the build stage runs the step check. Then `/doc-read` gives each part of
 the change to a reader that has seen neither the plan nor the conversation, and
 the reader lists where it had to stop and each walkthrough item that repeats the
-code of its step (owner, 2026-11-16). The session closes each stop with a
-rename, a comment from evidence, a question to the owner, or a decline with its
-reason. A second round of `/doc-read` reads what the session changed to close
-the stops. Then `/doc-audit` checks the change against the policy and reconciles
-it against the plan, and the session applies or declines each finding. The build
-stage saves the answers of `/doc-read` and `/doc-audit` under `.plans/`. The
-guided review shows the stops, the declines and the findings from those files
-(owner, 2026-11-14).
+code of its step (owner, 2026-11-16). It also lists each sentence of a doc
+comment that it understood only after it had said the sentence to itself in
+plainer words, and the session rewrites that sentence (owner, 2026-11-21). The
+session closes each stop with a rename, a comment from evidence, a question to
+the owner, or a decline with its reason. A second round of `/doc-read` reads
+what the session changed to close the stops. Then `/doc-audit` checks the change
+against the policy and reconciles it against the plan, and the session applies
+or declines each finding. The build stage saves the answers of `/doc-read` and
+`/doc-audit` under `.plans/`. The guided review shows the stops, the declines
+and the findings from those files (owner, 2026-11-14).
 
 The cold read takes a change in parts of about 300 changed lines, and one
 reader reads each part. The script `change_parts.py` in the doc-discipline
@@ -138,6 +140,10 @@ whole module.
 One doc-discipline skill invoked with mode words for each check. The harness
 loads a skill as text, and a second invocation of a loaded skill adds only a
 note. An agent then carries out a mode in its head and leaves no output.
+
+The audit as the check that a doc comment reads the way a colleague would say
+it. The audit already reads the "Prose" rules, and it passed doc comments that
+the owner then marked as reading like a paper (owner, 2026-11-21).
 
 ## Consequences
 

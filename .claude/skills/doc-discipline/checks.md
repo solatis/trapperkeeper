@@ -32,7 +32,8 @@ says. `<base>` is the revision the change started from.
       or its standard library does, or when the line already answers it
 
    Rewrite or delete a comment that the reader said told it nothing or
-   repeated its code. Check a statement that the reader believed false
+   repeated its code, and rewrite each sentence that the reader understood
+   only in plainer words. Check a statement that the reader believed false
    against the code, and correct the statement or the code.
 
 4. When step 3 changed a comment, a document or the code, run a second

@@ -77,6 +77,8 @@ Report also:
 - a walkthrough item that repeats what the code of its step shows, such as
   the values it checks or the calls it makes
 - a statement you believe false, with the line that contradicts it
+- a sentence of a doc comment that you understood only after you had said it
+  to yourself in plainer words
 
 Read a changed Markdown file as a newcomer to the repository. Report a
 sentence you had to read twice, a term used without a definition or a
@@ -101,6 +103,7 @@ read $0 part $1: <files> files, <functions> functions, <sections> sections, <row
 <path>:<line> | empty | <the first words of the comment>
 <path>:<line> | repeats | <the first words of the item>
 <path>:<line> | false | <the statement>, contradicted by <path>:<line>
+<path>:<line> | plain | <the first words of the sentence>
 <path>:<line> | term | <the term> in <the sentence>
 <path>:<line> | unmatched | <the statement about the code>
 <path> | no stops
