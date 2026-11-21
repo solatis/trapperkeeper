@@ -88,8 +88,8 @@ const TYPES: [TypeName; 5] = [
     TypeName::List,
 ];
 
-/// The pattern of a generated text: at most eight characters, and no line
-/// break, because `.` matches none.
+/// The regex for a generated text: up to eight characters. `.` matches no
+/// line break, so a text never has one.
 const TEXT: &str = ".{0,8}";
 
 /// Generates every kind of node, in trees of at most three levels, with
@@ -155,17 +155,16 @@ pub fn expr() -> BoxedStrategy<Expr> {
     .boxed()
 }
 
-/// Generates a tree that holds `inner` exactly once, as one operand of a
-/// generated node of any kind. The other operands come from `expr()`.
+/// Wraps `inner` in one random node. `inner` becomes one of that node's
+/// operands, and `expr()` fills in the rest.
 fn frame(inner: Expr) -> BoxedStrategy<Expr> {
     let operand = || expr().prop_map(Box::new);
     let held = Just(Box::new(inner));
-    // Every kind of node that holds an operand stands in one of the arms,
-    // from the same lists as in `expr()`, so a pointer through any kind is
-    // tested.
+    // The arms cover every kind of node that has an operand, from the same
+    // lists that `expr()` uses. So the tests see a pointer through each kind.
     prop_oneof![
         (select(UNARY.to_vec()), held.clone()).prop_map(|(make, inner)| make(inner)),
-        // The flag puts `inner` on the left or on the right.
+        // `left` says which side `inner` goes on.
         (
             select(BINARY.to_vec()),
             held.clone(),
@@ -179,8 +178,7 @@ fn frame(inner: Expr) -> BoxedStrategy<Expr> {
                     make(other, inner)
                 }
             }),
-        // `inner` goes in at a generated index among zero to two generated
-        // items.
+        // `inner` goes in at a random position among up to two other items.
         (
             select(LISTS.to_vec()),
             held.clone(),
@@ -191,8 +189,8 @@ fn frame(inner: Expr) -> BoxedStrategy<Expr> {
                 items.insert(at.index(items.len() + 1), *inner);
                 make(items)
             }),
-        // The index picks the property that holds `inner`: the test, the
-        // first branch or the branch after `else`.
+        // `at` picks where `inner` goes: the test, the first branch or the
+        // `else` branch.
         (held.clone(), operand(), operand(), 0..3usize).prop_map(|(inner, a, b, at)| {
             let (test, then, otherwise) = match at {
                 0 => (inner, a, b),
@@ -205,7 +203,7 @@ fn frame(inner: Expr) -> BoxedStrategy<Expr> {
                 otherwise,
             }
         }),
-        // The flag puts `inner` in the list or in the test.
+        // `in_list` says whether `inner` is the list or the test.
         (
             select(QUANTIFIERS.to_vec()),
             TEXT,
@@ -228,16 +226,15 @@ fn frame(inner: Expr) -> BoxedStrategy<Expr> {
     .boxed()
 }
 
-/// Generates a tree that holds `defect` exactly once, under zero to two
-/// generated nodes of any kind that holds an operand, together with the
-/// number of those nodes.
+/// Buries `defect` under zero, one or two random nodes. Returns the tree and
+/// how many nodes it put on top.
 pub fn around(defect: Expr) -> BoxedStrategy<(Expr, usize)> {
-    // With the three levels of the other operands, a bound of two keeps the
-    // tree far below `MAX_DEPTH`, so only the defect can be refused.
+    // Two nodes on top, plus the three levels of the other operands, stay
+    // far below `MAX_DEPTH`. So only the defect can make validation fail.
     (0..=2usize)
         .prop_flat_map(move |n| {
-            // Each of the `n` rounds wraps the tree so far in one more node
-            // of `frame`, so the defect ends `n` nodes below the top.
+            // Each round wraps the tree in one more node, so after `n` rounds
+            // the defect sits `n` levels below the top.
             (0..n)
                 .fold(Just(defect.clone()).boxed(), |tree, _| {
                     tree.prop_flat_map(frame).boxed()
@@ -268,8 +265,8 @@ pub fn scope() -> impl Strategy<Value = BTreeMap<String, String>> {
 }
 
 /// A rule that `validate` accepts: a version 7 UUID as its id, a sample rate
-/// in (0, 1], a scope within the caps and an expression of `expr()`, which
-/// stays within the limits of validation.
+/// in (0, 1], a scope within the caps and an expression from `expr()`, which
+/// is small enough to pass every limit.
 pub fn rule() -> impl Strategy<Value = Rule> {
     // The bound of 40 characters on a title is a choice that no measurement
     // backs.
