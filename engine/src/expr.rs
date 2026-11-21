@@ -178,223 +178,156 @@ pub enum Expr {
     IsAscii(Box<Expr>),
 }
 
-impl Expr {
-    /// The key that names the kind of this node in its JSON form, as `gt` for
-    /// `Gt` and `re_search` for `ReSearch`. For `None` it is `none`, the bare
-    /// string that `None` is written as.
-    pub(crate) fn key(&self) -> &'static str {
-        // serde derives these names from the attributes on `Expr` and gives
-        // no way to ask for the name of a variant. The property
-        // `a_node_past_the_depth_cap_is_refused_at_its_place` in
-        // `tests/model.rs` puts nodes of every kind that holds a node above a
-        // defect. It fails when the pointer that `children` builds from these
-        // names differs from the place of the defect in serde's own JSON. The
-        // name of a kind without a node appears in no pointer.
-        match self {
-            Expr::None => "none",
-            Expr::Bool(_) => "bool",
-            Expr::Int(_) => "int",
-            Expr::Float(_) => "float",
-            Expr::Text(_) => "text",
-            Expr::List(_) => "list",
-            Expr::Field(_) => "field",
-            Expr::Element { .. } => "element",
-            Expr::Not(_) => "not",
-            Expr::And(_) => "and",
-            Expr::Or(_) => "or",
-            Expr::Eq(..) => "eq",
-            Expr::Ne(..) => "ne",
-            Expr::Lt(..) => "lt",
-            Expr::Le(..) => "le",
-            Expr::Gt(..) => "gt",
-            Expr::Ge(..) => "ge",
-            Expr::In(..) => "in",
-            Expr::NotIn(..) => "not_in",
-            Expr::IsNone(_) => "is_none",
-            Expr::IsNotNone(_) => "is_not_none",
-            Expr::Add(..) => "add",
-            Expr::Sub(..) => "sub",
-            Expr::Mul(..) => "mul",
-            Expr::Div(..) => "div",
-            Expr::Mod(..) => "mod",
-            Expr::Neg(_) => "neg",
-            Expr::If { .. } => "if",
-            Expr::Any { .. } => "any",
-            Expr::All { .. } => "all",
-            Expr::Len(_) => "len",
-            Expr::IsInstance { .. } => "isinstance",
-            Expr::ReSearch { .. } => "re_search",
-            Expr::ReMatch { .. } => "re_match",
-            Expr::ReFullmatch { .. } => "re_fullmatch",
-            Expr::IsNan(_) => "math_isnan",
-            Expr::StartsWith(..) => "startswith",
-            Expr::EndsWith(..) => "endswith",
-            Expr::Upper(_) => "upper",
-            Expr::Lower(_) => "lower",
-            Expr::Strip(_) => "strip",
-            Expr::LStrip(_) => "lstrip",
-            Expr::RStrip(_) => "rstrip",
-            Expr::IsDigit(_) => "isdigit",
-            Expr::IsAlpha(_) => "isalpha",
-            Expr::IsAlnum(_) => "isalnum",
-            Expr::IsSpace(_) => "isspace",
-            Expr::IsUpper(_) => "isupper",
-            Expr::IsLower(_) => "islower",
-            Expr::IsAscii(_) => "isascii",
-        }
-    }
+/// The operands of one node, in the form that JSON writes them. `R` is
+/// `&Expr` or `&mut Expr`.
+pub(crate) enum Operands<R> {
+    /// A literal, a field or an element. It has no operand.
+    Leaf,
+    /// One operand, which JSON writes directly under the key.
+    One(R),
+    /// Operands that JSON writes as an array under the key.
+    Listed(Vec<R>),
+    /// Operands that JSON writes as named properties under the key.
+    Named(Vec<(&'static str, R)>),
+}
 
-    /// The nodes directly under this one, in the order of the JSON form. Each
-    /// comes with the steps of a JSON pointer that lead to it from this node,
-    /// as `gt/1` for the right operand of a `Gt`.
-    pub(crate) fn children(&self) -> Vec<(String, &Expr)> {
-        let key = self.key();
-        match self {
-            Expr::None
-            | Expr::Bool(_)
-            | Expr::Int(_)
-            | Expr::Float(_)
-            | Expr::Text(_)
-            | Expr::Field(_)
-            | Expr::Element { .. } => Vec::new(),
-            // JSON writes the operands as an array, so the steps are the key
-            // and the index.
-            Expr::List(items) | Expr::And(items) | Expr::Or(items) => items
-                .iter()
-                .enumerate()
-                .map(|(i, x)| (format!("{key}/{i}"), x))
-                .collect(),
-            // The JSON of such a node is an object whose one value is the
-            // operand, so the step is the key alone.
-            Expr::Not(x)
-            | Expr::IsNone(x)
-            | Expr::IsNotNone(x)
-            | Expr::Neg(x)
-            | Expr::Len(x)
-            | Expr::IsNan(x)
-            | Expr::Upper(x)
-            | Expr::Lower(x)
-            | Expr::Strip(x)
-            | Expr::LStrip(x)
-            | Expr::RStrip(x)
-            | Expr::IsDigit(x)
-            | Expr::IsAlpha(x)
-            | Expr::IsAlnum(x)
-            | Expr::IsSpace(x)
-            | Expr::IsUpper(x)
-            | Expr::IsLower(x)
-            | Expr::IsAscii(x) => vec![(key.to_owned(), x)],
-            // The types of `IsInstance` and the pattern of a pattern function
-            // are not nodes, so the value and the text are the only children.
-            // JSON writes these kinds as an object of named properties.
-            Expr::IsInstance { value: x, .. } => vec![(format!("{key}/value"), x)],
-            Expr::ReSearch { text: x, .. }
-            | Expr::ReMatch { text: x, .. }
-            | Expr::ReFullmatch { text: x, .. } => vec![(format!("{key}/text"), x)],
-            // As for a list, the steps are the key and the index.
-            Expr::Eq(l, r)
-            | Expr::Ne(l, r)
-            | Expr::Lt(l, r)
-            | Expr::Le(l, r)
-            | Expr::Gt(l, r)
-            | Expr::Ge(l, r)
-            | Expr::In(l, r)
-            | Expr::NotIn(l, r)
-            | Expr::Add(l, r)
-            | Expr::Sub(l, r)
-            | Expr::Mul(l, r)
-            | Expr::Div(l, r)
-            | Expr::Mod(l, r)
-            | Expr::StartsWith(l, r)
-            | Expr::EndsWith(l, r) => vec![(format!("{key}/0"), l), (format!("{key}/1"), r)],
-            // JSON writes the conditional and the quantifiers as an object of
-            // named properties, in the order of the fields of the variant.
+// The one table of the tree: a row per kind, with its JSON key and its
+// operands. `Expr::parts` and `Expr::parts_mut` both expand it, because Rust
+// cannot share one `match` between `&self` and `&mut self`. `$unbox` and
+// `$iter` are the shared or the mutable way to reach an operand.
+//
+// serde derives the keys from the attributes on `Expr` and cannot be asked
+// for them, so they are written again here. The property
+// `a_node_past_the_depth_cap_is_refused_at_its_place` in `tests/model.rs`
+// fails when a key or a property name here differs from serde's JSON. It
+// covers every kind that has an operand. The key of a leaf is never used in
+// a pointer.
+//
+// The types of `IsInstance` and the pattern of a pattern function are not
+// nodes, so they are not operands.
+macro_rules! parts {
+    ($e:expr, $unbox:ident, $iter:ident) => {
+        match $e {
+            Expr::None => ("none", Operands::Leaf),
+            Expr::Bool(_) => ("bool", Operands::Leaf),
+            Expr::Int(_) => ("int", Operands::Leaf),
+            Expr::Float(_) => ("float", Operands::Leaf),
+            Expr::Text(_) => ("text", Operands::Leaf),
+            Expr::Field(_) => ("field", Operands::Leaf),
+            Expr::Element { .. } => ("element", Operands::Leaf),
+            Expr::List(items) => ("list", Operands::Listed(items.$iter().collect())),
+            Expr::And(items) => ("and", Operands::Listed(items.$iter().collect())),
+            Expr::Or(items) => ("or", Operands::Listed(items.$iter().collect())),
+            Expr::Not(x) => ("not", Operands::One(x.$unbox())),
+            Expr::IsNone(x) => ("is_none", Operands::One(x.$unbox())),
+            Expr::IsNotNone(x) => ("is_not_none", Operands::One(x.$unbox())),
+            Expr::Neg(x) => ("neg", Operands::One(x.$unbox())),
+            Expr::Len(x) => ("len", Operands::One(x.$unbox())),
+            Expr::IsNan(x) => ("math_isnan", Operands::One(x.$unbox())),
+            Expr::Upper(x) => ("upper", Operands::One(x.$unbox())),
+            Expr::Lower(x) => ("lower", Operands::One(x.$unbox())),
+            Expr::Strip(x) => ("strip", Operands::One(x.$unbox())),
+            Expr::LStrip(x) => ("lstrip", Operands::One(x.$unbox())),
+            Expr::RStrip(x) => ("rstrip", Operands::One(x.$unbox())),
+            Expr::IsDigit(x) => ("isdigit", Operands::One(x.$unbox())),
+            Expr::IsAlpha(x) => ("isalpha", Operands::One(x.$unbox())),
+            Expr::IsAlnum(x) => ("isalnum", Operands::One(x.$unbox())),
+            Expr::IsSpace(x) => ("isspace", Operands::One(x.$unbox())),
+            Expr::IsUpper(x) => ("isupper", Operands::One(x.$unbox())),
+            Expr::IsLower(x) => ("islower", Operands::One(x.$unbox())),
+            Expr::IsAscii(x) => ("isascii", Operands::One(x.$unbox())),
+            Expr::Eq(l, r) => ("eq", Operands::Listed(vec![l.$unbox(), r.$unbox()])),
+            Expr::Ne(l, r) => ("ne", Operands::Listed(vec![l.$unbox(), r.$unbox()])),
+            Expr::Lt(l, r) => ("lt", Operands::Listed(vec![l.$unbox(), r.$unbox()])),
+            Expr::Le(l, r) => ("le", Operands::Listed(vec![l.$unbox(), r.$unbox()])),
+            Expr::Gt(l, r) => ("gt", Operands::Listed(vec![l.$unbox(), r.$unbox()])),
+            Expr::Ge(l, r) => ("ge", Operands::Listed(vec![l.$unbox(), r.$unbox()])),
+            Expr::In(l, r) => ("in", Operands::Listed(vec![l.$unbox(), r.$unbox()])),
+            Expr::NotIn(l, r) => ("not_in", Operands::Listed(vec![l.$unbox(), r.$unbox()])),
+            Expr::Add(l, r) => ("add", Operands::Listed(vec![l.$unbox(), r.$unbox()])),
+            Expr::Sub(l, r) => ("sub", Operands::Listed(vec![l.$unbox(), r.$unbox()])),
+            Expr::Mul(l, r) => ("mul", Operands::Listed(vec![l.$unbox(), r.$unbox()])),
+            Expr::Div(l, r) => ("div", Operands::Listed(vec![l.$unbox(), r.$unbox()])),
+            Expr::Mod(l, r) => ("mod", Operands::Listed(vec![l.$unbox(), r.$unbox()])),
+            Expr::StartsWith(l, r) => {
+                ("startswith", Operands::Listed(vec![l.$unbox(), r.$unbox()]))
+            }
+            Expr::EndsWith(l, r) => ("endswith", Operands::Listed(vec![l.$unbox(), r.$unbox()])),
             Expr::If {
                 test,
                 then,
                 otherwise,
-            } => vec![
-                (format!("{key}/test"), test),
-                (format!("{key}/then"), then),
-                (format!("{key}/else"), otherwise),
-            ],
-            Expr::Any { list, test, .. } | Expr::All { list, test, .. } => {
-                vec![(format!("{key}/list"), list), (format!("{key}/test"), test)]
+            } => (
+                "if",
+                Operands::Named(vec![
+                    ("test", test.$unbox()),
+                    ("then", then.$unbox()),
+                    ("else", otherwise.$unbox()),
+                ]),
+            ),
+            Expr::Any { list, test, .. } => (
+                "any",
+                Operands::Named(vec![("list", list.$unbox()), ("test", test.$unbox())]),
+            ),
+            Expr::All { list, test, .. } => (
+                "all",
+                Operands::Named(vec![("list", list.$unbox()), ("test", test.$unbox())]),
+            ),
+            Expr::IsInstance { value, .. } => (
+                "isinstance",
+                Operands::Named(vec![("value", value.$unbox())]),
+            ),
+            Expr::ReSearch { text, .. } => {
+                ("re_search", Operands::Named(vec![("text", text.$unbox())]))
+            }
+            Expr::ReMatch { text, .. } => {
+                ("re_match", Operands::Named(vec![("text", text.$unbox())]))
+            }
+            Expr::ReFullmatch { text, .. } => (
+                "re_fullmatch",
+                Operands::Named(vec![("text", text.$unbox())]),
+            ),
+        }
+    };
+}
+
+impl Expr {
+    /// The JSON key of this node and its operands.
+    fn parts(&self) -> (&'static str, Operands<&Expr>) {
+        parts!(self, as_ref, iter)
+    }
+
+    /// Like `parts`, with operands that can be changed.
+    fn parts_mut(&mut self) -> (&'static str, Operands<&mut Expr>) {
+        parts!(self, as_mut, iter_mut)
+    }
+
+    /// The child nodes in JSON order. Each comes with its path from this
+    /// node, in JSON pointer form, such as `gt/1` for the right side of a
+    /// `Gt`.
+    pub(crate) fn children(&self) -> Vec<(String, &Expr)> {
+        let (key, operands) = self.parts();
+        match operands {
+            Operands::Leaf => Vec::new(),
+            Operands::One(x) => vec![(key.to_owned(), x)],
+            Operands::Listed(xs) => {
+                let child = |(i, x)| (format!("{key}/{i}"), x);
+                xs.into_iter().enumerate().map(child).collect()
+            }
+            Operands::Named(xs) => {
+                let child = |(name, x)| (format!("{key}/{name}"), x);
+                xs.into_iter().map(child).collect()
             }
         }
     }
 
-    /// The nodes directly under this one, in the order of the rule text.
-    /// `children` gives the same nodes in the order of the JSON form, with the
-    /// steps of their pointers.
+    /// The child nodes in JSON order, for a caller that changes them.
     pub(crate) fn children_mut(&mut self) -> Vec<&mut Expr> {
-        // `resolve` in `text/grammar.rs` is the only caller. It resolves each
-        // child on its own and handles `Any` and `All` itself, so no result
-        // of it depends on the order.
-        match self {
-            // `None`, a boolean, a number and a text hold no node. A field
-            // and an element hold a path of segments, and a segment is not a
-            // node.
-            Expr::None
-            | Expr::Bool(_)
-            | Expr::Int(_)
-            | Expr::Float(_)
-            | Expr::Text(_)
-            | Expr::Field(_)
-            | Expr::Element { .. } => Vec::new(),
-            Expr::List(items) | Expr::And(items) | Expr::Or(items) => items.iter_mut().collect(),
-            // The arm holds the kinds with one child. The types of
-            // `IsInstance` and the pattern of a pattern function are not
-            // nodes, so only the value and the text are children.
-            Expr::Not(x)
-            | Expr::IsNone(x)
-            | Expr::IsNotNone(x)
-            | Expr::Neg(x)
-            | Expr::Len(x)
-            | Expr::IsNan(x)
-            | Expr::Upper(x)
-            | Expr::Lower(x)
-            | Expr::Strip(x)
-            | Expr::LStrip(x)
-            | Expr::RStrip(x)
-            | Expr::IsDigit(x)
-            | Expr::IsAlpha(x)
-            | Expr::IsAlnum(x)
-            | Expr::IsSpace(x)
-            | Expr::IsUpper(x)
-            | Expr::IsLower(x)
-            | Expr::IsAscii(x)
-            | Expr::IsInstance { value: x, .. }
-            | Expr::ReSearch { text: x, .. }
-            | Expr::ReMatch { text: x, .. }
-            | Expr::ReFullmatch { text: x, .. } => vec![x],
-            // Two nodes, the left before the right. A method's receiver
-            // stands before its argument.
-            Expr::Eq(l, r)
-            | Expr::Ne(l, r)
-            | Expr::Lt(l, r)
-            | Expr::Le(l, r)
-            | Expr::Gt(l, r)
-            | Expr::Ge(l, r)
-            | Expr::In(l, r)
-            | Expr::NotIn(l, r)
-            | Expr::Add(l, r)
-            | Expr::Sub(l, r)
-            | Expr::Mul(l, r)
-            | Expr::Div(l, r)
-            | Expr::Mod(l, r)
-            | Expr::StartsWith(l, r)
-            | Expr::EndsWith(l, r) => vec![l, r],
-            // In the text the test of a quantifier stands before its list.
-            // The arm does not bind the name, so a caller that follows the
-            // scope handles `Any` and `All` itself, as `resolve` does.
-            Expr::Any { list, test, .. } | Expr::All { list, test, .. } => vec![test, list],
-            // In the text the first branch stands before the test.
-            Expr::If {
-                test,
-                then,
-                otherwise,
-            } => vec![then, test, otherwise],
+        match self.parts_mut().1 {
+            Operands::Leaf => Vec::new(),
+            Operands::One(x) => vec![x],
+            Operands::Listed(xs) => xs,
+            Operands::Named(xs) => xs.into_iter().map(|(_, x)| x).collect(),
         }
     }
 }

@@ -324,8 +324,8 @@ proptest! {
         //    `MAX_DEPTH + 1` is the marker under `above` nodes of `not`.
         // 3. We look that node up in the JSON of the rule and compare its
         //    pointer with the place of the refusal. The pointer comes from
-        //    serde's own output, so the test also fails when `Expr::key` or
-        //    `Expr::children` name a step differently from the JSON form.
+        //    serde's own output, so the test also fails when the table `parts!`
+        //    of `src/expr.rs` names a step differently from the JSON form.
 
         // 1. validate the rule with the defect
         rule.expression = tree;

@@ -14,7 +14,7 @@ code.
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Cargo.toml`          | the package name; the dependencies and their features                                                                                                                                      | changing a dependency; why floats parse exactly; why no UUID generator; why the package name ends in `-engine`                                                                         |
 | `src/lib.rs`          | the modules and what the crate exports                                                                                                                                                     | what a user of the crate can reach; why `text::Reason` is not exported at the crate root                                                                                               |
-| `src/expr.rs`         | the expression tree, a path segment, the type names, the JSON key of a kind and the reference tokens of the JSON pointer to each child                                                     | the JSON key of a kind of node; the JSON pointer of a node; adding a function or a method                                                                                              |
+| `src/expr.rs`         | the expression tree, a path segment, the type names, and the table `parts!` with the JSON key and the operands of each kind                                                                | the JSON key of a kind of node; the JSON pointer of a node; adding a function or a method                                                                                              |
 | `src/rule.rs`         | the rule and the action types                                                                                                                                                              | the JSON form of a rule; the value of a field that JSON omits; why a rule holds the tree and no text                                                                                   |
 | `src/limits.rs`       | the limits as constants, each with where its number came from                                                                                                                              | how many scope tags, how long a tag; how long a rule's text may be and how deep it may nest; how deep a tree may be; the cap on token tests in one parse; why the limits are constants |
 | `src/validate.rs`     | `validate`, the refusal reasons and the JSON pointer of a refusal                                                                                                                          | which fields of a rule and what of its expression are checked, and in which order; why a rule was refused; adding a check of the expression                                            |
@@ -30,12 +30,11 @@ code.
   that `validate` accepted the rule. `validate` checks the id, the sample
   rate and the scope tags, and it holds the expression to `MAX_DEPTH` and its
   printed text to `MAX_TEXT_LENGTH`. It returns the first refusal.
-- The name that `Expr::key` gives a kind is the kind's JSON key. The compiler
-  asks for an arm of a new kind in `Expr::key`, `Expr::children` and
-  `Expr::children_mut`, but it does not check the name. The property
+- A new kind of node gets a row in the table `parts!` of `src/expr.rs`, with
+  its JSON key and its operands. The compiler asks for the row but does not
+  check the key. The property
   `a_node_past_the_depth_cap_is_refused_at_its_place` in `tests/model.rs`
-  checks the name of every kind that holds a node. The name of a kind without
-  a node appears in no pointer.
+  checks the key of every kind that has an operand.
 - The crate depends on serde, serde_json and uuid only.
 - Every struct of the model and every node of the tree refuses an unknown
   JSON property.
