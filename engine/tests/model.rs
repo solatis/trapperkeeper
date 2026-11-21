@@ -15,7 +15,7 @@ use trapperkeeper_engine::limits::{MAX_DEPTH, MAX_SCOPE_TAGS, MAX_TAG_LENGTH, MA
 use trapperkeeper_engine::{Action, Error, Reason, Rule, parse, validate};
 use uuid::Uuid;
 
-use common::{PATTERNS, around, rule, valid_expr};
+use common::{MEMBERSHIP, NUMERIC, PATTERNS, around, rule, valid_expr};
 
 /// One way to break a valid rule.
 #[derive(Debug, Clone, Copy)]
@@ -176,6 +176,29 @@ fn bad_pattern() -> BoxedStrategy<Expr> {
     (select(PATTERNS.to_vec()), valid_expr())
         .prop_map(|(make, text)| make(BAD_PATTERN.to_owned(), Box::new(text)))
         .boxed()
+}
+
+/// Generates a node with the literal `None` in a place where validation
+/// refuses it. The other operand, if the kind has one, is the marker.
+fn none_operand() -> BoxedStrategy<Expr> {
+    let none = || Box::new(Expr::None);
+    let marked = || Box::new(marker());
+    // The three arms match the cases of `operands_without_none` in
+    // `src/validate.rs`. The marker makes the node unlike any generated
+    // node, so the test can find it again. `Neg(None)` needs no marker,
+    // because `valid_expr()` never builds one.
+    prop_oneof![
+        (select(NUMERIC.to_vec()), any::<bool>()).prop_map(move |(make, left)| {
+            if left {
+                make(none(), marked())
+            } else {
+                make(marked(), none())
+            }
+        }),
+        Just(Expr::Neg(none())),
+        select(MEMBERSHIP.to_vec()).prop_map(move |make| make(marked(), none())),
+    ]
+    .boxed()
 }
 
 /// `e` wrapped in `n` layers of `not`.
@@ -348,6 +371,34 @@ proptest! {
         // `pointer_to` searched inside the expression, so `/expression` goes
         // in front.
         prop_assert_eq!(error.at, format!("/expression{found}"));
+    }
+
+    /// A `None` next to an operator that cannot take it gets `NoneOperand`,
+    /// pointing at that `None`.
+    #[test]
+    fn a_none_beside_an_operator_is_refused_at_its_place(
+        mut rule in rule(),
+        // The strategy also hands back the defect node, so the test can find
+        // it in the tree. The count of nodes on top is not needed.
+        ((tree, _), node) in none_operand()
+            .prop_flat_map(|node| (around(node.clone()), Just(node))),
+    ) {
+        rule.expression = tree;
+        let error = validate(&rule).expect_err("a None beside an operator is refused");
+        // Nothing else in the tree is invalid, so the reason is
+        // `NoneOperand`.
+        prop_assert_eq!(&error.reason, &Reason::NoneOperand);
+        // The test finds the defect node in the rule's JSON. The error must
+        // point somewhere inside it.
+        let document = serde_json::to_value(&rule).expect("a rule serializes");
+        let wanted = serde_json::to_value(&node).expect("a tree serializes");
+        let found = pointer_to(&document["expression"], &wanted).expect("the tree holds the node");
+        let prefix = format!("/expression{found}/");
+        prop_assert!(error.at.starts_with(&prefix), "{} under {}", error.at, prefix);
+        // The defect node holds exactly one `None`, so if the error points
+        // at a `None` inside it, it points at the right one.
+        let none = serde_json::to_value(Expr::None).expect("a tree serializes");
+        prop_assert_eq!(document.pointer(&error.at), Some(&none));
     }
 
     /// A pattern that does not compile gets `BadPattern`, pointing at the

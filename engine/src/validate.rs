@@ -1,6 +1,7 @@
 //! Checks a rule before it is stored or sent to a sensor. It checks the
-//! rule's own fields, how deep the expression is, how long it prints and
-//! whether its patterns compile (ADR-0033).
+//! rule's own fields, how deep the expression is, how long it prints,
+//! whether its patterns compile and where the literal `None` stands
+//! (ADR-0033).
 
 use std::fmt::{self, Write as _};
 
@@ -42,6 +43,11 @@ pub enum Reason {
     /// error it has several lines and marks the place in the pattern. For a
     /// pattern that compiles too large it is one line.
     BadPattern { message: String },
+    /// The literal `None` is used where it can never do anything useful: next
+    /// to `<`, `<=`, `>` or `>=`, next to an arithmetic operator, under a
+    /// minus, or on the right of `in` or `not in` (ADR-0005). The error points
+    /// at that `None`.
+    NoneOperand,
 }
 
 /// One refusal: where in the rule document, as a JSON pointer (RFC 6901),
@@ -90,9 +96,37 @@ fn printed_length(e: &Expr) -> usize {
     counter.0
 }
 
+/// Which operands of `e` may not be the literal `None`, as indexes into
+/// `e.children()`.
+fn operands_without_none(e: &Expr) -> &'static [usize] {
+    match e {
+        // `x < None` is unknown and `None + 1` is a null, for every record.
+        // So neither side may be the literal (ADR-0005).
+        Expr::Lt(..)
+        | Expr::Le(..)
+        | Expr::Gt(..)
+        | Expr::Ge(..)
+        | Expr::Add(..)
+        | Expr::Sub(..)
+        | Expr::Mul(..)
+        | Expr::Div(..)
+        | Expr::Mod(..) => &[0, 1],
+        // `-None` is a null for every record.
+        Expr::Neg(_) => &[0],
+        // Only the right side. `None in x` is fine: it is true when the list
+        // `x` holds a null (ADR-0005).
+        Expr::In(..) | Expr::NotIn(..) => &[1],
+        // `==` and `!=` with `None` test for a null. Everywhere else `None`
+        // is just a missing value. `len(None)` and `None.upper()` are left
+        // for the type check that comes with the planner (ADR-0005).
+        _ => &[],
+    }
+}
+
 /// Checks `e` and every node below it, and returns the first error. For each
-/// node it checks the depth and, if it has one, the pattern. `at` is the JSON
-/// pointer of `e`. `depth` is the level of `e`, where the top node is level 1.
+/// node it checks the depth, the pattern if it has one, and that no operand
+/// is a `None` it may not hold. `at` is the JSON pointer of `e`. `depth` is
+/// the level of `e`, where the top node is level 1.
 fn check_nodes(e: &Expr, at: &str, depth: usize) -> Result<(), Error> {
     // Stopping here also keeps this function from overflowing the stack on a
     // very deep tree, because it calls itself once per level.
@@ -114,18 +148,27 @@ fn check_nodes(e: &Expr, at: &str, depth: usize) -> Result<(), Error> {
         let message = error.to_string();
         return refuse(&at, Reason::BadPattern { message });
     }
-    for (steps, child) in e.children() {
+    let without_none = operands_without_none(e);
+    for (index, (steps, child)) in e.children().into_iter().enumerate() {
         // `steps` needs no escaping: it is made of JSON keys of the tree and
         // indexes, and none of them holds a `~` or a `/`.
-        check_nodes(child, &format!("{at}/{steps}"), depth + 1)?;
+        let at = format!("{at}/{steps}");
+        check_nodes(child, &at, depth + 1)?;
+        // This comes after the child's own checks, so a `None` that is also
+        // too deep gets `TooDeep`. Only the literal is refused: a field that
+        // happens to hold a null is data.
+        if matches!(child, Expr::None) && without_none.contains(&index) {
+            return refuse(&at, Reason::NoneOperand);
+        }
     }
     Ok(())
 }
 
 /// Checks the id, the sample rate, the scope tags and the expression of
 /// `rule`. For the expression it checks how deep it is, whether its patterns
-/// compile and how long it prints. It does not check that the parser could
-/// have built the tree, such as whether an `and` has two operands (ADR-0033).
+/// compile, where the literal `None` stands and how long it prints. It does
+/// not check that the parser could have built the tree, such as whether an
+/// `and` has two operands (ADR-0033).
 ///
 /// # Errors
 ///
