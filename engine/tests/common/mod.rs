@@ -22,12 +22,12 @@ type Binary = fn(Box<Expr>, Box<Expr>) -> Expr;
 /// its test.
 type Quantifier = fn(String, Box<Expr>, Box<Expr>) -> Expr;
 
-/// The kinds of node that hold one operand.
-const UNARY: [Unary; 18] = [
+/// The kinds of node with one operand, except `Neg`. `Neg` is apart because
+/// validation does not let it hold the literal `None`.
+const UNARY: [Unary; 17] = [
     Expr::Not,
     Expr::IsNone,
     Expr::IsNotNone,
-    Expr::Neg,
     Expr::Len,
     Expr::IsNan,
     Expr::Upper,
@@ -44,24 +44,27 @@ const UNARY: [Unary; 18] = [
     Expr::IsAscii,
 ];
 
-/// The kinds of node that hold two operands.
-const BINARY: [Binary; 15] = [
-    Expr::Eq,
-    Expr::Ne,
+/// The kinds of node with two operands that may hold the literal `None` on
+/// either side.
+const BINARY: [Binary; 4] = [Expr::Eq, Expr::Ne, Expr::StartsWith, Expr::EndsWith];
+
+/// The orderings and the arithmetic operators. Validation refuses the
+/// literal `None` on either side of them.
+pub const NUMERIC: [Binary; 9] = [
     Expr::Lt,
     Expr::Le,
     Expr::Gt,
     Expr::Ge,
-    Expr::In,
-    Expr::NotIn,
     Expr::Add,
     Expr::Sub,
     Expr::Mul,
     Expr::Div,
     Expr::Mod,
-    Expr::StartsWith,
-    Expr::EndsWith,
 ];
+
+/// `in` and `not in`. Validation refuses the literal `None` on their right
+/// side.
+pub const MEMBERSHIP: [Binary; 2] = [Expr::In, Expr::NotIn];
 
 /// The kinds of node that hold a list of operands.
 const LISTS: [fn(Vec<Expr>) -> Expr; 3] = [Expr::List, Expr::And, Expr::Or];
@@ -142,6 +145,18 @@ fn tree(valid: bool) -> BoxedStrategy<Expr> {
     // measurement backs.
     leaf.prop_recursive(2, 24, 3, move |inner| {
         let operand = || inner.clone().prop_map(Box::new);
+        // An operand for the places where validation refuses the literal
+        // `None`. With `valid` set it is never `None`. Without `valid` it can
+        // be anything, so `expr()` still builds `x < None` for the JSON
+        // tests.
+        let not_none = || {
+            inner
+                .clone()
+                .prop_filter("validation refuses None here", move |e| {
+                    !valid || !matches!(e, Expr::None)
+                })
+                .prop_map(Box::new)
+        };
         // The strategy does not hold the trees to the shapes the parser
         // builds. An `And` may hold an `And` or fewer than two operands, and
         // an `Element` may stand outside a quantifier that names it. No test
@@ -149,7 +164,11 @@ fn tree(valid: bool) -> BoxedStrategy<Expr> {
         // `engine/AGENTS.md` asks that a new kind of node is added here.
         prop_oneof![
             (select(UNARY.to_vec()), operand()).prop_map(|(make, a)| make(a)),
+            not_none().prop_map(Expr::Neg),
             (select(BINARY.to_vec()), operand(), operand()).prop_map(|(make, a, b)| make(a, b)),
+            (select(NUMERIC.to_vec()), not_none(), not_none()).prop_map(|(make, a, b)| make(a, b)),
+            (select(MEMBERSHIP.to_vec()), operand(), not_none())
+                .prop_map(|(make, a, b)| make(a, b)),
             (select(LISTS.to_vec()), vec(inner.clone(), 0..=3))
                 .prop_map(|(make, items)| make(items)),
             (operand(), operand(), operand()).prop_map(|(test, then, otherwise)| Expr::If {
@@ -190,25 +209,33 @@ pub fn valid_expr() -> BoxedStrategy<Expr> {
 /// validation fail.
 fn frame(inner: Expr) -> BoxedStrategy<Expr> {
     let operand = || valid_expr().prop_map(Box::new);
+    // The second operand of a two-operand node is never the literal `None`.
+    // Some kinds would refuse it, and filtering it out for all of them lets
+    // one arm build every kind.
+    let other = || {
+        valid_expr()
+            .prop_filter("validation refuses None here", |e| !matches!(e, Expr::None))
+            .prop_map(Box::new)
+    };
     let held = Just(Box::new(inner));
+    // `tree` builds `Neg` in an arm of its own, so it is added to `UNARY`
+    // here.
+    let unary = [&UNARY[..], &[Expr::Neg]].concat();
+    let binary = [&BINARY[..], &NUMERIC[..], &MEMBERSHIP[..]].concat();
     // The arms cover every kind of node that has an operand, from the same
     // lists that `tree` uses. So the tests see a pointer through each kind.
     prop_oneof![
-        (select(UNARY.to_vec()), held.clone()).prop_map(|(make, inner)| make(inner)),
+        (select(unary), held.clone()).prop_map(|(make, inner)| make(inner)),
         // `left` says which side `inner` goes on.
-        (
-            select(BINARY.to_vec()),
-            held.clone(),
-            operand(),
-            any::<bool>()
-        )
-            .prop_map(|(make, inner, other, left)| {
+        (select(binary), held.clone(), other(), any::<bool>()).prop_map(
+            |(make, inner, other, left)| {
                 if left {
                     make(inner, other)
                 } else {
                     make(other, inner)
                 }
-            }),
+            }
+        ),
         // `inner` goes in at a random position among up to two other items.
         (
             select(LISTS.to_vec()),
