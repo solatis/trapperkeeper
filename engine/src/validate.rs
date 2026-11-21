@@ -1,5 +1,5 @@
-//! Validation of a rule before it is stored or sent to a sensor: the rule's
-//! own fields, and the depth and the printed length of its expression
+//! Checks a rule before it is stored or sent to a sensor. It checks the
+//! rule's own fields, how deep the expression is and how long it prints
 //! (ADR-0033).
 
 use std::fmt::{self, Write as _};
@@ -29,18 +29,17 @@ pub enum Reason {
     /// A tag value is empty or longer than `max`. `len` counts the characters
     /// of the value, and the accepted range is 1 to `max`.
     TagValueLength { len: usize, max: usize },
-    /// The way from the top of the expression down to a node passes more than
-    /// `max` nodes, the cap `MAX_DEPTH`, with the top and the node counted.
-    /// The refusal points at the node past the cap that the walk meets first,
-    /// in the order of the JSON form.
+    /// The expression is more than `max` levels deep, where `max` is
+    /// `MAX_DEPTH` and the top node is level 1. The error points at the
+    /// first node that is too deep, in JSON order.
     TooDeep { max: usize },
-    /// The expression prints as `len` characters of rule text, which is more
-    /// than `max`, the cap `MAX_TEXT_LENGTH`.
+    /// The expression prints as `len` characters of rule text. That is more
+    /// than `max`, which is `MAX_TEXT_LENGTH`.
     TextTooLong { len: usize, max: usize },
 }
 
 /// One refusal: where in the rule document, as a JSON pointer (RFC 6901),
-/// and why. `validate` returns the first refusal of a rule.
+/// and why. `validate` returns the first one it finds.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Error {
     pub at: String,
@@ -55,7 +54,7 @@ fn token(key: &str) -> String {
     key.replace('~', "~0").replace('/', "~1")
 }
 
-/// The refusal for `reason` at the JSON pointer `at`.
+/// Returns the error for `reason` at the JSON pointer `at`.
 fn refuse(at: &str, reason: Reason) -> Result<(), Error> {
     Err(Error {
         at: at.to_owned(),
@@ -63,66 +62,60 @@ fn refuse(at: &str, reason: Reason) -> Result<(), Error> {
     })
 }
 
-/// Counts the characters that are written to it and keeps none of them.
+/// A writer that counts the characters it gets and throws them away.
 struct Counter(usize);
 
 impl fmt::Write for Counter {
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        // Characters are Unicode scalar values, as `MAX_TEXT_LENGTH` counts
-        // them.
+        // `MAX_TEXT_LENGTH` counts Unicode scalar values, so this does too.
         self.0 += s.chars().count();
         Ok(())
     }
 }
 
-/// The number of characters of `e` printed as rule text.
+/// How many characters `e` takes when printed as rule text.
 fn printed_length(e: &Expr) -> usize {
     let mut counter = Counter(0);
-    // The printer writes into the counter, so a text of any length is counted
-    // and never held in memory. The counter does not stop at the cap, so
-    // `TextTooLong` holds the whole length, as `TooManyTags` holds its count,
-    // and the author sees how far over the rule is.
-    // `Counter` never returns an error, so the write cannot fail and its
-    // result is dropped.
+    // Printing into the counter means the text is never held in memory. The
+    // counter keeps going past the cap, so the error can say how long the
+    // text really is, the way `TooManyTags` gives its count.
+    // `Counter` never fails, so the result is dropped.
     let _ = write!(counter, "{e}");
     counter.0
 }
 
-/// Checks the depth of `e` and then of every node under it, and returns the
-/// first refusal. `at` is the JSON pointer of `e`, and `depth` counts the nodes
-/// from the top of the expression down to `e`.
+/// Checks `e` and every node below it, and returns the first error. `at` is
+/// the JSON pointer of `e`. `depth` is the level of `e`, where the top node
+/// is level 1.
 fn check_nodes(e: &Expr, at: &str, depth: usize) -> Result<(), Error> {
-    // The walk refuses the node and does not go further down. It calls itself
-    // once per level, so the cap also bounds its own stack on a tree of any
-    // depth.
+    // Stopping here also keeps this function from overflowing the stack on a
+    // very deep tree, because it calls itself once per level.
     if depth > MAX_DEPTH {
         return refuse(at, Reason::TooDeep { max: MAX_DEPTH });
     }
     for (steps, child) in e.children() {
-        // The steps are keys of the tree's JSON form and indexes, joined by
-        // `/`. No key and no index holds a `~` or a `/` that would need
-        // escaping.
+        // `steps` needs no escaping: it is made of JSON keys of the tree and
+        // indexes, and none of them holds a `~` or a `/`.
         check_nodes(child, &format!("{at}/{steps}"), depth + 1)?;
     }
     Ok(())
 }
 
 /// Checks the id, the sample rate, the scope tags and the expression of
-/// `rule`: the depth of the expression and the length of its printed text.
-/// It does not test whether the parser could have built the expression
+/// `rule`. For the expression it checks how deep it is and how long it
+/// prints. It does not check that the parser could have built the tree
 /// (ADR-0033).
 ///
 /// # Errors
 ///
-/// The first refusal, in the order in which the JSON form of a rule writes
-/// the fields: the id, then the sample rate, then the scope, then each tag
-/// in key order, with a key before its value, then the expression, with a
-/// node before its children, and last the length of its printed text.
+/// The first error it finds. It checks in the order of the rule's JSON: the
+/// id, the sample rate, the scope, each tag in key order with the key before
+/// the value, and then the expression. In the expression a node comes before
+/// its children, and the printed length comes last.
 pub fn validate(rule: &Rule) -> Result<(), Error> {
-    // `validate` runs its checks in the order in which the JSON form of a
-    // rule holds the fields, and it returns the refusal of the first check
-    // that fails. The fixed order gives a rule with several defects the same
-    // answer every time. The check of the printed text comes last, and the
+    // The checks run in the order of the rule's JSON, and the first one that
+    // fails returns. The fixed order means a rule with several mistakes
+    // always gets the same error. The printed length comes last, and the
     // note there says why.
     let version = rule.rule_id.get_version_num();
     // The server issues version 7 UUIDs, and a format that admits any
@@ -163,10 +156,10 @@ pub fn validate(rule: &Rule) -> Result<(), Error> {
             return refuse(&at, Reason::TagValueLength { len, max });
         }
     }
-    // The top of the expression is the first node, so its depth is 1.
+    // The top node is level 1.
     check_nodes(&rule.expression, "/expression", 1)?;
-    // The printer calls itself once per level, so it runs after the walk,
-    // which has refused every tree deeper than `MAX_DEPTH`.
+    // The printer calls itself once per level, so it must not see a very
+    // deep tree. The walk above has already refused those.
     let len = printed_length(&rule.expression);
     if len > MAX_TEXT_LENGTH {
         let max = MAX_TEXT_LENGTH;
