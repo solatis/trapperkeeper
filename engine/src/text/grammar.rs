@@ -28,7 +28,9 @@ pub(super) const WORDS: [&str; 13] = [
 // Its reason is that a call would otherwise need four tokens to tell it from a
 // field: `re.search(` and the field `re.search` differ at the `(`.
 // `function_name` reads `re` only as the start of a call such as `re.search`,
-// and a bare `re` is refused with `ModuleAlone`.
+// and a bare `re` is refused with `ModuleAlone`. The constant is a list, so a
+// later module joins it as one more entry, and `ModuleAlone` names the module
+// it refuses.
 const MODULES: [&str; 1] = ["re"];
 
 // Python's keywords (`keyword.kwlist`) less those that are words of the
@@ -1135,17 +1137,15 @@ pub(super) const FUNCTIONS: [(&str, Arguments); 7] = [
 /// name token is read, also a word of the language.
 ///
 /// A called name outside the closed list is refused with `UnknownFunction`,
-/// with the nearest known function when one is near enough. `re` with no
-/// function after it is refused with `ModuleAlone`.
+/// with the nearest known function when one is near enough. `re` without a
+/// dot after it is refused with `ModuleAlone`.
 fn call(i: &Input<'_>, p: usize) -> Reply<Expr> {
     // The function reads a function name, tests for the `(` after it without
     // moving past it, and only then looks the name up in `FUNCTIONS`. Then
     // it runs the parser of the arguments that the entry names.
     //
-    // 1. We read the name with `function_name`: a plain name, or `re`, a dot
-    //    and a name. Without a name the rule gives no match. `re` with no
-    //    function after it is refused with `ModuleAlone`, and the `?` passes
-    //    that refusal on.
+    // 1. We read the name, which may have the module `re`. A bare `re` ends
+    //    the parse with its refusal.
     // 2. We test for the `(` at the token after the name, without moving
     //    past it. Without a `(` the rule gives no match. A plain name
     //    without `(` is no call, so the bare-name alternative of `atom`
@@ -1182,8 +1182,8 @@ fn call(i: &Input<'_>, p: usize) -> Reply<Expr> {
         hidden(open)(i, q)?
     };
     // After a module name no other alternative of `atom` matches either,
-    // because `re` is a word of the language, and the note "`(`" becomes the
-    // error.
+    // because `re` is a word of the language. `open` logged the note "`(`",
+    // and `explain` in `parse` builds the error from that log.
     if seen.is_none() {
         return Ok(None);
     }
@@ -1216,13 +1216,13 @@ fn call(i: &Input<'_>, p: usize) -> Reply<Expr> {
 ///
 /// Reads the `len` of `len(name)` and the `re.search` of
 /// `re.search(r"a", x)`, and says whether the name has a module. After the
-/// dot any name token is read, also a word of the language. `re` with no
-/// function after it is refused with `ModuleAlone`.
+/// dot any name token is read, also a word of the language. `re` without a
+/// dot after it is refused with `ModuleAlone`.
 fn function_name(i: &Input<'_>, p: usize) -> Reply<(String, bool)> {
-    // `module` reads `re`, as the module of `re.search`. The note
-    // has no name, because `hidden` below keeps it out of every error.
-    // `furthest` still returns the empty note, and its callers look for words
-    // in backticks, which it never equals.
+    // `module` reads `re`, as the module of `re.search`. Its note is empty,
+    // because `hidden` below keeps it out of every error. `furthest` still
+    // returns the empty note to `miscased_word` and `with_words`, which look
+    // only for words in backticks, so the empty note never matches.
     let module = token("", |t| match &t.kind {
         Tok::Name(n) => MODULES.iter().find(|m| *m == n).copied(),
         _ => None,
@@ -1235,7 +1235,7 @@ fn function_name(i: &Input<'_>, p: usize) -> Reply<(String, bool)> {
     // `re.search`: the module, a dot and the function. Any name token is
     // read after the dot, so `re.if(x)` is the unknown function `re.if`.
     let Some((function, r)) = right(punct("."), any_name)(i, q)? else {
-        // `re` with no function after it is refused with `ModuleAlone`.
+        // `re` without a dot after it is refused with `ModuleAlone`, as
         // `re == 1` is refused at `re`.
         let (at, reason) = (i.tok(p).at.clone(), Reason::ModuleAlone { word: module });
         let error = SyntaxError { at, reason };
