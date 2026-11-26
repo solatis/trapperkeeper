@@ -73,8 +73,9 @@ text in brackets works at every step of a path (owner, 2026-11-13,
 
 Twelve words are reserved: `and`, `or`, `not`, `in`, `is`, `if`, `else`, `for`,
 `None`, `True`, `False` and `record`. Python's other keywords are names (owner,
-2026-11-14). `re` is reserved too, as the name of the module of the pattern
-functions (owner, 2026-11-26). A lowercase `null`, `true` or `false` is a
+2026-11-14). `re` is reserved in the same way, as the name of the module of the
+pattern functions, so a field `re` is written `record["re"]` (owner,
+2026-11-26). A lowercase `null`, `true` or `false` is a
 name like any other (owner, 2026-11-14). A word of the language never stands
 after a dot (owner, 2026-11-14).
 
