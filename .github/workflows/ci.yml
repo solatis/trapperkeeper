@@ -148,8 +148,8 @@ jobs:
     name: miri
     runs-on: ubuntu-24.04
     env:
-      # The properties use proptest's default configuration, which reads this
-      # variable. With 16 cases per property, and the smaller columns that the
+      # The properties keep proptest's default case count, which proptest
+      # reads from this variable. With 16 cases per property, and the smaller columns that the
       # tests generate under Miri, the job takes minutes.
       PROPTEST_CASES: 16
     steps:
