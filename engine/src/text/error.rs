@@ -284,6 +284,8 @@ impl fmt::Display for Reason {
                 f,
                 "`record` is the whole record; name a field, as in `record[\"key\"]`"
             ),
+            // `re` is the only entry of `MODULES`, so the sentence names the
+            // pattern functions without a test of the word.
             Reason::ModuleAlone { word } => write!(
                 f,
                 "`{word}` names the pattern functions; to name a field `{word}`, \
