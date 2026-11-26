@@ -65,14 +65,16 @@ Arrow format defines them, so a text view holds no number of 2^31 or more
 (owner, 2026-11-26).
 
 A list column is offsets into an element column, a fixed number of elements
-per record, an offset and a size per record, or a column per record (owner,
-2026-11-21, 2026-11-26). In the first three layouts the elements are one
-column with a description of its own, which may itself be a list. In the last
-layout every record is a column of its own, with its own layout and marking,
-so it nests to any depth: a numpy array of dtype `object` that holds masked
-arrays of masked arrays is read in place (owner, 2026-11-26). The lists of the
-offset-and-size layout may lie in any order and share elements, as Arrow's
-list view allows.
+per record, an offset and a size per record, or a column per record. A record
+is a row of a list column (owner, 2026-11-21, 2026-11-26). In the first three
+layouts the elements of all records are one column with a description of its
+own, which may itself be a list. In the last layout every record is a column of
+its own, with its own layout and marking, because each record lies in memory
+of its own and not end to end with the others. The adapter writes one
+description per record, and no value or mask is copied, so a numpy array of
+dtype `object` that holds masked arrays of masked arrays is read in place
+(owner, 2026-11-26). The lists of the offset-and-size layout may lie in any
+order and share elements, as Arrow's list view allows.
 
 A column has one type. Each value of a column is either present or missing,
 with no third state (owner, 2026-11-12).
@@ -124,8 +126,9 @@ of Rust structs. The adapter would then copy each text of at most 12 bytes
 into its view (owner, 2026-11-26).
 
 A pointer, a length and an optional byte mask per record, in place of a column
-per record, because it covers one level only, and nested masked arrays would
-be copied (owner, 2026-11-26).
+per record. Such a record points at the values of one scalar array, so an
+inner masked array has no description, and its adapter would copy it into an
+offsets layout (owner, 2026-11-26).
 
 One trait for text and lists together. The elements of a list are a column
 with a marking, so the bytes of a text would carry a marking that no text
