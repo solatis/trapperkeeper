@@ -2,7 +2,9 @@
 
 **What**: the module is the engine's own description of a column: the type of
 its values, where they lie in the source's memory, how far apart they lie, and
-how the source marks "no value". It evaluates nothing.
+how the source marks "no value". It also holds the loops that turn a marking
+into the bitmap of a chunk, and the pass that clears the rows whose float is a
+NaN. It evaluates no rule.
 
 **Map**:
 
@@ -25,9 +27,9 @@ how the source marks "no value". It evaluates nothing.
 - The engine owns the closed list of cases, so a public trait of this module,
   such as `Float`, is sealed.
 - A new layout or loop gets a property in `engine/tests/column.rs` that builds
-  it from generated data and reads the data back. A property draws the length
-  of a generated column from `MAX_ROWS`, which is small under Miri, and the
-  property runs under Miri in CI.
+  it from generated data and reads the data back. A generated column has at
+  most `MAX_ROWS` rows, which is small under Miri, and the property runs under
+  Miri in CI.
 
 **Why**:
 
@@ -35,16 +37,15 @@ how the source marks "no value". It evaluates nothing.
   `doc/adr/0036-column-descriptions-and-adapters.md`.
 - A stride is positive and every value is aligned:
   `doc/adr/0036-column-descriptions-and-adapters.md`.
+- A bitmap marks a present value with a set bit and may start at any bit, a
+  byte mask marks a missing value with a byte that is not zero, and no flag
+  turns either meaning around:
+  `doc/adr/0036-column-descriptions-and-adapters.md`.
 - The chunk of 2048 rows, and one loop per marking that makes the bitmap of a
   chunk: `doc/adr/0035-vectorized-evaluation-with-a-planner.md`.
 - A set bit means present. A comparison on a row whose bit is clear gives
   unknown, the null of a boolean:
   `doc/adr/0005-one-vocabulary-for-failure-behavior.md`.
-- The bitmap of a chunk is 64-bit words with the first row in the lowest bit.
-  Testing a row is then a shift and a mask, a loop visits the set rows in
-  order with `trailing_zeros`, and a logic step works on 64 rows at a time. A
-  source bitmap in the same bit order, such as Arrow's, copies with shifts
-  alone.
 - The loops over values that lie one after the other use `std::simd`, and the
   instruction sets that the build turns on are decided from measurements:
   `doc/adr/0035-vectorized-evaluation-with-a-planner.md`.
