@@ -7,7 +7,7 @@ mod values;
 
 use std::fmt;
 
-pub use marking::Marking;
+pub use marking::{CHUNK_ROWS, CHUNK_WORDS, Marking, Present, present_all, present_from_bits};
 pub use values::{Bits, Booleans, Floats, Ints, Strided};
 
 /// A marking that covers another number of rows than the values of its

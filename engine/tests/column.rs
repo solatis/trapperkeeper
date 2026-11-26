@@ -7,7 +7,37 @@ use std::mem::size_of;
 
 use proptest::collection::vec;
 use proptest::prelude::*;
-use trapperkeeper_engine::column::{Bits, Column, Ints, Marking, Mismatch, Strided};
+use proptest::sample::Index;
+use trapperkeeper_engine::column::{
+    Bits, CHUNK_ROWS, CHUNK_WORDS, Column, Ints, Marking, Mismatch, Present, Strided, present_all,
+    present_from_bits,
+};
+
+/// Whether bit `row` of the bitmap of a chunk is set.
+fn bit(out: &Present, row: usize) -> bool {
+    out[row / 64] >> (row % 64) & 1 == 1
+}
+
+/// Checks that `out` is the bitmap of `expected`: one bit per row, and no bit
+/// set from the end of `expected` on.
+fn assert_bitmap(out: &Present, expected: &[bool]) -> Result<(), TestCaseError> {
+    for (row, want) in expected.iter().enumerate() {
+        prop_assert_eq!(bit(out, row), *want, "row {}", row);
+    }
+    // A later step combines whole words, so a stray bit past the chunk would
+    // count as a row.
+    prop_assert!((expected.len()..CHUNK_WORDS * 64).all(|row| !bit(out, row)));
+    Ok(())
+}
+
+/// The start and the length of a chunk of a column of `len` rows, picked by
+/// two generated indexes. The first picks the start inside the column, and the
+/// second a length of at most `CHUNK_ROWS` that stays inside it, so every
+/// start is reached, also one that is no multiple of 64.
+fn chunk_of(len: usize, (at, size): (Index, Index)) -> (usize, usize) {
+    let start = at.index(len + 1);
+    (start, size.index((len - start).min(CHUNK_ROWS) + 1))
+}
 
 /// Packs booleans into bytes from bit `offset` on, lowest bit first, as a
 /// source bitmap holds them. The bits before `offset` are set, so a loop that
@@ -77,4 +107,46 @@ proptest! {
         // `Never` covers any number of rows.
         prop_assert_eq!(Column::ints(ints, Marking::Never).map(|c| c.rows()), Ok(values));
     }
+
+    /// The bitmap of a chunk from a source bitmap has a bit per row of the
+    /// chunk, at any bit offset and any start.
+    #[test]
+    fn a_chunk_of_a_bitmap_has_its_bits(
+        bools in vec(any::<bool>(), 0..5000),
+        offset in 0usize..17,
+        cut in any::<(Index, Index)>(),
+    ) {
+        let bytes = packed(&bools, offset);
+        let bits = Bits::new(&bytes, offset, bools.len()).expect("the buffer holds the bits");
+        let (start, rows) = chunk_of(bools.len(), cut);
+        // The bitmap starts full, so a word that the loop does not write shows.
+        let mut out = [u64::MAX; CHUNK_WORDS];
+        present_from_bits(bits, start, rows, &mut out);
+        assert_bitmap(&out, &bools[start..start + rows])?;
+    }
+
+    /// The bitmap of a chunk of a column that marks nothing has every row of
+    /// the chunk.
+    #[test]
+    fn a_chunk_without_a_marking_has_every_row(rows in 0..=CHUNK_ROWS) {
+        let mut out = [0; CHUNK_WORDS];
+        present_all(rows, &mut out);
+        assert_bitmap(&out, &vec![true; rows])?;
+    }
+}
+
+#[test]
+#[should_panic(expected = "a chunk of 2049 rows")]
+fn a_chunk_above_the_chunk_size_panics() {
+    let bytes = [0u8; 300];
+    let bits = Bits::new(&bytes, 0, 2400).expect("the buffer holds the bits");
+    present_from_bits(bits, 0, CHUNK_ROWS + 1, &mut [0; CHUNK_WORDS]);
+}
+
+#[test]
+#[should_panic(expected = "a chunk of 10 rows from row 95 of 100")]
+fn a_chunk_past_the_column_panics() {
+    let bytes = [0u8; 13];
+    let bits = Bits::new(&bytes, 0, 100).expect("the buffer holds the bits");
+    present_from_bits(bits, 95, 10, &mut [0; CHUNK_WORDS]);
 }

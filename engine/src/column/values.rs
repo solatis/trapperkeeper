@@ -151,6 +151,11 @@ impl<'a> Bits<'a> {
         let at = self.offset + row;
         self.bytes[at / 8] >> (at % 8) & 1 == 1
     }
+
+    /// The bytes that hold the bits and the bit at which the run starts.
+    pub(crate) fn parts(&self) -> (&'a [u8], usize) {
+        (self.bytes, self.offset)
+    }
 }
 
 /// The values of an int column: one of the eight fixed-width int types.
