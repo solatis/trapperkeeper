@@ -6,8 +6,9 @@ tree of a rule's expression, their JSON form and the validation of a rule.
 Validation checks the rule's own fields, holds its expression to a depth and a
 printed length, checks its patterns, and refuses the literal `None` beside an
 operator that cannot take it. The crate also parses a rule's text into the tree
-and prints a tree as text. It does not evaluate rules. It depends on no server,
-store or HTTP code.
+and prints a tree as text. It also holds the description of a column, over
+which the executor will run. It still evaluates no rule. It depends on no
+server, store or HTTP code.
 
 **Map**:
 
@@ -19,6 +20,7 @@ store or HTTP code.
 | `src/rule.rs`         | the rule and the action types                                                                                                                                                              | the JSON form of a rule; the value of a field that JSON omits; why a rule holds the tree and no text                                                                                                       |
 | `src/limits.rs`       | the limits as constants, each with where its number came from                                                                                                                              | how many scope tags, how long a tag; how long a rule's text may be and how deep it may nest; how deep a tree may be; the cap on token tests in one parse; why the limits are constants                     |
 | `src/validate.rs`     | `validate`, the refusal reasons and the JSON pointer of a refusal                                                                                                                          | which fields of a rule and what of its expression are checked, and in which order; how a pattern is checked; where the literal `None` is refused; why a rule was refused; adding a check of the expression |
+| `src/column/`         | the description of a column                                                                                                                                                                | how a column's values and its marking of "no value" are described; see `src/column/AGENTS.md`                                                                                                              |
 | `src/text/`           | the parser and the printer of rule text                                                                                                                                                    | parsing or printing rule text; a syntax error and its sentence; see `src/text/AGENTS.md`                                                                                                                   |
 | `tests/common/mod.rs` | the strategies for any tree, for a tree that validates and for rules, and the strategy that puts a defect under generated nodes                                                            | generating trees or rules in another test; adding a kind of node to the generated trees                                                                                                                    |
 | `tests/tree.rs`       | the round trip and the refusals of the tree's JSON, as properties over generated trees                                                                                                     | how the JSON form of the tree is tested                                                                                                                                                                    |
@@ -76,6 +78,8 @@ store or HTTP code.
   `doc/adr/0005-one-vocabulary-for-failure-behavior.md`.
 - Property, behavioral and data-driven tests are preferred:
   `doc/adr/0018-unit-integration-and-end-to-end-tests.md`.
+- Column descriptions and adapters:
+  `doc/adr/0036-column-descriptions-and-adapters.md`.
 - The crate's directory:
   `doc/adr/0010-one-top-level-directory-per-component.md`.
 

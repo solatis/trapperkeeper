@@ -1,6 +1,6 @@
 # 0011. Clippy pedantic denied everywhere
 
-Date: 2026-10-31.
+Date: 2026-11-26.
 
 ## Context
 
@@ -15,6 +15,9 @@ The workspace lints table in the root `Cargo.toml` denies clippy's `all` and
 lint is relaxed per case with a higher-priority entry, never by lowering a
 group. CI passes no extra lint flag, so a commit fails the same way on a
 developer's machine and in CI.
+
+The table also denies `clippy::undocumented_unsafe_blocks`, a lint outside both
+groups, so every `unsafe` block says why it is sound (owner, 2026-11-26).
 
 ## Rejected alternatives
 

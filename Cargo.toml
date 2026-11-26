@@ -25,6 +25,9 @@ warnings = "deny"
 # Priority -1 lets such a single-lint entry override the group.
 all = { level = "deny", priority = -1 }
 pedantic = { level = "deny", priority = -1 }
+# Every `unsafe` block states why it is sound. The lint is in clippy's
+# restriction group, which neither group above turns on (ADR-0011).
+undocumented_unsafe_blocks = "deny"
 
 # Each Argon2id hash runs over 64 MiB in three passes. The login check, the
 # creation and the reset of an account, a password change and the derivation of

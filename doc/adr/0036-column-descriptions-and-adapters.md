@@ -24,6 +24,15 @@ The source picks which of these markings a column has. A NaN in a float column
 is no value (`adr/0005`) in every source and under every marking (owner,
 2026-11-26).
 
+No framework is a model for the description. Arrow is one source among numpy,
+pandas, Polars, DuckDB and Rust structs. Each layout that a source holds is
+equally a reason, and an abstraction is chosen to cover all of them at once
+(owner, 2026-11-26).
+
+Data never moves between machines of different byte order, so every value is
+in the byte order of the machine (owner, 2026-11-26). A stride is a positive
+number of bytes, and every value is aligned for its type (owner, 2026-11-21).
+
 A column has one type. Each value of a column is either present or missing,
 with no third state (owner, 2026-11-12).
 
@@ -54,6 +63,10 @@ mask and no NaN as null.
 Writing the Arrow import ourselves, because dropping arrow-rs would be
 anti-pragmatic unless it performs badly.
 
+A negative or an unaligned stride, because every strided loop would then read
+with an unaligned load and a signed offset. It is added when a source needs it
+(owner, 2026-11-21).
+
 A third state per value in a column, because it is incompatible with fast
 column-oriented evaluation.
 
@@ -70,6 +83,8 @@ same pass 10 to 50 times slower than native code.
 
 Every float column costs one pass over its values, which finds the NaNs
 (`adr/0005`).
+
+An adapter copies a reversed or a packed numpy view into a new array.
 
 Contiguous memory decides whether a loop vectorizes. A column with a stride
 measured about 3 times the contiguous cost.
