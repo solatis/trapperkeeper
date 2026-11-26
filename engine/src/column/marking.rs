@@ -248,7 +248,7 @@ impl Test<u16> for NotNan {
     }
 
     fn one(&self, value: u16) -> bool {
-        value & 0x7fff <= F16_INFINITY
+        (value & 0x7fff) <= F16_INFINITY
     }
 }
 
