@@ -13,7 +13,7 @@ use proptest::prelude::*;
 use proptest::sample::Index;
 use trapperkeeper_engine::column::{
     AnyOffsets, Bits, CHUNK_ROWS, CHUNK_WORDS, Column, Float, INLINE, Ints, Marking, Mismatch,
-    Offsets, Present, Strided, Text, Texts, Utf8, View, Views, clear_nan, present_all,
+    Offsets, Piece, Present, Strided, Text, Texts, Utf8, View, Views, clear_nan, present_all,
     present_from_bits, present_from_mask,
 };
 
@@ -321,6 +321,24 @@ proptest! {
         let layout = unsafe { Views::new(&views, &lent) };
         assert_texts(layout, &texts)?;
         let column = Column::text(Text::Views(layout), Marking::Never);
+        prop_assert_eq!(column.map(|c| c.rows()), Ok(texts.len()));
+    }
+
+    /// A run of pieces reads back its texts, contiguous and strided.
+    #[test]
+    fn pieces_read_back_their_texts(texts in texts(), step in 1usize..4) {
+        // Each text's piece is followed by `step - 1` pieces of other texts, as
+        // a field of a struct is followed by the struct's other fields.
+        let pieces = texts
+            .iter()
+            .flat_map(|t| std::iter::once(Piece::new(t)).chain(std::iter::repeat_n(Piece::new("x"), step - 1)))
+            .collect::<Vec<_>>();
+        // SAFETY: the pointer is the vector's, the stride is `step` pieces in
+        // bytes, and the count is the number of texts, each of which has
+        // `step` pieces in the vector.
+        let run = unsafe { Strided::from_raw(pieces.as_ptr(), step * size_of::<Piece<'_>>(), texts.len()) };
+        assert_texts(run, &texts)?;
+        let column = Column::text(Text::Pieces(run), Marking::Never);
         prop_assert_eq!(column.map(|c| c.rows()), Ok(texts.len()));
     }
 }

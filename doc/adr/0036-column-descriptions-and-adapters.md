@@ -50,8 +50,8 @@ One sealed trait per kind gives the elements of a row for every layout, and a
 loop is written once against it. No layout copies a text or an element
 (owner, 2026-11-26).
 
-A text column is offsets into one buffer or views of 16 bytes (owner,
-2026-11-21). The length, buffer number and offset of a view are signed 32-bit
+A text column is offsets into one buffer, views of 16 bytes, or a pointer and
+a length per row (owner, 2026-11-21). The length, buffer number and offset of a view are signed 32-bit
 integers, as the Arrow format defines them, so a view holds no number of 2^31
 or more (owner, 2026-11-26).
 
@@ -98,6 +98,9 @@ zero byte (owner, 2026-11-21).
 A negative or an unaligned stride, because every strided loop would then read
 with an unaligned load and a signed offset. It is added when a source needs it
 (owner, 2026-11-21).
+
+Views whose long text is an address, because they copy each text of at most
+12 bytes into the view (owner, 2026-11-26).
 
 One trait for text and lists together, because the bytes of a text would then
 be a column with a marking that they never use.

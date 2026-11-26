@@ -1,9 +1,13 @@
 //! The layouts of a text column and the trait `Texts` through which a loop
 //! reads any of them. Nothing in this file copies a text.
 
+use std::marker::PhantomData;
 use std::ops::Range;
+use std::ptr::NonNull;
+use std::slice;
 
 use super::layout::{self, AnyOffsets, Offset, Offsets, Storage};
+use super::values::Strided;
 
 mod sealed {
     /// The part of `Unit` and `Texts` that only the engine can name, so no
@@ -260,6 +264,73 @@ impl<'a> Texts<'a> for Views<'a> {
     }
 }
 
+/// The address and the length of the bytes of one text, which stays where the
+/// source holds it. An adapter over a slice of Rust structs fills a run of
+/// pieces from `String` or `&str` fields and copies no text.
+// `repr(C)` fixes the layout, because Rust does not fix the layout of a `&str`,
+// and an adapter in another language writes pieces too.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct Piece<'a> {
+    first: NonNull<u8>,
+    len: usize,
+    borrow: PhantomData<&'a str>,
+}
+
+impl<'a> Piece<'a> {
+    /// The piece of a text.
+    #[must_use]
+    pub fn new(text: &'a str) -> Self {
+        Self {
+            first: NonNull::from(text.as_bytes()).cast(),
+            len: text.len(),
+            borrow: PhantomData,
+        }
+    }
+
+    /// A piece over bytes that Rust did not allocate.
+    ///
+    /// # Safety
+    ///
+    /// `first` is not null, `len` bytes are readable from it, and nothing
+    /// writes them during `'a`. The bytes are UTF-8.
+    #[must_use]
+    pub unsafe fn from_raw(first: *const u8, len: usize) -> Self {
+        debug_assert!(!first.is_null(), "the text is at a null address");
+        // SAFETY: the caller promises that `len` bytes are readable from
+        // `first`. A debug build reads them once to check the UTF-8 promise.
+        let bytes = unsafe { slice::from_raw_parts(first, len) };
+        debug_assert!(str::from_utf8(bytes).is_ok(), "the text is not UTF-8");
+        Self {
+            // SAFETY: the caller promises that `first` is not null.
+            first: unsafe { NonNull::new_unchecked(first.cast_mut()) },
+            len,
+            borrow: PhantomData,
+        }
+    }
+
+    /// The bytes of the text.
+    fn bytes(&self) -> &'a [u8] {
+        // SAFETY: both constructors make `len` bytes readable from `first`
+        // for `'a`.
+        unsafe { slice::from_raw_parts(self.first.as_ptr(), self.len) }
+    }
+}
+
+impl sealed::Sealed for Strided<'_, Piece<'_>> {}
+
+impl<'a> Texts<'a> for Strided<'a, Piece<'a>> {
+    type Unit = u8;
+
+    fn len(&self) -> usize {
+        Strided::len(self)
+    }
+
+    fn get(&self, row: usize) -> &'a [u8] {
+        Strided::get(self, row).bytes()
+    }
+}
+
 /// The layout of a text column.
 #[derive(Debug, Clone, Copy)]
 pub enum Text<'a> {
@@ -268,6 +339,9 @@ pub enum Text<'a> {
     Offsets(AnyOffsets<'a, Utf8<'a>>),
     /// Views of 16 bytes.
     Views(Views<'a>),
+    /// A pointer and a length per row, as an adapter over a slice of Rust
+    /// structs fills them.
+    Pieces(Strided<'a, Piece<'a>>),
 }
 
 impl Text<'_> {
@@ -277,6 +351,7 @@ impl Text<'_> {
         match self {
             Self::Offsets(o) => o.len(),
             Self::Views(v) => Texts::len(v),
+            Self::Pieces(p) => Strided::len(p),
         }
     }
 
