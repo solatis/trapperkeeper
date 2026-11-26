@@ -43,8 +43,8 @@ mask marks a missing value with a byte that is not zero (owner, 2026-11-21).
 
 Text columns and list columns use the same two layouts of rows: offsets, and a
 fixed number of elements per row. Each layout is generic over what its rows
-point into, which is the bytes of the texts for a text column and the element
-column for a list column (owner, 2026-11-26). The
+point into, which is the bytes or the UTF-32 units of the texts for a text
+column and the element column for a list column (owner, 2026-11-26). The
 offset type is `i32`, `i64`, `u32` or `u64`, and more are added when a source
 needs them (owner, 2026-11-26).
 
