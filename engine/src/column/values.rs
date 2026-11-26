@@ -44,8 +44,8 @@ impl<'a, T: Copy> Strided<'a, T> {
     /// `T`, and nothing writes them during `'a`.
     #[must_use]
     pub unsafe fn from_raw(first: *const T, stride: usize, len: usize) -> Self {
-        // These check the parts of the contract that can be checked, so that
-        // an adapter's mistake shows in a debug build and under Miri.
+        // These check the parts of the contract that can be checked, so that a
+        // caller that breaks it fails in a debug build and under Miri.
         debug_assert!(!first.is_null(), "the first value is at a null address");
         debug_assert!(first.is_aligned(), "the first value is not aligned");
         debug_assert!(
@@ -174,8 +174,6 @@ impl<'a> Bits<'a> {
     #[must_use]
     pub fn get(&self, row: usize) -> bool {
         assert!(row < self.len, "bit {row} of a run of {}", self.len);
-        // The bit's position in the buffer is `offset + row`. Its byte is the
-        // position divided by 8, and its bit in that byte the remainder.
         let at = self.offset + row;
         self.bytes[at / 8] >> (at % 8) & 1 == 1
     }
@@ -212,7 +210,8 @@ pub enum Floats<'a> {
 #[derive(Debug, Clone, Copy)]
 pub enum Booleans<'a> {
     // One byte per value, as numpy holds booleans. A byte that is not zero is
-    // true, so the core reads no byte of foreign memory as a Rust `bool`.
+    // true, so no byte of the source's memory is read as a Rust `bool`, for
+    // which any byte but 0 and 1 is undefined behavior.
     Bytes(Strided<'a, u8>),
     // One bit per value, as Polars and Arrow data hold booleans.
     Bits(Bits<'a>),
