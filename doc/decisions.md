@@ -72,7 +72,8 @@ private attributes is open. Decide with the milestone "Python sensor SDK".
 
 Every measurement behind the evaluator's design comes from one ARM machine
 (`adr/0035`). Which instruction sets the loops are compiled for on x86_64 is
-open. Decide with the milestone "The evaluator", from measurements on the CI
+open, and so is the chunk size of 2048 rows, which no measurement chose.
+Decide both with the milestone "The evaluator", from measurements on the CI
 targets.
 
 ## Timestamps in the rule language
