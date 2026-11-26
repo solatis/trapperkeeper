@@ -9,7 +9,7 @@ use std::simd::{Simd, SimdElement};
 use super::values::{Bits, Strided};
 
 /// Rows in one chunk, at most. The executor works on a column in chunks of
-/// this size, which ADR-0035 sets.
+/// this size, which ADR-0035 sets. No measurement has fixed the number yet.
 pub const CHUNK_ROWS: usize = 2048;
 
 /// Words of 64 bits in the bitmap of one chunk.
