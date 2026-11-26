@@ -50,9 +50,9 @@ pub enum Kind<'a> {
     Booleans(Booleans<'a>, Marking<'a>),
     /// Texts, where the marking says which rows have no text.
     Text(Text<'a>, Marking<'a>),
-    /// Lists, where the marking says which records have no list. The element
-    /// column has a marking of its own for the elements that have no value
-    /// (ADR-0005).
+    /// Lists, where the marking says which records have no list. The column
+    /// that holds the elements, or the column of each record, has a marking of
+    /// its own for the elements that have no value (ADR-0005).
     List(List<'a>, Marking<'a>),
 }
 
