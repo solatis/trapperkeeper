@@ -80,8 +80,8 @@ targets.
 
 A column of numpy's `U` type is read in place as UTF-32 (`adr/0041`), and the
 `regex` crate matches UTF-8 only. The options are to convert a chunk to UTF-8
-before the pattern loops run, or to turn the rule off for such a column with a
-fault. Decide with the issue that adds the pattern loops.
+before the pattern loops run, or to turn the rule off for such a column and
+report the column as a fault (`adr/0005`). Decide with the issue that adds the pattern loops.
 
 ## Timestamps in the rule language
 
