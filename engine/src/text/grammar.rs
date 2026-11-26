@@ -16,21 +16,20 @@ use super::kit::{
 use super::tokens::{Tok, lex};
 use crate::expr::{Expr, Segment, TypeName};
 
-// The twelve reserved words of ADR-0041 and the two module names `re` and
-// `math`. `name` does not match a name token that is one of them, so a field
-// of that name is written `record["in"]`. The printer writes such a key in
-// brackets for the same reason.
-pub(super) const WORDS: [&str; 14] = [
+// The twelve reserved words of ADR-0041 and the module name `re`. `name` does
+// not match a name token that is one of them, so a field of that name is
+// written `record["in"]`. The printer writes such a key in brackets for the
+// same reason.
+pub(super) const WORDS: [&str; 13] = [
     "and", "or", "not", "in", "is", "if", "else", "for", "None", "True", "False", "record", "re",
-    "math",
 ];
 
-// ADR-0041 reserves `re` and `math` as the names of the two modules. Its
-// reason is that a call would otherwise need four tokens to tell it from a
+// ADR-0041 reserves `re` as the name of the module of the pattern functions.
+// Its reason is that a call would otherwise need four tokens to tell it from a
 // field: `re.search(` and the field `re.search` differ at the `(`.
-// `function_name` reads one only as the start of a call such as `re.search`,
+// `function_name` reads `re` only as the start of a call such as `re.search`,
 // and a bare `re` is refused with `ModuleAlone`.
-const MODULES: [&str; 2] = ["re", "math"];
+const MODULES: [&str; 1] = ["re"];
 
 // Python's keywords (`keyword.kwlist`) less those that are words of the
 // language. ADR-0041 makes them names, and a rule may use one as a key,
@@ -1104,7 +1103,7 @@ pub(super) enum Arguments {
 
 // Every function of the closed list of ADR-0041: its name, and how its
 // arguments are read.
-pub(super) const FUNCTIONS: [(&str, Arguments); 8] = [
+pub(super) const FUNCTIONS: [(&str, Arguments); 7] = [
     ("len", Arguments::One(Expr::Len)),
     (
         "any",
@@ -1127,27 +1126,26 @@ pub(super) const FUNCTIONS: [(&str, Arguments); 8] = [
         "re.fullmatch",
         Arguments::Pattern(|pattern, text| Expr::ReFullmatch { pattern, text }),
     ),
-    ("math.isnan", Arguments::One(Expr::IsNan)),
 ];
 
-/// `call := (name | ("re" | "math") "." name) "(" arguments ")"`
+/// `call := (name | "re" "." name) "(" arguments ")"`
 ///
 /// Reads `len(name)`, `isinstance(price, int)` and `re.search(r"a", x)`.
 /// The name picks how the arguments are read. After the dot of a module any
 /// name token is read, also a word of the language.
 ///
 /// A called name outside the closed list is refused with `UnknownFunction`,
-/// with the nearest known function when one is near enough. `re` or `math`
-/// with no function after it is refused with `ModuleAlone`.
+/// with the nearest known function when one is near enough. `re` with no
+/// function after it is refused with `ModuleAlone`.
 fn call(i: &Input<'_>, p: usize) -> Reply<Expr> {
     // The function reads a function name, tests for the `(` after it without
     // moving past it, and only then looks the name up in `FUNCTIONS`. Then
     // it runs the parser of the arguments that the entry names.
     //
-    // 1. We read the name with `function_name`: a plain name, or `re` or
-    //    `math`, a dot and a name. Without a name the rule gives no match.
-    //    `re` or `math` with no function after it is refused with
-    //    `ModuleAlone`, and the `?` passes that refusal on.
+    // 1. We read the name with `function_name`: a plain name, or `re`, a dot
+    //    and a name. Without a name the rule gives no match. `re` with no
+    //    function after it is refused with `ModuleAlone`, and the `?` passes
+    //    that refusal on.
     // 2. We test for the `(` at the token after the name, without moving
     //    past it. Without a `(` the rule gives no match. A plain name
     //    without `(` is no call, so the bare-name alternative of `atom`
@@ -1184,8 +1182,8 @@ fn call(i: &Input<'_>, p: usize) -> Reply<Expr> {
         hidden(open)(i, q)?
     };
     // After a module name no other alternative of `atom` matches either,
-    // because `re` and `math` are words of the language, and the note "`(`"
-    // becomes the error.
+    // because `re` is a word of the language, and the note "`(`" becomes the
+    // error.
     if seen.is_none() {
         return Ok(None);
     }
@@ -1214,14 +1212,14 @@ fn call(i: &Input<'_>, p: usize) -> Reply<Expr> {
     }
 }
 
-/// `name | ("re" | "math") "." name`
+/// `name | "re" "." name`
 ///
 /// Reads the `len` of `len(name)` and the `re.search` of
 /// `re.search(r"a", x)`, and says whether the name has a module. After the
-/// dot any name token is read, also a word of the language. `re` or `math`
-/// with no function after it is refused with `ModuleAlone`.
+/// dot any name token is read, also a word of the language. `re` with no
+/// function after it is refused with `ModuleAlone`.
 fn function_name(i: &Input<'_>, p: usize) -> Reply<(String, bool)> {
-    // `module` reads `re` or `math`, as the module of `re.search`. The note
+    // `module` reads `re`, as the module of `re.search`. The note
     // has no name, because `hidden` below keeps it out of every error.
     // `furthest` still returns the empty note, and its callers look for words
     // in backticks, which it never equals.
@@ -1237,8 +1235,8 @@ fn function_name(i: &Input<'_>, p: usize) -> Reply<(String, bool)> {
     // `re.search`: the module, a dot and the function. Any name token is
     // read after the dot, so `re.if(x)` is the unknown function `re.if`.
     let Some((function, r)) = right(punct("."), any_name)(i, q)? else {
-        // `re` or `math` with no function after it is refused with
-        // `ModuleAlone`. `re == 1` is refused at `re`.
+        // `re` with no function after it is refused with `ModuleAlone`.
+        // `re == 1` is refused at `re`.
         let (at, reason) = (i.tok(p).at.clone(), Reason::ModuleAlone { word: module });
         let error = SyntaxError { at, reason };
         // The refusal stands at the token after the module. In `re.` that is

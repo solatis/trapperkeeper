@@ -24,12 +24,11 @@ type Quantifier = fn(String, Box<Expr>, Box<Expr>) -> Expr;
 
 /// The kinds of node with one operand, except `Neg`. `Neg` is apart because
 /// validation does not let it hold the literal `None`.
-const UNARY: [Unary; 17] = [
+const UNARY: [Unary; 16] = [
     Expr::Not,
     Expr::IsNone,
     Expr::IsNotNone,
     Expr::Len,
-    Expr::IsNan,
     Expr::Upper,
     Expr::Lower,
     Expr::Strip,

@@ -22,13 +22,12 @@ type Unary = fn(Box<Expr>) -> Expr;
 type Binary = fn(Box<Expr>, Box<Expr>) -> Expr;
 
 /// The kinds of node with one operand.
-const UNARY: [Unary; 18] = [
+const UNARY: [Unary; 17] = [
     Expr::Not,
     Expr::IsNone,
     Expr::IsNotNone,
     Expr::Neg,
     Expr::Len,
-    Expr::IsNan,
     Expr::Upper,
     Expr::Lower,
     Expr::Strip,
@@ -73,12 +72,11 @@ const TYPES: [TypeName; 5] = [
 ];
 
 /// The words of the language, which no name can be. The list copies `WORDS`
-/// of the grammar, the twelve words of ADR-0041 and the two module names. The
+/// of the grammar, the twelve words of ADR-0041 and the module name `re`. The
 /// grammar's constant is private to its crate and an integration test cannot
 /// import it, so a word added to the grammar is added here too.
-const WORDS: [&str; 14] = [
+const WORDS: [&str; 13] = [
     "and", "or", "not", "in", "is", "if", "else", "for", "None", "True", "False", "record", "re",
-    "math",
 ];
 
 /// The steps of a generated field after its first key, at most. Two keeps
@@ -397,13 +395,15 @@ const VALID: &[(&str, &str)] = &[
     ),
     // A comma after the last item of a list.
     (
-        "status in (expected, \"paid\",)\n  and math.isnan(ratio)\n  or flag",
-        "status in (expected, \"paid\") and math.isnan(ratio) or flag",
+        "status in (expected, \"paid\",)\n  and len(ratio) > 0\n  or flag",
+        "status in (expected, \"paid\") and len(ratio) > 0 or flag",
     ),
     // A function name without `(` is a field.
     ("len == 1", "len == 1"),
     // A field named like a module.
-    ("record[\"math\"] > 50", "record[\"math\"] > 50"),
+    ("record[\"re\"] > 50", "record[\"re\"] > 50"),
+    // `math` names no module, so a field `math` is a bare name.
+    ("math > 50", "math > 50"),
     // A list of one, the empty list, and one type in parentheses.
     (
         "(a,) == () or isinstance(x, (int,))",
@@ -670,7 +670,7 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
                 nearest: None,
             },
             "unknown function `abs`; the functions are len, any, all, isinstance, re.search, \
-             re.match, re.fullmatch, math.isnan",
+             re.match, re.fullmatch",
         ),
         (
             "name.startwith(\"a\")",
@@ -831,7 +831,7 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
                 nearest: None,
             },
             "unknown function `re.upper`; the functions are len, any, all, isinstance, \
-             re.search, re.match, re.fullmatch, math.isnan",
+             re.search, re.match, re.fullmatch",
         ),
         (
             "re == 1",
@@ -839,11 +839,19 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
             Reason::ModuleAlone { word: "re" },
             "`re` names the pattern functions; to name a field `re`, write `record[\"re\"]`",
         ),
+        // `math` names no module, so the parser reads it as a field and
+        // `.isnan(` as a call of a method on that field. `isnan` is no method
+        // of a text, so the refusal covers `isnan` and lists the methods.
         (
-            "math > 50",
-            0..4,
-            Reason::ModuleAlone { word: "math" },
-            "`math` names the math functions; to name a field `math`, write `record[\"math\"]`",
+            "math.isnan(x)",
+            5..10,
+            Reason::UnknownMethod {
+                name: "isnan".to_owned(),
+                nearest: None,
+            },
+            "unknown method `isnan`; the methods are startswith, endswith, upper, lower, \
+             strip, lstrip, rstrip, isdigit, isalpha, isalnum, isspace, isupper, islower, \
+             isascii",
         ),
         (
             "len() > 1",
@@ -1157,7 +1165,6 @@ fn a_deep_faulty_text_is_refused_for_its_own_mistake() {
         ("x in (1, ", ")", 1),
         ("a == (", ")", 1),
         ("len(", ")", 1),
-        ("math.isnan(", ")", 1),
         ("any(", " for i in xs)", 1),
         ("all(", " for i in xs)", 1),
         ("isinstance(", ", int)", 1),

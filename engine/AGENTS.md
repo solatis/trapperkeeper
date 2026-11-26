@@ -71,7 +71,8 @@ store or HTTP code.
 - The caps on the length and the nesting of a rule's text, and what the parser
   refuses and what it leaves to validation:
   `doc/adr/0042-the-parser-of-the-rule-language.md`.
-- A missing value is a null, and `==` and `!=` with `None` test for it:
+- A missing value is a null, a NaN is a null, and `==` and `!=` with `None`
+  test for it:
   `doc/adr/0005-one-vocabulary-for-failure-behavior.md`.
 - Property, behavioral and data-driven tests are preferred:
   `doc/adr/0018-unit-integration-and-end-to-end-tests.md`.

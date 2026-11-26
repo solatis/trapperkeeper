@@ -46,8 +46,8 @@ pub enum TypeName {
 /// `Any` and `All` are the quantifiers `any` and `all`, which an author
 /// writes as `any(test for name in list)`.
 ///
-/// The JSON key of a function, from `Len` to `IsNan`, is the name an author
-/// types, with `_` for the dot, so `re.search` has the key `re_search`. The
+/// The JSON key of a function, from `Len` to `ReFullmatch`, is the name an
+/// author types, with `_` for the dot, so `re.search` has the key `re_search`. The
 /// pattern of `ReSearch`, `ReMatch` and `ReFullmatch` is a literal text
 /// rather than an expression, so the server can check it when the rule is
 /// created.
@@ -147,8 +147,6 @@ pub enum Expr {
         pattern: String,
         text: Box<Expr>,
     },
-    #[serde(rename = "math_isnan")]
-    IsNan(Box<Expr>),
 
     // The methods.
     #[serde(rename = "startswith")]
@@ -223,7 +221,6 @@ macro_rules! parts {
             Expr::IsNotNone(x) => ("is_not_none", Operands::One(x.$unbox())),
             Expr::Neg(x) => ("neg", Operands::One(x.$unbox())),
             Expr::Len(x) => ("len", Operands::One(x.$unbox())),
-            Expr::IsNan(x) => ("math_isnan", Operands::One(x.$unbox())),
             Expr::Upper(x) => ("upper", Operands::One(x.$unbox())),
             Expr::Lower(x) => ("lower", Operands::One(x.$unbox())),
             Expr::Strip(x) => ("strip", Operands::One(x.$unbox())),

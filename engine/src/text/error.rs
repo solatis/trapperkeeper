@@ -88,8 +88,8 @@ pub enum Reason {
     /// `record == 1` and `record[0] == 1`, where `record` stands for the
     /// whole record.
     BareRecord,
-    /// `re` or `math` without a function after it. Its sentence also says how
-    /// to name a field of that name.
+    /// `re` without a function after it. Its sentence also says how to name a
+    /// field `re`.
     ModuleAlone { word: &'static str },
     /// The `.x` of `"abc".x == 1`, a key on a value that is no field.
     KeyOnValue,
@@ -284,16 +284,11 @@ impl fmt::Display for Reason {
                 f,
                 "`record` is the whole record; name a field, as in `record[\"key\"]`"
             ),
-            Reason::ModuleAlone { word } => {
-                // `word` is `re` or `math`, the only words in `MODULES`, so
-                // every word other than `re` is `math`.
-                let functions = if *word == "re" { "pattern" } else { "math" };
-                write!(
-                    f,
-                    "`{word}` names the {functions} functions; to name a field `{word}`, \
-                     write `record[\"{word}\"]`"
-                )
-            }
+            Reason::ModuleAlone { word } => write!(
+                f,
+                "`{word}` names the pattern functions; to name a field `{word}`, \
+                 write `record[\"{word}\"]`"
+            ),
             Reason::KeyOnValue => write!(f, "only a field has keys and indexes"),
             Reason::NegativeIndex => write!(f, "a negative index is not supported"),
             Reason::ChainedComparison { write } => {

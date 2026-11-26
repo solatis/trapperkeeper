@@ -216,7 +216,6 @@ fn write_expr(
         Expr::Any { name, list, test } => write_quantifier("any", name, list, test, scope, f),
         Expr::All { name, list, test } => write_quantifier("all", name, list, test, scope, f),
         Expr::Len(x) => write_call("len", None, x, scope, f),
-        Expr::IsNan(x) => write_call("math.isnan", None, x, scope, f),
         Expr::ReSearch { pattern, text } => write_call("re.search", Some(pattern), text, scope, f),
         Expr::ReMatch { pattern, text } => write_call("re.match", Some(pattern), text, scope, f),
         Expr::ReFullmatch { pattern, text } => {
