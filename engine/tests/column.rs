@@ -12,8 +12,9 @@ use proptest::collection::vec;
 use proptest::prelude::*;
 use proptest::sample::Index;
 use trapperkeeper_engine::column::{
-    Bits, CHUNK_ROWS, CHUNK_WORDS, Column, Float, Ints, Marking, Mismatch, Present, Strided,
-    clear_nan, present_all, present_from_bits, present_from_mask,
+    AnyOffsets, Bits, CHUNK_ROWS, CHUNK_WORDS, Column, Float, Ints, Marking, Mismatch, Offsets,
+    Present, Strided, Text, Texts, Utf8, clear_nan, present_all, present_from_bits,
+    present_from_mask,
 };
 
 /// The most rows of a generated column that a chunk is cut from. It exceeds
@@ -78,6 +79,47 @@ fn packed(bools: &[bool], offset: usize) -> Vec<u8> {
         bytes[at / 8] |= u8::from(bit) << (at % 8);
     }
     bytes
+}
+
+/// Texts for the layouts: empty texts, texts of one to four bytes per
+/// character, and texts on both sides of the 12 bytes that a view holds
+/// itself. No text holds U+0000, which a fixed-width cell cannot keep at the
+/// end of a value.
+fn texts() -> impl Strategy<Value = Vec<String>> {
+    // The class draws ASCII without U+0000 and one character each of two,
+    // three and four bytes, so the ends of the texts fall after every width
+    // of character. Up to 30 characters put texts below, at and above 12
+    // bytes.
+    vec("[\\x01-\\x7f\u{e9}\u{20ac}\u{1f600}]{0,30}", 0..40)
+}
+
+/// Checks that every row of `layout` gives the bytes of `expected`, as UTF-8
+/// that reads back to the same text.
+fn assert_texts<'a, T: Texts<'a, Unit = u8>>(
+    layout: T,
+    expected: &[String],
+) -> Result<(), TestCaseError> {
+    prop_assert_eq!(layout.len(), expected.len());
+    for (row, text) in expected.iter().enumerate() {
+        prop_assert_eq!(
+            str::from_utf8(layout.get(row)),
+            Ok(text.as_str()),
+            "row {}",
+            row
+        );
+    }
+    Ok(())
+}
+
+/// The offsets of `ends` in the offset type `O`.
+fn offsets_of<O: TryFrom<usize>>(ends: &[usize]) -> Vec<O> {
+    ends.iter()
+        .map(|e| {
+            O::try_from(*e)
+                .map_err(|_| ())
+                .expect("every end fits the offset type")
+        })
+        .collect()
 }
 
 proptest! {
@@ -217,6 +259,41 @@ proptest! {
         let mut out = [u64::MAX; CHUNK_WORDS];
         present_all(rows, &mut out);
         assert_bitmap(&out, &vec![true; rows])?;
+    }
+
+    /// An offsets layout reads back its texts with each of the four offset
+    /// types, from a buffer that has other bytes before the first text.
+    #[test]
+    fn offsets_read_back_their_texts(texts in texts(), lead in 0usize..5) {
+        // The first offset is `lead`, not zero, as in a slice of a longer
+        // column, so a reader that assumes zero shows.
+        let mut bytes = vec![b'x'; lead];
+        let mut ends = vec![lead];
+        for text in &texts {
+            bytes.extend_from_slice(text.as_bytes());
+            ends.push(bytes.len());
+        }
+        // SAFETY: every range between two ends is one of the texts, which are
+        // UTF-8.
+        let utf8 = unsafe { Utf8::new(&bytes) };
+        let (i32s, i64s) = (offsets_of::<i32>(&ends), offsets_of::<i64>(&ends));
+        let (u32s, u64s) = (offsets_of::<u32>(&ends), offsets_of::<u64>(&ends));
+        // SAFETY: the offsets are the ends of the texts, in order, and the
+        // last is the length of the bytes.
+        let (a, b, c, d) = unsafe {
+            (
+                Offsets::new(&i32s, utf8),
+                Offsets::new(&i64s, utf8),
+                Offsets::new(&u32s, utf8),
+                Offsets::new(&u64s, utf8),
+            )
+        };
+        assert_texts(a, &texts)?;
+        assert_texts(b, &texts)?;
+        assert_texts(c, &texts)?;
+        assert_texts(d, &texts)?;
+        let column = Column::text(Text::Offsets(AnyOffsets::U64(d)), Marking::Never);
+        prop_assert_eq!(column.map(|c| c.rows()), Ok(texts.len()));
     }
 }
 

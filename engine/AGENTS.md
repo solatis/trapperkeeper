@@ -81,6 +81,9 @@ server, store or HTTP code.
   `doc/adr/0018-unit-integration-and-end-to-end-tests.md`.
 - Column descriptions and adapters:
   `doc/adr/0036-column-descriptions-and-adapters.md`.
+- An adapter promises that the memory it describes is valid, and the core
+  does not check it in a release build:
+  `doc/adr/0038-one-rust-core-for-every-sdk.md`.
 - The crate's directory:
   `doc/adr/0010-one-top-level-directory-per-component.md`.
 

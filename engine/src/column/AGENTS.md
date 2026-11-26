@@ -4,7 +4,8 @@
 its values, where they lie in the source's memory, how far apart they lie, and
 how the source marks "no value". It also holds the loops that turn a marking
 into the bitmap of a chunk, and the pass that clears the rows whose float is a
-NaN. It evaluates no rule.
+NaN. It also describes text columns, and holds the layouts that text and list
+columns share. It evaluates no rule.
 
 **Map**:
 
@@ -12,6 +13,8 @@ NaN. It evaluates no rule.
 | ------------ | -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `values.rs`  | where the values lie: a run with a stride, a run of bits, and the number and boolean types   | what a stride is; building a run from raw memory and what the adapter promises; which number and boolean types a column holds |
 | `marking.rs` | the markings, the chunk size, the bitmap of a chunk, the loops that make it and the NaN pass | how a source says "no value"; the bit order of a chunk's bitmap; why a NaN row has no value; adding a marking                 |
+| `layout.rs`  | the offsets layout, generic over what its rows point into                                    | which offset types are supported; what an adapter promises about offsets; adding a shared layout                              |
+| `text.rs`    | the trait `Texts` and the layouts of a text column                                           | writing a loop over text; adding a text layout                                                                                |
 | `mod.rs`     | `Column`, its kinds and the check of the row counts                                          | building a column; adding a kind of column                                                                                    |
 
 **Invariants**:
@@ -26,6 +29,12 @@ NaN. It evaluates no rule.
   and combines whole words.
 - The engine owns the closed list of cases, so a public trait of this module,
   such as `Float`, is sealed.
+- A constructor that takes offsets or text bytes from an adapter is
+  `unsafe`, states the adapter's promise under `# Safety`, and checks all of
+  it in a `debug_assert!`.
+- Nothing in the module copies a text or an element.
+- A loop over text is written against `Texts`, and a layout whose `Unit` is
+  `u8` holds valid UTF-8 in every row.
 - A new layout or loop gets a property in `engine/tests/column.rs` that builds
   it from generated data and reads the data back. The property runs under
   Miri in the nightly workflow `miri.yml`.
@@ -34,6 +43,10 @@ NaN. It evaluates no rule.
 
 - The description, and why no framework is a model for it:
   `doc/adr/0036-column-descriptions-and-adapters.md`.
+- The adapter promises that the memory it describes is valid, and the core
+  does not validate it: `doc/adr/0038-one-rust-core-for-every-sdk.md`.
+- The text layouts, the layouts that text and lists share, one trait per kind
+  and no copies: `doc/adr/0036-column-descriptions-and-adapters.md`.
 - A stride is positive and every value is aligned:
   `doc/adr/0036-column-descriptions-and-adapters.md`.
 - A bitmap marks a present value with a set bit and may start at any bit, a

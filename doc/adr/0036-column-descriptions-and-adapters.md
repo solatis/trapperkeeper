@@ -41,6 +41,17 @@ the unstable feature `f16` for it (owner, 2026-11-26).
 A bitmap marks a present value with a set bit and may start at any bit. A byte
 mask marks a missing value with a byte that is not zero (owner, 2026-11-21).
 
+Text and list columns share two layouts, each generic over what its rows point
+into: offsets, and a fixed number of elements per row (owner, 2026-11-26). The
+offset type is `i32`, `i64`, `u32` or `u64`, and more are added when a source
+needs them (owner, 2026-11-26).
+
+One sealed trait per kind gives the elements of a row for every layout, and a
+loop is written once against it. No layout copies a text or an element
+(owner, 2026-11-26).
+
+A text column is offsets into one buffer (owner, 2026-11-21).
+
 A column has one type. Each value of a column is either present or missing,
 with no third state (owner, 2026-11-12).
 
@@ -84,6 +95,13 @@ zero byte (owner, 2026-11-21).
 A negative or an unaligned stride, because every strided loop would then read
 with an unaligned load and a signed offset. It is added when a source needs it
 (owner, 2026-11-21).
+
+One trait for text and lists together, because the bytes of a text would then
+be a column with a marking that they never use.
+
+Separate layout types for text and lists, because the code that finds the
+elements of a row would be written twice. Text as a list of bytes, because the
+promise that the bytes are UTF-8 would then leave the type.
 
 A third state per value in a column, because it is incompatible with fast
 column-oriented evaluation.

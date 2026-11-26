@@ -1,6 +1,6 @@
 # 0038. One Rust core for every SDK
 
-Date: 2026-11-15.
+Date: 2026-11-26.
 
 ## Context
 
@@ -14,8 +14,13 @@ The design serves Rust, Python, Java and Go (owner, 2026-11-12). One Rust
 core serves every SDK (owner, 2026-11-13). Each SDK's native part is compiled
 together with its adapters (`adr/0036`).
 
-A native core that can crash the process is an acceptable trade-off. A
-validation pass over imported buffers may be needed (owner, 2026-11-12).
+A native core that can crash the process is an acceptable trade-off (owner,
+2026-11-12).
+
+An adapter promises that the memory it describes is valid, such as offsets
+that are in range and text bytes that are UTF-8, and the core does not check
+it. The project owns every adapter, and this explicit contract keeps the loops
+fast (owner, 2026-11-21).
 
 By default no error of ours is raised into a pipeline (`adr/0005`).
 
@@ -32,6 +37,12 @@ copies, as the loops read the memory of a source in place (`adr/0036`), and it
 costs a crossing per batch. It guards against a crash that correct SDKs do not
 cause (owner, 2026-11-16).
 
+A pass in the core that validates every text column, because every batch
+would pay it, also where the source has already validated.
+
+A safe constructor that validates, beside an unsafe one that does not. The
+owner gave no reason beyond the contract in the Decision.
+
 An executor of our own written in pure Java, because one Rust core serves every
 SDK (owner, 2026-11-15). A native integration with a host engine, such as an
 executor for Spark built for performance, stays possible, and `decisions.md`
@@ -41,3 +52,6 @@ keeps that option open.
 
 A crash of the core is an exception to "harmless when it breaks"
 (`principles.md`, 1). An SDK ships native code for each platform.
+
+An adapter that breaks its promise causes undefined behavior in a release
+build. A debug build checks the promise.
