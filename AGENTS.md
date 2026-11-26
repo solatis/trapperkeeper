@@ -51,9 +51,9 @@ milestones of this repository on GitHub.
   aarch64, CI starts Postgres and MariaDB, so the tests run against SQLite,
   Postgres and MariaDB. `doc/adr/0021` gives the reason.
 - A second CI job, `miri`, runs the engine's column tests under Miri on Linux
-  amd64. Miri runs in CI only. A change does not run Miri locally, because
-  Miri interprets every row of the tests and takes many times as long as
-  `cargo test`.
+  amd64. Miri runs in CI only. An agent does not run Miri on its own machine,
+  because Miri interprets every row of the tests and takes many times as long
+  as `cargo test`.
 - The reasons behind the layout, the toolchain policy and the lint level are
   records `0010`, `0009` and `0011` in `doc/adr/`.
 
