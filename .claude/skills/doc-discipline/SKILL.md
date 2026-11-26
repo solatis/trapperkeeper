@@ -21,6 +21,7 @@ the same copy serves every repository.
 | ------------------------- | --------------------------------------------------------------------------------------------- |
 | `narrative.md`            | before you write or change code, or the sketches of a plan                                    |
 | `placement.md`            | before you write or move a document, or a comment that holds knowledge                        |
+| `names.md`                | before you name a type, a trait, a function, a field, a module or a file                      |
 | `checks.md`               | after a change is complete, before it leaves the session                                      |
 | `scripts/check_steps.py`  | the step check: it checks walkthrough numbers, back-references and denied marks               |
 | `scripts/change_parts.py` | the part list: it splits a change, or the files under given paths, into parts for `/doc-read` |

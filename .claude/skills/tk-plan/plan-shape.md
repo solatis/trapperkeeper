@@ -54,14 +54,16 @@ it is never dropped.
    has not ruled on, so it carries the reason and the alternative that
    lost, or it is a question asked before the gate. Every new type, route,
    table, column or module the owner did not name is a row marked
-   `proposal`, so no choice hides in a sketch. "Rejected, and why" names
-   the alternative that lost and what sank it, so no later agent
-   re-litigates it. "Gained" and "given up" are the trade: what the issue
-   buys, and the cost it accepts (a limitation, a slower path, a rule the
-   code must now keep). Put here everything the conversation established
-   that the code will not show: a dependency's defect, an owner preference,
-   a reversal of an earlier rule. A decision another plan of the unit also
-   rests on is a row here too, worded the same.
+   `proposal`, so no choice hides in a sketch. The row of a new name says
+   what sets the named thing apart, as `names.md` of the doc-discipline
+   skill asks. "Rejected, and why" names the alternative that lost and what
+   sank it, so no later agent re-litigates it. "Gained" and "given up" are
+   the trade: what the issue buys, and the cost it accepts (a limitation, a
+   slower path, a rule the code must now keep). Put here everything the
+   conversation established that the code will not show: a dependency's
+   defect, an owner preference, a reversal of an earlier rule. A decision
+   another plan of the unit also rests on is a row here too, worded the
+   same.
 3. **Verified facts.** What you checked against dependencies, crate docs,
    a running tool or the documents, each with its evidence (`path:line`, a
    commit, a command's output, a dated session), so the executor neither
