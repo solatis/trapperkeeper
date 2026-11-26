@@ -1,6 +1,6 @@
 # 0041. The rule language
 
-Date: 2026-11-17.
+Date: 2026-11-26.
 
 ## Context
 
@@ -28,8 +28,8 @@ The language has these kinds of expression (owner, 2026-11-12, 2026-11-13):
 - a conditional expression
 
 Functions and methods come from a closed list. The functions are `len`,
-`any`, `all`, `isinstance`, `re.search`, `re.match`, `re.fullmatch` and
-`math.isnan` (owner, 2026-11-13). The methods of a text are `startswith`,
+`any`, `all`, `isinstance`, `re.search`, `re.match` and `re.fullmatch` (owner,
+2026-11-13, 2026-11-26). The methods of a text are `startswith`,
 `endswith`, `upper`, `lower`, `strip`, `lstrip`, `rstrip`, `isdigit`,
 `isalpha`, `isalnum`, `isspace`, `isupper`, `islower` and `isascii` (owner,
 2026-11-13, 2026-11-14). `isinstance` tests for `int`, `float`, `str`, `bool`
@@ -49,9 +49,8 @@ There is no truthiness (owner, 2026-11-13).
 `any` over an empty list is false, and `all` over an empty list is true
 (owner, 2026-11-13).
 
-A NaN that the source treats as a value compares as IEEE 754 defines. Every
-comparison with it is false, except `!=`, which is true. An infinity is an
-ordinary number (owner, 2026-11-13).
+A NaN is a null (`adr/0005`), and an infinity is an ordinary number (owner,
+2026-11-13, 2026-11-26).
 
 Patterns follow the linear-time dialect of Rust's `regex` crate, which has no
 lookaround and no backreferences. The server refuses a pattern outside it
@@ -74,10 +73,10 @@ text in brackets works at every step of a path (owner, 2026-11-13,
 
 Twelve words are reserved: `and`, `or`, `not`, `in`, `is`, `if`, `else`, `for`,
 `None`, `True`, `False` and `record`. Python's other keywords are names (owner,
-2026-11-14). `re` and `math` are reserved too, as the names of the two modules.
-A lowercase `null`, `true` or `false` is a name like any other (owner,
-2026-11-14). A word of the language never stands after a dot (owner,
-2026-11-14).
+2026-11-14). `re` is reserved too, as the name of the module of the pattern
+functions (owner, 2026-11-26). A lowercase `null`, `true` or `false` is a
+name like any other (owner, 2026-11-14). A word of the language never stands
+after a dot (owner, 2026-11-14).
 
 A rule may run over several lines. A number may hold underscores, and an integer
 may be hexadecimal. A membership list may hold fields (owner, 2026-11-14). The
@@ -143,8 +142,13 @@ backticks, which need no word for the record and are not Python syntax.
 Reserving all of Python's keywords, because a column named `from` would need
 a special form.
 
-`re` and `math` as ordinary names, because the parser would then need four
-tokens to tell a call such as `re.search(` from a field `re.search`.
+`re` as an ordinary name, because the parser would then need four tokens to
+tell a call such as `re.search(` from a field `re.search`.
+
+`math.isnan`, because a NaN is a null and `x is None` finds it.
+
+`math` kept reserved for a later function, because a field named `math` would
+need brackets until then.
 
 Refusing a lowercase `null` or `true` beside a comparison, because a rule may
 compare two fields and a real field may be named `null`. The parser cannot

@@ -49,10 +49,11 @@ exists to pay this cost.
 ## 5. Deterministic semantics
 
 The same rule on the same record gives the same outcome in every SDK. A batch
-gives each record the outcome it gets alone (`adr/0037`). A source says what "no
-value" is, so two frameworks can differ on the same numbers (`adr/0036`).
-Optimizations (batching, vectorization, a later reordering of rules) may change
-cost, never results.
+gives each record the outcome it gets alone (`adr/0037`). A source says how it
+marks "no value", and a NaN is no value in every source, so two frameworks give
+the same outcome on the same numbers (`adr/0005`, `adr/0036`). Optimizations
+(batching, vectorization, a later reordering of rules) may change cost, never
+results.
 
 ## 6. Reversible operations
 

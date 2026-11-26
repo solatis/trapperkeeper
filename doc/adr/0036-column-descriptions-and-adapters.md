@@ -1,6 +1,6 @@
 # 0036. Column descriptions and adapters
 
-Date: 2026-11-13.
+Date: 2026-11-26.
 
 ## Context
 
@@ -20,9 +20,9 @@ gives the value type and width, where the values are and how far apart they are,
 and how "no value" is marked: never, by a bitmap, by a byte mask or by NaN.
 Arrow is one case of it (owner, 2026-11-13).
 
-A source says what "no value" is. In a pandas float column a NaN means that
-the value is missing. In a Polars or an Arrow column a NaN is a value (owner,
-2026-11-13).
+A source says how it marks "no value": never, by a bitmap or by a byte mask. A
+NaN in a float column is no value in every source (`adr/0005`) (owner,
+2026-11-26).
 
 A column has one type. Each value of a column is either present or missing,
 with no third state (owner, 2026-11-12).
@@ -44,8 +44,8 @@ place, with no intermediate column format between the two (owner,
 
 ## Rejected alternatives
 
-Arrow layouts only, because a numpy boolean array, a masked array's mask, a
-column with a stride and NaN as null each need a pass over the data.
+Arrow layouts only, because a numpy boolean array, a masked array's mask and a
+column with a stride each need a pass over the data.
 
 arrow-rs arrays as the executor's column type, because owning the
 implementation gives more flexibility, and arrow-rs has no stride, no byte
@@ -67,9 +67,6 @@ Converting a convention through a Python library, because pyarrow does the
 same pass 10 to 50 times slower than native code.
 
 ## Consequences
-
-The same numbers can give a different outcome through pandas than through
-Polars.
 
 Contiguous memory decides whether a loop vectorizes. A column with a stride
 measured about 3 times the contiguous cost.

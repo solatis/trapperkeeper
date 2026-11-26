@@ -1,6 +1,6 @@
 # 0005. One vocabulary for failure behavior
 
-Date: 2026-11-16.
+Date: 2026-11-26.
 
 ## Context
 
@@ -25,10 +25,11 @@ TrapperKeeper being down should not affect a production pipeline by default
 
 A rule treats a value that is not there as a null in the data. That value is no
 fault and does not turn the rule off. A missing key is a null (owner,
-2026-11-14). The source of the records, such as pandas or Arrow, says what
-else is "no value" (`adr/0036`). An index beyond the end of a list, a list
-that is absent under `any` or `all`, and a null element of a list are nulls
-too (owner, 2026-11-14).
+2026-11-14). A NaN is a null, whatever the source of the records (owner,
+2026-11-26). The source says how it marks a value that is not there, such as
+by a bitmap or by a byte mask (`adr/0036`). An index beyond the end of a list, a
+list that is absent under `any` or `all`, and a null element of a list are
+nulls too (owner, 2026-11-14).
 
 A rule applies to a record that holds a null. The sensor does not report that
 null. When no record has a field that a rule reads, the sensor logs no warning
@@ -122,6 +123,9 @@ wrong type, because a rule should say in its own text what it does.
 
 Semantics of our own for a null, because every reader and every host engine
 already knows SQL's.
+
+A NaN that a source treats as a value, compared as IEEE 754 defines, because
+the same numbers would then give different outcomes through two sources.
 
 A missing value as a fault, because rules would then be off for ordinary
 records. Reports would flow for ordinary records too. And `amount > 500 or
