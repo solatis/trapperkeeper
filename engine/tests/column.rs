@@ -65,7 +65,7 @@ fn nan_cleared<T: Float>(
 
 /// The start and the length of a chunk of a column of `len` rows, picked by
 /// two generated indexes. The first picks the start inside the column, and the
-/// second a length of at most `CHUNK_ROWS` that stays inside it, so every
+/// second picks a length of at most `CHUNK_ROWS` that stays inside it, so every
 /// start is reached, also one that is no multiple of 64.
 fn chunk_of(len: usize, (at, size): (Index, Index)) -> (usize, usize) {
     let start = at.index(len + 1);
