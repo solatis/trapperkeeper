@@ -66,9 +66,10 @@ compiled size, 10 MiB in `regex` 1.13. Validation sets no cap of its own
 The engine reads text in the encoding that its source holds, which is UTF-8,
 or UTF-32 for the fixed-width cells of numpy's `U` type. It converts neither
 (owner, 2026-11-21, 2026-11-26). A loop compares text in the encoding of its
-column, and the planner encodes each literal of a rule in both encodings when
-it plans (owner, 2026-11-26). Two UTF-8 texts are equal exactly when their code
-points are, so equality needs no decoding.
+column, and the planner (`adr/0035`) encodes each literal of a rule in both
+encodings when it plans (owner, 2026-11-26). Two UTF-8 texts are equal exactly
+when their code points are, and two UTF-32 texts exactly when their units are,
+so equality needs no decoding in either.
 
 A bare name is a field of the record. A key that cannot be a bare name is
 written with the word `record` and brackets, as in `record["unit price"]`. A
@@ -186,7 +187,8 @@ ASCII class inside one pattern. The dialect and the cap on a compiled pattern
 change when the `regex` crate changes its defaults. The engine crate depends on
 `regex`, and so does every SDK.
 
-Every loop over text has a UTF-8 form and a UTF-32 form. The `regex` crate
+Every loop over text is compiled for UTF-8 bytes and for UTF-32 units, and a
+loop that reads characters has code for each encoding. The `regex` crate
 matches UTF-8 only, so how a pattern runs on a UTF-32 column is open
 (`decisions.md`).
 
