@@ -13,10 +13,10 @@ mod sealed {
     pub trait Sealed {}
 }
 
-// The offsets and the fixed-width layouts of a list point into its element
-// column through this impl.
 impl layout::sealed::Sealed for &Column<'_> {}
 
+// The offsets and the fixed-width layouts of a list point into its element
+// column through this impl.
 impl Storage for &Column<'_> {
     fn count(&self) -> usize {
         self.rows()
@@ -90,9 +90,9 @@ pub struct SizedLists<'a, O> {
 }
 
 impl<'a, O: Offset> SizedLists<'a, O> {
-    /// A column of one list per offset. The loops over a list read the
-    /// element column at these ranges without a bound check, and they rely on
-    /// this contract.
+    /// A list column with one list per offset and size. Code that reads the
+    /// elements of a record may slice the element column at the record's
+    /// range without a bound check, because of this contract.
     ///
     /// # Safety
     ///
