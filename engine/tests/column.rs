@@ -117,12 +117,12 @@ fn assert_texts<'a, T: Texts<'a, Unit = u8>>(
 fn offsets_of<O: TryFrom<usize>>(numbers: &[usize]) -> Vec<O> {
     numbers
         .iter()
-        .map(|e| {
+        .map(|n| {
             // `expect` needs a `Debug` error, which `O::Error` need not be,
             // so the error is dropped.
-            O::try_from(*e)
+            O::try_from(*n)
                 .map_err(|_| ())
-                .expect("every end fits the offset type")
+                .expect("every number fits the offset type")
         })
         .collect()
 }
@@ -525,30 +525,30 @@ proptest! {
             .iter()
             .zip(&stepped)
             // A mask has one byte per value that the stepped run reads.
-            .map(|((_, mask, _), e)| mask[..e.len()].iter().map(|b| u8::from(*b)).collect::<Vec<_>>())
+            .map(|((_, mask, _), values)| mask[..values.len()].iter().map(|b| u8::from(*b)).collect::<Vec<_>>())
             .collect::<Vec<_>>();
         let records = arrays
             .iter()
             .zip(&stepped)
             .zip(&masks)
-            .map(|(((xs, _, step), e), mask)| {
+            .map(|(((xs, _, step), values), mask)| {
                 // SAFETY: the pointer is the vector's, the stride is `step`
                 // values in bytes, and the count is the number of `step`-th
                 // values that the vector holds.
-                let run = unsafe { Strided::from_raw(xs.as_ptr(), step * size_of::<f32>(), e.len()) };
+                let run = unsafe { Strided::from_raw(xs.as_ptr(), step * size_of::<f32>(), values.len()) };
                 Column::floats(Floats::F32(run), Marking::ByteMask(Strided::from_slice(mask)))
                     .expect("the mask has a byte per value")
             })
             .collect::<Vec<_>>();
         let shape = Shape { scalar: Scalar::Float, depth: 0 };
-        let layout = PerRecord::new(&records, shape).expect("stepped record is a float column");
+        let layout = PerRecord::new(&records, shape).expect("every record is a float column");
         prop_assert_eq!(layout.len(), records.len());
-        for (row, (e, mask)) in stepped.iter().zip(&masks).enumerate() {
+        for (row, (values, mask)) in stepped.iter().zip(&masks).enumerate() {
             let Kind::Floats(Floats::F32(run), Marking::ByteMask(marks)) = layout.get(row).kind() else {
                 return Err(TestCaseError::fail(format!("record {row} is not a masked float32 column")));
             };
             // The bits are compared, because a NaN is not equal to itself.
-            prop_assert!((0..e.len()).all(|i| run.get(i).to_bits() == e[i].to_bits() && marks.get(i) == mask[i]));
+            prop_assert!((0..values.len()).all(|i| run.get(i).to_bits() == values[i].to_bits() && marks.get(i) == mask[i]));
         }
         // The record at `mixed_at` becomes an int column, and the constructor names
         // its index.
