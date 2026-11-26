@@ -72,8 +72,8 @@ const TYPES: [TypeName; 5] = [
 ];
 
 /// The words of the language, which no name can be. The list copies `WORDS`
-/// of the grammar, the twelve words of ADR-0041 and the module name `re`. The
-/// grammar's constant is private to its crate and an integration test cannot
+/// of the grammar, the thirteen words of ADR-0041, of which the module name
+/// `re` is the last. The grammar's constant is private to its crate and an integration test cannot
 /// import it, so a word added to the grammar is added here too.
 const WORDS: [&str; 13] = [
     "and", "or", "not", "in", "is", "if", "else", "for", "None", "True", "False", "record", "re",
@@ -841,7 +841,8 @@ fn faulty() -> Vec<(&'static str, Range<usize>, Reason, &'static str)> {
         ),
         // `math` names no module, so the parser reads it as a field and
         // `.isnan(` as a call of a method on that field. `isnan` is no method
-        // of a text, so the refusal covers `isnan` and lists the methods.
+        // of a text, so the refusal covers `isnan`. Every method is more than
+        // one edit from `isnan`, so the sentence lists the methods.
         (
             "math.isnan(x)",
             5..10,
