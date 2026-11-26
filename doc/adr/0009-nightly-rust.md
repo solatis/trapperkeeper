@@ -1,6 +1,6 @@
 # 0009. Nightly Rust
 
-Date: 2026-11-21.
+Date: 2026-11-26.
 
 ## Context
 
@@ -13,8 +13,7 @@ nightly, and so does `std::simd`.
 The project builds with the nightly channel everywhere, on a developer's
 machine and in CI (owner, 2026-11-21).
 
-The project builds with the newest nightly and pins no date. So
-`rust-toolchain.toml` names the `nightly` channel with no date, and there is no
+The project pins no nightly to a date. So `rust-toolchain.toml` names the `nightly` channel with no date, and there is no
 minimum supported version (owner, 2026-11-21).
 
 Code turns on an unstable feature only where a decision record names the
@@ -28,20 +27,22 @@ comment to justify it, because nothing would then bound what a floating nightly
 can break. It also rejected a ban on every unstable feature, because the
 project chose nightly to use Miri and `std::simd`.
 
-The stable channel, with nightly for the Miri job alone, because nightly is
-needed anyway and the owner wants one toolchain.
+The project rejected the stable channel with nightly for the Miri job alone,
+because nightly is needed anyway and the owner wants one toolchain.
 
-A nightly pinned to a date. The owner chose the floating nightly and gave no
-reason against the pinned one.
+The project rejected a nightly pinned to a date. The owner chose the floating
+nightly and gave no reason against the pinned one.
 
-A minimum supported Rust version, because it would hold back features for
-people who build with an older compiler, and the project has no such people.
+The project rejected a minimum supported Rust version, because it would hold
+back features for people who build with an older compiler, and the project has no such people.
 
 ## Consequences
 
-Anyone who builds TrapperKeeper, or a pipeline that embeds the engine crate,
-needs a nightly toolchain. The owner expects few Rust users of the engine
+Anyone who builds TrapperKeeper needs a nightly toolchain. A pipeline that
+embeds the engine crate needs one as soon as the crate turns on an unstable
+feature. The owner expects few Rust users of the engine
 crate, and the features that need nightly may be stable before that changes
 (owner, 2026-11-21).
 
-A new nightly can break the build without a commit.
+No commit is needed to follow the compiler, and a new nightly can break the
+build without a commit (owner, 2026-11-21).
