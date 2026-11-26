@@ -21,7 +21,7 @@ and how "no value" is marked: never, by a bitmap or by a byte mask. Arrow is
 one case of it (owner, 2026-11-13).
 
 The source picks which of these markings a column has. A NaN in a float column
-is no value in every source and under every marking (`adr/0005`) (owner,
+is no value (`adr/0005`) in every source and under every marking (owner,
 2026-11-26).
 
 A column has one type. Each value of a column is either present or missing,
@@ -67,6 +67,9 @@ Converting a convention through a Python library, because pyarrow does the
 same pass 10 to 50 times slower than native code.
 
 ## Consequences
+
+Every float column costs one pass over its values, which finds the NaNs
+(`adr/0005`).
 
 Contiguous memory decides whether a loop vectorizes. A column with a stride
 measured about 3 times the contiguous cost.
