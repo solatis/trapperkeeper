@@ -155,8 +155,8 @@ pub enum AnySized<'a> {
 }
 
 /// The type of the values of a column, in the terms of the rule language.
-// A width such as `i8` or `i64` is a layout and not a type, so the records of
-// one column-per-record list may hold ints of different widths (ADR-0041).
+// The rule language has one int type and one float type (ADR-0041), so the
+// records of one column-per-record list may hold ints of different widths.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Scalar {
     Int,
@@ -206,13 +206,13 @@ impl Column<'_> {
 #[derive(Debug, Clone, Copy)]
 pub struct PerRecord<'a> {
     records: &'a [Column<'a>],
-    // The shape of every record. The constructor checks it, and an empty list
-    // column has no record to take it from.
+    // Every record has this shape, which `new` checks. The field keeps it,
+    // because an empty list column has no record to take it from.
     shape: Shape,
 }
 
 impl<'a> PerRecord<'a> {
-    /// A list column of one record per column, each of shape `shape`.
+    /// A list column with one column per record, each of shape `shape`.
     ///
     /// # Errors
     ///
