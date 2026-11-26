@@ -165,13 +165,15 @@ pub enum Scalar {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Shape {
     pub scalar: Scalar,
-    pub depth: u8,
+    pub depth: usize,
 }
 
 impl Shape {
     /// The shape of a list whose elements have this shape.
     fn deeper(self) -> Self {
         Self {
+            // Every level of a list is a column in memory, so the depth stays
+            // far below the largest `usize`.
             depth: self.depth + 1,
             ..self
         }
