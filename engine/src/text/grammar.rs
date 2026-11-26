@@ -24,13 +24,11 @@ pub(super) const WORDS: [&str; 13] = [
     "and", "or", "not", "in", "is", "if", "else", "for", "None", "True", "False", "record", "re",
 ];
 
-// ADR-0041 reserves `re` as the name of the module of the pattern functions,
-// because a call would otherwise need four tokens to tell it from a field:
-// `re.search(` and the field `re.search` differ at the `(`. `function_name`
-// reads `re` only as the start of a call such as `re.search`, and a bare `re`
-// is refused with `ModuleAlone`. The constant is a list, so a later module
-// joins it as one more entry and gets a sentence of its own in the display of
-// `ModuleAlone`.
+// ADR-0041 reserves `re` as the name of the module of the pattern functions.
+// `function_name` reads `re` only as the start of a call such as `re.search`,
+// and a bare `re` is refused with `ModuleAlone`. The constant is a list, so a
+// later module joins it as one more entry and gets a sentence of its own in the
+// display of `ModuleAlone`.
 const MODULES: [&str; 1] = ["re"];
 
 // Python's keywords (`keyword.kwlist`) less those that are words of the
