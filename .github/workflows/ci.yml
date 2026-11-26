@@ -43,7 +43,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@nightly
         with:
           components: clippy, rustfmt
-      # The cache keys on the installed rustc, so the toolchain comes first.
+      # The cache keys on the installed rustc, so the toolchain comes first. Each
+      # new nightly changes that key, and the first run on it builds without a
+      # cache.
       - uses: Swatinem/rust-cache@v2
       # Postgres and MariaDB run on every platform that has a build of them, at
       # the latest Postgres major and the latest MariaDB LTS (ADR-0021). Each of
