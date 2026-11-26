@@ -115,8 +115,7 @@ impl<'a> Column<'a> {
 /// the two counts differ.
 fn matched(values: usize, marking: Option<usize>) -> Result<usize, Mismatch> {
     match marking {
-        // The marking `Never` has no length of its own, so it fits every
-        // column.
+        // The marking `Never` has no length of its own.
         None => Ok(values),
         Some(m) if m == values => Ok(values),
         Some(marking) => Err(Mismatch { values, marking }),
