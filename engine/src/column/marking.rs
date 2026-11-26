@@ -19,7 +19,8 @@ pub const CHUNK_WORDS: usize = CHUNK_ROWS / 64;
 /// `i / 64`, and a set bit means that the row has a value.
 // With this order, testing a row is one shift and one mask, a loop visits the
 // set rows in order with `trailing_zeros`, and a logic step combines 64 rows
-// per instruction.
+// per instruction. A source bitmap in the same bit order, such as Arrow's,
+// copies with shifts alone.
 pub type Present = [u64; CHUNK_WORDS];
 
 /// How a column marks the rows that have no value.
@@ -236,20 +237,25 @@ impl Test<f64> for NotNan {
     }
 }
 
-/// The bits of infinity in half precision, without the sign. A half-precision
-/// value is a NaN when its bits without the sign lie above these.
+/// The bits of infinity in half precision, without the sign: the five exponent
+/// bits set and the ten fraction bits clear, as IEEE 754 binary16 defines it.
+/// A half-precision value is a NaN when its bits without the sign lie above
+/// these.
 const F16_INFINITY: u16 = 0x7c00;
 
 // The test of a half-precision float runs on its 16 bits, because the lanes
 // of `std::simd` do not take `f16`.
 impl Test<u16> for NotNan {
     fn lanes(&self, values: Simd<u16, 64>) -> u64 {
+        // `0x7fff` clears the sign bit, so a negative NaN tests like a
+        // positive one.
         (values & Simd::splat(0x7fff))
             .simd_le(Simd::splat(F16_INFINITY))
             .to_bitmask()
     }
 
     fn one(&self, value: u16) -> bool {
+        // `0x7fff` clears the sign bit, as in `lanes`.
         (value & 0x7fff) <= F16_INFINITY
     }
 }
