@@ -1,0 +1,37 @@
+name: miri
+
+# Miri runs nightly on master and on demand, and not on every push, because a
+# run takes hours: Miri interprets every row of every generated column.
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # Miri interprets the column tests and fails on a read that is out of
+  # bounds, unaligned or of uninitialized memory. The property tests alone
+  # usually pass such a read. The job runs the column tests only, because they
+  # are the tests that reach unsafe code, and the parser's properties are too
+  # slow under an interpreter. One runner is enough, because Miri interprets
+  # the program and does not run the runner's machine code.
+  miri:
+    name: miri
+    runs-on: ubuntu-24.04
+    # A run takes hours, and GitHub stops a job at 6 hours.
+    timeout-minutes: 360
+    env:
+      # The properties keep proptest's default case count, which proptest
+      # reads from this variable.
+      PROPTEST_CASES: 16
+    steps:
+      - uses: actions/checkout@v7
+      # `cargo miri` builds the standard library for Miri from its source,
+      # which the component rust-src holds.
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: miri, rust-src
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo miri test -p trapperkeeper-engine --test column --locked
