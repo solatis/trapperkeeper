@@ -127,8 +127,7 @@ fn offsets_of<O: TryFrom<usize>>(numbers: &[usize]) -> Vec<O> {
         .collect()
 }
 
-/// Lists of ints for the layouts: empty lists, short lists and lists of equal
-/// length.
+/// Lists of ints for the layouts, from empty lists to lists of seven ints.
 fn lists() -> impl Strategy<Value = Vec<Vec<i64>>> {
     vec(vec(any::<i64>(), 0..8), 0..30)
 }
@@ -148,8 +147,10 @@ fn flatten<T: Clone>(lists: &[Vec<T>]) -> (Vec<T>, Vec<usize>) {
     (elements, ends)
 }
 
-/// Checks that each record of `layout` gives the rows of the element column
-/// that hold `expected`.
+/// Checks that the range of each record of `layout`, read from the element
+/// values `elements`, equals the list of `expected` at that record.
+// The bound on `Record` takes the layouts whose records are ranges, so the
+// column-per-record layout has checks of its own.
 fn assert_lists<'a, L: Lists<'a, Record = Range<usize>>>(
     layout: L,
     elements: &[i64],
@@ -466,6 +467,8 @@ proptest! {
         assert_lists(b, &values, &lists)?;
         assert_lists(c, &values, &lists)?;
         assert_lists(d, &values, &lists)?;
+        // The column takes one of the four layouts, which is enough to check
+        // that `Column::list` counts the records of an offsets layout.
         let column = Column::list(List::Offsets(AnyOffsets::I64(b)), Marking::Never);
         prop_assert_eq!(column.map(|c| c.rows()), Ok(lists.len()));
     }
@@ -483,6 +486,8 @@ proptest! {
         // `size + extra` elements lie between two records, as in a stepped
         // view of a numpy array.
         let step = size + extra;
+        // The number of elements up to the end of the last record, and 0 when
+        // there is no record.
         let end = len.checked_sub(1).map_or(0, |last| last * step + size);
         let values = (0..i64::try_from(end).expect("a small count")).collect::<Vec<_>>();
         let elements = Column::ints(Ints::I64(Strided::from_slice(&values)), Marking::Never)
@@ -507,6 +512,8 @@ proptest! {
     /// another shape.
     #[test]
     fn per_record_lists_read_back(
+        // Each mask has as many booleans as the longest array, and a record
+        // uses the first ones.
         arrays in vec((vec(any::<f32>(), 0..40), vec(any::<bool>(), 40), 1usize..3), 0..20),
         mixed_at in any::<Index>(),
     ) {
@@ -517,6 +524,7 @@ proptest! {
         let masks = arrays
             .iter()
             .zip(&stepped)
+            // A mask has one byte per value that the stepped run reads.
             .map(|((_, mask, _), e)| mask[..e.len()].iter().map(|b| u8::from(*b)).collect::<Vec<_>>())
             .collect::<Vec<_>>();
         let records = arrays
@@ -566,6 +574,8 @@ proptest! {
         // offsets fall, and the last list is named twice, so two records
         // overlap fully.
         let order = (0..lists.len()).rev().chain(lists.len().checked_sub(1)).collect::<Vec<_>>();
+        // `flatten` puts a 0 before the ends, so the end at `i` is the start of
+        // list `i`.
         let starts = order.iter().map(|i| ends[*i]).collect::<Vec<_>>();
         let sizes = order.iter().map(|i| lists[*i].len()).collect::<Vec<_>>();
         let (offsets, sizes) = (offsets_of::<i64>(&starts), offsets_of::<i64>(&sizes));
@@ -584,6 +594,8 @@ proptest! {
     fn nested_lists_read_back(
         outer in vec(lists(), 0..10),
         texts in vec(texts(), 0..10),
+        // Each mask has as many booleans as the longest array, and an array
+        // uses the first ones.
         arrays in vec(vec((vec(any::<f32>(), 0..20), vec(any::<bool>(), 20)), 0..5), 0..5),
     ) {
         // The test describes three columns whose lists hold lists, texts and
@@ -594,9 +606,10 @@ proptest! {
         // 2. The columns are built from the inside out, because each list
         //    borrows its element column.
         // 3. Each outer record reads as a range of inner lists, and each of
-        //    those as a range of ints, which must equal the input.
-        // 4. A list of texts has one level, and its element column is a text
-        //    column of offsets.
+        //    those as a range of ints, which must equal the input. The inner
+        //    column has the shape of a list of ints.
+        // 4. A list may hold another kind of column: here the element column
+        //    is a text column of offsets, one level deep.
         // 5. Masked arrays of masked arrays are a column per record inside a
         //    column per record, as a numpy object array that holds masked
         //    arrays, and every value and mask reads back through both levels.
@@ -638,6 +651,8 @@ proptest! {
         // ending at the number of texts.
         let lists_of_texts = unsafe { Offsets::new(&text_offsets, &text_column) };
         for (row, record) in texts.iter().enumerate() {
+            // `text_column` holds `text_layout`, so this reads the texts that
+            // the record's range points at.
             let got = lists_of_texts.get(row).map(|i| text_layout.get(i).to_vec()).collect::<Vec<_>>();
             let want = record.iter().map(|t| t.as_bytes().to_vec()).collect::<Vec<_>>();
             prop_assert_eq!(got, want, "record {}", row);
