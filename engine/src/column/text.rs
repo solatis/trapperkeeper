@@ -236,8 +236,7 @@ impl<'a> Texts<'a> for Views<'a> {
     }
 
     fn get(&self, row: usize) -> &'a [u8] {
-        let views: &'a [View] = self.views;
-        let view = &views[row];
+        let view = &self.views[row];
         let len = view.len();
         // A text of at most `INLINE` bytes lies in the view, and a longer one
         // in the buffer that the view names.
@@ -400,8 +399,7 @@ where
     }
 
     fn get(&self, row: usize) -> &'a [U] {
-        let units: &'a [U] = self.storage().0;
-        trim(&units[self.range(row)])
+        trim(&self.storage().0[self.range(row)])
     }
 }
 
