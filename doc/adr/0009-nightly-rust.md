@@ -19,7 +19,7 @@ minimum supported version (owner, 2026-11-21).
 
 Code turns on an unstable feature only where a decision record names the
 feature and gives its reason (owner, 2026-11-26). This record names no unstable
-feature, so the first use of `std::simd` needs a record of its own.
+feature, so the first use of `std::simd` needs a record that names it.
 
 ## Rejected alternatives
 
@@ -35,7 +35,7 @@ A nightly pinned to a date. The owner chose the floating nightly and gave no
 reason against the pinned one.
 
 A minimum supported Rust version, because it would hold back features for
-people who build with an older compiler, and the project has none.
+people who build with an older compiler, and the project has no such people.
 
 ## Consequences
 
