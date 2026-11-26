@@ -20,8 +20,8 @@ gives the value type and width, where the values are and how far apart they are,
 and how "no value" is marked: never, by a bitmap or by a byte mask. Arrow is
 one case of it (owner, 2026-11-13).
 
-A source says how it marks "no value": never, by a bitmap or by a byte mask. A
-NaN in a float column is no value in every source (`adr/0005`) (owner,
+The source picks which of these markings a column has. A NaN in a float column
+is no value in every source and under every marking (`adr/0005`) (owner,
 2026-11-26).
 
 A column has one type. Each value of a column is either present or missing,
