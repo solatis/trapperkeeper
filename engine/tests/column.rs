@@ -13,10 +13,10 @@ use proptest::collection::vec;
 use proptest::prelude::*;
 use proptest::sample::Index;
 use trapperkeeper_engine::column::{
-    AnyOffsets, Bits, CHUNK_ROWS, CHUNK_WORDS, Column, Fixed, Float, Floats, INLINE, Ints, Kind,
-    List, Lists, Marking, Mismatch, Offsets, PerRecord, Piece, Present, Scalar, Shape, Strided,
-    Text, Texts, Units, Utf8, View, Views, clear_nan, present_all, present_from_bits,
-    present_from_mask,
+    AnyOffsets, AnySized, Bits, CHUNK_ROWS, CHUNK_WORDS, Column, Fixed, Float, Floats, INLINE,
+    Ints, Kind, List, Lists, Marking, Mismatch, Offsets, PerRecord, Piece, Present, Scalar, Shape,
+    SizedLists, Strided, Text, Texts, Units, Utf8, View, Views, clear_nan, present_all,
+    present_from_bits, present_from_mask,
 };
 
 /// The most rows of a generated column that a chunk is cut from. It exceeds
@@ -552,6 +552,29 @@ proptest! {
         let column = Column::list(List::PerRecord(layout), Marking::Never).expect("`Never` fits any column");
         prop_assert_eq!(column.rows(), records.len());
         prop_assert_eq!(column.shape(), Shape { scalar: Scalar::Float, depth: 1 });
+    }
+
+    /// An offset-and-size layout gives each list its elements when the lists
+    /// lie in reverse order and when two records share one list.
+    #[test]
+    fn sized_lists_read_back_their_elements(lists in lists()) {
+        let (values, ends) = flatten(&lists);
+        let elements = Column::ints(Ints::I64(Strided::from_slice(&values)), Marking::Never)
+            .expect("`Never` fits any column");
+        // The records name the lists from the last to the first, so their
+        // offsets fall, and the last list is named twice, so two records
+        // overlap fully.
+        let order = (0..lists.len()).rev().chain(lists.len().checked_sub(1)).collect::<Vec<_>>();
+        let starts = order.iter().map(|i| ends[*i]).collect::<Vec<_>>();
+        let sizes = order.iter().map(|i| lists[*i].len()).collect::<Vec<_>>();
+        let (offsets, sizes) = (offsets_of::<i64>(&starts), offsets_of::<i64>(&sizes));
+        // SAFETY: each offset and size is one of the lists, which lie inside
+        // the elements, and there is one size per offset.
+        let layout = unsafe { SizedLists::new(&offsets, &sizes, &elements) };
+        let expected = order.iter().map(|i| lists[*i].clone()).collect::<Vec<_>>();
+        assert_lists(layout, &values, &expected)?;
+        let column = Column::list(List::Sized(AnySized::I64(layout)), Marking::Never);
+        prop_assert_eq!(column.map(|c| c.rows()), Ok(expected.len()));
     }
 }
 

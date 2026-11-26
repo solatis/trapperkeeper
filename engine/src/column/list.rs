@@ -76,6 +76,79 @@ impl<'a> Lists<'a> for Fixed<&'a Column<'a>> {
     }
 }
 
+/// Lists that each name their elements by an offset into the element column
+/// and a size. The lists may lie in any order and may share elements, as
+/// Arrow's list view allows.
+#[derive(Debug, Clone, Copy)]
+pub struct SizedLists<'a, O> {
+    offsets: &'a [O],
+    sizes: &'a [O],
+    elements: &'a Column<'a>,
+}
+
+impl<'a, O: Offset> SizedLists<'a, O> {
+    /// A column of one list per offset.
+    ///
+    /// # Safety
+    ///
+    /// `offsets` and `sizes` have the same length. Every offset and every size
+    /// fits a `usize`, and each offset plus its size is at most the number of
+    /// rows of `elements`.
+    #[must_use]
+    pub unsafe fn new(offsets: &'a [O], sizes: &'a [O], elements: &'a Column<'a>) -> Self {
+        // `valid` checks the whole contract, so that a caller that breaks it
+        // fails in a debug build and under Miri. It asks for no order and no
+        // disjoint lists, because a list view allows both.
+        debug_assert!(
+            Self::valid(offsets, sizes, elements),
+            "the lists break the contract of `new`"
+        );
+        Self {
+            offsets,
+            sizes,
+            elements,
+        }
+    }
+
+    /// Whether the offsets and the sizes keep the contract of `new`.
+    fn valid(offsets: &[O], sizes: &[O], elements: &Column<'_>) -> bool {
+        offsets.len() == sizes.len()
+            && offsets.iter().zip(sizes).all(|(o, s)| {
+                // `fits` runs before `index`, because a negative number would
+                // cast to a huge index.
+                o.fits()
+                    && s.fits()
+                    && o.index()
+                        .checked_add(s.index())
+                        .is_some_and(|end| end <= elements.rows())
+            })
+    }
+}
+
+impl<O: Offset> sealed::Sealed for SizedLists<'_, O> {}
+
+impl<'a, O: Offset> Lists<'a> for SizedLists<'a, O> {
+    type Record = Range<usize>;
+
+    fn len(&self) -> usize {
+        self.offsets.len()
+    }
+
+    fn get(&self, row: usize) -> Range<usize> {
+        let start = self.offsets[row].index();
+        start..start + self.sizes[row].index()
+    }
+}
+
+/// A list layout of offsets and sizes with any of the four offset types.
+#[derive(Debug, Clone, Copy)]
+pub enum AnySized<'a> {
+    I32(SizedLists<'a, i32>),
+    I64(SizedLists<'a, i64>),
+    U32(SizedLists<'a, u32>),
+    U64(SizedLists<'a, u64>),
+}
+
 /// The type of the values of a column, in the terms of the rule language.
 // A width such as `i8` or `i64` is a layout and not a type, so records of one
 // list may hold ints of different widths (ADR-0041).
@@ -168,6 +241,8 @@ pub enum List<'a> {
     /// The same number of elements per record, as in a two-dimensional numpy
     /// array.
     Fixed(Fixed<&'a Column<'a>>),
+    /// An offset and a size per record, in any order and possibly shared.
+    Sized(AnySized<'a>),
     /// A column per record, which may itself be a list.
     PerRecord(PerRecord<'a>),
 }
@@ -179,6 +254,10 @@ impl List<'_> {
         match self {
             Self::Offsets(o) => o.len(),
             Self::Fixed(f) => f.len(),
+            Self::Sized(AnySized::I32(s)) => s.len(),
+            Self::Sized(AnySized::I64(s)) => s.len(),
+            Self::Sized(AnySized::U32(s)) => s.len(),
+            Self::Sized(AnySized::U64(s)) => s.len(),
             Self::PerRecord(p) => p.len(),
         }
     }
@@ -193,6 +272,10 @@ impl List<'_> {
             Self::Offsets(AnyOffsets::U32(o)) => o.storage().shape(),
             Self::Offsets(AnyOffsets::U64(o)) => o.storage().shape(),
             Self::Fixed(f) => f.storage().shape(),
+            Self::Sized(AnySized::I32(s)) => s.elements.shape(),
+            Self::Sized(AnySized::I64(s)) => s.elements.shape(),
+            Self::Sized(AnySized::U32(s)) => s.elements.shape(),
+            Self::Sized(AnySized::U64(s)) => s.elements.shape(),
             Self::PerRecord(p) => p.shape,
         };
         elements.deeper()

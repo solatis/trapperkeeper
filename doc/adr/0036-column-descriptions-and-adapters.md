@@ -65,11 +65,14 @@ Arrow format defines them, so a text view holds no number of 2^31 or more
 (owner, 2026-11-26).
 
 A list column is offsets into an element column, a fixed number of elements
-per record, or a column per record. Its elements are one column
-with a description of its own, which may itself be a list (owner, 2026-11-21,
-2026-11-26). In the last layout every record is a column of its own, with its own layout
-and marking, so it nests to any depth: a numpy array of dtype `object` that
-holds masked arrays of masked arrays is read in place (owner, 2026-11-26).
+per record, an offset and a size per record, or a column per record (owner,
+2026-11-21, 2026-11-26). In the first three layouts the elements are one
+column with a description of its own, which may itself be a list. In the last
+layout every record is a column of its own, with its own layout and marking,
+so it nests to any depth: a numpy array of dtype `object` that holds masked
+arrays of masked arrays is read in place (owner, 2026-11-26). The lists of the
+offset-and-size layout may lie in any order and share elements, as Arrow's
+list view allows.
 
 A column has one type. Each value of a column is either present or missing,
 with no third state (owner, 2026-11-12).

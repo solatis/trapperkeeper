@@ -16,7 +16,7 @@ evaluates no rule.
 | `marking.rs` | the markings, the chunk size, the bitmap of a chunk, the loops that make it and the NaN pass     | how a source says "no value"; the bit order of a chunk's bitmap; why a NaN row has no value; adding a marking                                                                                      |
 | `layout.rs`  | the offsets and the fixed-width layouts, generic over what their rows point into                 | which offset types are supported; what an adapter promises about offsets; how a numpy view with a step, such as `a[::2]`, is described; adding a layout of rows                                    |
 | `text.rs`    | the trait `Texts` and the layouts of a text column                                               | writing a loop over text; what an adapter promises about text bytes and pieces; the layout of a view; why a numpy cell loses its trailing zeros; why UTF-32 is read as units; adding a text layout |
-| `list.rs`    | the trait `Lists`, the layouts of a list column, the shape of a column and the column per record | writing a loop over a list; lists of texts, lists of lists and masked arrays of masked arrays; adding a list layout                                                                                |
+| `list.rs`    | the trait `Lists`, the layouts of a list column, the shape of a column and the column per record | writing a loop over a list; which lists may overlap; lists of texts, lists of lists and masked arrays of masked arrays; adding a list layout                                                       |
 | `mod.rs`     | `Column`, its kinds and the check of the row counts                                              | building a column; adding a kind of column                                                                                                                                                         |
 
 **Invariants**:
@@ -56,6 +56,9 @@ evaluates no rule.
 - The text layouts, the layouts that text and lists share, one trait per kind
   and no copies: `doc/adr/0036-column-descriptions-and-adapters.md`.
 - The list layouts: `doc/adr/0036-column-descriptions-and-adapters.md`.
+- The lists of the offset-and-size layout may lie in any order and share
+  elements, so a loop cannot assume that a record's elements follow those of
+  the record before it: `doc/adr/0036-column-descriptions-and-adapters.md`.
 - A column per record nests to any depth and copies no value or mask, at the
   cost of one dispatch per record:
   `doc/adr/0036-column-descriptions-and-adapters.md`.
