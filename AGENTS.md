@@ -50,10 +50,13 @@ milestones of this repository on GitHub.
   nightly toolchain that the run installs. On every runner except Windows
   aarch64, CI starts Postgres and MariaDB, so the tests run against SQLite,
   Postgres and MariaDB. `doc/adr/0021` gives the reason.
-- A second CI job, `miri`, runs the engine's column tests under Miri on Linux
-  amd64. Miri runs in CI only. An agent does not run Miri on its own machine,
-  because Miri interprets each row of the columns that the tests generate and
-  takes many times as long as `cargo test`.
+- A second workflow, `.github/workflows/miri.yml`, runs the engine's column
+  tests under Miri on Linux amd64, nightly on `master` and on demand, because
+  a run takes hours.
+- Running Miri locally is out of scope for an agent. An agent starts the Miri
+  workflow by hand (`gh workflow run miri.yml --ref <branch>`) only when a
+  change affects unsafe memory access, and only after the owner has signed
+  off on that run explicitly.
 - The reasons behind the layout, the toolchain policy and the lint level are
   records `0010`, `0009` and `0011` in `doc/adr/`.
 
