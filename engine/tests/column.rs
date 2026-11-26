@@ -13,9 +13,10 @@ use proptest::collection::vec;
 use proptest::prelude::*;
 use proptest::sample::Index;
 use trapperkeeper_engine::column::{
-    AnyOffsets, Bits, CHUNK_ROWS, CHUNK_WORDS, Column, Fixed, Float, INLINE, Ints, List, Lists,
-    Marking, Mismatch, Offsets, Piece, Present, Strided, Text, Texts, Units, Utf8, View, Views,
-    clear_nan, present_all, present_from_bits, present_from_mask,
+    AnyOffsets, Bits, CHUNK_ROWS, CHUNK_WORDS, Column, Fixed, Float, Floats, INLINE, Ints, Kind,
+    List, Lists, Marking, Mismatch, Offsets, PerRecord, Piece, Present, Scalar, Shape, Strided,
+    Text, Texts, Units, Utf8, View, Views, clear_nan, present_all, present_from_bits,
+    present_from_mask,
 };
 
 /// The most rows of a generated column that a chunk is cut from. It exceeds
@@ -498,6 +499,59 @@ proptest! {
         }
         let column = Column::list(List::Fixed(layout), Marking::Never);
         prop_assert_eq!(column.map(|c| c.rows()), Ok(len));
+    }
+
+    /// A column per record reads back a list of masked float32 arrays, some
+    /// contiguous and some stepped, and `PerRecord::new` refuses a record of
+    /// another shape.
+    #[test]
+    fn per_record_lists_read_back(
+        arrays in vec((vec(any::<f32>(), 0..40), vec(any::<bool>(), 40), 1usize..3), 0..20),
+        odd in any::<Index>(),
+    ) {
+        // Each record is a float32 column over its own values, with its own
+        // step and a byte mask from its booleans, so the records differ in
+        // layout and marking as in a numpy object array.
+        let every = arrays.iter().map(|(xs, _, step)| xs.iter().step_by(*step).copied().collect::<Vec<_>>()).collect::<Vec<_>>();
+        let masks = arrays
+            .iter()
+            .zip(&every)
+            .map(|((_, mask, _), e)| mask[..e.len()].iter().map(|b| u8::from(*b)).collect::<Vec<_>>())
+            .collect::<Vec<_>>();
+        let records = arrays
+            .iter()
+            .zip(&every)
+            .zip(&masks)
+            .map(|(((xs, _, step), e), mask)| {
+                // SAFETY: the pointer is the vector's, the stride is `step`
+                // values in bytes, and the count is the number of `step`-th
+                // values that the vector holds.
+                let run = unsafe { Strided::from_raw(xs.as_ptr(), step * size_of::<f32>(), e.len()) };
+                Column::floats(Floats::F32(run), Marking::ByteMask(Strided::from_slice(mask)))
+                    .expect("the mask has a byte per value")
+            })
+            .collect::<Vec<_>>();
+        let shape = Shape { scalar: Scalar::Float, depth: 0 };
+        let layout = PerRecord::new(&records, shape).expect("every record is a float column");
+        prop_assert_eq!(layout.len(), records.len());
+        for (row, (e, mask)) in every.iter().zip(&masks).enumerate() {
+            let Kind::Floats(Floats::F32(run), Marking::ByteMask(marks)) = layout.get(row).kind() else {
+                return Err(TestCaseError::fail(format!("record {row} is not a masked float32 column")));
+            };
+            // The bits are compared, because a NaN is not equal to itself.
+            prop_assert!((0..e.len()).all(|i| run.get(i).to_bits() == e[i].to_bits() && marks.get(i) == mask[i]));
+        }
+        // The record at `odd` becomes an int column, and the constructor names
+        // its index.
+        if !records.is_empty() {
+            let at = odd.index(records.len());
+            let mut mixed = records.clone();
+            mixed[at] = Column::ints(Ints::I64(Strided::from_slice(&[])), Marking::Never).expect("`Never` fits any column");
+            prop_assert_eq!(PerRecord::new(&mixed, shape).err(), Some(at));
+        }
+        let column = Column::list(List::PerRecord(layout), Marking::Never).expect("`Never` fits any column");
+        prop_assert_eq!(column.rows(), records.len());
+        prop_assert_eq!(column.shape(), Shape { scalar: Scalar::Float, depth: 1 });
     }
 }
 

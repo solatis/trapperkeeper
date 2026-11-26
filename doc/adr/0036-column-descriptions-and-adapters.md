@@ -64,10 +64,12 @@ offset in that buffer. These three numbers are signed 32-bit integers, as the
 Arrow format defines them, so a text view holds no number of 2^31 or more
 (owner, 2026-11-26).
 
-A list column is offsets into an element column, or a fixed number of elements
-per record. Its elements are one column
+A list column is offsets into an element column, a fixed number of elements
+per record, or a column per record. Its elements are one column
 with a description of its own, which may itself be a list (owner, 2026-11-21,
-2026-11-26).
+2026-11-26). In the last layout every record is a column of its own, with its own layout
+and marking, so it nests to any depth: a numpy array of dtype `object` that
+holds masked arrays of masked arrays is read in place (owner, 2026-11-26).
 
 A column has one type. Each value of a column is either present or missing,
 with no third state (owner, 2026-11-12).
@@ -117,6 +119,10 @@ Text views whose long text is an address, in place of a pointer and a length
 per row, for a source that holds each text at its own address, such as a slice
 of Rust structs. The adapter would then copy each text of at most 12 bytes
 into its view (owner, 2026-11-26).
+
+A pointer, a length and an optional byte mask per record, in place of a column
+per record, because it covers one level only, and nested masked arrays would
+be copied (owner, 2026-11-26).
 
 One trait for text and lists together. The elements of a list are a column
 with a marking, so the bytes of a text would carry a marking that no text

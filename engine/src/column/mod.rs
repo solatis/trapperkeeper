@@ -11,7 +11,7 @@ mod values;
 use std::fmt;
 
 pub use layout::{AnyOffsets, Fixed, Offset, Offsets, Storage};
-pub use list::{List, Lists};
+pub use list::{List, Lists, PerRecord, Scalar, Shape};
 pub use marking::{
     CHUNK_ROWS, CHUNK_WORDS, Float, Marking, Present, clear_nan, present_all, present_from_bits,
     present_from_mask,
