@@ -4,20 +4,21 @@
 its values, where they lie in the source's memory, how far apart they lie, and
 how the source marks "no value". It also holds the loops that turn a marking
 into the bitmap of a chunk, and the pass that clears the rows whose float is a
-NaN. It also describes text columns and list columns, which share their
-layouts of rows. The elements of a list are a column of their own. It
+NaN. It also describes text columns and list columns, which share the offsets
+and the fixed-width layouts of `layout.rs`. The elements of a list are a column
+of their own. It
 evaluates no rule.
 
 **Map**:
 
-| File         | What                                                                                             | When to read                                                                                                                                                                                       |
-| ------------ | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `values.rs`  | where the values lie: a run with a stride, a run of bits, and the number and boolean types       | what a stride is; building a run from raw memory and what the adapter promises; which number and boolean types a column holds                                                                      |
-| `marking.rs` | the markings, the chunk size, the bitmap of a chunk, the loops that make it and the NaN pass     | how a source says "no value"; the bit order of a chunk's bitmap; why a NaN row has no value; adding a marking                                                                                      |
-| `layout.rs`  | the offsets and the fixed-width layouts, generic over what their rows point into                 | which offset types are supported; what an adapter promises about offsets; how a numpy view with a step, such as `a[::2]`, is described; adding a layout of rows                                    |
-| `text.rs`    | the trait `Texts` and the layouts of a text column                                               | writing a loop over text; what an adapter promises about text bytes and pieces; the layout of a view; why a numpy cell loses its trailing zeros; why UTF-32 is read as units; adding a text layout |
-| `list.rs`    | the trait `Lists`, the layouts of a list column, the shape of a column and the column per record | writing a loop over a list; which lists may overlap; lists of texts, lists of lists and masked arrays of masked arrays; adding a list layout                                                       |
-| `mod.rs`     | `Column`, its kinds and the check of the row counts                                              | building a column; adding a kind of column                                                                                                                                                         |
+| File         | What                                                                                                                                           | When to read                                                                                                                                                                                       |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `values.rs`  | where the values lie: a run with a stride, a run of bits, and the number and boolean types                                                     | what a stride is; building a run from raw memory and what the adapter promises; which number and boolean types a column holds                                                                      |
+| `marking.rs` | the markings, the chunk size, the bitmap of a chunk, the loops that make it and the NaN pass                                                   | how a source says "no value"; the bit order of a chunk's bitmap; why a NaN row has no value; adding a marking                                                                                      |
+| `layout.rs`  | the offsets and the fixed-width layouts, generic over what their rows point into                                                               | which offset types are supported; what an adapter promises about offsets; how a numpy view with a step, such as `a[::2]`, is described; adding a layout of rows                                    |
+| `text.rs`    | the trait `Texts` and the layouts of a text column                                                                                             | writing a loop over text; what an adapter promises about text bytes and pieces; the layout of a view; why a numpy cell loses its trailing zeros; why UTF-32 is read as units; adding a text layout |
+| `list.rs`    | the trait `Lists`, the layouts of a list column, the shape of a column (its scalar type and how deep its lists nest) and the column per record | writing a loop over a list; which lists may overlap; lists of texts, lists of lists and masked arrays of masked arrays; adding a list layout                                                       |
+| `mod.rs`     | `Column`, its kinds and the check that a marking covers as many rows as the values                                                             | building a column; adding a kind of column                                                                                                                                                         |
 
 **Invariants**:
 
@@ -39,8 +40,9 @@ evaluates no rule.
 - A list borrows its element column, and no description allocates.
 - The element column of a list has its own marking for the elements without
   a value, and the list column's marking says which records have no list.
-- The records of a column-per-record list share one shape, and each may have
-  its own layout and marking, so a loop dispatches once per record.
+- The records of a column-per-record list share one shape, the scalar type
+  and the depth of their lists, because a column has one type. Each record may
+  have its own layout and marking, so a loop dispatches once per record.
 - `Text::Utf32` is the one layout that is not UTF-8, and no function gives a
   `&str` or a `char` for it.
 - A new layout or loop gets a property in `engine/tests/column.rs` that builds
