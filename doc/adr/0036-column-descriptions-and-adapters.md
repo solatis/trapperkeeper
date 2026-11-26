@@ -25,8 +25,9 @@ is no value (`adr/0005`) in every source and under every marking (owner,
 2026-11-26).
 
 No framework is a model for the description. Arrow is one source among numpy,
-pandas, Polars, DuckDB and Rust structs. Each layout that a source holds is
-equally a reason, and an abstraction is chosen to cover all of them at once
+pandas, Polars, DuckDB and Rust structs. The layouts of all these sources
+count equally, and the description picks abstractions that cover all of them
+at once
 (owner, 2026-11-26).
 
 Data never moves between machines of different byte order, so every value is
@@ -78,7 +79,8 @@ The `half` crate for float16, because it adds a dependency to a crate that
 pipelines embed.
 
 A flag on each marking for what a set bit or a non-zero byte means, because no
-known source uses the other two forms (owner, 2026-11-21).
+known source marks a present value with a zero bit or a missing value with a
+zero byte (owner, 2026-11-21).
 
 A negative or an unaligned stride, because every strided loop would then read
 with an unaligned load and a signed offset. It is added when a source needs it
@@ -101,7 +103,9 @@ same pass 10 to 50 times slower than native code.
 Every float column costs one pass over its values, which finds the NaNs
 (`adr/0005`).
 
-An adapter copies a reversed or a packed numpy view into a new array.
+An adapter copies two kinds of numpy view into a new array: a reversed view,
+whose stride is negative, and a view into a packed structured array, whose
+values are not aligned.
 
 Contiguous memory decides whether a loop vectorizes. A column with a stride
 measured about 3 times the contiguous cost.
