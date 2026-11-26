@@ -13,17 +13,20 @@ nightly, and so does `std::simd`.
 The project builds with the nightly channel everywhere, on a developer's
 machine and in CI (owner, 2026-11-21).
 
-The nightly floats. `rust-toolchain.toml` names the `nightly` channel with no
-date, and there is no minimum supported version (owner, 2026-11-21).
+The project builds with the newest nightly and pins no date. So
+`rust-toolchain.toml` names the `nightly` channel with no date, and there is no
+minimum supported version (owner, 2026-11-21).
 
 Code turns on an unstable feature only where a decision record names the
-feature and gives its reason (owner, 2026-11-26).
+feature and gives its reason (owner, 2026-11-26). This record names no unstable
+feature, so the first use of `std::simd` needs a record of its own.
 
 ## Rejected alternatives
 
-A commit that turns on an unstable feature with a comment, because nothing
-would then bound what a floating nightly can break. No unstable feature at all,
-because the project chose nightly to use Miri and `std::simd`.
+The project rejected letting any commit turn on an unstable feature with only a
+comment to justify it, because nothing would then bound what a floating nightly
+can break. It also rejected a ban on every unstable feature, because the
+project chose nightly to use Miri and `std::simd`.
 
 The stable channel, with nightly for the Miri job alone, because nightly is
 needed anyway and the owner wants one toolchain.
@@ -32,7 +35,7 @@ A nightly pinned to a date. The owner chose the floating nightly and gave no
 reason against the pinned one.
 
 A minimum supported Rust version, because it would hold back features for
-builders nobody has.
+people who build with an older compiler, and the project has none.
 
 ## Consequences
 
