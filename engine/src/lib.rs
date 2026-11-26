@@ -3,6 +3,10 @@
 //! a rule. The crate also holds the description of a column, over which the
 //! executor will run. No code of this crate evaluates a rule yet.
 
+// The half-precision float of numpy and pandas columns is nightly's `f16`,
+// and ADR-0036 names this feature, as ADR-0009 asks.
+#![feature(f16)]
+
 // The crate root exports nothing of `column`, because its names, such as
 // `Strided`, are general and read better as `column::Strided`.
 pub mod column;

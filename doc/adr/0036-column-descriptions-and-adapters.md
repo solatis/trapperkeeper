@@ -33,6 +33,11 @@ Data never moves between machines of different byte order, so every value is
 in the byte order of the machine (owner, 2026-11-26). A stride is a positive
 number of bytes, and every value is aligned for its type (owner, 2026-11-21).
 
+The number types are the signed and unsigned ints of 8 to 64 bits and the
+floats of 16, 32 and 64 bits. A boolean is a byte or a bit (owner, 2026-11-21,
+2026-11-26). A float16 value is nightly's `f16`, and the engine crate turns on
+the unstable feature `f16` for it (owner, 2026-11-26).
+
 A column has one type. Each value of a column is either present or missing,
 with no third state (owner, 2026-11-12).
 
@@ -62,6 +67,12 @@ mask and no NaN as null.
 
 Writing the Arrow import ourselves, because dropping arrow-rs would be
 anti-pragmatic unless it performs badly.
+
+The machine-learning formats bfloat16 and the 8-bit floats, until a source
+needs them (owner, 2026-11-26).
+
+The `half` crate for float16, because it adds a dependency to a crate that
+pipelines embed.
 
 A negative or an unaligned stride, because every strided loop would then read
 with an unaligned load and a signed offset. It is added when a source needs it

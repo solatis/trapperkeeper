@@ -7,7 +7,19 @@ use std::mem::size_of;
 
 use proptest::collection::vec;
 use proptest::prelude::*;
-use trapperkeeper_engine::column::Strided;
+use trapperkeeper_engine::column::{Bits, Strided};
+
+/// Packs booleans into bytes from bit `offset` on, lowest bit first, as a
+/// source bitmap holds them. The bits before `offset` are set, so a loop that
+/// reads them shows.
+fn packed(bools: &[bool], offset: usize) -> Vec<u8> {
+    let mut bytes = vec![0u8; (offset + bools.len()).div_ceil(8)];
+    let bits = std::iter::repeat_n(true, offset).chain(bools.iter().copied());
+    for (at, bit) in bits.enumerate() {
+        bytes[at / 8] |= u8::from(bit) << (at % 8);
+    }
+    bytes
+}
 
 proptest! {
     // `failure_persistence: None` turns off proptest's regression file, so a
@@ -35,5 +47,20 @@ proptest! {
         prop_assert!((0..every.len()).all(|row| strided.get(row) == every[row]));
         // A run with a step above 1 is not contiguous.
         prop_assert_eq!(strided.as_slice().is_some(), step == 1);
+    }
+
+    /// A run of bits reads back the booleans it was packed from, at any bit
+    /// offset, and `Bits::new` refuses a buffer that is too short.
+    #[test]
+    fn bits_read_back_their_booleans(bools in vec(any::<bool>(), 0..300), offset in 0usize..17) {
+        let bytes = packed(&bools, offset);
+        let bits = Bits::new(&bytes, offset, bools.len()).expect("the buffer holds the bits");
+        prop_assert_eq!(bits.len(), bools.len());
+        prop_assert!((0..bools.len()).all(|row| bits.get(row) == bools[row]));
+        // `packed` makes the shortest buffer, so one byte less cannot hold the
+        // bits whenever there is a byte.
+        if let Some(short) = bytes.len().checked_sub(1) {
+            prop_assert!(Bits::new(&bytes[..short], offset, bools.len()).is_none());
+        }
     }
 }

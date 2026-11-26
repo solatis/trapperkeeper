@@ -4,4 +4,4 @@
 
 mod values;
 
-pub use values::Strided;
+pub use values::{Bits, Booleans, Floats, Ints, Strided};
