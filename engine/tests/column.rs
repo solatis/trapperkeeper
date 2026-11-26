@@ -21,8 +21,8 @@ use trapperkeeper_engine::column::{
 /// exceeds two chunks, so a chunk of `CHUNK_ROWS` rows can start at any row
 /// below `CHUNK_ROWS`. Miri interprets every row, so under Miri the columns
 /// stay at 300 rows. That still covers several 64-row blocks, the rows after
-/// the last block and unaligned starts, which are the places where a read
-/// leaves its buffer.
+/// the last block and unaligned starts, which are where a read out of bounds
+/// would happen.
 const MAX_ROWS: usize = if cfg!(miri) { 300 } else { 5000 };
 
 /// Whether bit `row` of the bitmap of a chunk is set.
@@ -42,8 +42,9 @@ fn assert_bitmap(out: &Present, expected: &[bool]) -> Result<(), TestCaseError> 
     Ok(())
 }
 
-/// Writes into `out` the bitmap of a chunk of `values` after its marking
-/// `present` and the NaN pass, with every `step`-th value of `values` as a row.
+/// The bitmap of a chunk of `values` after its marking `present`, with the rows
+/// whose float is a NaN cleared. Every `step`-th value of `values` is a row,
+/// and `present` has one bit per row.
 fn nan_cleared<T: Float>(
     values: &[T],
     step: usize,
@@ -51,9 +52,11 @@ fn nan_cleared<T: Float>(
     (start, rows): (usize, usize),
 ) -> Present {
     // SAFETY: the pointer is the slice's, the stride is `step` values in
-    // bytes, and the count is the number of `step`-th values that the slice
-    // holds, so every value read lies inside it.
+    // bytes, and the count is the length of `present`, which the caller makes
+    // the number of `step`-th values that the slice holds. So every value read
+    // lies inside the slice.
     let run = unsafe { Strided::from_raw(values.as_ptr(), step * size_of::<T>(), present.len()) };
+    // The bitmap starts full, so a word that the loops do not write shows.
     let mut out = [u64::MAX; CHUNK_WORDS];
     present_from_bits(present, start, rows, &mut out);
     clear_nan(run, start, rows, &mut out);
@@ -183,6 +186,8 @@ proptest! {
     #[test]
     fn a_nan_is_cleared_after_the_marking(
         xs in vec(prop_oneof![Just(f64::NAN), any::<f64>()], 0..MAX_ROWS),
+        // The mask is as long as the longest column, so it covers the values
+        // whatever their number, and the property cuts it to that number.
         mask in vec(any::<bool>(), MAX_ROWS),
         step in 1usize..4,
         cut in any::<(Index, Index)>(),
@@ -202,6 +207,8 @@ proptest! {
         #[expect(clippy::cast_possible_truncation, reason = "the property narrows on purpose")]
         let narrow = xs.iter().map(|x| *x as f32).collect::<Vec<_>>();
         assert_bitmap(&nan_cleared(&narrow, step, present, chunk), &expected)?;
+        // Clippy's `cast_possible_truncation` does not check a cast to `f16`,
+        // so this cast needs no `expect`.
         let half = xs.iter().map(|x| *x as f16).collect::<Vec<_>>();
         assert_bitmap(&nan_cleared(&half, step, present, chunk), &expected)?;
     }
@@ -220,6 +227,8 @@ proptest! {
 #[test]
 #[should_panic(expected = "a chunk of 2049 rows")]
 fn a_chunk_above_the_chunk_size_panics() {
+    // 300 bytes hold the 2400 bits, which are more than a chunk, so only the
+    // bound on the chunk size fails.
     let bytes = [0u8; 300];
     let bits = Bits::new(&bytes, 0, 2400).expect("the buffer holds the bits");
     present_from_bits(bits, 0, CHUNK_ROWS + 1, &mut [0; CHUNK_WORDS]);
