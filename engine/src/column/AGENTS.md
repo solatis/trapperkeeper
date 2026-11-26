@@ -5,9 +5,9 @@ its values, where they lie in the source's memory, how far apart they lie, and
 how the source marks "no value". It also holds the loops that turn a marking
 into the bitmap of a chunk, and the pass that clears the rows whose float is a
 NaN. It also describes text columns and list columns, which share the offsets
-and the fixed-width layouts of `layout.rs`. A record is a row of a list column, and
-the elements of a list are a column of their own. It
-evaluates no rule.
+and the fixed-width layouts of `layout.rs`. A record is a row of a list column.
+The elements of all records are one column of their own, or each record is a
+column of its own. It evaluates no rule.
 
 **Map**:
 
