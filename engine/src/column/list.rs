@@ -5,7 +5,7 @@
 use std::ops::Range;
 
 use super::Column;
-use super::layout::{self, AnyOffsets, Offset, Offsets, Storage};
+use super::layout::{self, AnyOffsets, Fixed, Offset, Offsets, Storage};
 
 mod sealed {
     /// The part of `Lists` that only the engine can name, so no other crate
@@ -59,12 +59,29 @@ impl<'a, O: Offset> Lists<'a> for Offsets<'a, O, &'a Column<'a>> {
     }
 }
 
+impl sealed::Sealed for Fixed<&Column<'_>> {}
+
+impl<'a> Lists<'a> for Fixed<&'a Column<'a>> {
+    type Record = Range<usize>;
+
+    fn len(&self) -> usize {
+        Fixed::len(self)
+    }
+
+    fn get(&self, row: usize) -> Range<usize> {
+        self.range(row)
+    }
+}
+
 /// The layout of a list column.
 #[derive(Debug, Clone, Copy)]
 pub enum List<'a> {
     /// The elements of all records end to end in the element column, with
     /// offsets of any of the four types.
     Offsets(AnyOffsets<'a, &'a Column<'a>>),
+    /// The same number of elements per record, as in a two-dimensional numpy
+    /// array.
+    Fixed(Fixed<&'a Column<'a>>),
 }
 
 impl List<'_> {
@@ -73,6 +90,7 @@ impl List<'_> {
     pub fn len(&self) -> usize {
         match self {
             Self::Offsets(o) => o.len(),
+            Self::Fixed(f) => f.len(),
         }
     }
 

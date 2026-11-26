@@ -64,7 +64,8 @@ offset in that buffer. These three numbers are signed 32-bit integers, as the
 Arrow format defines them, so a text view holds no number of 2^31 or more
 (owner, 2026-11-26).
 
-A list column is offsets into an element column. Its elements are one column
+A list column is offsets into an element column, or a fixed number of elements
+per record. Its elements are one column
 with a description of its own, which may itself be a list (owner, 2026-11-21,
 2026-11-26).
 

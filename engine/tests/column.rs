@@ -467,6 +467,38 @@ proptest! {
         let column = Column::list(List::Offsets(AnyOffsets::I64(b)), Marking::Never);
         prop_assert_eq!(column.map(|c| c.rows()), Ok(lists.len()));
     }
+
+    /// A fixed-width layout gives record `i` the elements from `i * step` on,
+    /// contiguous and stepped, and refuses an element column that is too
+    /// short.
+    #[test]
+    fn fixed_lists_read_back_their_elements(
+        size in 0usize..5,
+        extra in 0usize..3,
+        len in 0usize..50,
+        short in 1usize..4,
+    ) {
+        // `size + extra` elements lie between two records, as in a stepped
+        // view of a numpy array.
+        let step = size + extra;
+        let end = len.checked_sub(1).map_or(0, |last| last * step + size);
+        let values = (0..i64::try_from(end).expect("a small count")).collect::<Vec<_>>();
+        let elements = Column::ints(Ints::I64(Strided::from_slice(&values)), Marking::Never)
+            .expect("`Never` fits any column");
+        let layout = Fixed::new(size, step, len, &elements).expect("the elements hold every record");
+        let expected = (0..len).map(|i| values[i * step..i * step + size].to_vec()).collect::<Vec<_>>();
+        assert_lists(layout, &values, &expected)?;
+        // An element column `short` rows shorter than the end of the last
+        // record is refused. The case is skipped when that end is below
+        // `short`.
+        if let Some(cut) = end.checked_sub(short) {
+            let fewer = Column::ints(Ints::I64(Strided::from_slice(&values[..cut])), Marking::Never)
+                .expect("`Never` fits any column");
+            prop_assert!(Fixed::new(size, step, len, &fewer).is_none());
+        }
+        let column = Column::list(List::Fixed(layout), Marking::Never);
+        prop_assert_eq!(column.map(|c| c.rows()), Ok(len));
+    }
 }
 
 #[test]
