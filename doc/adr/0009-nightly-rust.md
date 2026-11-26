@@ -13,8 +13,9 @@ nightly, and so does `std::simd`.
 The project builds with the nightly channel everywhere, on a developer's
 machine and in CI (owner, 2026-11-21).
 
-The project pins no nightly to a date. So `rust-toolchain.toml` names the `nightly` channel with no date, and there is no
-minimum supported version (owner, 2026-11-21).
+The project pins no nightly to a date. So `rust-toolchain.toml` names the
+`nightly` channel with no date, and there is no minimum supported version
+(owner, 2026-11-21).
 
 Code turns on an unstable feature only where a decision record names the
 feature and gives its reason (owner, 2026-11-26). This record names no unstable
@@ -34,15 +35,15 @@ The project rejected a nightly pinned to a date. The owner chose the floating
 nightly and gave no reason against the pinned one.
 
 The project rejected a minimum supported Rust version, because it would hold
-back features for people who build with an older compiler, and the project has no such people.
+back features for people who build with an older compiler, and the project has
+no such people.
 
 ## Consequences
 
 Anyone who builds TrapperKeeper needs a nightly toolchain. A pipeline that
 embeds the engine crate needs one as soon as the crate turns on an unstable
-feature. The owner expects few Rust users of the engine
-crate, and the features that need nightly may be stable before that changes
-(owner, 2026-11-21).
+feature. The owner expects few Rust users of the engine crate, and the features
+that need nightly may be stable before that changes (owner, 2026-11-21).
 
 No commit is needed to follow the compiler, and a new nightly can break the
 build without a commit (owner, 2026-11-21).
