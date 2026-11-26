@@ -23,6 +23,10 @@ how the source marks "no value". It evaluates nothing.
   `rows` on at 0, because a later step counts and combines whole words.
 - The core owns the closed list of cases, so the public traits of this module
   are sealed.
+- A new layout or loop gets a property in `engine/tests/column.rs` that builds
+  it from generated data and reads the data back. A property draws the length
+  of a generated column from `MAX_ROWS`, which is small under Miri, and the
+  property runs under Miri in CI.
 
 **Why**:
 
@@ -44,3 +48,10 @@ how the source marks "no value". It evaluates nothing.
   `doc/adr/0035-vectorized-evaluation-with-a-planner.md`.
 - A NaN is a null in every source, so every float column gets a NaN pass after
   its marking: `doc/adr/0005-one-vocabulary-for-failure-behavior.md`.
+
+**How to**:
+
+- `cargo test -p trapperkeeper-engine --test column` runs the properties.
+- The CI job `miri` runs them under Miri, with the command in
+  `.github/workflows/ci.yml`. Miri runs in CI only, as the root `AGENTS.md`
+  says.
