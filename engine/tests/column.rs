@@ -113,9 +113,10 @@ fn assert_texts<'a, T: Texts<'a, Unit = u8>>(
     Ok(())
 }
 
-/// The offsets of `ends` in the offset type `O`.
-fn offsets_of<O: TryFrom<usize>>(ends: &[usize]) -> Vec<O> {
-    ends.iter()
+/// `numbers`, such as the ends or the sizes of lists, in the offset type `O`.
+fn offsets_of<O: TryFrom<usize>>(numbers: &[usize]) -> Vec<O> {
+    numbers
+        .iter()
         .map(|e| {
             // `expect` needs a `Debug` error, which `O::Error` need not be,
             // so the error is dropped.
@@ -507,20 +508,20 @@ proptest! {
     #[test]
     fn per_record_lists_read_back(
         arrays in vec((vec(any::<f32>(), 0..40), vec(any::<bool>(), 40), 1usize..3), 0..20),
-        odd in any::<Index>(),
+        mixed_at in any::<Index>(),
     ) {
         // Each record is a float32 column over its own values, with its own
         // step and a byte mask from its booleans, so the records differ in
         // layout and marking as in a numpy object array.
-        let every = arrays.iter().map(|(xs, _, step)| xs.iter().step_by(*step).copied().collect::<Vec<_>>()).collect::<Vec<_>>();
+        let stepped = arrays.iter().map(|(xs, _, step)| xs.iter().step_by(*step).copied().collect::<Vec<_>>()).collect::<Vec<_>>();
         let masks = arrays
             .iter()
-            .zip(&every)
+            .zip(&stepped)
             .map(|((_, mask, _), e)| mask[..e.len()].iter().map(|b| u8::from(*b)).collect::<Vec<_>>())
             .collect::<Vec<_>>();
         let records = arrays
             .iter()
-            .zip(&every)
+            .zip(&stepped)
             .zip(&masks)
             .map(|(((xs, _, step), e), mask)| {
                 // SAFETY: the pointer is the vector's, the stride is `step`
@@ -532,19 +533,19 @@ proptest! {
             })
             .collect::<Vec<_>>();
         let shape = Shape { scalar: Scalar::Float, depth: 0 };
-        let layout = PerRecord::new(&records, shape).expect("every record is a float column");
+        let layout = PerRecord::new(&records, shape).expect("stepped record is a float column");
         prop_assert_eq!(layout.len(), records.len());
-        for (row, (e, mask)) in every.iter().zip(&masks).enumerate() {
+        for (row, (e, mask)) in stepped.iter().zip(&masks).enumerate() {
             let Kind::Floats(Floats::F32(run), Marking::ByteMask(marks)) = layout.get(row).kind() else {
                 return Err(TestCaseError::fail(format!("record {row} is not a masked float32 column")));
             };
             // The bits are compared, because a NaN is not equal to itself.
             prop_assert!((0..e.len()).all(|i| run.get(i).to_bits() == e[i].to_bits() && marks.get(i) == mask[i]));
         }
-        // The record at `odd` becomes an int column, and the constructor names
+        // The record at `mixed_at` becomes an int column, and the constructor names
         // its index.
         if !records.is_empty() {
-            let at = odd.index(records.len());
+            let at = mixed_at.index(records.len());
             let mut mixed = records.clone();
             mixed[at] = Column::ints(Ints::I64(Strided::from_slice(&[])), Marking::Never).expect("`Never` fits any column");
             prop_assert_eq!(PerRecord::new(&mixed, shape).err(), Some(at));
@@ -626,13 +627,7 @@ proptest! {
 
         // 4. read the lists of texts
         let (all, text_ends) = flatten(&texts);
-        let bytes = all.concat().into_bytes();
-        let byte_ends = std::iter::once(0)
-            .chain(all.iter().scan(0, |end, t| {
-                *end += t.len();
-                Some(*end)
-            }))
-            .collect::<Vec<_>>();
+        let (bytes, byte_ends) = flatten(&all.iter().map(|t| t.as_bytes().to_vec()).collect::<Vec<_>>());
         let (byte_offsets, text_offsets) = (offsets_of::<i64>(&byte_ends), offsets_of::<i64>(&text_ends));
         // SAFETY: the bytes are the texts end to end, and the offsets are
         // their ends, in order, starting at 0.
