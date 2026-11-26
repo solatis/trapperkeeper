@@ -50,7 +50,10 @@ One sealed trait per kind gives the elements of a row for every layout, and a
 loop is written once against it. No layout copies a text or an element
 (owner, 2026-11-26).
 
-A text column is offsets into one buffer (owner, 2026-11-21).
+A text column is offsets into one buffer or views of 16 bytes (owner,
+2026-11-21). The length, buffer number and offset of a view are signed 32-bit
+integers, as the Arrow format defines them, so a view holds no number of 2^31
+or more (owner, 2026-11-26).
 
 A column has one type. Each value of a column is either present or missing,
 with no third state (owner, 2026-11-12).

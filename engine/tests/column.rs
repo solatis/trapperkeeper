@@ -12,9 +12,9 @@ use proptest::collection::vec;
 use proptest::prelude::*;
 use proptest::sample::Index;
 use trapperkeeper_engine::column::{
-    AnyOffsets, Bits, CHUNK_ROWS, CHUNK_WORDS, Column, Float, Ints, Marking, Mismatch, Offsets,
-    Present, Strided, Text, Texts, Utf8, clear_nan, present_all, present_from_bits,
-    present_from_mask,
+    AnyOffsets, Bits, CHUNK_ROWS, CHUNK_WORDS, Column, Float, INLINE, Ints, Marking, Mismatch,
+    Offsets, Present, Strided, Text, Texts, Utf8, View, Views, clear_nan, present_all,
+    present_from_bits, present_from_mask,
 };
 
 /// The most rows of a generated column that a chunk is cut from. It exceeds
@@ -293,6 +293,34 @@ proptest! {
         assert_texts(c, &texts)?;
         assert_texts(d, &texts)?;
         let column = Column::text(Text::Offsets(AnyOffsets::U64(d)), Marking::Never);
+        prop_assert_eq!(column.map(|c| c.rows()), Ok(texts.len()));
+    }
+
+    /// A column of views reads back its texts, the short ones from the view
+    /// and the long ones from one of two buffers.
+    #[test]
+    fn views_read_back_their_texts(texts in texts()) {
+        // A long text goes to the buffer of its row's parity, so the buffer
+        // number of a view is read and not assumed to be 0.
+        let mut buffers = [Vec::new(), Vec::new()];
+        let mut views = Vec::new();
+        for (row, text) in texts.iter().enumerate() {
+            let view = if text.len() <= INLINE {
+                View::inline(text)
+            } else {
+                let buffer = &mut buffers[row % 2];
+                let offset = u32::try_from(buffer.len()).expect("the buffer is small");
+                buffer.extend_from_slice(text.as_bytes());
+                View::outside(text, u32::try_from(row % 2).expect("0 or 1"), offset)
+            };
+            views.push(view.expect("the text fits a view"));
+        }
+        let lent = [&buffers[0][..], &buffers[1][..]];
+        // SAFETY: each long view names the buffer and the offset that its text
+        // was copied to, and the texts are UTF-8.
+        let layout = unsafe { Views::new(&views, &lent) };
+        assert_texts(layout, &texts)?;
+        let column = Column::text(Text::Views(layout), Marking::Never);
         prop_assert_eq!(column.map(|c| c.rows()), Ok(texts.len()));
     }
 }

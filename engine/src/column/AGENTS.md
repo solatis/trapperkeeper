@@ -14,7 +14,7 @@ columns share. It evaluates no rule.
 | `values.rs`  | where the values lie: a run with a stride, a run of bits, and the number and boolean types   | what a stride is; building a run from raw memory and what the adapter promises; which number and boolean types a column holds |
 | `marking.rs` | the markings, the chunk size, the bitmap of a chunk, the loops that make it and the NaN pass | how a source says "no value"; the bit order of a chunk's bitmap; why a NaN row has no value; adding a marking                 |
 | `layout.rs`  | the offsets layout, generic over what its rows point into                                    | which offset types are supported; what an adapter promises about offsets; adding a shared layout                              |
-| `text.rs`    | the trait `Texts` and the layouts of a text column                                           | writing a loop over text; adding a text layout                                                                                |
+| `text.rs`    | the trait `Texts` and the layouts of a text column                                           | writing a loop over text; the layout of a view; adding a text layout                                                          |
 | `mod.rs`     | `Column`, its kinds and the check of the row counts                                          | building a column; adding a kind of column                                                                                    |
 
 **Invariants**:
