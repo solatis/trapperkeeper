@@ -57,4 +57,5 @@ A crash of the core is an exception to "harmless when it breaks"
 (`principles.md`, 1). An SDK ships native code for each platform.
 
 An adapter that breaks its promise causes undefined behavior in a release
-build. A debug build checks the promise.
+build. A debug build checks the parts of the promise that it can check, such as
+the order of offsets and UTF-8.
