@@ -76,6 +76,13 @@ open, and so is the chunk size of 2048 rows, which no measurement chose.
 Decide both with the milestone "The evaluator", from measurements on the CI
 targets.
 
+## Patterns on a UTF-32 column
+
+A column of numpy's `U` type is read in place as UTF-32 (`adr/0041`), and the
+`regex` crate matches UTF-8 only. The options are to convert a chunk to UTF-8
+before the pattern loops run, or to turn the rule off for such a column with a
+fault. Decide with the issue that adds the pattern loops.
+
 ## Timestamps in the rule language
 
 The rule language has no timestamp type (`adr/0041`). Rules about time need

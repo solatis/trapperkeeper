@@ -51,7 +51,8 @@ loop is written once against it. No layout copies a text or an element
 (owner, 2026-11-26).
 
 A text column is offsets into one buffer, views of 16 bytes, a pointer and a
-length per row, or fixed-width cells of UTF-8 bytes (owner, 2026-11-21). The length, buffer number and offset of a view are signed 32-bit
+length per row, or fixed-width cells of UTF-8 bytes or of UTF-32 (owner,
+2026-11-21). The length, buffer number and offset of a view are signed 32-bit
 integers, as the Arrow format defines them, so a view holds no number of 2^31
 or more (owner, 2026-11-26).
 

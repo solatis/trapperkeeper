@@ -35,6 +35,8 @@ columns share. It evaluates no rule.
 - Nothing in the module copies a text or an element.
 - A loop over text is written against `Texts`, and a layout whose `Unit` is
   `u8` holds valid UTF-8 in every row.
+- `Text::Utf32` is the one layout that is not UTF-8, and no function gives a
+  `&str` or a `char` for it.
 - A new layout or loop gets a property in `engine/tests/column.rs` that builds
   it from generated data and reads the data back. The property runs under
   Miri in the nightly workflow `miri.yml`.
@@ -47,6 +49,10 @@ columns share. It evaluates no rule.
   does not validate it: `doc/adr/0038-one-rust-core-for-every-sdk.md`.
 - The text layouts, the layouts that text and lists share, one trait per kind
   and no copies: `doc/adr/0036-column-descriptions-and-adapters.md`.
+- The cells of numpy's `U` type are UTF-32, an exception to UTF-8 everywhere
+  else: `doc/adr/0041-the-rule-language.md`. Their reader returns units,
+  because a Python text can hold a lone surrogate, and promising valid
+  characters would make the adapter scan every array.
 - A stride is positive and every value is aligned:
   `doc/adr/0036-column-descriptions-and-adapters.md`.
 - A bitmap marks a present value with a set bit and may start at any bit, a

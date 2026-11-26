@@ -373,6 +373,28 @@ proptest! {
         let column = Column::text(Text::Bytes(layout), Marking::Never);
         prop_assert_eq!(column.map(|c| c.rows()), Ok(texts.len()));
     }
+
+    /// numpy `U` cells read back the characters of their texts as units.
+    #[test]
+    fn utf32_cells_read_back_their_texts(texts in texts(), slack in 0usize..3) {
+        // A text is compared as the `u32` values of its characters, because
+        // the reader returns units and no `char`.
+        let expected = texts.iter().map(|t| t.chars().map(u32::from).collect::<Vec<_>>()).collect::<Vec<_>>();
+        let width = expected.iter().map(Vec::len).max().unwrap_or(0) + slack;
+        let mut units = Vec::new();
+        for text in &expected {
+            let start = units.len();
+            units.extend_from_slice(text);
+            units.resize(start + width, 0);
+        }
+        let layout = Fixed::new(width, width, texts.len(), Units::utf32(&units)).expect("the cells hold every row");
+        prop_assert_eq!(layout.len(), expected.len());
+        for (row, text) in expected.iter().enumerate() {
+            prop_assert_eq!(layout.get(row), text.as_slice(), "row {}", row);
+        }
+        let column = Column::text(Text::Utf32(layout), Marking::Never);
+        prop_assert_eq!(column.map(|c| c.rows()), Ok(texts.len()));
+    }
 }
 
 #[test]

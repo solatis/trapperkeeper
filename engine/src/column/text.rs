@@ -349,6 +349,17 @@ impl<'a> Units<'a, u8> {
     }
 }
 
+impl<'a> Units<'a, u32> {
+    /// The units of numpy's `U` cells, in the byte order of the machine.
+    // The constructor is safe, because the reader returns units and promises
+    // no valid characters, so no value of a unit is wrong. A Python text can
+    // hold a lone surrogate, which a `char` must not hold.
+    #[must_use]
+    pub fn utf32(units: &'a [u32]) -> Self {
+        Self(units)
+    }
+}
+
 impl<U> layout::sealed::Sealed for Units<'_, U> {}
 
 impl Storage for Units<'_, u8> {
@@ -360,6 +371,16 @@ impl Storage for Units<'_, u8> {
         self.0
             .get(range)
             .is_some_and(|cell| str::from_utf8(trim(cell)).is_ok())
+    }
+}
+
+impl Storage for Units<'_, u32> {
+    fn count(&self) -> usize {
+        self.0.len()
+    }
+
+    fn holds(&self, _: Range<usize>) -> bool {
+        true
     }
 }
 
@@ -406,6 +427,9 @@ pub enum Text<'a> {
     Pieces(Strided<'a, Piece<'a>>),
     /// Fixed-width cells of UTF-8 bytes, as numpy's `S` type.
     Bytes(Fixed<Units<'a, u8>>),
+    /// Fixed-width cells of UTF-32, as numpy's `U` type. This is the one
+    /// layout that is not UTF-8 (ADR-0041).
+    Utf32(Fixed<Units<'a, u32>>),
 }
 
 impl Text<'_> {
@@ -417,6 +441,7 @@ impl Text<'_> {
             Self::Views(v) => Texts::len(v),
             Self::Pieces(p) => Strided::len(p),
             Self::Bytes(f) => f.len(),
+            Self::Utf32(f) => f.len(),
         }
     }
 
