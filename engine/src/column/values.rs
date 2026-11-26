@@ -94,8 +94,8 @@ impl<'a, T: Copy> Strided<'a, T> {
     /// Panics when `row` is not below `len`.
     #[must_use]
     pub fn get(&self, row: usize) -> T {
-        // The read below trusts this bound, and the bound is what makes this
-        // function safe to call.
+        // The unchecked read below trusts this bound, so `get` stays sound for
+        // any `row`.
         assert!(row < self.len, "row {row} of a run of {}", self.len);
         // SAFETY: the assertion above keeps `row` below `len`.
         unsafe { self.get_unchecked(row) }
@@ -108,6 +108,8 @@ impl<'a, T: Copy> Strided<'a, T> {
     /// `U` has the size and the alignment of `T`, and every bit pattern of a
     /// `T` is a valid `U`.
     pub(crate) unsafe fn cast<U>(self) -> Strided<'a, U> {
+        // This checks the size and the alignment of the contract. No check
+        // can show that every bit pattern of a `T` is a valid `U`.
         debug_assert!(size_of::<U>() == size_of::<T>() && align_of::<U>() == align_of::<T>());
         Strided {
             first: self.first.cast(),
