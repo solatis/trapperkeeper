@@ -143,8 +143,7 @@ backticks, which need no word for the record and are not Python syntax.
 Reserving all of Python's keywords, because a column named `from` would need
 a special form.
 
-`re` as an ordinary name, because the parser would then need four tokens to
-tell a call such as `re.search(` from a field `re.search`.
+`re` as an ordinary name. The record gives no reason against it.
 
 `math.isnan`, because a NaN is a null and `x is None` finds it.
 
