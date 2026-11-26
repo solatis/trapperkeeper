@@ -103,8 +103,8 @@ Every float column costs one pass over its values, which finds the NaNs
 (`adr/0005`).
 
 An adapter copies two kinds of numpy view into a new array: a reversed view,
-whose stride is negative, and a view into a packed structured array, whose
-values are not aligned.
+whose stride is negative, and a view into a structured array without
+alignment padding, whose values are not aligned.
 
 Contiguous memory decides whether a loop vectorizes. A column with a stride
 measured about 3 times the contiguous cost.
