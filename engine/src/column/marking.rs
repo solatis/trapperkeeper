@@ -237,11 +237,9 @@ impl Test<f64> for NotNan {
     }
 }
 
-/// The bits of infinity in half precision, without the sign: the five exponent
-/// bits set and the ten fraction bits clear, as IEEE 754 binary16 defines it.
-/// A half-precision value is a NaN when its bits without the sign lie above
-/// these.
-const F16_INFINITY: u16 = 0x7c00;
+/// The bits of positive infinity in half precision. A half-precision value is
+/// a NaN when its bits without the sign lie above these.
+const F16_INFINITY: u16 = f16::INFINITY.to_bits();
 
 // The test of a half-precision float runs on its 16 bits, because the lanes
 // of `std::simd` do not take `f16`.
