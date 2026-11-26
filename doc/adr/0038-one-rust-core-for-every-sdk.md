@@ -18,9 +18,11 @@ A native core that can crash the process is an acceptable trade-off (owner,
 2026-11-12).
 
 An adapter promises that the memory it describes is valid, such as offsets
-that are in range and text bytes that are UTF-8, and the core does not check
-it. The project owns every adapter, and this explicit contract keeps the loops
-fast (owner, 2026-11-21).
+that are in range and text bytes that are UTF-8, and a release build of the
+core does not check it. The project owns the adapters of its SDKs, and this
+explicit contract keeps the loops fast (owner, 2026-11-21). The constructors
+that take such memory are `unsafe`, so a Rust user who writes an adapter makes
+the same promise.
 
 By default no error of ours is raised into a pipeline (`adr/0005`).
 
@@ -41,7 +43,8 @@ A pass in the core that validates every text column, because every batch
 would pay it, also where the source has already validated.
 
 A safe constructor that validates, beside an unsafe one that does not. The
-owner gave no reason beyond the contract in the Decision.
+owner gave no reason beyond the decision that the adapter promises the memory
+is valid.
 
 An executor of our own written in pure Java, because one Rust core serves every
 SDK (owner, 2026-11-15). A native integration with a host engine, such as an
