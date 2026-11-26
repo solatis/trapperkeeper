@@ -35,12 +35,12 @@ impl Unit for u32 {
 }
 
 /// A layout of a text column. It gives the units of a row's text, read in
-/// place from the source's memory.
-// A layout whose `Unit` is `u8` holds valid UTF-8 in every row, so the code
-// that evaluates a rule may read a row as a `&str` without a check. A loop compares a column's units
-// with a literal that the planner encoded in the same encoding, so no loop
-// converts a text (ADR-0041). The trait is sealed, so only the engine adds a
-// layout, and a loop written against it runs on every layout.
+/// place from the source's memory. A layout whose `Unit` is `u8` holds valid
+/// UTF-8 in every row, so a caller may read a row as a `&str` without a check.
+// A loop compares a column's units with a literal that the planner encoded in
+// the same encoding, so no loop converts a text (ADR-0041). The trait is
+// sealed, so only the engine adds a layout. A loop written against the trait
+// runs on every layout.
 pub trait Texts<'a>: Copy + sealed::Sealed {
     type Unit: Unit;
     /// The number of texts.
@@ -107,8 +107,8 @@ pub const INLINE: usize = 12;
 
 /// One view of a text: its length, and then either the text itself, when it
 /// has at most `INLINE` bytes, or the first four bytes of the text, the number
-/// of the buffer that holds it and its offset in that buffer. Polars and
-/// `DuckDB` hold their texts as views, and so does Arrow data.
+/// of the buffer that holds it and its offset in that buffer. Arrow's string
+/// view type holds texts this way, and Polars uses it for its strings.
 // The alignment is 4, because the widest field is 4 bytes. An alignment of 16
 // would refuse memory that allocators align only to 8.
 #[repr(C)]
@@ -201,7 +201,7 @@ impl<'a> Views<'a> {
     /// bytes of every text are UTF-8.
     #[must_use]
     pub unsafe fn new(views: &'a [View], buffers: &'a [&'a [u8]]) -> Self {
-        // This checks the whole contract, so that a caller that breaks it
+        // `valid` checks the whole contract, so that a caller that breaks it
         // fails in a debug build and under Miri.
         debug_assert!(
             Self::valid(views, buffers),
@@ -260,7 +260,9 @@ impl<'a> Texts<'a> for Views<'a> {
 
 /// The address and the length of the bytes of one text, which stays where the
 /// source holds it. An adapter over a slice of Rust structs fills a run of
-/// pieces from `String` or `&str` fields and copies no text.
+/// pieces from `String` or `&str` fields and copies no text. A piece that
+/// foreign code writes into memory keeps the promise of `from_raw`, because
+/// `Strided::from_raw` requires that every value it reads is valid.
 // `repr(C)` fixes the layout, because Rust does not fix the layout of a `&str`,
 // and an adapter in another language writes pieces too.
 #[repr(C)]
@@ -305,8 +307,10 @@ impl<'a> Piece<'a> {
 
     /// The bytes of the text.
     fn bytes(&self) -> &'a [u8] {
-        // SAFETY: both constructors make `len` bytes readable from `first`
-        // for `'a`.
+        // SAFETY: every piece keeps the promise of `from_raw`: a constructor
+        // made it, or foreign code wrote it under the contract of
+        // `Strided::from_raw`. So `len` bytes are readable from `first` for
+        // `'a`.
         unsafe { slice::from_raw_parts(self.first.as_ptr(), self.len) }
     }
 }
@@ -347,7 +351,8 @@ impl<'a> Units<'a, u32> {
     /// The units of numpy's `U` cells, in the byte order of the machine.
     // `Texts::get` hands out these units and no `char`, so every `u32` is a
     // valid unit and the constructor has nothing to promise. A `char` could
-    // not hold the lone surrogates that a Python text may contain.
+    // not hold the lone surrogates that a Python text may contain, and a
+    // promise of valid characters would make the adapter scan every array.
     #[must_use]
     pub fn utf32(units: &'a [u32]) -> Self {
         Self(units)
@@ -419,7 +424,7 @@ where
 #[derive(Debug, Clone, Copy)]
 pub enum Text<'a> {
     /// Texts end to end in one buffer, with offsets of any of the four types,
-    /// as Polars and `DuckDB` hold them.
+    /// as Arrow's string and large string types hold them.
     Offsets(AnyOffsets<'a, Utf8<'a>>),
     /// Views of 16 bytes.
     Views(Views<'a>),
