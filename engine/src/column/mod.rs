@@ -37,8 +37,9 @@ impl std::error::Error for Mismatch {}
 #[derive(Debug, Clone, Copy)]
 pub enum Kind<'a> {
     Ints(Ints<'a>, Marking<'a>),
-    // Besides its marking, every NaN of a float column is no value, which
-    // `clear_nan` applies.
+    // Besides its marking, every NaN of a float column is no value. A reader of
+    // the column runs `clear_nan` after the loop of the marking to clear those
+    // rows.
     Floats(Floats<'a>, Marking<'a>),
     Booleans(Booleans<'a>, Marking<'a>),
 }
@@ -48,6 +49,8 @@ pub enum Kind<'a> {
 #[derive(Debug, Clone, Copy)]
 pub struct Column<'a> {
     kind: Kind<'a>,
+    // The row count that the constructor checked, kept so that `rows` needs
+    // no match over the kinds and their value types.
     rows: usize,
 }
 
@@ -107,7 +110,9 @@ impl<'a> Column<'a> {
     }
 }
 
-/// `values` when the marking covers that many rows or any number of rows.
+/// The row count of a column of `values` values whose marking covers
+/// `marking` rows, where `None` is a marking that fits any count. Fails when
+/// the two counts differ.
 fn matched(values: usize, marking: Option<usize>) -> Result<usize, Mismatch> {
     match marking {
         // The marking `Never` has no length of its own, so it fits every
