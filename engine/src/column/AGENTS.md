@@ -19,10 +19,11 @@ how the source marks "no value". It evaluates nothing.
   every read itself.
 - Every `unsafe` block says why it is sound, and the workspace lint
   `undocumented_unsafe_blocks` fails the build otherwise.
-- A loop writes every word of the chunk's bitmap and leaves the bits from
-  `rows` on at 0, because a later step counts and combines whole words.
-- The core owns the closed list of cases, so the public traits of this module
-  are sealed.
+- A loop that makes the bitmap of a chunk writes all its words, and sets no
+  bit at or past the chunk's row count `rows`, because a later step counts
+  and combines whole words.
+- The engine owns the closed list of cases, so a public trait of this module,
+  such as `Float`, is sealed.
 - A new layout or loop gets a property in `engine/tests/column.rs` that builds
   it from generated data and reads the data back. A property draws the length
   of a generated column from `MAX_ROWS`, which is small under Miri, and the
@@ -36,7 +37,8 @@ how the source marks "no value". It evaluates nothing.
   `doc/adr/0036-column-descriptions-and-adapters.md`.
 - The chunk of 2048 rows, and one loop per marking that makes the bitmap of a
   chunk: `doc/adr/0035-vectorized-evaluation-with-a-planner.md`.
-- A set bit means present, and unknown uses that mask:
+- A set bit means present. A comparison on a row whose bit is clear gives
+  unknown, the null of a boolean:
   `doc/adr/0005-one-vocabulary-for-failure-behavior.md`.
 - The bitmap of a chunk is 64-bit words with the first row in the lowest bit.
   Testing a row is then a shift and a mask, a loop visits the set rows in
