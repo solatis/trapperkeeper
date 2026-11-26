@@ -31,8 +31,8 @@ can use too. It evaluates no rule.
   such as `Float`, is sealed.
 - A constructor that takes a promise it does not check, such as offsets in
   order or bytes that are UTF-8, is `unsafe` and states the promise under
-  `# Safety`. A debug build checks the whole promise when the layout is
-  built.
+  `# Safety`. A debug build checks the parts of the promise that it can
+  check, such as order, bounds and UTF-8, when the layout is built.
 - A layout reads each text and each element where the source holds it, and
   copies none.
 - A loop over text is written against `Texts`, and a layout whose `Unit` is
