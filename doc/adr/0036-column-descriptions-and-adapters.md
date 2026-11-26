@@ -17,8 +17,8 @@ possible (owner, 2026-11-13).
 
 A view describes each column in our own column description. The description
 gives the value type and width, where the values are and how far apart they are,
-and how "no value" is marked: never, by a bitmap, by a byte mask or by NaN.
-Arrow is one case of it (owner, 2026-11-13).
+and how "no value" is marked: never, by a bitmap or by a byte mask. Arrow is
+one case of it (owner, 2026-11-13).
 
 A source says how it marks "no value": never, by a bitmap or by a byte mask. A
 NaN in a float column is no value in every source (`adr/0005`) (owner,
