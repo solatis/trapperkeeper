@@ -7,7 +7,7 @@ use std::mem::size_of;
 
 use proptest::collection::vec;
 use proptest::prelude::*;
-use trapperkeeper_engine::column::{Bits, Strided};
+use trapperkeeper_engine::column::{Bits, Column, Ints, Marking, Mismatch, Strided};
 
 /// Packs booleans into bytes from bit `offset` on, lowest bit first, as a
 /// source bitmap holds them. The bits before `offset` are set, so a loop that
@@ -62,5 +62,19 @@ proptest! {
         if let Some(short) = bytes.len().checked_sub(1) {
             prop_assert!(Bits::new(&bytes[..short], offset, bools.len()).is_none());
         }
+    }
+
+    /// A column refuses a marking that covers another number of rows than its
+    /// values, and takes one that covers the same number.
+    #[test]
+    fn a_marking_of_another_length_is_refused(values in 0usize..100, marking in 0usize..100) {
+        let xs = vec![0i32; values];
+        let mask = vec![0u8; marking];
+        let ints = Ints::I32(Strided::from_slice(&xs));
+        let column = Column::ints(ints, Marking::ByteMask(Strided::from_slice(&mask)));
+        let expected = if values == marking { Ok(values) } else { Err(Mismatch { values, marking }) };
+        prop_assert_eq!(column.map(|c| c.rows()), expected);
+        // `Never` covers any number of rows.
+        prop_assert_eq!(Column::ints(ints, Marking::Never).map(|c| c.rows()), Ok(values));
     }
 }

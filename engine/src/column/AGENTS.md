@@ -6,10 +6,11 @@ how the source marks "no value". It evaluates nothing.
 
 **Map**:
 
-| File        | What                                                                                       | When to read                                                                                                                  |
-| ----------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
-| `values.rs` | where the values lie: a run with a stride, a run of bits, and the number and boolean types | what a stride is; building a run from raw memory and what the adapter promises; which number and boolean types a column holds |
-| `mod.rs`    | the files of the module and what it exports                                                | which items of the module a user of the crate can name                                                                        |
+| File         | What                                                                                       | When to read                                                                                                                  |
+| ------------ | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| `values.rs`  | where the values lie: a run with a stride, a run of bits, and the number and boolean types | what a stride is; building a run from raw memory and what the adapter promises; which number and boolean types a column holds |
+| `marking.rs` | the markings of "no value"                                                                 | how a source says "no value"; adding a marking                                                                                |
+| `mod.rs`     | `Column`, its kinds and the check of the row counts                                        | building a column; adding a kind of column                                                                                    |
 
 **Invariants**:
 

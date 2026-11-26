@@ -38,6 +38,9 @@ floats of 16, 32 and 64 bits. A boolean is a byte or a bit (owner, 2026-11-21,
 2026-11-26). A float16 value is nightly's `f16`, and the engine crate turns on
 the unstable feature `f16` for it (owner, 2026-11-26).
 
+A bitmap marks a present value with a set bit and may start at any bit. A byte
+mask marks a missing value with a byte that is not zero (owner, 2026-11-21).
+
 A column has one type. Each value of a column is either present or missing,
 with no third state (owner, 2026-11-12).
 
@@ -74,6 +77,9 @@ needs them (owner, 2026-11-26).
 The `half` crate for float16, because it adds a dependency to a crate that
 pipelines embed.
 
+A flag on each marking for what a set bit or a non-zero byte means, because no
+known source uses the other two forms (owner, 2026-11-21).
+
 A negative or an unaligned stride, because every strided loop would then read
 with an unaligned load and a signed offset. It is added when a source needs it
 (owner, 2026-11-21).
@@ -103,5 +109,5 @@ measured about 3 times the contiguous cost.
 In Java and Go, host code reads objects and fills arrays, because Rust cannot
 walk them cheaply.
 
-The core owns a closed list of cases, and no adapter extends it. The exact
-cases are chosen when the description is built (owner, 2026-11-13).
+The core owns a closed list of cases, and no adapter extends it (owner,
+2026-11-13).
