@@ -1,8 +1,7 @@
 //! The properties of the column description. Each one builds a description
 //! from generated data and checks that a reader or a loop gives that data
 //! back. The properties keep proptest's default case count, so that
-//! `PROPTEST_CASES` can lower it under Miri, and they generate smaller columns
-//! under Miri.
+//! `PROPTEST_CASES` can lower it under Miri.
 
 // The half-precision column holds nightly's `f16` (ADR-0036).
 #![feature(f16)]
@@ -17,13 +16,10 @@ use trapperkeeper_engine::column::{
     clear_nan, present_all, present_from_bits, present_from_mask,
 };
 
-/// The most rows of a generated column that a chunk is cut from. Natively it
-/// exceeds two chunks, so a chunk of `CHUNK_ROWS` rows can start at any row
-/// below `CHUNK_ROWS`. Miri interprets every row, so under Miri the columns
-/// stay at 300 rows. That still covers several 64-row blocks, the rows after
-/// the last block and unaligned starts, which are where a read out of bounds
-/// would happen.
-const MAX_ROWS: usize = if cfg!(miri) { 300 } else { 5000 };
+/// The most rows of a generated column that a chunk is cut from. It exceeds
+/// two chunks, so a chunk of `CHUNK_ROWS` rows can start at any row below
+/// `CHUNK_ROWS`.
+const MAX_ROWS: usize = 5000;
 
 /// Whether bit `row` of the bitmap of a chunk is set.
 fn bit(out: &Present, row: usize) -> bool {
