@@ -65,16 +65,18 @@ Arrow format defines them, so a text view holds no number of 2^31 or more
 (owner, 2026-11-26).
 
 A list column is offsets into an element column, a fixed number of elements
-per record, an offset and a size per record, or a column per record. A record
-is a row of a list column (owner, 2026-11-21, 2026-11-26). In the first three
+per record, an offset and a size per record, or a column per record (owner,
+2026-11-21, 2026-11-26). A record is a row of a list column. In the first three
 layouts the elements of all records are one column with a description of its
-own, which may itself be a list. In the last layout every record is a column of
-its own, with its own layout and marking, because each record lies in memory
-of its own and not end to end with the others. The adapter writes one
-description per record, and no value or mask is copied, so a numpy array of
-dtype `object` that holds masked arrays of masked arrays is read in place
-(owner, 2026-11-26). The lists of the offset-and-size layout may lie in any
-order and share elements, as Arrow's list view allows.
+own, which may itself be a list. A list borrows its element column, so a
+description allocates nothing, though an adapter builds one per batch (owner,
+2026-11-26). In the last layout every record is a column of its own, with its
+own layout and marking, because each record lies in memory of its own, apart
+from the others. The adapter writes one description per record and copies no
+value or mask, so a numpy array of dtype `object` that holds masked arrays of
+masked arrays is read in place (owner, 2026-11-26). The lists of the
+offset-and-size layout may lie in any order and share elements, as Arrow's
+list view allows.
 
 A column has one type. Each value of a column is either present or missing,
 with no third state (owner, 2026-11-12).
@@ -131,6 +133,8 @@ inner masked array is an array with a mask of its own, which such a record
 cannot point at, so its adapter would copy it into an offsets layout (owner,
 2026-11-26).
 
+A boxed element column, because every description would then allocate.
+
 One trait for text and lists together. The elements of a list are a column
 with a marking, so the bytes of a text would carry a marking that no text
 uses.
@@ -152,6 +156,9 @@ Converting a convention through a Python library, because pyarrow does the
 same pass 10 to 50 times slower than native code.
 
 ## Consequences
+
+A loop over a column-per-record list dispatches once per record, because each
+record may have its own layout and marking.
 
 Every float column costs one pass over its values, which finds the NaNs
 (`adr/0005`).
