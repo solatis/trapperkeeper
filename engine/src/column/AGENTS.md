@@ -27,9 +27,8 @@ NaN. It evaluates no rule.
 - The engine owns the closed list of cases, so a public trait of this module,
   such as `Float`, is sealed.
 - A new layout or loop gets a property in `engine/tests/column.rs` that builds
-  it from generated data and reads the data back. A generated column has at
-  most `MAX_ROWS` rows, which is small under Miri, and the property runs under
-  Miri in CI.
+  it from generated data and reads the data back. The property runs under
+  Miri in the nightly workflow `miri.yml`.
 
 **Why**:
 
@@ -55,6 +54,5 @@ NaN. It evaluates no rule.
 **How to**:
 
 - `cargo test -p trapperkeeper-engine --test column` runs the properties.
-- The CI job `miri` runs them under Miri, with the command in
-  `.github/workflows/ci.yml`. Miri runs in CI only, as the root `AGENTS.md`
-  says.
+- The workflow `.github/workflows/miri.yml` runs them under Miri, nightly
+  and on demand. The root `AGENTS.md` says when an agent may start it.
