@@ -210,7 +210,8 @@ proptest! {
     /// the chunk.
     #[test]
     fn a_chunk_without_a_marking_has_every_row(rows in 0..=CHUNK_ROWS) {
-        let mut out = [0; CHUNK_WORDS];
+        // The bitmap starts full, so a word that the loop does not clear shows.
+        let mut out = [u64::MAX; CHUNK_WORDS];
         present_all(rows, &mut out);
         assert_bitmap(&out, &vec![true; rows])?;
     }
