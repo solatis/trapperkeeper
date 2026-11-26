@@ -267,8 +267,8 @@ proptest! {
     /// types, from a buffer that has other bytes before the first text.
     #[test]
     fn offsets_read_back_their_texts(texts in texts(), lead in 0usize..5) {
-        // The first offset is `lead`, not zero, as in a slice of a longer
-        // column, so a reader that assumes zero shows.
+        // The first offset is `lead`, as in a slice of a longer column, so a
+        // reader that assumes it is zero shows.
         let mut bytes = vec![b'x'; lead];
         let mut ends = vec![lead];
         for text in &texts {
