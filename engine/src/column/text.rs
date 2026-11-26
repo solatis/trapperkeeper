@@ -394,8 +394,9 @@ fn trim<U: Unit>(cell: &[U]) -> &[U] {
 
 impl<U: Unit> sealed::Sealed for Fixed<Units<'_, U>> {}
 
-// `Storage` has one impl per unit type, so the bound names it for the `U` at
-// hand, which the calls to `Fixed`'s methods need.
+// The bound lets this impl call the methods of `Fixed`, which need `Storage`.
+// `Storage` is implemented for `Units<u8>` and for `Units<u32>` one by one, so
+// a bound on `U` alone does not give it.
 impl<'a, U: Unit> Texts<'a> for Fixed<Units<'a, U>>
 where
     Units<'a, U>: Storage,
