@@ -100,9 +100,13 @@ unit is already through this stage: say so and leave it out.
    every row in exactly one of them. "Settled by you:" one line per owner
    row, the decision and the date, nothing else. "Proposed here:" one line
    per proposal row, the decision, the alternative that lost and why, so
-   the owner rules on it here and not at the code. A label with no rows is
-   left out. One decision per line, the decision before its reason. The
-   "Looks good" settles the proposals as it settles the open questions.
+   the owner rules on it here and not at the code. A proposal row that adds
+   a type, a trait or a memory layout also gets, under its line, a fenced
+   block that shows a caller building one and reading a row from it in the
+   language of the code, or a drawing of its bytes for a layout. A label
+   with no rows is left out. One decision per line, the decision before its
+   reason. The "Looks good" settles the proposals as it settles the open
+   questions.
 
    The owner's answer is one of three, by The Inbox's table:
    - "Looks good" on this message: the owner's yes on these plans, and on the plans
