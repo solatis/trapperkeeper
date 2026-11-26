@@ -97,8 +97,20 @@ impl<'a, T: Copy> Strided<'a, T> {
         // The read below trusts this bound, and the bound is what makes this
         // function safe to call.
         assert!(row < self.len, "row {row} of a run of {}", self.len);
-        // SAFETY: `row` is below `len`, and the constructor's contract makes
-        // the value at `first` plus `row * stride` bytes readable and aligned.
+        // SAFETY: the assertion above keeps `row` below `len`.
+        unsafe { self.get_unchecked(row) }
+    }
+
+    /// The value at `row`, without the bound check.
+    ///
+    /// # Safety
+    ///
+    /// `row` is below `len`.
+    pub(crate) unsafe fn get_unchecked(&self, row: usize) -> T {
+        // SAFETY: the caller keeps `row` below `len`, and the constructor's
+        // contract makes the value at `first` plus `row * stride` bytes
+        // readable. The read is aligned, because the stride is a multiple of
+        // the alignment of `T`.
         unsafe { self.first.byte_add(row * self.stride).read() }
     }
 }

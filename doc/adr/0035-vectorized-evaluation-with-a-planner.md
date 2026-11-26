@@ -1,6 +1,6 @@
 # 0035. Vectorized evaluation with a planner
 
-Date: 2026-11-16.
+Date: 2026-11-26.
 
 ## Context
 
@@ -39,6 +39,12 @@ generic code. Nothing is compiled at run time (owner, 2026-11-13).
 For each "no value" convention, one loop turns the source's marking into a
 bitmap per chunk. A comparison loop reads only that bitmap and never sees the
 convention.
+
+The loops over values that lie one after the other use `std::simd`, and the
+engine crate turns on the unstable feature `portable_simd` for it. A strided
+column keeps a plain loop (owner, 2026-11-26). The instruction sets that the
+build turns on are still decided from measurements on the CI targets
+(`decisions.md`).
 
 A single row runs the same plan as a batch.
 

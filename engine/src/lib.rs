@@ -6,6 +6,8 @@
 // The half-precision float of numpy and pandas columns is nightly's `f16`,
 // and ADR-0036 names this feature, as ADR-0009 asks.
 #![feature(f16)]
+// The contiguous loops use `std::simd`, and ADR-0035 names this feature.
+#![feature(portable_simd)]
 
 // The crate root exports nothing of `column`, because its names, such as
 // `Strided`, are general and read better as `column::Strided`.

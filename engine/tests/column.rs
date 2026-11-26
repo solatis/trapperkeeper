@@ -10,7 +10,7 @@ use proptest::prelude::*;
 use proptest::sample::Index;
 use trapperkeeper_engine::column::{
     Bits, CHUNK_ROWS, CHUNK_WORDS, Column, Ints, Marking, Mismatch, Present, Strided, present_all,
-    present_from_bits,
+    present_from_bits, present_from_mask,
 };
 
 /// Whether bit `row` of the bitmap of a chunk is set.
@@ -123,6 +123,28 @@ proptest! {
         let mut out = [u64::MAX; CHUNK_WORDS];
         present_from_bits(bits, start, rows, &mut out);
         assert_bitmap(&out, &bools[start..start + rows])?;
+    }
+
+    /// The bitmap of a chunk from a byte mask has a bit where the byte is
+    /// zero, for a contiguous mask and for a strided one.
+    #[test]
+    fn a_chunk_of_a_byte_mask_has_its_bits(
+        // Half the bytes are zero, and the others are any byte, so a byte
+        // such as 2 or 255 also counts as "no value".
+        bytes in vec(prop_oneof![Just(0u8), any::<u8>()], 0..5000),
+        step in 1usize..4,
+        cut in any::<(Index, Index)>(),
+    ) {
+        let every = bytes.iter().step_by(step).copied().collect::<Vec<_>>();
+        // SAFETY: the pointer is the vector's, the stride is `step` bytes, and
+        // the count is the number of `step`-th bytes that the vector holds, so
+        // every byte read lies inside it.
+        let mask = unsafe { Strided::from_raw(bytes.as_ptr(), step, every.len()) };
+        let (start, rows) = chunk_of(every.len(), cut);
+        let mut out = [u64::MAX; CHUNK_WORDS];
+        present_from_mask(mask, start, rows, &mut out);
+        let expected = every[start..start + rows].iter().map(|b| *b == 0).collect::<Vec<_>>();
+        assert_bitmap(&out, &expected)?;
     }
 
     /// The bitmap of a chunk of a column that marks nothing has every row of

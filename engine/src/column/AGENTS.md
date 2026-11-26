@@ -37,3 +37,6 @@ how the source marks "no value". It evaluates nothing.
   order with `trailing_zeros`, and a logic step works on 64 rows at a time. A
   source bitmap in the same bit order, such as Arrow's, copies with shifts
   alone.
+- The loops over values that lie one after the other use `std::simd`, and the
+  instruction sets that the build turns on are decided from measurements:
+  `doc/adr/0035-vectorized-evaluation-with-a-planner.md`.

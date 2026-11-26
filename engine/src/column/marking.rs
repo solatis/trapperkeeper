@@ -2,6 +2,8 @@
 //! marking into the bitmap of a chunk. A source says how it marks "no value"
 //! (ADR-0036), and a NaN is no value in every source (ADR-0005).
 
+use std::simd::{Simd, SimdElement, cmp::SimdPartialEq};
+
 use super::values::{Bits, Strided};
 
 /// Rows in one chunk, at most. The executor works on a column in chunks of
@@ -121,4 +123,88 @@ pub fn present_from_bits(bits: Bits<'_>, start: usize, rows: usize, out: &mut Pr
     if !rows.is_multiple_of(64) {
         out[rows / 64] &= (1 << (rows % 64)) - 1;
     }
+}
+
+/// A test that a loop applies to each value of a chunk.
+// The two methods give the same answer for the same value, so the vector arm
+// and the scalar arm of `pack` agree.
+trait Test<T: SimdElement> {
+    /// The answers for 64 values, with the answer for lane `i` in bit `i`.
+    fn lanes(&self, values: Simd<T, 64>) -> u64;
+    /// The answer for one value.
+    fn one(&self, value: T) -> bool;
+}
+
+/// The test of a byte mask: the byte is zero, so the row has a value.
+struct ZeroByte;
+
+impl Test<u8> for ZeroByte {
+    fn lanes(&self, values: Simd<u8, 64>) -> u64 {
+        values.simd_eq(Simd::splat(0)).to_bitmask()
+    }
+
+    fn one(&self, value: u8) -> bool {
+        value == 0
+    }
+}
+
+/// Writes into `out` the bitmap of the rows `start .. start + rows` of `run`,
+/// with a bit set where `test` says so. Every word of `out` is written, and the
+/// bits from `rows` on are 0.
+///
+/// # Panics
+///
+/// Panics when `rows` is above `CHUNK_ROWS` or the chunk reaches past `run`.
+fn pack<T: SimdElement, X: Test<T>>(
+    run: Strided<'_, T>,
+    start: usize,
+    rows: usize,
+    out: &mut Present,
+    test: &X,
+) {
+    // The bound keeps the chunk inside `out`, and the unchecked reads of the
+    // strided arm trust it.
+    assert!(
+        rows <= CHUNK_ROWS && start.checked_add(rows).is_some_and(|end| end <= run.len()),
+        "a chunk of {rows} rows from row {start} of {}",
+        run.len()
+    );
+    // The arms below write only the words that hold rows.
+    out.fill(0);
+    // Values that lie one after the other load 64 at a time into a vector,
+    // and `Test::lanes` gives one word per load. A strided run reads one value
+    // at a time, because its values are not adjacent in memory.
+    if let Some(values) = run.as_slice() {
+        let (groups, tail) = values[start..start + rows].as_chunks::<64>();
+        for (word, group) in out.iter_mut().zip(groups) {
+            *word = test.lanes(Simd::from_array(*group));
+        }
+        // The rows after the last full group of 64 are tested one by one, so
+        // no load reads past the chunk.
+        let first = groups.len() * 64;
+        for (i, value) in tail.iter().enumerate() {
+            set_if(out, first + i, test.one(*value));
+        }
+    } else {
+        for row in 0..rows {
+            // SAFETY: the assertion above keeps `start + row` below `len`.
+            let value = unsafe { run.get_unchecked(start + row) };
+            set_if(out, row, test.one(value));
+        }
+    }
+}
+
+/// Sets the bit of `row` in `out` when `on` is true.
+fn set_if(out: &mut Present, row: usize, on: bool) {
+    out[row / 64] |= u64::from(on) << (row % 64);
+}
+
+/// Writes the bitmap of the rows `start .. start + rows` of a byte mask into
+/// `out`: a row has a value where its byte is zero.
+///
+/// # Panics
+///
+/// Panics when `rows` is above `CHUNK_ROWS` or the chunk reaches past `mask`.
+pub fn present_from_mask(mask: Strided<'_, u8>, start: usize, rows: usize, out: &mut Present) {
+    pack(mask, start, rows, out, &ZeroByte);
 }
