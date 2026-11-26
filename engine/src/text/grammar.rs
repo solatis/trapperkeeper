@@ -1181,8 +1181,8 @@ fn call(i: &Input<'_>, p: usize) -> Reply<Expr> {
         hidden(open)(i, q)?
     };
     // No other alternative of `atom` matches after a module name, because
-    // `re` is a word of the language. `open` logged the note "`(`",
-    // and `explain` in `parse` builds the error from that log.
+    // `re` is a word of the language. `open` logged the note "`(`", and
+    // `explain` in `parse` builds the error from that log.
     if seen.is_none() {
         return Ok(None);
     }
