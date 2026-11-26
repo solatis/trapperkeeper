@@ -41,20 +41,25 @@ the unstable feature `f16` for it (owner, 2026-11-26).
 A bitmap marks a present value with a set bit and may start at any bit. A byte
 mask marks a missing value with a byte that is not zero (owner, 2026-11-21).
 
-Text and list columns share two layouts, each generic over what its rows point
-into: offsets, and a fixed number of elements per row (owner, 2026-11-26). The
+Text columns and list columns use the same two layouts of rows: offsets, and a
+fixed number of elements per row. Each layout is generic over what its rows
+point into, which is the bytes of the texts for a text column and the element
+column for a list column (owner, 2026-11-26). The
 offset type is `i32`, `i64`, `u32` or `u64`, and more are added when a source
 needs them (owner, 2026-11-26).
 
-One sealed trait per kind gives the elements of a row for every layout, and a
-loop is written once against it. No layout copies a text or an element
-(owner, 2026-11-26).
+Each kind of column with rows of several elements, text and list, has one
+sealed trait that gives the elements of a row for every layout of that kind.
+A loop is written once against the trait. A layout reads each text and each
+element where the source holds it, and copies none (owner, 2026-11-26).
 
-A text column is offsets into one buffer, views of 16 bytes, a pointer and a
-length per row, or fixed-width cells of UTF-8 bytes or of UTF-32 (owner,
-2026-11-21). The length, buffer number and offset of a view are signed 32-bit
-integers, as the Arrow format defines them, so a view holds no number of 2^31
-or more (owner, 2026-11-26).
+A text column is offsets into one buffer, text views of 16 bytes as Arrow's
+view types hold them, a pointer and a length per row, or fixed-width cells of
+UTF-8 bytes or of UTF-32 (owner, 2026-11-21). A text view holds its length,
+and for a long text also the number of the buffer that holds the text and the
+offset in that buffer. These three numbers are signed 32-bit integers, as the
+Arrow format defines them, so a text view holds no number of 2^31 or more
+(owner, 2026-11-26).
 
 A column has one type. Each value of a column is either present or missing,
 with no third state (owner, 2026-11-12).
@@ -100,15 +105,18 @@ A negative or an unaligned stride, because every strided loop would then read
 with an unaligned load and a signed offset. It is added when a source needs it
 (owner, 2026-11-21).
 
-Views whose long text is an address, because they copy each text of at most
-12 bytes into the view (owner, 2026-11-26).
+Text views whose long text is an address, in place of a pointer and a length
+per row, for a source that holds each text at its own address, such as a slice
+of Rust structs. The adapter would then copy each text of at most 12 bytes
+into its view (owner, 2026-11-26).
 
-One trait for text and lists together, because the bytes of a text would then
-be a column with a marking that they never use.
+One trait for text and lists together. The elements of a list are a column
+with a marking, so the bytes of a text would carry a marking that no text
+uses.
 
 Separate layout types for text and lists, because the code that finds the
-elements of a row would be written twice. Text as a list of bytes, because the
-promise that the bytes are UTF-8 would then leave the type.
+elements of a row would be written twice. Text as a list of bytes, because a
+list of bytes cannot promise that its bytes are UTF-8.
 
 A third state per value in a column, because it is incompatible with fast
 column-oriented evaluation.
