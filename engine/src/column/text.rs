@@ -132,15 +132,12 @@ impl View {
     #[must_use]
     pub fn inline(text: &str) -> Option<Self> {
         let bytes = text.as_bytes();
-        if bytes.len() > INLINE {
-            return None;
-        }
+        let len = u32::try_from(bytes.len())
+            .ok()
+            .filter(|n| *n as usize <= INLINE)?;
         let mut rest = [0; 12];
         rest[..bytes.len()].copy_from_slice(bytes);
-        Some(Self {
-            len: u32::try_from(bytes.len()).ok()?,
-            rest,
-        })
+        Some(Self { len, rest })
     }
 
     /// The view of a text of more than `INLINE` bytes that lies in buffer
@@ -149,14 +146,11 @@ impl View {
     #[must_use]
     pub fn outside(text: &str, buffer: u32, offset: u32) -> Option<Self> {
         let bytes = text.as_bytes();
+        let len = u32::try_from(bytes.len()).ok()?;
         // The numbers of a view are signed, so a number that needs the 32nd
         // bit has no view.
-        let fits = |n: usize| n <= VIEW_MAX;
-        if bytes.len() <= INLINE
-            || !fits(bytes.len())
-            || !fits(buffer as usize)
-            || !fits(offset as usize)
-        {
+        let fits = |n: u32| n as usize <= VIEW_MAX;
+        if bytes.len() <= INLINE || !fits(len) || !fits(buffer) || !fits(offset) {
             return None;
         }
         let mut rest = [0; 12];
@@ -165,10 +159,7 @@ impl View {
         rest[..4].copy_from_slice(&bytes[..4]);
         rest[4..8].copy_from_slice(&buffer.to_ne_bytes());
         rest[8..].copy_from_slice(&offset.to_ne_bytes());
-        Some(Self {
-            len: u32::try_from(bytes.len()).ok()?,
-            rest,
-        })
+        Some(Self { len, rest })
     }
 
     /// The length of the text in bytes.
