@@ -3,6 +3,7 @@
 //! read that memory in place.
 
 mod layout;
+mod list;
 mod marking;
 mod text;
 mod values;
@@ -10,6 +11,7 @@ mod values;
 use std::fmt;
 
 pub use layout::{AnyOffsets, Fixed, Offset, Offsets, Storage};
+pub use list::{List, Lists};
 pub use marking::{
     CHUNK_ROWS, CHUNK_WORDS, Float, Marking, Present, clear_nan, present_all, present_from_bits,
     present_from_mask,
@@ -48,6 +50,10 @@ pub enum Kind<'a> {
     Booleans(Booleans<'a>, Marking<'a>),
     /// Texts, where the marking says which rows have no text.
     Text(Text<'a>, Marking<'a>),
+    /// Lists, where the marking says which records have no list. The element
+    /// column has a marking of its own for the elements that have no value
+    /// (ADR-0005).
+    List(List<'a>, Marking<'a>),
 }
 
 /// The description of one column: one type of value, and for each row either
@@ -113,6 +119,20 @@ impl<'a> Column<'a> {
         let rows = matched(values.len(), marking.rows())?;
         Ok(Self {
             kind: Kind::Text(values, marking),
+            rows,
+        })
+    }
+
+    /// A column of lists. Fails when the marking covers another number of
+    /// rows than `values`.
+    ///
+    /// # Errors
+    ///
+    /// `Mismatch` with both numbers of rows.
+    pub fn list(values: List<'a>, marking: Marking<'a>) -> Result<Self, Mismatch> {
+        let rows = matched(values.len(), marking.rows())?;
+        Ok(Self {
+            kind: Kind::List(values, marking),
             rows,
         })
     }

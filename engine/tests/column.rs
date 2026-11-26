@@ -7,14 +7,15 @@
 #![feature(f16)]
 
 use std::mem::size_of;
+use std::ops::Range;
 
 use proptest::collection::vec;
 use proptest::prelude::*;
 use proptest::sample::Index;
 use trapperkeeper_engine::column::{
-    AnyOffsets, Bits, CHUNK_ROWS, CHUNK_WORDS, Column, Fixed, Float, INLINE, Ints, Marking,
-    Mismatch, Offsets, Piece, Present, Strided, Text, Texts, Units, Utf8, View, Views, clear_nan,
-    present_all, present_from_bits, present_from_mask,
+    AnyOffsets, Bits, CHUNK_ROWS, CHUNK_WORDS, Column, Fixed, Float, INLINE, Ints, List, Lists,
+    Marking, Mismatch, Offsets, Piece, Present, Strided, Text, Texts, Units, Utf8, View, Views,
+    clear_nan, present_all, present_from_bits, present_from_mask,
 };
 
 /// The most rows of a generated column that a chunk is cut from. It exceeds
@@ -122,6 +123,46 @@ fn offsets_of<O: TryFrom<usize>>(ends: &[usize]) -> Vec<O> {
                 .expect("every end fits the offset type")
         })
         .collect()
+}
+
+/// Lists of ints for the layouts: empty lists, short lists and lists of equal
+/// length.
+fn lists() -> impl Strategy<Value = Vec<Vec<i64>>> {
+    vec(vec(any::<i64>(), 0..8), 0..30)
+}
+
+/// The elements of all lists end to end, and the end of each list with a 0 in
+/// front, which are the offsets of the lists.
+fn flatten<T: Clone>(lists: &[Vec<T>]) -> (Vec<T>, Vec<usize>) {
+    let elements = lists.concat();
+    // Each end is the number of elements of the lists up to it, so `n` lists
+    // give `n + 1` offsets.
+    let ends = std::iter::once(0)
+        .chain(lists.iter().scan(0, |end, l| {
+            *end += l.len();
+            Some(*end)
+        }))
+        .collect();
+    (elements, ends)
+}
+
+/// Checks that each record of `layout` gives the rows of the element column
+/// that hold `expected`.
+fn assert_lists<'a, L: Lists<'a, Record = Range<usize>>>(
+    layout: L,
+    elements: &[i64],
+    expected: &[Vec<i64>],
+) -> Result<(), TestCaseError> {
+    prop_assert_eq!(layout.len(), expected.len());
+    for (row, list) in expected.iter().enumerate() {
+        prop_assert_eq!(
+            &elements[layout.get(row)],
+            list.as_slice(),
+            "record {}",
+            row
+        );
+    }
+    Ok(())
 }
 
 proptest! {
@@ -398,6 +439,33 @@ proptest! {
         }
         let column = Column::text(Text::Utf32(layout), Marking::Never);
         prop_assert_eq!(column.map(|c| c.rows()), Ok(texts.len()));
+    }
+
+    /// An offsets layout gives each list the rows of its elements, with each
+    /// of the four offset types.
+    #[test]
+    fn offset_lists_read_back_their_elements(lists in lists()) {
+        let (values, ends) = flatten(&lists);
+        let elements = Column::ints(Ints::I64(Strided::from_slice(&values)), Marking::Never)
+            .expect("`Never` fits any column");
+        let (i32s, i64s) = (offsets_of::<i32>(&ends), offsets_of::<i64>(&ends));
+        let (u32s, u64s) = (offsets_of::<u32>(&ends), offsets_of::<u64>(&ends));
+        // SAFETY: `flatten` gives the offsets in order, starting at 0 and
+        // ending at the number of elements.
+        let (a, b, c, d) = unsafe {
+            (
+                Offsets::new(&i32s, &elements),
+                Offsets::new(&i64s, &elements),
+                Offsets::new(&u32s, &elements),
+                Offsets::new(&u64s, &elements),
+            )
+        };
+        assert_lists(a, &values, &lists)?;
+        assert_lists(b, &values, &lists)?;
+        assert_lists(c, &values, &lists)?;
+        assert_lists(d, &values, &lists)?;
+        let column = Column::list(List::Offsets(AnyOffsets::I64(b)), Marking::Never);
+        prop_assert_eq!(column.map(|c| c.rows()), Ok(lists.len()));
     }
 }
 
