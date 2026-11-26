@@ -125,7 +125,7 @@ impl<'a, O: Offset, S: Storage> Offsets<'a, O, S> {
     /// what `S` requires.
     #[must_use]
     pub unsafe fn new(offsets: &'a [O], storage: S) -> Self {
-        // This checks the whole contract, so that a caller that breaks it
+        // `valid` checks the whole contract, so that a caller that breaks it
         // fails in a debug build and under Miri.
         debug_assert!(
             Self::valid(offsets, &storage),
@@ -170,6 +170,8 @@ impl<'a, O: Offset, S: Storage> Offsets<'a, O, S> {
         // cast to a huge index.
         !offsets.is_empty()
             && offsets.iter().all(|o| o.fits())
+            // The order check below keeps every other offset at or below the
+            // last, so the last bounds them all.
             && offsets.last().is_some_and(|o| o.index() <= storage.count())
             // Each pair of neighbouring offsets is one row, which must not
             // run backwards and must hold what `S` requires.
@@ -234,7 +236,9 @@ impl<S: Storage> Fixed<S> {
             Some(last) => last.checked_mul(step)?.checked_add(size)?,
         };
         // No row reaches past the elements after this guard, so the
-        // constructor needs no promise about the bounds and is safe.
+        // constructor needs no promise about the bounds and is safe. A step
+        // below the size would make rows overlap. It is refused like a stride
+        // of 0 (ADR-0036), so a broadcast numpy view is copied by its adapter.
         if step < size || end > storage.count() {
             return None;
         }
