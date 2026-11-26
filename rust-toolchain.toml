@@ -1,6 +1,6 @@
 [toolchain]
-# The channel names stable with no version, because the project targets the
-# latest stable release only and has no minimum version (ADR-0009).
-channel = "stable"
+# The channel names nightly with no date, because the project builds with the
+# newest nightly and pins none (ADR-0009).
+channel = "nightly"
 components = ["clippy", "rustfmt"]
 profile = "minimal"

@@ -35,8 +35,8 @@ milestones of this repository on GitHub.
 
 ## How to
 
-- Toolchain: rustup with the `stable` channel. `rust-toolchain.toml` names the
-  `stable` channel with no version, and the clippy and rustfmt components.
+- Toolchain: rustup with the `nightly` channel. `rust-toolchain.toml` names the
+  `nightly` channel with no date, and the clippy and rustfmt components.
 - Format: `cargo fmt --all --check`.
 - Lint: `cargo clippy --workspace --all-targets`. The workspace lints table in
   the root `Cargo.toml` sets the lint level (`doc/adr/0011`).
@@ -45,7 +45,7 @@ milestones of this repository on GitHub.
   `cargo fmt --all --check`, then clippy, build and test over the workspace
   with `--locked`. It runs them on five native runners, Linux amd64 and
   aarch64, Windows amd64 and aarch64, and macOS aarch64, always with the
-  current stable toolchain. On every runner except Windows aarch64, CI starts
+  newest nightly toolchain. On every runner except Windows aarch64, CI starts
   Postgres and MariaDB, so the tests run against SQLite, Postgres and MariaDB.
   `doc/adr/0021` gives the reason.
 - The reasons behind the layout, the toolchain policy and the lint level are

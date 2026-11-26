@@ -40,7 +40,7 @@ jobs:
       TK_TEST_EXPECT: ${{ matrix.backends }}
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@nightly
         with:
           components: clippy, rustfmt
       # The cache keys on the installed rustc, so the toolchain comes first.

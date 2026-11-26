@@ -24,5 +24,5 @@ formatting check and leaving clippy advisory, because warnings then accumulate.
 
 ## Consequences
 
-Nothing builds with a known warning while iterating. A new stable release that
-adds a warning breaks the build until the warning is fixed.
+Nothing builds with a known warning while iterating. A new nightly that adds
+a warning breaks the build until the warning is fixed.
