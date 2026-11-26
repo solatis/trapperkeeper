@@ -576,6 +576,122 @@ proptest! {
         let column = Column::list(List::Sized(AnySized::I64(layout)), Marking::Never);
         prop_assert_eq!(column.map(|c| c.rows()), Ok(expected.len()));
     }
+
+    /// A list of lists of ints, a list of texts, and masked arrays of masked
+    /// arrays of float32 read back through every level.
+    #[test]
+    fn nested_lists_read_back(
+        outer in vec(lists(), 0..10),
+        texts in vec(texts(), 0..10),
+        arrays in vec(vec((vec(any::<f32>(), 0..20), vec(any::<bool>(), 20)), 0..5), 0..5),
+    ) {
+        // The test describes three columns whose lists hold lists, texts and
+        // columns, and reads each back through every level.
+        //
+        // 1. Flattening the lists of lists twice gives the inner lists with
+        //    the outer offsets, and then the ints with the inner offsets.
+        // 2. The columns are built from the inside out, because each list
+        //    borrows its element column.
+        // 3. Each outer record reads as a range of inner lists, and each of
+        //    those as a range of ints, which must equal the input.
+        // 4. A list of texts has one level, and its element column is a text
+        //    column of offsets.
+        // 5. Masked arrays of masked arrays are a column per record inside a
+        //    column per record, as a numpy object array that holds masked
+        //    arrays, and every value and mask reads back through both levels.
+
+        // 1. flatten twice
+        let (inner, outer_ends) = flatten(&outer);
+        let (values, inner_ends) = flatten(&inner);
+
+        // 2. build from the inside out
+        let ints = Column::ints(Ints::I64(Strided::from_slice(&values)), Marking::Never)
+            .expect("`Never` fits any column");
+        let (inner_offsets, outer_offsets) = (offsets_of::<i64>(&inner_ends), offsets_of::<i64>(&outer_ends));
+        // SAFETY: `flatten` gives the offsets in order, starting at 0 and
+        // ending at the number of elements.
+        let inner_layout = unsafe { Offsets::new(&inner_offsets, &ints) };
+        let inner_column = Column::list(List::Offsets(AnyOffsets::I64(inner_layout)), Marking::Never)
+            .expect("`Never` fits any column");
+        // SAFETY: as for the inner offsets.
+        let outer_layout = unsafe { Offsets::new(&outer_offsets, &inner_column) };
+
+        // 3. read the lists of lists
+        prop_assert_eq!(outer_layout.len(), outer.len());
+        for (row, lists) in outer.iter().enumerate() {
+            let got = outer_layout.get(row).map(|i| values[inner_layout.get(i)].to_vec()).collect::<Vec<_>>();
+            prop_assert_eq!(&got, lists, "record {}", row);
+        }
+        prop_assert_eq!(inner_column.shape(), Shape { scalar: Scalar::Int, depth: 1 });
+
+        // 4. read the lists of texts
+        let (all, text_ends) = flatten(&texts);
+        let bytes = all.concat().into_bytes();
+        let byte_ends = std::iter::once(0)
+            .chain(all.iter().scan(0, |end, t| {
+                *end += t.len();
+                Some(*end)
+            }))
+            .collect::<Vec<_>>();
+        let (byte_offsets, text_offsets) = (offsets_of::<i64>(&byte_ends), offsets_of::<i64>(&text_ends));
+        // SAFETY: the bytes are the texts end to end, and the offsets are
+        // their ends, in order, starting at 0.
+        let text_layout = unsafe { Offsets::new(&byte_offsets, Utf8::new(&bytes)) };
+        let text_column = Column::text(Text::Offsets(AnyOffsets::I64(text_layout)), Marking::Never)
+            .expect("`Never` fits any column");
+        // SAFETY: `flatten` gives the offsets in order, starting at 0 and
+        // ending at the number of texts.
+        let lists_of_texts = unsafe { Offsets::new(&text_offsets, &text_column) };
+        for (row, record) in texts.iter().enumerate() {
+            let got = lists_of_texts.get(row).map(|i| text_layout.get(i).to_vec()).collect::<Vec<_>>();
+            let want = record.iter().map(|t| t.as_bytes().to_vec()).collect::<Vec<_>>();
+            prop_assert_eq!(got, want, "record {}", row);
+        }
+
+        // 5. read the masked arrays of masked arrays
+        let masks = arrays
+            .iter()
+            .map(|record| record.iter().map(|(xs, mask)| mask[..xs.len()].iter().map(|b| u8::from(*b)).collect::<Vec<_>>()).collect::<Vec<_>>())
+            .collect::<Vec<_>>();
+        let leaves = arrays
+            .iter()
+            .zip(&masks)
+            .map(|(record, record_masks)| {
+                record
+                    .iter()
+                    .zip(record_masks)
+                    .map(|((xs, _), mask)| {
+                        Column::floats(Floats::F32(Strided::from_slice(xs)), Marking::ByteMask(Strided::from_slice(mask)))
+                            .expect("the mask has a byte per value")
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        let float = Shape { scalar: Scalar::Float, depth: 0 };
+        let middles = leaves
+            .iter()
+            .map(|l| {
+                let records = PerRecord::new(l, float).expect("every leaf is a float column");
+                Column::list(List::PerRecord(records), Marking::Never).expect("`Never` fits any column")
+            })
+            .collect::<Vec<_>>();
+        let top = PerRecord::new(&middles, Shape { scalar: Scalar::Float, depth: 1 })
+            .expect("every middle is a list of float columns");
+        for (row, record) in arrays.iter().enumerate() {
+            let Kind::List(List::PerRecord(middle), _) = top.get(row).kind() else {
+                return Err(TestCaseError::fail(format!("record {row} is not a column per record")));
+            };
+            for (i, (xs, mask)) in record.iter().enumerate() {
+                let Kind::Floats(Floats::F32(run), Marking::ByteMask(marks)) = middle.get(i).kind() else {
+                    return Err(TestCaseError::fail(format!("record {row}, {i} is not a masked float32 column")));
+                };
+                // The bits are compared, because a NaN is not equal to itself.
+                prop_assert!((0..xs.len()).all(|k| run.get(k).to_bits() == xs[k].to_bits() && marks.get(k) == u8::from(mask[k])));
+            }
+        }
+        let column = Column::list(List::PerRecord(top), Marking::Never).expect("`Never` fits any column");
+        prop_assert_eq!(column.shape(), Shape { scalar: Scalar::Float, depth: 2 });
+    }
 }
 
 #[test]
