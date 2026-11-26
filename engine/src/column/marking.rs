@@ -2,7 +2,9 @@
 //! marking into the bitmap of a chunk. A source says how it marks "no value"
 //! (ADR-0036), and a NaN is no value in every source (ADR-0005).
 
-use std::simd::{Simd, SimdElement, cmp::SimdPartialEq};
+use std::simd::cmp::{SimdPartialEq, SimdPartialOrd};
+use std::simd::num::SimdFloat;
+use std::simd::{Simd, SimdElement};
 
 use super::values::{Bits, Strided};
 
@@ -207,4 +209,105 @@ fn set_if(out: &mut Present, row: usize, on: bool) {
 /// Panics when `rows` is above `CHUNK_ROWS` or the chunk reaches past `mask`.
 pub fn present_from_mask(mask: Strided<'_, u8>, start: usize, rows: usize, out: &mut Present) {
     pack(mask, start, rows, out, &ZeroByte);
+}
+
+/// The test of a float: the value is not a NaN, so the row keeps its value.
+struct NotNan;
+
+impl Test<f32> for NotNan {
+    fn lanes(&self, values: Simd<f32, 64>) -> u64 {
+        !values.is_nan().to_bitmask()
+    }
+
+    fn one(&self, value: f32) -> bool {
+        !value.is_nan()
+    }
+}
+
+impl Test<f64> for NotNan {
+    fn lanes(&self, values: Simd<f64, 64>) -> u64 {
+        !values.is_nan().to_bitmask()
+    }
+
+    fn one(&self, value: f64) -> bool {
+        !value.is_nan()
+    }
+}
+
+/// The bits of infinity in half precision, without the sign. A half-precision
+/// value is a NaN when its bits without the sign lie above these.
+const F16_INFINITY: u16 = 0x7c00;
+
+// The test of a half-precision float runs on its 16 bits, because the lanes
+// of `std::simd` do not take `f16`.
+impl Test<u16> for NotNan {
+    fn lanes(&self, values: Simd<u16, 64>) -> u64 {
+        (values & Simd::splat(0x7fff))
+            .simd_le(Simd::splat(F16_INFINITY))
+            .to_bitmask()
+    }
+
+    fn one(&self, value: u16) -> bool {
+        value & 0x7fff <= F16_INFINITY
+    }
+}
+
+mod sealed {
+    use super::{Present, Strided};
+
+    /// The part of `Float` that only this crate can name, so no adapter
+    /// implements `Float` for a type of its own.
+    pub trait Sealed: Copy + Sized {
+        /// Writes into `out` the bitmap of the rows of the chunk whose float is
+        /// not a NaN.
+        fn not_nan(values: Strided<'_, Self>, start: usize, rows: usize, out: &mut Present);
+    }
+}
+
+/// A float type that a column can hold.
+// The trait is sealed, because the core owns the closed list of cases and no
+// adapter extends it (ADR-0036).
+pub trait Float: sealed::Sealed {}
+
+impl sealed::Sealed for f16 {
+    fn not_nan(values: Strided<'_, Self>, start: usize, rows: usize, out: &mut Present) {
+        // SAFETY: a `u16` has the size and the alignment of an `f16`, and
+        // every bit pattern is a valid `u16`.
+        let bits = unsafe { values.cast::<u16>() };
+        pack(bits, start, rows, out, &NotNan);
+    }
+}
+
+impl sealed::Sealed for f32 {
+    fn not_nan(values: Strided<'_, Self>, start: usize, rows: usize, out: &mut Present) {
+        pack(values, start, rows, out, &NotNan);
+    }
+}
+
+impl sealed::Sealed for f64 {
+    fn not_nan(values: Strided<'_, Self>, start: usize, rows: usize, out: &mut Present) {
+        pack(values, start, rows, out, &NotNan);
+    }
+}
+
+impl Float for f16 {}
+impl Float for f32 {}
+impl Float for f64 {}
+
+/// Clears in `out` the bit of every row of `start .. start + rows` whose float
+/// is a NaN, because a NaN is a null (ADR-0005). The other bits stay as they
+/// are.
+///
+/// # Panics
+///
+/// Panics when `rows` is above `CHUNK_ROWS` or the chunk reaches past
+/// `values`.
+pub fn clear_nan<T: Float>(values: Strided<'_, T>, start: usize, rows: usize, out: &mut Present) {
+    let mut not_nan = [0; CHUNK_WORDS];
+    T::not_nan(values, start, rows, &mut not_nan);
+    // The marking's loop runs first and writes `out`, and this pass only
+    // removes rows, so a row that the marking counts as missing stays missing.
+    for (word, keep) in out.iter_mut().zip(not_nan) {
+        *word &= keep;
+    }
 }

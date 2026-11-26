@@ -8,7 +8,8 @@ mod values;
 use std::fmt;
 
 pub use marking::{
-    CHUNK_ROWS, CHUNK_WORDS, Marking, Present, present_all, present_from_bits, present_from_mask,
+    CHUNK_ROWS, CHUNK_WORDS, Float, Marking, Present, clear_nan, present_all, present_from_bits,
+    present_from_mask,
 };
 pub use values::{Bits, Booleans, Floats, Ints, Strided};
 
@@ -36,6 +37,8 @@ impl std::error::Error for Mismatch {}
 #[derive(Debug, Clone, Copy)]
 pub enum Kind<'a> {
     Ints(Ints<'a>, Marking<'a>),
+    // Besides its marking, every NaN of a float column is no value, which
+    // `clear_nan` applies.
     Floats(Floats<'a>, Marking<'a>),
     Booleans(Booleans<'a>, Marking<'a>),
 }

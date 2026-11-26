@@ -101,6 +101,22 @@ impl<'a, T: Copy> Strided<'a, T> {
         unsafe { self.get_unchecked(row) }
     }
 
+    /// The same run, read as values of type `U`.
+    ///
+    /// # Safety
+    ///
+    /// `U` has the size and the alignment of `T`, and every bit pattern of a
+    /// `T` is a valid `U`.
+    pub(crate) unsafe fn cast<U>(self) -> Strided<'a, U> {
+        debug_assert!(size_of::<U>() == size_of::<T>() && align_of::<U>() == align_of::<T>());
+        Strided {
+            first: self.first.cast(),
+            stride: self.stride,
+            len: self.len,
+            borrow: PhantomData,
+        }
+    }
+
     /// The value at `row`, without the bound check.
     ///
     /// # Safety

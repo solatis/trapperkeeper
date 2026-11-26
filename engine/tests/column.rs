@@ -3,14 +3,17 @@
 //! back. The properties keep proptest's default case count, so that
 //! `PROPTEST_CASES` can lower it under Miri.
 
+// The half-precision column holds nightly's `f16` (ADR-0036).
+#![feature(f16)]
+
 use std::mem::size_of;
 
 use proptest::collection::vec;
 use proptest::prelude::*;
 use proptest::sample::Index;
 use trapperkeeper_engine::column::{
-    Bits, CHUNK_ROWS, CHUNK_WORDS, Column, Ints, Marking, Mismatch, Present, Strided, present_all,
-    present_from_bits, present_from_mask,
+    Bits, CHUNK_ROWS, CHUNK_WORDS, Column, Float, Ints, Marking, Mismatch, Present, Strided,
+    clear_nan, present_all, present_from_bits, present_from_mask,
 };
 
 /// Whether bit `row` of the bitmap of a chunk is set.
@@ -28,6 +31,24 @@ fn assert_bitmap(out: &Present, expected: &[bool]) -> Result<(), TestCaseError> 
     // count as a row.
     prop_assert!((expected.len()..CHUNK_WORDS * 64).all(|row| !bit(out, row)));
     Ok(())
+}
+
+/// Writes into `out` the bitmap of a chunk of `values` after its marking
+/// `present` and the NaN pass, with every `step`-th value of `values` as a row.
+fn nan_cleared<T: Float>(
+    values: &[T],
+    step: usize,
+    present: Bits<'_>,
+    (start, rows): (usize, usize),
+) -> Present {
+    // SAFETY: the pointer is the slice's, the stride is `step` values in
+    // bytes, and the count is the number of `step`-th values that the slice
+    // holds, so every value read lies inside it.
+    let run = unsafe { Strided::from_raw(values.as_ptr(), step * size_of::<T>(), present.len()) };
+    let mut out = [u64::MAX; CHUNK_WORDS];
+    present_from_bits(present, start, rows, &mut out);
+    clear_nan(run, start, rows, &mut out);
+    out
 }
 
 /// The start and the length of a chunk of a column of `len` rows, picked by
@@ -145,6 +166,35 @@ proptest! {
         present_from_mask(mask, start, rows, &mut out);
         let expected = every[start..start + rows].iter().map(|b| *b == 0).collect::<Vec<_>>();
         assert_bitmap(&out, &expected)?;
+    }
+
+    /// After a bitmap marking, `clear_nan` leaves a bit set only where the
+    /// marking says present and the float is not a NaN, for f16, f32 and f64,
+    /// contiguous and strided.
+    #[test]
+    fn a_nan_is_cleared_after_the_marking(
+        xs in vec(prop_oneof![Just(f64::NAN), any::<f64>()], 0..5000),
+        mask in vec(any::<bool>(), 5000),
+        step in 1usize..4,
+        cut in any::<(Index, Index)>(),
+    ) {
+        let every = xs.iter().step_by(step).copied().collect::<Vec<_>>();
+        let marked = &mask[..every.len()];
+        let bytes = packed(marked, 0);
+        let present = Bits::new(&bytes, 0, every.len()).expect("the buffer holds the bits");
+        let chunk @ (start, rows) = chunk_of(every.len(), cut);
+        // A row the marking calls missing stays missing, and a row the marking
+        // calls present goes missing where its float is a NaN.
+        let expected = (start..start + rows).map(|r| marked[r] && !every[r].is_nan()).collect::<Vec<_>>();
+        assert_bitmap(&nan_cleared(&xs, step, present, chunk), &expected)?;
+        // Narrowing keeps a NaN a NaN and turns no other value into one, so
+        // the three widths share one expectation. A large f64 narrows to an
+        // infinity, which is no NaN.
+        #[expect(clippy::cast_possible_truncation, reason = "the property narrows on purpose")]
+        let narrow = xs.iter().map(|x| *x as f32).collect::<Vec<_>>();
+        assert_bitmap(&nan_cleared(&narrow, step, present, chunk), &expected)?;
+        let half = xs.iter().map(|x| *x as f16).collect::<Vec<_>>();
+        assert_bitmap(&nan_cleared(&half, step, present, chunk), &expected)?;
     }
 
     /// The bitmap of a chunk of a column that marks nothing has every row of
