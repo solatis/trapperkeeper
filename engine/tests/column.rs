@@ -1,7 +1,8 @@
 //! The properties of the column description. Each one builds a description
 //! from generated data and checks that a reader or a loop gives that data
 //! back. The properties keep proptest's default case count, so that
-//! `PROPTEST_CASES` can lower it under Miri.
+//! `PROPTEST_CASES` can lower it under Miri, and they generate smaller columns
+//! under Miri.
 
 // The half-precision column holds nightly's `f16` (ADR-0036).
 #![feature(f16)]
@@ -15,6 +16,14 @@ use trapperkeeper_engine::column::{
     Bits, CHUNK_ROWS, CHUNK_WORDS, Column, Float, Ints, Marking, Mismatch, Present, Strided,
     clear_nan, present_all, present_from_bits, present_from_mask,
 };
+
+/// The most rows of a generated column that a chunk is cut from. Natively it
+/// exceeds two chunks, so a chunk of `CHUNK_ROWS` rows can start at any row
+/// below `CHUNK_ROWS`. Miri interprets every row, so under Miri the columns
+/// stay at 300 rows. That still covers several 64-row blocks, the rows after
+/// the last block and unaligned starts, which are the places where a read
+/// leaves its buffer.
+const MAX_ROWS: usize = if cfg!(miri) { 300 } else { 5000 };
 
 /// Whether bit `row` of the bitmap of a chunk is set.
 fn bit(out: &Present, row: usize) -> bool {
@@ -133,7 +142,7 @@ proptest! {
     /// chunk, at any bit offset and any start.
     #[test]
     fn a_chunk_of_a_bitmap_has_its_bits(
-        bools in vec(any::<bool>(), 0..5000),
+        bools in vec(any::<bool>(), 0..MAX_ROWS),
         offset in 0usize..17,
         cut in any::<(Index, Index)>(),
     ) {
@@ -152,7 +161,7 @@ proptest! {
     fn a_chunk_of_a_byte_mask_has_its_bits(
         // Half the bytes are zero, and the others are any byte, so a byte
         // such as 2 or 255 also counts as "no value".
-        bytes in vec(prop_oneof![Just(0u8), any::<u8>()], 0..5000),
+        bytes in vec(prop_oneof![Just(0u8), any::<u8>()], 0..MAX_ROWS),
         step in 1usize..4,
         cut in any::<(Index, Index)>(),
     ) {
@@ -173,8 +182,8 @@ proptest! {
     /// contiguous and strided.
     #[test]
     fn a_nan_is_cleared_after_the_marking(
-        xs in vec(prop_oneof![Just(f64::NAN), any::<f64>()], 0..5000),
-        mask in vec(any::<bool>(), 5000),
+        xs in vec(prop_oneof![Just(f64::NAN), any::<f64>()], 0..MAX_ROWS),
+        mask in vec(any::<bool>(), MAX_ROWS),
         step in 1usize..4,
         cut in any::<(Index, Index)>(),
     ) {
