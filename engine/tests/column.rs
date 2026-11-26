@@ -550,8 +550,8 @@ proptest! {
             // The bits are compared, because a NaN is not equal to itself.
             prop_assert!((0..values.len()).all(|i| run.get(i).to_bits() == values[i].to_bits() && marks.get(i) == mask[i]));
         }
-        // The record at `mixed_at` becomes an int column, and the constructor names
-        // its index.
+        // The record at `mixed_at` becomes an int column, and the constructor
+        // names its index. A list without records has no record to replace.
         if !records.is_empty() {
             let at = mixed_at.index(records.len());
             let mut mixed = records.clone();
@@ -608,8 +608,8 @@ proptest! {
         // 3. Each outer record reads as a range of inner lists, and each of
         //    those as a range of ints, which must equal the input. The inner
         //    column has the shape of a list of ints.
-        // 4. A list may hold another kind of column: here the element column
-        //    is a text column of offsets, one level deep.
+        // 4. A list may hold texts: its element column is a text column of
+        //    offsets, and each record reads back as its texts.
         // 5. Masked arrays of masked arrays are a column per record inside a
         //    column per record, as a numpy object array that holds masked
         //    arrays, and every value and mask reads back through both levels.
