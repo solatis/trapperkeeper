@@ -50,8 +50,7 @@ pub enum TypeName {
 /// author types, with `_` for the dot, so `re.search` has the key
 /// `re_search`. The pattern of `ReSearch`, `ReMatch` and `ReFullmatch` is a
 /// literal text rather than an expression, so the server can check it when
-/// the rule is
-/// created.
+/// the rule is created.
 ///
 /// The first operand of a method, from `StartsWith` to `IsAscii`, is the
 /// text the method is called on.
