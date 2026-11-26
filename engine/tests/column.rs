@@ -113,7 +113,8 @@ fn assert_texts<'a, T: Texts<'a, Unit = u8>>(
     Ok(())
 }
 
-/// `numbers`, such as the ends or the sizes of lists, in the offset type `O`.
+/// Converts `numbers`, such as the ends or the sizes of lists, to the offset
+/// type `O`.
 fn offsets_of<O: TryFrom<usize>>(numbers: &[usize]) -> Vec<O> {
     numbers
         .iter()
@@ -608,7 +609,7 @@ proptest! {
         // 3. Each outer record reads as a range of inner lists, and each of
         //    those as a range of ints, which must equal the input. The inner
         //    column has the shape of a list of ints.
-        // 4. A list may hold texts: its element column is a text column of
+        // 4. A list may hold texts. Its element column is a text column of
         //    offsets, and each record reads back as its texts.
         // 5. Masked arrays of masked arrays are a column per record inside a
         //    column per record, as a numpy object array that holds masked
