@@ -1,6 +1,7 @@
-//! The layouts that text and list columns share. Each says which elements
-//! belong to a row, and is generic over what the elements are: the bytes of
-//! texts, the units of numpy cells, or the element column of a list.
+//! The layouts of the rows of a text column. Each says which elements belong
+//! to a row, and is generic over what the elements are, so that list columns
+//! can use the same layouts. The elements of a text column are its bytes, or
+//! the 32-bit units of numpy's `U` cells.
 
 use std::ops::Range;
 
@@ -33,8 +34,8 @@ impl Offset for i32 {
         reason = "the caller knows the offset is not negative"
     )]
     fn index(self) -> usize {
-        // The layout's contract says that the offset fits, so the cast loses
-        // nothing.
+        // The caller has checked `fits`, as `Offsets::new` requires, so the
+        // cast loses nothing.
         self as usize
     }
 
@@ -50,8 +51,8 @@ impl Offset for i64 {
         reason = "the caller knows the offset fits a usize"
     )]
     fn index(self) -> usize {
-        // The layout's contract says that the offset fits, so the cast loses
-        // nothing.
+        // The caller has checked `fits`, as `Offsets::new` requires, so the
+        // cast loses nothing.
         self as usize
     }
 
@@ -62,8 +63,8 @@ impl Offset for i64 {
 
 impl Offset for u32 {
     fn index(self) -> usize {
-        // The layout's contract says that the offset fits, so the cast loses
-        // nothing.
+        // The caller has checked `fits`, which can fail only where a `usize`
+        // has 16 bits, so the cast loses nothing.
         self as usize
     }
 
@@ -78,8 +79,8 @@ impl Offset for u64 {
         reason = "the caller knows the offset fits a usize"
     )]
     fn index(self) -> usize {
-        // The layout's contract says that the offset fits, so the cast loses
-        // nothing.
+        // The caller has checked `fits`, as `Offsets::new` requires, so the
+        // cast loses nothing.
         self as usize
     }
 
@@ -111,7 +112,10 @@ pub struct Offsets<'a, O, S> {
 }
 
 impl<'a, O: Offset, S: Storage> Offsets<'a, O, S> {
-    /// A layout of `offsets.len() - 1` rows over `storage`.
+    /// A layout of `offsets.len() - 1` rows over `storage`. The contract is a
+    /// promise and not a check, because checking it costs a pass over the
+    /// offsets and the elements, and the readers of a layout slice the
+    /// elements without a bound check under it.
     ///
     /// # Safety
     ///
@@ -225,12 +229,12 @@ impl<S: Storage> Fixed<S> {
     pub fn new(size: usize, step: usize, len: usize, storage: S) -> Option<Self> {
         // The end of the last row, `(len - 1) * step + size`, uses checked
         // arithmetic, so a count that overflows is refused and does not wrap.
-        // With this guard no row reaches past the elements, which is why the
-        // constructor is safe.
         let end = match len.checked_sub(1) {
             None => 0,
             Some(last) => last.checked_mul(step)?.checked_add(size)?,
         };
+        // No row reaches past the elements after this guard, so the
+        // constructor needs no promise about the bounds and is safe.
         if step < size || end > storage.count() {
             return None;
         }
@@ -240,8 +244,9 @@ impl<S: Storage> Fixed<S> {
             len,
             storage,
         };
-        // The storage's own promise, such as UTF-8 in every cell, is checked
-        // in a debug build and under Miri.
+        // The storage's own promise, such as UTF-8 in every cell, belongs to
+        // the unsafe constructor of the storage. A debug build and Miri check
+        // it here, where the rows are known.
         debug_assert!(
             (0..len).all(|row| storage.holds(layout.range(row))),
             "a row breaks the promise of the storage"
@@ -269,6 +274,8 @@ impl<S: Storage> Fixed<S> {
     #[must_use]
     pub fn range(&self, row: usize) -> Range<usize> {
         assert!(row < self.len, "row {row} of a layout of {}", self.len);
+        // `new` checked that the end of the last row fits a `usize`, so
+        // neither sum overflows.
         let start = row * self.step;
         start..start + self.size
     }
