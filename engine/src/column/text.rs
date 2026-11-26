@@ -1,5 +1,6 @@
 //! The layouts of a text column and the trait `Texts` through which a loop
-//! reads any of them. Nothing in this file copies a text.
+//! reads any of them. A layout reads each text where the source holds it and
+//! copies none.
 
 use std::marker::PhantomData;
 use std::ops::Range;
@@ -33,10 +34,10 @@ impl Unit for u32 {
     const ZERO: Self = 0;
 }
 
-/// A layout of a text column. It gives the units of the text of a row where
-/// the source holds them.
-// A layout whose `Unit` is `u8` holds valid UTF-8 in every row, so a loop may
-// read a row as a `&str` without a check. A loop compares a column's units
+/// A layout of a text column. It gives the units of a row's text, read in
+/// place from the source's memory.
+// A layout whose `Unit` is `u8` holds valid UTF-8 in every row, so the code
+// that evaluates a rule may read a row as a `&str` without a check. A loop compares a column's units
 // with a literal that the planner encoded in the same encoding, so no loop
 // converts a text (ADR-0041). The trait is sealed, so only the engine adds a
 // layout, and a loop written against it runs on every layout.
@@ -62,8 +63,9 @@ impl<'a> Utf8<'a> {
     ///
     /// # Safety
     ///
-    /// Every range that a layout over these bytes names holds UTF-8.
-    /// `Offsets::new` checks it in a debug build.
+    /// Every range that a layout over these bytes names holds UTF-8. The
+    /// caller of `Offsets::new` makes the same promise for its ranges, and a
+    /// debug build checks it there.
     #[must_use]
     pub unsafe fn new(bytes: &'a [u8]) -> Self {
         Self(bytes)
@@ -185,7 +187,7 @@ impl View {
 pub struct Views<'a> {
     views: &'a [View],
     // One slice per buffer of the source, often one or two per batch, which
-    // the adapter lends.
+    // the caller lends.
     buffers: &'a [&'a [u8]],
 }
 
@@ -217,6 +219,8 @@ impl<'a> Views<'a> {
                 Some(&v.rest[..len])
             } else {
                 let (number, offset) = v.place();
+                // `None` when the buffer does not exist, when the offset plus
+                // the length overflows, or when the text runs past the buffer.
                 buffers
                     .get(number)
                     .and_then(|b| b.get(offset..offset.checked_add(len)?))
@@ -341,9 +345,9 @@ impl<'a> Units<'a, u8> {
 
 impl<'a> Units<'a, u32> {
     /// The units of numpy's `U` cells, in the byte order of the machine.
-    // The constructor is safe, because the reader returns units and promises
-    // no valid characters, so no value of a unit is wrong. A Python text can
-    // hold a lone surrogate, which a `char` must not hold.
+    // `Texts::get` hands out these units and no `char`, so every `u32` is a
+    // valid unit and the constructor has nothing to promise. A `char` could
+    // not hold the lone surrogates that a Python text may contain.
     #[must_use]
     pub fn utf32(units: &'a [u32]) -> Self {
         Self(units)
@@ -369,6 +373,8 @@ impl Storage for Units<'_, u32> {
         self.0.len()
     }
 
+    // Every `u32` is a valid unit, and `Fixed::new` checks the range against
+    // `count` itself.
     fn holds(&self, _: Range<usize>) -> bool {
         true
     }
@@ -388,6 +394,8 @@ fn trim<U: Unit>(cell: &[U]) -> &[U] {
 
 impl<U: Unit> sealed::Sealed for Fixed<Units<'_, U>> {}
 
+// `Storage` has one impl per unit type, so the bound names it for the `U` at
+// hand, which the calls to `Fixed`'s methods need.
 impl<'a, U: Unit> Texts<'a> for Fixed<Units<'a, U>>
 where
     Units<'a, U>: Storage,
