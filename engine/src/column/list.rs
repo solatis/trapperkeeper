@@ -13,6 +13,8 @@ mod sealed {
     pub trait Sealed {}
 }
 
+// The offsets and the fixed-width layouts of a list point into its element
+// column through this impl.
 impl layout::sealed::Sealed for &Column<'_> {}
 
 impl Storage for &Column<'_> {
@@ -30,7 +32,8 @@ impl Storage for &Column<'_> {
 /// A layout of a list column. It gives the elements of a record, read in
 /// place from the element column.
 // The trait is sealed, so only the engine adds a layout. A loop written
-// against the trait runs on every layout.
+// against the trait runs on every layout. `'a` is the lifetime of the borrowed
+// columns, which a `Record` of the column-per-record layout carries.
 pub trait Lists<'a>: Copy + sealed::Sealed {
     /// The elements of one record: a range of the element column, or the
     /// record's own column.
@@ -87,7 +90,9 @@ pub struct SizedLists<'a, O> {
 }
 
 impl<'a, O: Offset> SizedLists<'a, O> {
-    /// A column of one list per offset.
+    /// A column of one list per offset. The loops over a list read the
+    /// element column at these ranges without a bound check, and they rely on
+    /// this contract.
     ///
     /// # Safety
     ///
@@ -150,8 +155,8 @@ pub enum AnySized<'a> {
 }
 
 /// The type of the values of a column, in the terms of the rule language.
-// A width such as `i8` or `i64` is a layout and not a type, so records of one
-// list may hold ints of different widths (ADR-0041).
+// A width such as `i8` or `i64` is a layout and not a type, so the records of
+// one column-per-record list may hold ints of different widths (ADR-0041).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Scalar {
     Int,
