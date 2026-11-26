@@ -407,7 +407,10 @@ where
     }
 
     fn get(&self, row: usize) -> &'a [U] {
-        trim(&self.storage().0[self.range(row)])
+        let range = self.range(row);
+        // SAFETY: `Fixed::new` refuses a layout whose last row reaches past the
+        // units, so every row's range lies inside them.
+        trim(unsafe { self.storage().0.get_unchecked(range) })
     }
 }
 
