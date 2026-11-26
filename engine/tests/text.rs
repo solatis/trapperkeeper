@@ -73,8 +73,9 @@ const TYPES: [TypeName; 5] = [
 
 /// The words of the language, which no name can be. The list copies `WORDS`
 /// of the grammar, the thirteen words of ADR-0041, of which the module name
-/// `re` is the last. The grammar's constant is private to its crate and an integration test cannot
-/// import it, so a word added to the grammar is added here too.
+/// `re` is the last. The grammar's constant is private to its crate and an
+/// integration test cannot import it, so a word added to the grammar is added
+/// here too.
 const WORDS: [&str; 13] = [
     "and", "or", "not", "in", "is", "if", "else", "for", "None", "True", "False", "record", "re",
 ];
