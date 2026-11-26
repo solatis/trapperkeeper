@@ -115,6 +115,8 @@ fn assert_texts<'a, T: Texts<'a, Unit = u8>>(
 fn offsets_of<O: TryFrom<usize>>(ends: &[usize]) -> Vec<O> {
     ends.iter()
         .map(|e| {
+            // `expect` needs a `Debug` error, which `O::Error` need not be,
+            // so the error is dropped.
             O::try_from(*e)
                 .map_err(|_| ())
                 .expect("every end fits the offset type")
@@ -292,6 +294,8 @@ proptest! {
         assert_texts(b, &texts)?;
         assert_texts(c, &texts)?;
         assert_texts(d, &texts)?;
+        // The column takes one of the four layouts, which is enough to check
+        // that `Column::text` counts the rows of an offsets layout.
         let column = Column::text(Text::Offsets(AnyOffsets::U64(d)), Marking::Never);
         prop_assert_eq!(column.map(|c| c.rows()), Ok(texts.len()));
     }
@@ -344,7 +348,7 @@ proptest! {
 
     /// numpy `S` cells read back their texts, for a cell as wide as the
     /// longest text and for a wider one, contiguous and stepped, and
-    /// `Fixed::new` refuses elements that are too short.
+    /// `Fixed::new` refuses one row too many and a step below the width.
     #[test]
     fn byte_cells_read_back_their_texts(texts in texts(), slack in 0usize..3, step in 1usize..3) {
         // A cell has the bytes of the longest text plus `slack`, so the
