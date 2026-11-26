@@ -63,6 +63,8 @@ pub fn present_all(rows: usize, out: &mut Present) {
         // Word `k` holds the rows from `64 * k` on: all 64 of them, the
         // `rows % 64` rows of a last part-filled word, or none.
         let held = rows.saturating_sub(64 * k).min(64);
+        // A full word takes its own branch, because `1 << 64` overflows a
+        // `u64`.
         *word = if held == 64 {
             u64::MAX
         } else {
@@ -255,8 +257,8 @@ impl Test<u16> for NotNan {
 mod sealed {
     use super::{Present, Strided};
 
-    /// The part of `Float` that only this crate can name, so no adapter
-    /// implements `Float` for a type of its own.
+    /// The part of `Float` that only this crate can name, so no crate outside
+    /// the engine implements `Float` for a type of its own.
     pub trait Sealed: Copy + Sized {
         /// Writes into `out` the bitmap of the rows of the chunk whose float is
         /// not a NaN.
@@ -265,8 +267,8 @@ mod sealed {
 }
 
 /// A float type that a column can hold.
-// The trait is sealed, because the core owns the closed list of cases and no
-// adapter extends it (ADR-0036).
+// The trait is sealed, because the engine owns the closed list of float types
+// and no other crate extends it (ADR-0036).
 pub trait Float: sealed::Sealed {}
 
 impl sealed::Sealed for f16 {
@@ -294,9 +296,10 @@ impl Float for f16 {}
 impl Float for f32 {}
 impl Float for f64 {}
 
-/// Clears in `out` the bit of every row of `start .. start + rows` whose float
-/// is a NaN, because a NaN is a null (ADR-0005). The other bits stay as they
-/// are.
+/// Clears in `out` the bit of every row of the chunk whose float is a NaN,
+/// because a NaN is a null (ADR-0005). Bit `i` of `out` is row `start + i` of
+/// the column, and the bits from `rows` on become 0. The loop of the column's
+/// marking writes `out` first, and this pass runs after it.
 ///
 /// # Panics
 ///
@@ -305,8 +308,8 @@ impl Float for f64 {}
 pub fn clear_nan<T: Float>(values: Strided<'_, T>, start: usize, rows: usize, out: &mut Present) {
     let mut not_nan = [0; CHUNK_WORDS];
     T::not_nan(values, start, rows, &mut not_nan);
-    // The marking's loop runs first and writes `out`, and this pass only
-    // removes rows, so a row that the marking counts as missing stays missing.
+    // The pass only clears bits, so a row that the marking counts as missing
+    // stays missing.
     for (word, keep) in out.iter_mut().zip(not_nan) {
         *word &= keep;
     }
