@@ -27,8 +27,7 @@ is no value (`adr/0005`) in every source and under every marking (owner,
 No framework is a model for the description. Arrow is one source among numpy,
 pandas, Polars, DuckDB and Rust structs. The layouts of all these sources
 count equally, and the description picks abstractions that cover all of them
-at once
-(owner, 2026-11-26).
+at once (owner, 2026-11-26).
 
 Data never moves between machines of different byte order, so every value is
 in the byte order of the machine (owner, 2026-11-26). A stride is a positive
