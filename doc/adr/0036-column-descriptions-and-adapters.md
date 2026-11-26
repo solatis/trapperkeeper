@@ -126,9 +126,10 @@ of Rust structs. The adapter would then copy each text of at most 12 bytes
 into its view (owner, 2026-11-26).
 
 A pointer, a length and an optional byte mask per record, in place of a column
-per record. Such a record points at the values of one scalar array, so an
-inner masked array has no description, and its adapter would copy it into an
-offsets layout (owner, 2026-11-26).
+per record. Such a record points at the values of one array of scalars. An
+inner masked array is an array with a mask of its own, which such a record
+cannot point at, so its adapter would copy it into an offsets layout (owner,
+2026-11-26).
 
 One trait for text and lists together. The elements of a list are a column
 with a marking, so the bytes of a text would carry a marking that no text
