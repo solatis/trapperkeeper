@@ -32,6 +32,9 @@ at once (owner, 2026-11-26).
 Data never moves between machines of different byte order, so every value is
 in the byte order of the machine (owner, 2026-11-26). A stride is a positive
 number of bytes, and every value is aligned for its type (owner, 2026-11-21).
+The rows of a fixed-width layout lie at least a row apart and do not overlap,
+for the same reason, so an adapter copies a broadcast numpy view, whose step
+is 0 (owner, 2026-11-26).
 
 The number types are the signed and unsigned ints of 8 to 64 bits and the
 floats of 16, 32 and 64 bits. A boolean is a byte or a bit (owner, 2026-11-21,
