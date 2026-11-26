@@ -19,7 +19,8 @@ possible. A sensor over nested JSON, row by row, is slow and works (owner,
 
 The executor is a vectorized interpreter. It runs one program per rule set
 over chunks of up to 2048 rows, with one call per step per chunk (owner,
-2026-11-13).
+2026-11-13). No measurement chose 2048, and DuckDB uses the same number. The
+measurements on the CI targets also decide the chunk size (`decisions.md`).
 
 The planner runs when the sensor fetches its rules. The planner makes one
 program of the whole rule set. The program reads a field once, even when
