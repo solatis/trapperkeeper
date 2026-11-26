@@ -203,3 +203,79 @@ impl<S: Storage> AnyOffsets<'_, S> {
         self.len() == 0
     }
 }
+
+/// A layout in which every row holds `size` elements, and row `i` starts at
+/// element `i * step`. `step` equals `size` when the rows lie one after the
+/// other, and is larger for a stepped view.
+#[derive(Debug, Clone, Copy)]
+pub struct Fixed<S> {
+    size: usize,
+    step: usize,
+    // With a size of 0 the number of rows cannot be derived from the
+    // elements, so the caller states it.
+    len: usize,
+    storage: S,
+}
+
+impl<S: Storage> Fixed<S> {
+    /// A layout of `len` rows of `size` elements, `step` elements apart.
+    /// `None` when `step` is below `size` or the last row reaches past the
+    /// elements.
+    #[must_use]
+    pub fn new(size: usize, step: usize, len: usize, storage: S) -> Option<Self> {
+        // The end of the last row, `(len - 1) * step + size`, uses checked
+        // arithmetic, so a count that overflows is refused and does not wrap.
+        // With this guard no row reaches past the elements, which is why the
+        // constructor is safe.
+        let end = match len.checked_sub(1) {
+            None => 0,
+            Some(last) => last.checked_mul(step)?.checked_add(size)?,
+        };
+        if step < size || end > storage.count() {
+            return None;
+        }
+        let layout = Self {
+            size,
+            step,
+            len,
+            storage,
+        };
+        // The storage's own promise, such as UTF-8 in every cell, is checked
+        // in a debug build and under Miri.
+        debug_assert!(
+            (0..len).all(|row| storage.holds(layout.range(row))),
+            "a row breaks the promise of the storage"
+        );
+        Some(layout)
+    }
+
+    /// The number of rows.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    /// Whether the layout has no row.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    /// The elements of the row at `row`.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `row` is not below `len`.
+    #[must_use]
+    pub fn range(&self, row: usize) -> Range<usize> {
+        assert!(row < self.len, "row {row} of a layout of {}", self.len);
+        let start = row * self.step;
+        start..start + self.size
+    }
+
+    /// What the rows point into.
+    #[must_use]
+    pub fn storage(&self) -> S {
+        self.storage
+    }
+}

@@ -6,7 +6,7 @@ use std::ops::Range;
 use std::ptr::NonNull;
 use std::slice;
 
-use super::layout::{self, AnyOffsets, Offset, Offsets, Storage};
+use super::layout::{self, AnyOffsets, Fixed, Offset, Offsets, Storage};
 use super::values::Strided;
 
 mod sealed {
@@ -331,6 +331,68 @@ impl<'a> Texts<'a> for Strided<'a, Piece<'a>> {
     }
 }
 
+/// The units of numpy cells of one width, end to end. A cell's text ends
+/// before its trailing zero units.
+#[derive(Debug, Clone, Copy)]
+pub struct Units<'a, U>(&'a [U]);
+
+impl<'a> Units<'a, u8> {
+    /// The bytes of numpy's `S` cells.
+    ///
+    /// # Safety
+    ///
+    /// Every row that a fixed-width layout over these bytes names holds UTF-8
+    /// up to its trailing zeros. `Fixed::new` checks it in a debug build.
+    #[must_use]
+    pub unsafe fn utf8(bytes: &'a [u8]) -> Self {
+        Self(bytes)
+    }
+}
+
+impl<U> layout::sealed::Sealed for Units<'_, U> {}
+
+impl Storage for Units<'_, u8> {
+    fn count(&self) -> usize {
+        self.0.len()
+    }
+
+    fn holds(&self, range: Range<usize>) -> bool {
+        self.0
+            .get(range)
+            .is_some_and(|cell| str::from_utf8(trim(cell)).is_ok())
+    }
+}
+
+/// The text of a cell: the cell without its trailing zero units.
+fn trim<U: Unit>(cell: &[U]) -> &[U] {
+    // The text ends after the last unit that is not zero, so a cell of zeros
+    // alone is the empty text. A text that itself ends in a zero unit loses
+    // it, as it does in numpy.
+    let end = cell
+        .iter()
+        .rposition(|u| *u != U::ZERO)
+        .map_or(0, |i| i + 1);
+    &cell[..end]
+}
+
+impl<U: Unit> sealed::Sealed for Fixed<Units<'_, U>> {}
+
+impl<'a, U: Unit> Texts<'a> for Fixed<Units<'a, U>>
+where
+    Units<'a, U>: Storage,
+{
+    type Unit = U;
+
+    fn len(&self) -> usize {
+        Fixed::len(self)
+    }
+
+    fn get(&self, row: usize) -> &'a [U] {
+        let units: &'a [U] = self.storage().0;
+        trim(&units[self.range(row)])
+    }
+}
+
 /// The layout of a text column.
 #[derive(Debug, Clone, Copy)]
 pub enum Text<'a> {
@@ -342,6 +404,8 @@ pub enum Text<'a> {
     /// A pointer and a length per row, as an adapter over a slice of Rust
     /// structs fills them.
     Pieces(Strided<'a, Piece<'a>>),
+    /// Fixed-width cells of UTF-8 bytes, as numpy's `S` type.
+    Bytes(Fixed<Units<'a, u8>>),
 }
 
 impl Text<'_> {
@@ -352,6 +416,7 @@ impl Text<'_> {
             Self::Offsets(o) => o.len(),
             Self::Views(v) => Texts::len(v),
             Self::Pieces(p) => Strided::len(p),
+            Self::Bytes(f) => f.len(),
         }
     }
 

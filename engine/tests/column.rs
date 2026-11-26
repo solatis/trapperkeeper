@@ -12,9 +12,9 @@ use proptest::collection::vec;
 use proptest::prelude::*;
 use proptest::sample::Index;
 use trapperkeeper_engine::column::{
-    AnyOffsets, Bits, CHUNK_ROWS, CHUNK_WORDS, Column, Float, INLINE, Ints, Marking, Mismatch,
-    Offsets, Piece, Present, Strided, Text, Texts, Utf8, View, Views, clear_nan, present_all,
-    present_from_bits, present_from_mask,
+    AnyOffsets, Bits, CHUNK_ROWS, CHUNK_WORDS, Column, Fixed, Float, INLINE, Ints, Marking,
+    Mismatch, Offsets, Piece, Present, Strided, Text, Texts, Units, Utf8, View, Views, clear_nan,
+    present_all, present_from_bits, present_from_mask,
 };
 
 /// The most rows of a generated column that a chunk is cut from. It exceeds
@@ -339,6 +339,38 @@ proptest! {
         let run = unsafe { Strided::from_raw(pieces.as_ptr(), step * size_of::<Piece<'_>>(), texts.len()) };
         assert_texts(run, &texts)?;
         let column = Column::text(Text::Pieces(run), Marking::Never);
+        prop_assert_eq!(column.map(|c| c.rows()), Ok(texts.len()));
+    }
+
+    /// numpy `S` cells read back their texts, for a cell as wide as the
+    /// longest text and for a wider one, contiguous and stepped, and
+    /// `Fixed::new` refuses elements that are too short.
+    #[test]
+    fn byte_cells_read_back_their_texts(texts in texts(), slack in 0usize..3, step in 1usize..3) {
+        // A cell has the bytes of the longest text plus `slack`, so the
+        // longest text fills its cell with no zero after it when `slack` is 0.
+        let width = texts.iter().map(String::len).max().unwrap_or(0) + slack;
+        let mut bytes = Vec::new();
+        for text in &texts {
+            let start = bytes.len();
+            bytes.extend_from_slice(text.as_bytes());
+            bytes.resize(start + width, 0);
+            // `step - 1` cells of other bytes lie between two rows, as in a
+            // stepped numpy view.
+            bytes.resize(start + step * width, b'y');
+        }
+        // SAFETY: every cell that the layout names holds a text, which is
+        // UTF-8, padded with zeros.
+        let units = unsafe { Units::utf8(&bytes) };
+        let layout = Fixed::new(width, step * width, texts.len(), units).expect("the cells hold every row");
+        assert_texts(layout, &texts)?;
+        // One more row would reach past the bytes, and a step below the width
+        // would overlap the cells, so both are refused when a cell has bytes.
+        if width > 0 {
+            prop_assert!(Fixed::new(width, step * width, texts.len() + 1, units).is_none());
+            prop_assert!(Fixed::new(width, width - 1, texts.len(), units).is_none());
+        }
+        let column = Column::text(Text::Bytes(layout), Marking::Never);
         prop_assert_eq!(column.map(|c| c.rows()), Ok(texts.len()));
     }
 }
