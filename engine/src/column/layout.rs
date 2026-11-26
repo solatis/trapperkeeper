@@ -34,8 +34,8 @@ impl Offset for i32 {
         reason = "the caller knows the offset is not negative"
     )]
     fn index(self) -> usize {
-        // The caller has checked `fits`, as `Offsets::new` requires, so the
-        // cast loses nothing.
+        // The caller of `Offsets::new` promised that every offset fits a
+        // `usize`, so the cast loses nothing.
         self as usize
     }
 
@@ -51,8 +51,8 @@ impl Offset for i64 {
         reason = "the caller knows the offset fits a usize"
     )]
     fn index(self) -> usize {
-        // The caller has checked `fits`, as `Offsets::new` requires, so the
-        // cast loses nothing.
+        // The caller of `Offsets::new` promised that every offset fits a
+        // `usize`, so the cast loses nothing.
         self as usize
     }
 
@@ -63,8 +63,8 @@ impl Offset for i64 {
 
 impl Offset for u32 {
     fn index(self) -> usize {
-        // The caller has checked `fits`, which can fail only where a `usize`
-        // has 16 bits, so the cast loses nothing.
+        // The caller of `Offsets::new` promised that every offset fits a
+        // `usize`, which a `u32` fails only where a `usize` has 16 bits.
         self as usize
     }
 
@@ -79,8 +79,8 @@ impl Offset for u64 {
         reason = "the caller knows the offset fits a usize"
     )]
     fn index(self) -> usize {
-        // The caller has checked `fits`, as `Offsets::new` requires, so the
-        // cast loses nothing.
+        // The caller of `Offsets::new` promised that every offset fits a
+        // `usize`, so the cast loses nothing.
         self as usize
     }
 
@@ -112,10 +112,10 @@ pub struct Offsets<'a, O, S> {
 }
 
 impl<'a, O: Offset, S: Storage> Offsets<'a, O, S> {
-    /// A layout of `offsets.len() - 1` rows over `storage`. The contract is a
-    /// promise and not a check, because checking it costs a pass over the
-    /// offsets and the elements, and the readers of a layout slice the
-    /// elements without a bound check under it.
+    /// A layout of `offsets.len() - 1` rows over `storage`. The readers of a
+    /// layout slice the elements without a bound check and rely on this
+    /// contract. The caller promises it, because checking it would cost a pass
+    /// over the offsets and the elements.
     ///
     /// # Safety
     ///
@@ -275,7 +275,7 @@ impl<S: Storage> Fixed<S> {
     pub fn range(&self, row: usize) -> Range<usize> {
         assert!(row < self.len, "row {row} of a layout of {}", self.len);
         // `new` checked that the end of the last row fits a `usize`, so
-        // neither sum overflows.
+        // neither the product nor the sum overflows.
         let start = row * self.step;
         start..start + self.size
     }
