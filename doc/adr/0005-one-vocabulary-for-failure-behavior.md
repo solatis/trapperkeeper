@@ -194,7 +194,12 @@ has the same form. Unknown is a boolean whose mask bit is not set. The mask
 of a comparison is the AND of the masks of its operands. `not` flips the
 values and keeps the mask. `and` and `or` combine two such results with a few
 bitwise operations per word. A record matches where the value and the mask
-are both set. A column without a mask gives a result without one.
+are both set. A float column always gets a mask, from the pass that finds its
+NaNs. Any other column without a mask gives a result without one.
+
+Every float column costs one pass that finds its NaNs. A NaN that arithmetic
+makes, such as infinity minus infinity, becomes a null, and a source that keeps
+a NaN as a value loses that distinction (owner, 2026-11-26).
 
 The evaluator records the faults of an operation as one bit per row, in a
 bitmap of their own. Only an operation that can fault, such as a division, has
