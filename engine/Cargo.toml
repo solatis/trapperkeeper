@@ -13,11 +13,6 @@ publish.workspace = true
 [dependencies]
 # serde derives the JSON form of a rule, its tree and a refusal.
 serde = { version = "1", features = ["derive"] }
-# serde_json reads and writes that JSON. float_roundtrip makes it parse a
-# float to the nearest f64, so a value in a rule reads back as the number that
-# was written. Without the feature serde_json can be off by one unit in the
-# last place.
-serde_json = { version = "1", features = ["float_roundtrip"] }
 # The `serde` feature of uuid lets serde read and write `rule_id`. No
 # generator feature is on, because the server generates the ids and the engine
 # only reads them.
@@ -27,6 +22,11 @@ uuid = { version = "1", features = ["serde"] }
 regex = "1"
 
 [dev-dependencies]
+# serde_json reads and writes the JSON form in the tests. float_roundtrip makes
+# it parse a float to the nearest f64, so a value in a rule reads back as the
+# number that was written. Without the feature serde_json can be off by one
+# unit in the last place.
+serde_json = { version = "1", features = ["float_roundtrip"] }
 # proptest generates the trees, the rules and the texts that the property
 # tests run on (ADR-0018).
 proptest = "1"
