@@ -1,6 +1,5 @@
 [toolchain]
-# The channel names nightly with no date, because the project builds with the
-# newest nightly and pins none (ADR-0009).
+# The channel follows nightly with no date (ADR-0009).
 channel = "nightly"
 components = ["clippy", "rustfmt"]
 profile = "minimal"
