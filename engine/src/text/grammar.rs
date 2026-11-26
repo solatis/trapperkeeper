@@ -1138,7 +1138,8 @@ pub(super) const FUNCTIONS: [(&str, Arguments); 7] = [
 ///
 /// A called name outside the closed list is refused with `UnknownFunction`,
 /// with the nearest known function when one is near enough. `re` without a
-/// dot after it is refused with `ModuleAlone`.
+/// dot after it is refused with `ModuleAlone`, and `re.` without a name after
+/// it gets an error that expects a name.
 fn call(i: &Input<'_>, p: usize) -> Reply<Expr> {
     // The function reads a function name, tests for the `(` after it without
     // moving past it, and only then looks the name up in `FUNCTIONS`. Then
@@ -1181,8 +1182,8 @@ fn call(i: &Input<'_>, p: usize) -> Reply<Expr> {
         // operator, ...".
         hidden(open)(i, q)?
     };
-    // After a module name no other alternative of `atom` matches either,
-    // because `re` is a word of the language. `open` logged the note "`(`",
+    // No other alternative of `atom` matches after a module name, because
+    // `re` is a word of the language. `open` logged the note "`(`",
     // and `explain` in `parse` builds the error from that log.
     if seen.is_none() {
         return Ok(None);
@@ -1217,7 +1218,8 @@ fn call(i: &Input<'_>, p: usize) -> Reply<Expr> {
 /// Reads the `len` of `len(name)` and the `re.search` of
 /// `re.search(r"a", x)`, and says whether the name has a module. After the
 /// dot any name token is read, also a word of the language. `re` without a
-/// dot after it is refused with `ModuleAlone`.
+/// dot after it is refused with `ModuleAlone`, and `re.` without a name after
+/// it gets an error that expects a name.
 fn function_name(i: &Input<'_>, p: usize) -> Reply<(String, bool)> {
     // `module` reads `re`, as the module of `re.search`. Its note is empty,
     // because `hidden` below keeps it out of every error. `furthest` still
@@ -1235,8 +1237,8 @@ fn function_name(i: &Input<'_>, p: usize) -> Reply<(String, bool)> {
     // `re.search`: the module, a dot and the function. Any name token is
     // read after the dot, so `re.if(x)` is the unknown function `re.if`.
     let Some((function, r)) = right(punct("."), any_name)(i, q)? else {
-        // `re` without a dot after it is refused with `ModuleAlone`, as
-        // `re == 1` is refused at `re`.
+        // `re` without a function after it reaches this branch, and
+        // `re == 1` is refused with `ModuleAlone` at `re`.
         let (at, reason) = (i.tok(p).at.clone(), Reason::ModuleAlone { word: module });
         let error = SyntaxError { at, reason };
         // The refusal stands at the token after the module. In `re.` that is
