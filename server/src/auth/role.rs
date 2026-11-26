@@ -41,8 +41,8 @@ impl Rank {
 /// A minimum role, as a type, so a handler states it in its signature.
 // Each rung is a marker type with a constant, because a const generic over
 // an enum (`AtLeast<{ Rank::Admin }>`) needs the unstable feature
-// `adt_const_params`, and the project turns on an unstable feature only where
-// a decision record names it (ADR-0009).
+// `adt_const_params`. The project turns on an unstable feature only where a
+// decision record names it, and no record names this one (ADR-0009).
 pub trait Rung {
     const RANK: Rank;
 }
