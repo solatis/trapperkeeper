@@ -47,9 +47,10 @@ pub enum TypeName {
 /// writes as `any(test for name in list)`.
 ///
 /// The JSON key of a function, from `Len` to `ReFullmatch`, is the name an
-/// author types, with `_` for the dot, so `re.search` has the key `re_search`. The
-/// pattern of `ReSearch`, `ReMatch` and `ReFullmatch` is a literal text
-/// rather than an expression, so the server can check it when the rule is
+/// author types, with `_` for the dot, so `re.search` has the key
+/// `re_search`. The pattern of `ReSearch`, `ReMatch` and `ReFullmatch` is a
+/// literal text rather than an expression, so the server can check it when
+/// the rule is
 /// created.
 ///
 /// The first operand of a method, from `StartsWith` to `IsAscii`, is the
