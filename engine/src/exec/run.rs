@@ -71,11 +71,11 @@ impl Bound {
             }
         }
 
+        // 2. write the presence of each field
         let mut present = vec![[0; CHUNK_WORDS]; columns.len()];
         let mut truths = Vec::with_capacity(self.steps.len());
         // The outcomes take the id of each rule, in the order of the rule set.
         let mut outcomes = Outcomes::new(rows, self.rules.iter().map(|&(id, _)| id));
-        // 2. write the presence of each field
         for start in (0..rows).step_by(CHUNK_ROWS) {
             let chunk = (rows - start).min(CHUNK_ROWS);
             for (out, c) in present.iter_mut().zip(columns) {
@@ -153,7 +153,7 @@ fn fault_of(steps: &[BoundStep], truths: &[Truth], slot: usize, row: usize) -> F
     // the fault on the row. A `not` passes on the fault of its operand. An
     // `and` or an `or` faulted because one of its operands did, and the walk
     // takes the operand whose fault counts. The walk ends at a fault constant
-    // or a type fault, which are the only steps that raise a fault.
+    // or a type fault.
     let mut slot = slot;
     loop {
         match &steps[slot] {
