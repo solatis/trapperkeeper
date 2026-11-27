@@ -14,8 +14,7 @@ A half-precision float shows the cost most clearly. On rustc 1.102.0-nightly
 of 2026-11-25, one comparison of 64 `f16` lanes compiled for the baseline
 amd64 target holds 129 calls to `__extendhfsf2`, about one for each lane of
 each operand, which widen the half-precision values to single precision one
-at a time. For
-`x86-64-v3` it holds `vcvtph2ps` and no call. The aarch64 targets need no
+at a time. For `x86-64-v3` it holds `vcvtph2ps` and no call. The aarch64 targets need no
 change: macOS compares `f16` lanes natively with `fcmgt.8h`, and the Linux
 baseline widens them with `fcvtl` and makes no call.
 
