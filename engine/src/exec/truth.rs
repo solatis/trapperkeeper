@@ -1,5 +1,5 @@
-//! The result of a step for the rows of one chunk, and the three-valued logic
-//! of ADR-0005 over it.
+//! The result of a step for the rows of one chunk, and the logic of ADR-0005
+//! over it: true, false and unknown, with the faults beside them.
 
 use crate::column::{CHUNK_WORDS, Present, present_all};
 use crate::plan::Constant;
@@ -48,12 +48,15 @@ impl Truth {
                 true_rows: NONE,
                 fault: NONE,
             },
+            // The kind of the fault stays in the step, where the run looks it
+            // up for each faulted record.
             Constant::Fault(_) => Self::faulted(all),
         }
     }
 
-    /// The result of a comparison whose loop wrote `truth`, where `known` is
-    /// the rows on which every field of the comparison has a value.
+    /// The result of a comparison whose `ChunkLoop` wrote the true rows into
+    /// `truth`, where `known` is the rows on which every field of the
+    /// comparison has a value.
     pub(crate) fn compared(truth: &Present, known: Present) -> Self {
         Self {
             // A loop also compares the values of the rows without a value,
@@ -72,6 +75,8 @@ impl Truth {
         let mut all = NONE;
         present_all(rows, &mut all);
         Self {
+            // `Column::present` sets no bit from `rows` on, so only the rows
+            // without a value need the mask of the chunk's rows.
             true_rows: zip(present, &all, |p, a| if negated { p } else { !p & a }),
             known: all,
             fault: NONE,
@@ -121,8 +126,8 @@ impl Truth {
         //    one faults and the left one is not false. A false left operand
         //    decides the row, so the fault of the right one does not happen
         //    (ADR-0005).
-        // 2. Of the other rows, a row is false where either operand is false,
-        //    true where both are true, and unknown otherwise.
+        // 2. It decides true, false and unknown on the rows that did not
+        //    fault, as ADR-0005 defines `and`.
         let mut out = Self::EMPTY;
         for k in 0..CHUNK_WORDS {
             let (left_false, right_false) = (self.falses(k), right.falses(k));
@@ -148,8 +153,8 @@ impl Truth {
         //    one faults and the left one is not true. A true left operand
         //    decides the row, so the fault of the right one does not happen
         //    (ADR-0005).
-        // 2. Of the other rows, a row is true where either operand is true,
-        //    false where both are false, and unknown otherwise.
+        // 2. It decides true, false and unknown on the rows that did not
+        //    fault, as ADR-0005 defines `or`.
         let mut out = Self::EMPTY;
         for k in 0..CHUNK_WORDS {
             // 1. decide the faults
