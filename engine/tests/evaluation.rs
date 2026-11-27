@@ -1148,7 +1148,7 @@ proptest! {
         // 2. run each record alone
         // A word holds 64 rows and a chunk 2048. The records at the edges of
         // the words and of the chunks, and every 97th record, keep a batch of
-        // 5000 rows from costing 5000 runs of one record.
+        // `MAX_ROWS` rows from costing a run of one record per row.
         let edges = [0, 1, 63, 64, 2047, 2048, 2049, 4095, 4096, t.rows.saturating_sub(1)];
         // 97 is a prime, so the sampled records fall at every place within a
         // word.

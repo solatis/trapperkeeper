@@ -360,10 +360,11 @@ pub fn rule() -> impl Strategy<Value = Rule> {
     )
 }
 
-/// The most rows of a generated column that a chunk is cut from. It exceeds
-/// two chunks, so a chunk of `CHUNK_ROWS` rows can start at any row below
-/// `CHUNK_ROWS`.
-pub const MAX_ROWS: usize = 5000;
+/// The most rows of a generated column that a chunk is cut from. A full chunk
+/// of `CHUNK_ROWS` rows can then start at any row below `CHUNK_ROWS`, and the
+/// 63 rows past two chunks leave room for a last word that is partly filled.
+/// Miri interprets every generated row, so the bound stays at that size.
+pub const MAX_ROWS: usize = 2 * CHUNK_ROWS + 63;
 
 /// Whether bit `row` of the bitmap of a chunk is set.
 pub fn bit(out: &Present, row: usize) -> bool {
