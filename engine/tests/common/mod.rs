@@ -383,17 +383,19 @@ pub fn assert_bitmap(out: &Present, expected: &[bool]) -> Result<(), TestCaseErr
 }
 
 /// The start and the length of a chunk of a column of `len` rows, picked by
-/// two generated indexes. The first picks the start inside the column, and the
-/// second picks a length of at most `CHUNK_ROWS` that stays inside it, so every
-/// start is reached, also one that is no multiple of 64.
+/// two generated indexes. The first index picks any start from 0 to `len`,
+/// also one that is no multiple of 64. The second picks a length of at most
+/// `CHUNK_ROWS` that ends inside the column.
 pub fn chunk_of(len: usize, (at, size): (Index, Index)) -> (usize, usize) {
+    // A start at `len` gives an empty chunk at the end of the column, which a
+    // loop handles too.
     let start = at.index(len + 1);
     (start, size.index((len - start).min(CHUNK_ROWS) + 1))
 }
 
 /// Packs booleans into bytes from bit `offset` on, lowest bit first, as a
-/// source bitmap holds them. The bits before `offset` are set, so a loop that
-/// reads them shows.
+/// source bitmap holds them. The bits before `offset` are set, so a test sees
+/// a loop that reads them by mistake.
 pub fn packed(bools: &[bool], offset: usize) -> Vec<u8> {
     let mut bytes = vec![0u8; (offset + bools.len()).div_ceil(8)];
     let bits = std::iter::repeat_n(true, offset).chain(bools.iter().copied());
