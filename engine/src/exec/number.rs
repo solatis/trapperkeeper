@@ -186,11 +186,17 @@ pub(crate) fn compare_widened<T: Number, O: Order>(
     pack(values, start, rows, out, &test);
 }
 
-/// The value of an int column's type that a literal converts to, or where
-/// the literal lies when the type cannot hold it.
+/// The value of an int column's type that a literal converts to, or the side
+/// of the type where the literal lies when the type cannot hold it.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Converted<T> {
     Within(T),
+    Outside(Side),
+}
+
+/// The side of an int type where a literal that the type cannot hold lies.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Side {
     Below,
     Above,
 }
@@ -202,15 +208,16 @@ impl<T: TryFrom<i64>> Converted<T> {
             Ok(v) => Self::Within(v),
             // A literal that fails to convert lies below the type when it is
             // negative, because every int type holds 0.
-            Err(_) if literal < 0 => Self::Below,
-            Err(_) => Self::Above,
+            Err(_) if literal < 0 => Self::Outside(Side::Below),
+            Err(_) => Self::Outside(Side::Above),
         }
     }
 }
 
 /// The result, on every row with a value, of a comparison whose literal lies
-/// below the column's type, or above it when `above`.
-pub(crate) fn outside(op: Comparison, above: bool) -> bool {
+/// on `side` of the column's type.
+pub(crate) fn outside(op: Comparison, side: Side) -> bool {
+    let above = matches!(side, Side::Above);
     match op {
         Comparison::Eq => false,
         // No value of the column equals a literal outside its type, so `!=`

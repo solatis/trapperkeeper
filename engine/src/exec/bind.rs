@@ -376,8 +376,7 @@ fn int_literal<T: Number + TryFrom<i64>>(op: Comparison, f: usize, i: i64) -> Bo
             }
         )),
         // A literal outside the type decides the comparison for every value.
-        Converted::Below => constant_loop(outside(op, false)),
-        Converted::Above => constant_loop(outside(op, true)),
+        Converted::Outside(side) => constant_loop(outside(op, side)),
     };
     BoundStep::Loop {
         fields: vec![f],
