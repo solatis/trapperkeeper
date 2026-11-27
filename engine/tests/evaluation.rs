@@ -311,8 +311,8 @@ fn a_false_left_operand_of_and_keeps_the_fault_on_its_right_from_happening() {
 }
 
 /// The outcome of the rule `e` for each record of a batch where `a` and `b`
-/// are the fields `a` and `b`. The rule reads `a` first, because the planner
-/// numbers the fields in the order that a rule first reads them.
+/// are the fields `a` and `b`. The planner numbers the fields in the order
+/// that a rule first reads them, so the rule reads `a` first.
 fn outcomes_of_pair(e: Expr, a: Column<'_>, b: Column<'_>) -> Vec<Outcome> {
     let program = plan(&[observing(Uuid::from_u128(1), e)]).expect("the rule plans");
     let columns = [Some(a), Some(b)];
@@ -344,8 +344,8 @@ fn a_negative_int_orders_below_every_u64() {
         outcomes_of_pair(a_with_b(Expr::Lt), i8s, u64s),
         [Matched, Matched, NotMatched]
     );
-    // With the `u64` column on the left, the test of the sign runs on the
-    // right operand.
+    // With the `u64` column on the left, the loop tests the right operand for
+    // a negative value.
     assert_eq!(
         outcomes_of_pair(a_with_b(Expr::Ge), u64s, i8s),
         [Matched, Matched, Matched]
@@ -384,7 +384,8 @@ fn two_floats_compare_in_the_wider_type() {
 #[test]
 fn a_strided_column_over_three_chunks_compares_every_row() {
     // Every second value is a row, so the run has a stride of two values and
-    // `pack` reads it one row at a time. A chunk holds `CHUNK_ROWS` rows,
+    // `pack`, the loop of the column module over a chunk, reads it one row at
+    // a time. A chunk holds `CHUNK_ROWS` rows,
     // 2048, so 5000 rows make three chunks.
     let values: Vec<i64> = (0..10_000).collect();
     // SAFETY: the pointer is the vector's, the stride is two `i64`, and 5000
@@ -587,8 +588,9 @@ fn order_with_literal(v: Value, literal: &Expr, ordering: bool) -> Result<Option
         // nearest value of that width.
         (Value::Float(f, w), Expr::Int(j)) => ieee(f, int_as(*j, w)),
         (Value::Float(f, w), Expr::Float(x)) => ieee(f, float_as(*x, w)),
-        // `None` beside an ordering never appears, because validation refuses
-        // it, so the other pairs are values of types that do not compare.
+        // `literal()` makes no `None`, so no generated rule holds one beside
+        // an ordering, as validation would refuse. The other pairs are values
+        // of types that do not compare.
         _ => return Err(Fault::Incompatible),
     };
     Ok(Some(order))
@@ -612,8 +614,8 @@ fn order_of_fields(a: Value, b: Value, ordering: bool) -> Result<Option<Ordering
 }
 
 /// The order of two literals, where an int widens to a float, or the fault
-/// of comparing them, for a rule that compares two literals, which the
-/// planner folds. `ordering` is false for `==` and `!=`.
+/// of comparing them. A generated rule may compare two literals, which the
+/// planner folds into a constant. `ordering` is false for `==` and `!=`.
 fn order_of_literals(a: &Expr, b: &Expr, ordering: bool) -> Result<Ordering, Fault> {
     match (a, b) {
         (Expr::Bool(x), Expr::Bool(y)) => booleans(*x, *y, ordering),
@@ -708,8 +710,8 @@ struct Field {
     step: usize,
     mark: Mark,
     present: Vec<bool>,
-    // The rows with a value, from bit `offset` on, when `mark` is `Bitmap`,
-    // and empty otherwise.
+    // The rows with a value when `mark` is `Bitmap(offset)`, from bit `offset`
+    // of the first byte on, and empty otherwise.
     bitmap: Vec<u8>,
     // One byte per row, 1 for a row without a value. Every field holds it,
     // and only a field whose `mark` is `ByteMask` hands it over.
@@ -1017,7 +1019,8 @@ fn condition(n: usize) -> impl Strategy<Value = Expr> {
     // Two literals, which the planner folds into a constant.
     let folded =
         (select(ops), literal(), literal()).prop_map(|(op, a, b)| op(Box::new(a), Box::new(b)));
-    // A number where a condition is expected faults on every record.
+    // Where a condition is expected, `None` is unknown, a boolean is itself
+    // and a number faults on every record.
     let literal_condition = prop_oneof![Just(Expr::None), literal()];
     let field_condition = (0..n).prop_map(field_named);
     let tested = prop_oneof![
@@ -1045,7 +1048,7 @@ fn condition(n: usize) -> impl Strategy<Value = Expr> {
         2 => null_test,
     ];
     // Up to three levels of `not`, `and` and `or` over the leaves.
-    // At most 24 nodes in all, and up to 4 items in an `and` or an `or`.
+    // At most 24 nodes in all. An `and` or an `or` holds two or three items.
     leaf.prop_recursive(3, 24, 4, |inner| {
         prop_oneof![
             inner.clone().prop_map(|x| Expr::Not(Box::new(x))),
@@ -1085,8 +1088,8 @@ proptest! {
         // The test runs the rules through the planner, bind and the executor,
         // then checks each record against the reference interpreter.
         //
-        // 1. It runs the rules through the planner, bind and the executor, as
-        //    a sensor would.
+        // 1. It runs the rules as a sensor would, so the property covers the
+        //    planner and bind as well as the executor.
         // 2. It checks each record against the reference interpreter, which
         //    evaluates one record at a time.
 
@@ -1104,8 +1107,8 @@ proptest! {
         // 2. check each record against the reference
         for row in 0..t.rows {
             let record = t.record(row);
-            // `rules()` holds one outcome per rule, in the order of the rule
-            // set.
+            // `rules()` holds one `RuleOutcome` per rule, in the order of the
+            // rule set, and each answers for every row of the batch.
             for (rule, outcome) in rules.iter().zip(outcomes.rules()) {
                 let expected = reference(&rule.expression, &record).outcome();
                 prop_assert_eq!(outcome.outcome(row), expected, "{:?} at row {}", rule.expression, row);
@@ -1124,7 +1127,8 @@ proptest! {
         // The test runs the rules over the whole batch and over records
         // alone, then compares the outcomes of each record.
         //
-        // 1. It runs the rules over the whole batch.
+        // 1. It runs the rules over the whole batch, whose outcome each record
+        //    alone must match.
         // 2. It runs the same bound program over a batch of one record for
         //    each record it checks. One bind serves both, because a batch of
         //    one record keeps the type and the layout of each field.
@@ -1144,7 +1148,8 @@ proptest! {
         // 2. run each record alone
         // A word holds 64 rows and a chunk 2048. The records at the edges of
         // the words and of the chunks, and every 97th record, keep a batch of
-        // 5000 rows from costing 5000 runs of one record.
+        // 5000 rows from costing 5000 runs of one record. 97 is a prime, so
+        // the sampled records fall at every place within a word.
         let edges = [0, 1, 63, 64, 2047, 2048, 2049, 4095, 4096, t.rows.saturating_sub(1)];
         let rows = edges.into_iter().chain((0..t.rows).step_by(97)).filter(|&r| r < t.rows);
         for row in rows {
