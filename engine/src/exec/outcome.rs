@@ -15,9 +15,9 @@ pub enum Fault {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Outcome {
     Matched,
-    // A rule whose expression gives false or unknown does not match. Unknown
-    // is the null of a boolean. A comparison gives it when a value is a null
-    // (ADR-0005).
+    /// The expression gives false or unknown, and the rule does not match.
+    /// Unknown is the null of a boolean. A comparison gives it when a value
+    /// is a null (ADR-0005).
     NotMatched,
     NotEvaluated(Fault),
 }
