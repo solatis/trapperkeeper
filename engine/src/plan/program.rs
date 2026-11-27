@@ -38,6 +38,12 @@ pub(crate) enum Step {
     },
     // A field where a condition is expected, which must hold a boolean.
     Condition(usize),
+    // `is None`, or `is not None` when `negated`, which is never unknown
+    // (ADR-0005).
+    IsNull {
+        field: usize,
+        negated: bool,
+    },
     // The logic of ADR-0005 over earlier slots. `And` and `Or` hold their
     // operands in written order.
     Not(usize),
@@ -137,7 +143,7 @@ pub(crate) enum Constant {
 }
 
 impl Constant {
-    fn of(b: bool) -> Self {
+    pub(crate) fn of(b: bool) -> Self {
         if b { Self::True } else { Self::False }
     }
 }
@@ -200,6 +206,10 @@ impl Planner<'_> {
     /// result. Fails with the JSON key of the first kind of node that it does
     /// not plan.
     fn expr(&mut self, e: &Expr) -> Result<usize, &'static str> {
+        // The function tests the kind of `e` in a match, and the first arm
+        // that applies plans it. A comparison with the literal `None` comes
+        // before the other comparisons, because `x == None` is a test for a
+        // null and no comparison (ADR-0005).
         let step = match e {
             Expr::Bool(b) => Step::Constant(Constant::of(*b)),
             Expr::Field(path) => Step::Condition(self.fields.field_of(path)),
@@ -213,6 +223,13 @@ impl Planner<'_> {
             Expr::Not(x) => Step::Not(self.expr(x)?),
             Expr::And(items) => return self.chain(items, Constant::True, Step::And),
             Expr::Or(items) => return self.chain(items, Constant::False, Step::Or),
+            Expr::IsNone(x) => return self.null_test(x, false),
+            Expr::IsNotNone(x) => return self.null_test(x, true),
+            // `x == None` is `x is None`, and `x != None` is `x is not None`.
+            Expr::Eq(l, r) if **r == Expr::None => return self.null_test(l, false),
+            Expr::Eq(l, r) if **l == Expr::None => return self.null_test(r, false),
+            Expr::Ne(l, r) if **r == Expr::None => return self.null_test(l, true),
+            Expr::Ne(l, r) if **l == Expr::None => return self.null_test(r, true),
             Expr::Eq(l, r) => return self.compare(Comparison::Eq, l, r),
             Expr::Ne(l, r) => return self.compare(Comparison::Ne, l, r),
             Expr::Lt(l, r) => return self.compare(Comparison::Lt, l, r),
@@ -245,6 +262,25 @@ impl Planner<'_> {
             slot = self.push(join(slot, right));
         }
         Ok(slot)
+    }
+
+    /// Plans the test whether `e` is a null, or, when `negated`, whether it is
+    /// not. Fails with the JSON key of a kind that this version does not
+    /// test.
+    fn null_test(&mut self, e: &Expr, negated: bool) -> Result<usize, &'static str> {
+        let step = match e {
+            Expr::Field(path) => Step::IsNull {
+                field: self.fields.field_of(path),
+                negated,
+            },
+            Expr::None => Step::Constant(Constant::of(!negated)),
+            // A literal other than `None` is never a null.
+            Expr::Bool(_) | Expr::Int(_) | Expr::Float(_) | Expr::Text(_) | Expr::List(_) => {
+                Step::Constant(Constant::of(negated))
+            }
+            _ => return Err(e.key()),
+        };
+        Ok(self.push(step))
     }
 
     /// Plans a comparison of `left` with `right`.

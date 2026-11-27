@@ -241,6 +241,26 @@ fn a_number_field_where_a_condition_is_expected_faults() {
 }
 
 #[test]
+fn a_test_for_a_null_is_never_unknown() {
+    let bitmap = packed(&[true, false], 0);
+    let column = ints(&[1, 2], &bitmap);
+    let none = || Box::new(Expr::None);
+    assert_eq!(
+        outcomes(Expr::IsNone(Box::new(x())), Some(column)),
+        [NotMatched, Matched]
+    );
+    assert_eq!(
+        outcomes(Expr::Ne(none(), Box::new(x())), Some(column)),
+        [Matched, NotMatched]
+    );
+    // A field that the source lacks is a null on every record.
+    assert_eq!(
+        outcomes(Expr::Eq(Box::new(x()), none()), None),
+        [Matched; 3]
+    );
+}
+
+#[test]
 fn a_number_where_a_condition_is_expected_faults_on_every_record() {
     assert_eq!(
         outcomes(Expr::Int(1), None),
@@ -484,6 +504,13 @@ fn reference(e: &Expr, record: &[Value]) -> Tri {
                 right => right,
             },
         }),
+        // A test for a null is never unknown.
+        Expr::IsNone(x) => Tri::of(is_null(x, record)),
+        Expr::IsNotNone(x) => Tri::of(!is_null(x, record)),
+        Expr::Eq(l, r) if **r == Expr::None => Tri::of(is_null(l, record)),
+        Expr::Eq(l, r) if **l == Expr::None => Tri::of(is_null(r, record)),
+        Expr::Ne(l, r) if **r == Expr::None => Tri::of(!is_null(l, record)),
+        Expr::Ne(l, r) if **l == Expr::None => Tri::of(!is_null(r, record)),
         Expr::Eq(l, r) => compare(l, r, record, Ordering::is_eq, false),
         Expr::Ne(l, r) => compare(l, r, record, Ordering::is_ne, false),
         Expr::Lt(l, r) => compare(l, r, record, Ordering::is_lt, true),
@@ -491,6 +518,14 @@ fn reference(e: &Expr, record: &[Value]) -> Tri {
         Expr::Gt(l, r) => compare(l, r, record, Ordering::is_gt, true),
         Expr::Ge(l, r) => compare(l, r, record, Ordering::is_ge, true),
         _ => unreachable!("the generated rules hold no other kind"),
+    }
+}
+
+/// Whether `e`, a field or a literal, is a null on `record`.
+fn is_null(e: &Expr, record: &[Value]) -> bool {
+    match e {
+        Expr::Field(p) => record[field_number(p)] == Value::Null,
+        other => *other == Expr::None,
     }
 }
 
@@ -895,12 +930,29 @@ fn condition(n: usize) -> impl Strategy<Value = Expr> {
         literal()
     ];
     let field_condition = (0..n).prop_map(field_named);
+    let tested = prop_oneof![
+        3 => (0..n).prop_map(field_named),
+        1 => Just(Expr::None),
+        1 => literal(),
+    ];
+    let null_test = (tested, 0..6usize).prop_map(|(x, form)| {
+        let (x, none) = (Box::new(x), Box::new(Expr::None));
+        match form {
+            0 => Expr::IsNone(x),
+            1 => Expr::IsNotNone(x),
+            2 => Expr::Eq(x, none),
+            3 => Expr::Eq(none, x),
+            4 => Expr::Ne(x, none),
+            _ => Expr::Ne(none, x),
+        }
+    });
     let leaf = prop_oneof![
         6 => comparison,
         3 => fields,
         1 => folded,
         1 => literal_condition,
         2 => field_condition,
+        2 => null_test,
     ];
     // Up to three levels of `not`, `and` and `or` over the leaves.
     leaf.prop_recursive(3, 24, 4, |inner| {

@@ -56,6 +56,20 @@ impl Truth {
         }
     }
 
+    /// The result of a null test on the first `rows` rows of a chunk, where
+    /// `present` is the rows with a value. It is true on the rows without a
+    /// value, or, when `negated`, on the rows with one, and it is never
+    /// unknown.
+    pub(crate) fn present(present: &Present, negated: bool, rows: usize) -> Self {
+        let mut all = NONE;
+        present_all(rows, &mut all);
+        Self {
+            true_rows: zip(present, &all, |p, a| if negated { p } else { !p & a }),
+            known: all,
+            fault: NONE,
+        }
+    }
+
     /// The result of a step that faults on every row in `rows`.
     pub(crate) fn faulted(rows: Present) -> Self {
         Self {

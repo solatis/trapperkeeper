@@ -117,6 +117,7 @@ fn run_step(
             Truth::compared(&truth, all_present(present, fields))
         }
         BoundStep::Faulted { fields, .. } => Truth::faulted(all_present(present, fields)),
+        BoundStep::Presence { field, negated } => Truth::present(&present[*field], *negated, rows),
         BoundStep::Not(a) => truths[*a].not(),
         BoundStep::And(a, b) => truths[*a].and(&truths[*b]),
         BoundStep::Or(a, b) => truths[*a].or(&truths[*b]),
@@ -147,7 +148,7 @@ fn fault_of(steps: &[BoundStep], truths: &[Truth], slot: usize, row: usize) -> F
             }
             // Only a fault constant, a type fault and the logic steps set a
             // fault bit.
-            BoundStep::Constant(_) | BoundStep::Loop { .. } => {
+            BoundStep::Constant(_) | BoundStep::Loop { .. } | BoundStep::Presence { .. } => {
                 unreachable!("a step that never faults has no faulted row")
             }
         }
