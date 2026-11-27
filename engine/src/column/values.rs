@@ -291,11 +291,14 @@ pub(super) mod sealed {
     /// The part of `Number` that only this crate can name, so no crate
     /// outside the engine implements `Number` for a type of its own.
     // `Send`, `Sync` and `'static` let a loop that holds a value of the type
-    // be shared between threads.
+    // be shared between threads. `Default` gives the zero that a test of the
+    // sign compares with, and `PartialOrd` lets the scalar arm of a loop
+    // compare two values.
     pub trait Number:
         Copy + Default + PartialOrd + Send + Sync + 'static + SimdElement + SimdCast
     {
-        /// Whether the type is a float.
+        /// Whether the type is a float. The executor picks the type in which
+        /// two number columns compare from this and from `SIGNED`.
         const FLOAT: bool;
 
         /// Whether the type holds negative values.
@@ -312,11 +315,10 @@ pub(super) mod sealed {
         /// `i`.
         fn eq_lanes(left: Simd<Self, 64>, right: Simd<Self, 64>) -> u64;
 
-        /// 64 lanes converted to `C`, each as Rust's `as` converts it.
+        /// Converts each of 64 lanes to `C`, as Rust's `as` converts a value.
         fn convert_lanes<C: super::Number>(lanes: Simd<Self, 64>) -> Simd<C, 64>;
 
-        /// The value converted to `C` as Rust's `as` converts it, so it
-        /// matches a lane of `convert_lanes`.
+        /// Converts the value to `C`, as one lane of `convert_lanes` does.
         fn convert<C: super::Number>(self) -> C;
     }
 }
@@ -355,6 +357,8 @@ macro_rules! numbers {
             }
 
             fn convert<C: Number>(self) -> C {
+                // Rust's `as` takes no generic target type, so a cast of one
+                // lane stands in for it and converts as `as` does.
                 Simd::<Self, 1>::splat(self).cast::<C>()[0]
             }
         }
