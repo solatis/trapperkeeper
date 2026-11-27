@@ -10,6 +10,15 @@
 // ADR-0035 names this feature.
 #![feature(portable_simd)]
 
+// An amd64 build without AVX2 and F16C means that a RUSTFLAGS in the
+// environment replaced the target CPU that `.cargo/config.toml` sets, and the
+// loops would fall back to SSE2 (ADR-0045).
+#[cfg(all(
+    target_arch = "x86_64",
+    not(all(target_feature = "avx2", target_feature = "f16c"))
+))]
+compile_error!("amd64 builds target x86-64-v3: add `-C target-cpu=x86-64-v3` to RUSTFLAGS");
+
 // The crate root exports nothing of `column`, because its names, such as
 // `Strided`, are general and read better as `column::Strided`.
 pub mod column;

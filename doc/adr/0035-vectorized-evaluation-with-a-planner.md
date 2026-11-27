@@ -43,9 +43,8 @@ convention.
 
 The loops over values that lie one after the other use `std::simd`, and the
 engine crate turns on the unstable feature `portable_simd` for it. A strided
-column keeps a plain loop (owner, 2026-11-26). The instruction sets that the
-build turns on are still decided from measurements on the CI targets
-(`decisions.md`).
+column keeps a plain loop (owner, 2026-11-26). Every amd64 build targets
+`x86-64-v3` (`adr/0045`).
 
 A single row runs the same plan as a batch.
 

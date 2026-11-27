@@ -1,0 +1,7 @@
+# Every amd64 build targets x86-64-v3, so the loops of the engine use AVX2 and
+# F16C without a check of the CPU at run time (ADR-0045). A RUSTFLAGS in the
+# environment replaces these flags instead of adding to them, so a shell that
+# sets RUSTFLAGS must carry `-C target-cpu=x86-64-v3` itself. The engine
+# refuses to compile for amd64 without AVX2 and F16C.
+[target.'cfg(target_arch = "x86_64")']
+rustflags = ["-C", "target-cpu=x86-64-v3"]

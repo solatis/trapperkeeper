@@ -38,7 +38,10 @@ milestones of this repository on GitHub.
 - Toolchain: rustup with the `nightly` channel. `rust-toolchain.toml` names the
   `nightly` channel with no date, and the clippy and rustfmt components. Code
   turns on an unstable feature only where a decision record names it
-  (`doc/adr/0009`).
+  (`doc/adr/0009`). Every amd64 build targets `x86-64-v3` through
+  `.cargo/config.toml` (`doc/adr/0045`). A `RUSTFLAGS` set in the shell
+  replaces those flags, so it carries `-C target-cpu=x86-64-v3` for an amd64
+  build, and the engine refuses to compile without it.
 - Format: `cargo fmt --all --check`.
 - Lint: `cargo clippy --workspace --all-targets`. The workspace lints table in
   the root `Cargo.toml` sets the lint level (`doc/adr/0011`).

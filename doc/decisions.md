@@ -68,13 +68,12 @@ An adapter looks fields up in the cheapest way its framework allows
 times the cost of its private one. Whether an adapter may use a library's
 private attributes is open. Decide with the milestone "Python sensor SDK".
 
-## Instruction sets on x86_64
+## The chunk size
 
 Every measurement behind the evaluator's design comes from one ARM machine
-(`adr/0035`). Which instruction sets the loops are compiled for on x86_64 is
-open, and so is the chunk size of 2048 rows, which no measurement chose.
-Decide both with the milestone "The evaluator", from measurements on the CI
-targets.
+(`adr/0035`). The chunk size of 2048 rows is open, because no measurement
+chose it. Decide it with the milestone "The evaluator", from measurements on
+the CI targets.
 
 ## Patterns on a UTF-32 column
 

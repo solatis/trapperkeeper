@@ -78,9 +78,9 @@ column of its own. It evaluates no rule.
 - A set bit means present. A comparison on a row whose bit is clear gives
   unknown, the null of a boolean:
   `doc/adr/0005-one-vocabulary-for-failure-behavior.md`.
-- The loops over values that lie one after the other use `std::simd`, and the
-  instruction sets that the build turns on are decided from measurements:
-  `doc/adr/0035-vectorized-evaluation-with-a-planner.md`.
+- The loops over values that lie one after the other use `std::simd`:
+  `doc/adr/0035-vectorized-evaluation-with-a-planner.md`. Every amd64 build
+  targets `x86-64-v3`: `doc/adr/0045-amd64-targets-x86-64-v3.md`.
 - A NaN is a null in every source, so every float column gets a NaN pass after
   its marking: `doc/adr/0005-one-vocabulary-for-failure-behavior.md`.
 
