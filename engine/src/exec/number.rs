@@ -263,8 +263,9 @@ const fn common<L: Number, R: Number>() -> Common {
         (false, false) if L::SIGNED == R::SIGNED => wider(l, r),
         (false, false) => {
             // A signed type twice as wide as an unsigned one holds every value
-            // of it, and no int type holds every value of a `u64` and of a
-            // signed type.
+            // of it. The signed type of the pair may already be wider, and
+            // then it holds both. No int type holds every value of a `u64`
+            // and of a signed type.
             let (signed, unsigned) = if L::SIGNED { (l, r) } else { (r, l) };
             let width = if 2 * unsigned > signed {
                 2 * unsigned
@@ -287,8 +288,8 @@ const fn wider(l: usize, r: usize) -> Common {
     if l >= r { Common::Left } else { Common::Right }
 }
 
-/// The result of `O` for a row whose signed value is negative, when the
-/// signed value stands on the left if `signed_left` and on the right
+/// The result of `O` for a row whose signed value is negative. The signed
+/// value is the left operand when `signed_left` is true, and the right one
 /// otherwise. A negative value orders below every `u64`.
 fn negative_side<O: Order>(signed_left: bool) -> bool {
     // The booleans stand in for the two values, because `false` orders below
