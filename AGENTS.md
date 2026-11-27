@@ -41,7 +41,7 @@ milestones of this repository on GitHub.
   (`doc/adr/0009`). Every amd64 build targets `x86-64-v3` through
   `.cargo/config.toml` (`doc/adr/0045`). A `RUSTFLAGS` set in the shell
   replaces those flags, so it carries `-C target-cpu=x86-64-v3` for an amd64
-  build, and the engine refuses to compile without it.
+  build. The engine refuses to compile for amd64 without AVX2 and F16C.
 - Format: `cargo fmt --all --check`.
 - Lint: `cargo clippy --workspace --all-targets`. The workspace lints table in
   the root `Cargo.toml` sets the lint level (`doc/adr/0011`).
