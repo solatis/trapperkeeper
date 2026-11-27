@@ -12,8 +12,9 @@ CPU, also on a CPU that has AVX2.
 
 A half-precision float shows the cost most clearly. On rustc 1.102.0-nightly
 of 2026-11-25, one comparison of 64 `f16` lanes compiled for the baseline
-amd64 target holds 129 calls to `__extendhfsf2`, which widen the
-half-precision values to single precision one at a time. For
+amd64 target holds 129 calls to `__extendhfsf2`, about one for each lane of
+each operand, which widen the half-precision values to single precision one
+at a time. For
 `x86-64-v3` it holds `vcvtph2ps` and no call. The aarch64 targets need no
 change: macOS compares `f16` lanes natively with `fcmgt.8h`, and the Linux
 baseline widens them with `fcvtl` and makes no call.
@@ -49,6 +50,7 @@ wheels of the milestone "Python sensor SDK" inherit that requirement.
 A shell or a CI job that sets `RUSTFLAGS` adds `-C target-cpu=x86-64-v3` to it
 for an amd64 build.
 
-Miri runs the engine's tests on Linux amd64 (`.github/workflows/miri.yml`),
-so its build meets the same check of AVX2 and F16C as any other amd64
-build.
+Miri runs the engine's tests on Linux amd64 (`.github/workflows/miri.yml`).
+The workflow sets no `RUSTFLAGS`, so cargo gives the Miri build the target
+CPU of `.cargo/config.toml`, and the build passes the check of AVX2 and F16C
+as any other amd64 build does.
