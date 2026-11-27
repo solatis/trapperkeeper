@@ -56,6 +56,10 @@ pub(crate) enum BoundStep {
         fault: Fault,
         fields: Vec<usize>,
     },
+    // The logic of ADR-0005 over earlier slots.
+    Not(usize),
+    And(usize, usize),
+    Or(usize, usize),
 }
 
 /// The loop of a step. It reads the columns of a batch and writes into its
@@ -176,6 +180,9 @@ impl Program {
 fn bind_step(step: &Step, types: &[FieldType]) -> BoundStep {
     match step {
         Step::Constant(c) => BoundStep::Constant(*c),
+        Step::Not(a) => BoundStep::Not(*a),
+        Step::And(a, b) => BoundStep::And(*a, *b),
+        Step::Or(a, b) => BoundStep::Or(*a, *b),
         Step::Compare {
             op,
             left: Operand::Field(f),

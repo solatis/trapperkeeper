@@ -34,6 +34,11 @@ pub(crate) enum Step {
         left: Operand,
         right: Operand,
     },
+    // The logic of ADR-0005 over earlier slots. `And` and `Or` hold their
+    // operands in written order.
+    Not(usize),
+    And(usize, usize),
+    Or(usize, usize),
 }
 
 /// What a comparison compares: a field by its number, or a literal.
@@ -166,6 +171,9 @@ impl Planner<'_> {
             Expr::Int(_) | Expr::Float(_) | Expr::Text(_) | Expr::List(_) => {
                 Step::Constant(Constant::Fault(Fault::NotBoolean))
             }
+            Expr::Not(x) => Step::Not(self.expr(x)?),
+            Expr::And(items) => return self.chain(items, Constant::True, Step::And),
+            Expr::Or(items) => return self.chain(items, Constant::False, Step::Or),
             Expr::Eq(l, r) => return self.compare(Comparison::Eq, l, r),
             Expr::Ne(l, r) => return self.compare(Comparison::Ne, l, r),
             Expr::Lt(l, r) => return self.compare(Comparison::Lt, l, r),
@@ -175,6 +183,29 @@ impl Planner<'_> {
             _ => return Err(e.key()),
         };
         Ok(self.push(step))
+    }
+
+    /// Plans the operands of an `and` or an `or` and joins them with `join`,
+    /// or returns `empty` for a node without operands.
+    fn chain(
+        &mut self,
+        items: &[Expr],
+        empty: Constant,
+        join: fn(usize, usize) -> Step,
+    ) -> Result<usize, &'static str> {
+        // The JSON form reads an `and` or an `or` without operands. It gives
+        // what Python's `all` and `any` give for an empty list.
+        let Some((first, rest)) = items.split_first() else {
+            return Ok(self.push(Step::Constant(empty)));
+        };
+        // The chain groups from the left, so `a and b and c` reads as
+        // `(a and b) and c` and keeps the written order of ADR-0005.
+        let mut slot = self.expr(first)?;
+        for item in rest {
+            let right = self.expr(item)?;
+            slot = self.push(join(slot, right));
+        }
+        Ok(slot)
     }
 
     /// Plans a comparison of `left` with `right`.

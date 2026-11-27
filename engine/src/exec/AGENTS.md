@@ -18,8 +18,11 @@ records it faulted on, each with its fault. It knows no rule text.
 
 **Invariants**:
 
-- A faulted row is never true, and a row where a field of a comparison has no
-  value is not true.
+- A true row is known, and a faulted row is neither known nor true. A row
+  where a field of a comparison has no value is unknown.
+- Both operands of `and` and `or` run on every row. The logic step then clears
+  the faults of the right operand on the rows that the left operand decided,
+  which keeps the written order of the faults without a branch per row.
 - A loop writes every word of its bitmap and sets no bit at or past the
   chunk's rows.
 - `run` reads no column whose type or row count differs from what bind saw,

@@ -1,13 +1,18 @@
-//! The result of a step for the rows of one chunk.
+//! The result of a step for the rows of one chunk, and the three-valued logic
+//! of ADR-0005 over it.
 
 use crate::column::{CHUNK_WORDS, Present, present_all};
 use crate::plan::Constant;
 
-/// The result of a step for the rows of one chunk: the rows that are true
-/// and the rows that faulted. A faulted row is never true.
+/// The result of a step for the rows of one chunk. A row is true, false,
+/// unknown or faulted. A true row is known, and a faulted row is neither known
+/// nor true.
 #[derive(Debug, Clone)]
 pub(crate) struct Truth {
-    truth: Present,
+    // A row whose bit is clear here and in `fault` is unknown, the null of a
+    // boolean (ADR-0005).
+    known: Present,
+    true_rows: Present,
     fault: Present,
 }
 
@@ -21,11 +26,18 @@ impl Truth {
         present_all(rows, &mut all);
         match c {
             Constant::True => Self {
-                truth: all,
+                known: all,
+                true_rows: all,
                 fault: NONE,
             },
-            Constant::False | Constant::Unknown => Self {
-                truth: NONE,
+            Constant::False => Self {
+                known: all,
+                true_rows: NONE,
+                fault: NONE,
+            },
+            Constant::Unknown => Self {
+                known: NONE,
+                true_rows: NONE,
                 fault: NONE,
             },
             Constant::Fault(_) => Self::faulted(all),
@@ -38,7 +50,8 @@ impl Truth {
         Self {
             // A loop also compares the values of the rows without a value,
             // and the result of such a row is unknown.
-            truth: zip(truth, &known, |t, k| t & k),
+            true_rows: zip(truth, &known, |t, k| t & k),
+            known,
             fault: NONE,
         }
     }
@@ -46,19 +59,93 @@ impl Truth {
     /// The result of a step that faults on every row in `rows`.
     pub(crate) fn faulted(rows: Present) -> Self {
         Self {
-            truth: NONE,
+            known: NONE,
+            true_rows: NONE,
             fault: rows,
         }
     }
 
     /// The rows that match, which are the true rows.
     pub(crate) fn matched(&self) -> &Present {
-        &self.truth
+        &self.true_rows
     }
 
     /// The rows that faulted.
     pub(crate) fn faults(&self) -> &Present {
         &self.fault
+    }
+
+    /// Whether row `row` of the chunk faulted.
+    pub(crate) fn faulted_at(&self, row: usize) -> bool {
+        self.fault[row / 64] >> (row % 64) & 1 == 1
+    }
+
+    /// `not`, which swaps true and false and keeps unknown and the faults.
+    pub(crate) fn not(&self) -> Self {
+        Self {
+            known: self.known,
+            true_rows: zip(&self.true_rows, &self.known, |t, k| !t & k),
+            fault: self.fault,
+        }
+    }
+
+    /// `and` in written order: false where an operand is false, and a fault
+    /// of the right operand counts only where the left one is not false.
+    pub(crate) fn and(&self, right: &Self) -> Self {
+        // The function combines 64 rows per word. It decides the faults
+        // first, because a faulted row is neither known nor true.
+        //
+        // 1. A row faults where the left operand faults, or where the right
+        //    one faults and the left one is not false. A false left operand
+        //    decides the row, so the fault of the right one does not happen
+        //    (ADR-0005).
+        // 2. Of the other rows, a row is false where either operand is false,
+        //    true where both are true, and unknown otherwise.
+        let mut out = Self::faulted(NONE);
+        for k in 0..CHUNK_WORDS {
+            let (left_false, right_false) = (self.falses(k), right.falses(k));
+            // 1. decide the faults
+            let fault = self.fault[k] | right.fault[k] & !left_false;
+
+            // 2. decide true, false and unknown
+            let both = self.true_rows[k] & right.true_rows[k];
+            out.known[k] = (left_false | right_false | both) & !fault;
+            out.true_rows[k] = both & !fault;
+            out.fault[k] = fault;
+        }
+        out
+    }
+
+    /// `or` in written order: true where an operand is true, and a fault of
+    /// the right operand counts only where the left one is not true.
+    pub(crate) fn or(&self, right: &Self) -> Self {
+        // The function combines 64 rows per word. It decides the faults
+        // first, because a faulted row is neither known nor true.
+        //
+        // 1. A row faults where the left operand faults, or where the right
+        //    one faults and the left one is not true. A true left operand
+        //    decides the row, so the fault of the right one does not happen
+        //    (ADR-0005).
+        // 2. Of the other rows, a row is true where either operand is true,
+        //    false where both are false, and unknown otherwise.
+        let mut out = Self::faulted(NONE);
+        for k in 0..CHUNK_WORDS {
+            // 1. decide the faults
+            let fault = self.fault[k] | right.fault[k] & !self.true_rows[k];
+
+            // 2. decide true, false and unknown
+            let either = self.true_rows[k] | right.true_rows[k];
+            let both_false = self.falses(k) & right.falses(k);
+            out.known[k] = (either | both_false) & !fault;
+            out.true_rows[k] = either & !fault;
+            out.fault[k] = fault;
+        }
+        out
+    }
+
+    /// The rows of word `k` that are false: known and not true.
+    fn falses(&self, k: usize) -> u64 {
+        self.known[k] & !self.true_rows[k]
     }
 }
 

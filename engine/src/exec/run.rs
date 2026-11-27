@@ -82,7 +82,7 @@ impl Bound {
             // 3. run the steps
             truths.clear();
             for step in &self.steps {
-                let truth = run_step(step, &present, columns, start, chunk);
+                let truth = run_step(step, &truths, &present, columns, start, chunk);
                 truths.push(truth);
             }
 
@@ -90,7 +90,7 @@ impl Bound {
             for (outcome, &(_, slot)) in outcomes.rules_mut().iter_mut().zip(&self.rules) {
                 let truth = &truths[slot];
                 outcome.append(truth.matched(), truth.faults(), start, chunk, |row| {
-                    fault_of(&self.steps, slot, row)
+                    fault_of(&self.steps, &truths, slot, row)
                 });
             }
         }
@@ -99,9 +99,11 @@ impl Bound {
 }
 
 /// The result of `step` on the chunk of `rows` rows from row `start`, where
-/// `present` holds the bitmap of each field for the chunk.
+/// `truths` holds the results of the steps before it and `present` the bitmap
+/// of each field for the chunk.
 fn run_step(
     step: &BoundStep,
+    truths: &[Truth],
     present: &[Present],
     columns: &[Option<Column<'_>>],
     start: usize,
@@ -115,6 +117,9 @@ fn run_step(
             Truth::compared(&truth, all_present(present, fields))
         }
         BoundStep::Faulted { fields, .. } => Truth::faulted(all_present(present, fields)),
+        BoundStep::Not(a) => truths[*a].not(),
+        BoundStep::And(a, b) => truths[*a].and(&truths[*b]),
+        BoundStep::Or(a, b) => truths[*a].or(&truths[*b]),
     }
 }
 
@@ -127,12 +132,24 @@ fn all_present(present: &[Present], fields: &[usize]) -> Present {
 
 /// The fault of the record at `row` of the chunk in the result of `slot`,
 /// which faulted on that row.
-fn fault_of(steps: &[BoundStep], slot: usize, _row: usize) -> Fault {
-    match &steps[slot] {
-        BoundStep::Constant(Constant::Fault(fault)) | BoundStep::Faulted { fault, .. } => *fault,
-        // Only a fault constant and a type fault set a fault bit.
-        BoundStep::Constant(_) | BoundStep::Loop { .. } => {
-            unreachable!("a step that never faults has no faulted row")
+fn fault_of(steps: &[BoundStep], truths: &[Truth], slot: usize, row: usize) -> Fault {
+    let mut slot = slot;
+    loop {
+        match &steps[slot] {
+            BoundStep::Constant(Constant::Fault(fault)) | BoundStep::Faulted { fault, .. } => {
+                return *fault;
+            }
+            BoundStep::Not(a) => slot = *a,
+            // Written order counts a fault of the left operand first, and the
+            // right operand faulted on the row where the left one did not.
+            BoundStep::And(a, b) | BoundStep::Or(a, b) => {
+                slot = if truths[*a].faulted_at(row) { *a } else { *b };
+            }
+            // Only a fault constant, a type fault and the logic steps set a
+            // fault bit.
+            BoundStep::Constant(_) | BoundStep::Loop { .. } => {
+                unreachable!("a step that never faults has no faulted row")
+            }
         }
     }
 }

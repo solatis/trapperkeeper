@@ -202,6 +202,40 @@ fn a_number_where_a_condition_is_expected_faults_on_every_record() {
 }
 
 #[test]
+fn a_false_left_operand_of_and_keeps_the_fault_on_its_right_from_happening() {
+    let ys = [0i32, 1, 2];
+    let pieces = [Piece::new("a"); 3];
+    let y = Column::ints(Ints::I32(Strided::from_slice(&ys)), Marking::Never).expect("unmarked");
+    let t =
+        Column::text(Text::Pieces(Strided::from_slice(&pieces)), Marking::Never).expect("unmarked");
+    let named = |name: &str| Box::new(Expr::Field(vec![Segment::Key(name.into())]));
+    // `y != 0 and t == 1`, where `t` holds text, so its comparison faults on
+    // every row.
+    let rule = Expr::And(vec![
+        Expr::Ne(named("y"), Box::new(Expr::Int(0))),
+        Expr::Eq(named("t"), Box::new(Expr::Int(1))),
+    ]);
+    let program = plan(&[observing(Uuid::from_u128(1), rule)]).expect("the rule plans");
+    let columns = [Some(y), Some(t)];
+    let run = program
+        .bind(&columns)
+        .expect("one column per field")
+        .run(3, &columns)
+        .expect("the batch fits the bind");
+    // The first row has `y == 0`, so the `and` is false there and the fault
+    // of its right operand does not happen.
+    let got: Vec<Outcome> = (0..3).map(|row| run.rules()[0].outcome(row)).collect();
+    assert_eq!(
+        got,
+        [
+            NotMatched,
+            NotEvaluated(Fault::Incompatible),
+            NotEvaluated(Fault::Incompatible)
+        ]
+    );
+}
+
+#[test]
 fn a_strided_column_over_three_chunks_compares_every_row() {
     // Every second value is a row, so the run has a stride of two values and
     // the loop reads it one row at a time.
@@ -309,6 +343,28 @@ fn reference(e: &Expr, record: &[Value]) -> Tri {
         // A null where a condition is expected is unknown.
         Expr::None => Tri::Unknown,
         Expr::Int(_) | Expr::Float(_) => Tri::Fault(Fault::NotBoolean),
+        Expr::Not(x) => match reference(x, record) {
+            Tri::True => Tri::False,
+            Tri::False => Tri::True,
+            other => other,
+        },
+        Expr::And(items) => items.iter().fold(Tri::True, |left, item| match left {
+            // A false left operand decides the `and`, so the right one is not
+            // evaluated and its fault does not happen.
+            Tri::False | Tri::Fault(_) => left,
+            _ => match reference(item, record) {
+                Tri::True => left,
+                right => right,
+            },
+        }),
+        Expr::Or(items) => items.iter().fold(Tri::False, |left, item| match left {
+            // A true left operand decides the `or`.
+            Tri::True | Tri::Fault(_) => left,
+            _ => match reference(item, record) {
+                Tri::False => left,
+                right => right,
+            },
+        }),
         Expr::Eq(l, r) => compare(l, r, record, Ordering::is_eq),
         Expr::Ne(l, r) => compare(l, r, record, Ordering::is_ne),
         Expr::Lt(l, r) => compare(l, r, record, Ordering::is_lt),
@@ -675,7 +731,15 @@ fn condition(n: usize) -> impl Strategy<Value = Expr> {
         Just(Expr::None),
         literal()
     ];
-    prop_oneof![6 => comparison, 1 => folded, 1 => literal_condition]
+    let leaf = prop_oneof![6 => comparison, 1 => folded, 1 => literal_condition];
+    // Up to three levels of `not`, `and` and `or` over the leaves.
+    leaf.prop_recursive(3, 24, 4, |inner| {
+        prop_oneof![
+            inner.clone().prop_map(|x| Expr::Not(Box::new(x))),
+            vec(inner.clone(), 2..4).prop_map(Expr::And),
+            vec(inner, 2..4).prop_map(Expr::Or),
+        ]
+    })
 }
 
 /// One to three rules over `n` fields.
