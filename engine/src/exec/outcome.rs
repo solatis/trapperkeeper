@@ -16,7 +16,7 @@ pub enum Fault {
 pub enum Outcome {
     Matched,
     // A rule whose expression gives false or unknown does not match. Unknown
-    // is the null of a boolean, as a comparison on a null gives it
+    // is the null of a boolean. A comparison gives it when a value is a null
     // (ADR-0005).
     NotMatched,
     NotEvaluated(Fault),
