@@ -1,9 +1,8 @@
 # engine/src/exec/
 
 **What**: the executor. It binds a `Program`, the planned rule set of
-`src/plan/`, to the column types of one schema
-and runs the bound program over each batch of that schema, one chunk of 2048
-rows at a time. A run returns, for each rule, the records it matched and the
+`src/plan/`, to the column types of one schema and runs the bound program over
+each batch of that schema, one chunk of 2048 rows at a time. A run returns, for each rule, the records it matched and the
 records it faulted on, each with its fault. It knows no rule text.
 
 **Map**:
@@ -36,8 +35,8 @@ records it faulted on, each with its fault. It knows no rule text.
 
 **Why**:
 
-- The program, the result of a step, bind once per schema and the
-  caller's interface: `doc/adr/0035-vectorized-evaluation-with-a-planner.md`.
+- The program, the result of a step, bind once per schema and the caller's
+  interface: `doc/adr/0035-vectorized-evaluation-with-a-planner.md`.
 - How numbers convert and compare: `doc/adr/0041-the-rule-language.md`.
 - Nulls, NaNs and faults: `doc/adr/0005-one-vocabulary-for-failure-behavior.md`.
 - The three outcomes of a record: `doc/adr/0006-conformance-fixtures-are-the-evaluation-spec.md`.
