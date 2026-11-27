@@ -63,9 +63,9 @@ impl Bound {
             });
         }
         for (field, (c, t)) in columns.iter().zip(&self.types).enumerate() {
-            // `FieldType::of` gives `Absent` for `None`, so a field that bind
-            // saw as absent is absent in each batch, and it has no rows to
-            // count.
+            // `FieldType::of` gives `Absent` for `None`. A field that bind saw
+            // as absent must then be absent in each batch too, and a missing
+            // column has no rows to count.
             if FieldType::of(c.as_ref()) != *t || c.as_ref().is_some_and(|c| c.rows() != rows) {
                 return Err(SchemaMismatch { field });
             }
