@@ -39,8 +39,7 @@ pub(crate) enum FieldType {
     F16,
     F32,
     F64,
-    BoolBytes,
-    BoolBits,
+    Bool,
     Text,
     List,
     // A field that the source lacks.
@@ -251,7 +250,7 @@ fn bind_condition(f: usize, t: FieldType) -> BoundStep {
     match t {
         // A null where a condition is expected is unknown (ADR-0005).
         FieldType::Absent => BoundStep::Constant(Constant::Unknown),
-        _ if t.is_bool() => BoundStep::Loop {
+        FieldType::Bool => BoundStep::Loop {
             fields: vec![f],
             chunk: booleans_equal(f, true),
         },
@@ -273,17 +272,16 @@ fn bind_literal(op: Comparison, f: usize, t: FieldType, literal: Literal) -> Bou
         // every row (ADR-0005).
         (FieldType::Absent, _) => BoundStep::Constant(Constant::Unknown),
         // An ordering is for numbers only (ADR-0041).
-        (_, Literal::Bool(_)) if t.is_bool() && op.is_ordering() => BoundStep::Faulted {
+        (FieldType::Bool, Literal::Bool(_)) if op.is_ordering() => BoundStep::Faulted {
             fault: Fault::Unordered,
             fields: vec![f],
         },
         // `x == False` holds where `x` is false, and `x != True` too.
-        (_, Literal::Bool(b)) if t.is_bool() => BoundStep::Loop {
+        (FieldType::Bool, Literal::Bool(b)) => BoundStep::Loop {
             fields: vec![f],
             chunk: booleans_equal(f, b == (op == Comparison::Eq)),
         },
-        (_, Literal::Bool(_))
-        | (FieldType::BoolBytes | FieldType::BoolBits | FieldType::Text | FieldType::List, _) => {
+        (_, Literal::Bool(_)) | (FieldType::Bool | FieldType::Text | FieldType::List, _) => {
             BoundStep::Faulted {
                 fault: Fault::Incompatible,
                 fields: vec![f],
@@ -336,11 +334,11 @@ fn bind_fields(
             BoundStep::Loop { fields, chunk }
         }
         // An ordering is for numbers only (ADR-0041).
-        _ if lt.is_bool() && rt.is_bool() && op.is_ordering() => BoundStep::Faulted {
+        (FieldType::Bool, FieldType::Bool) if op.is_ordering() => BoundStep::Faulted {
             fault: Fault::Unordered,
             fields,
         },
-        _ if lt.is_bool() && rt.is_bool() => {
+        (FieldType::Bool, FieldType::Bool) => {
             let equal = op == Comparison::Eq;
             let chunk: ChunkLoop = Box::new(
                 move |cols: &[Option<Column<'_>>], start: usize, rows: usize, out: &mut Present| {
@@ -517,16 +515,10 @@ impl FieldType {
             Kind::Floats(Floats::F16(_), _) => Self::F16,
             Kind::Floats(Floats::F32(_), _) => Self::F32,
             Kind::Floats(Floats::F64(_), _) => Self::F64,
-            Kind::Booleans(Booleans::Bytes(_), _) => Self::BoolBytes,
-            Kind::Booleans(Booleans::Bits(_), _) => Self::BoolBits,
+            Kind::Booleans(..) => Self::Bool,
             Kind::Text(..) => Self::Text,
             Kind::List(..) => Self::List,
         }
-    }
-
-    /// Whether the field holds booleans.
-    fn is_bool(self) -> bool {
-        matches!(self, Self::BoolBytes | Self::BoolBits)
     }
 
     /// Whether the field holds numbers.
