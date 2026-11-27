@@ -1,0 +1,289 @@
+//! The program of a rule set: its steps, and the planner that makes them.
+
+use std::cmp::Ordering;
+use std::fmt;
+
+use uuid::Uuid;
+
+use super::fields::FieldTree;
+use crate::exec::Fault;
+use crate::expr::Expr;
+use crate::rule::Rule;
+
+/// A rule set planned into one list of steps. Each step writes the slot with
+/// its own number, and the result of each rule is the slot of its expression.
+#[derive(Debug, Clone)]
+pub struct Program {
+    fields: FieldTree,
+    steps: Vec<Step>,
+    // The id of each rule with the slot that holds its result, in the order
+    // of the rule set.
+    rules: Vec<(Uuid, usize)>,
+}
+
+/// One step of a program. An operand is the number of an earlier slot or of a
+/// field.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum Step {
+    // A result that no field decides, the same on every row.
+    Constant(Constant),
+    // One of the six comparisons of a field with a literal. The field is
+    // always on the left.
+    Compare {
+        op: Comparison,
+        left: Operand,
+        right: Operand,
+    },
+}
+
+/// What a comparison compares: a field by its number, or a literal.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum Operand {
+    Field(usize),
+    Literal(Literal),
+}
+
+/// A literal that a comparison holds.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum Literal {
+    Int(i64),
+    Float(f64),
+}
+
+/// The six comparisons.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Comparison {
+    Eq,
+    Ne,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+}
+
+impl Comparison {
+    /// The comparison with its operands swapped, so `5 < x` becomes `x > 5`.
+    fn mirrored(self) -> Self {
+        match self {
+            Self::Lt => Self::Gt,
+            Self::Le => Self::Ge,
+            Self::Gt => Self::Lt,
+            Self::Ge => Self::Le,
+            Self::Eq | Self::Ne => self,
+        }
+    }
+
+    /// Whether the comparison holds for two values whose order is `order`.
+    pub(crate) fn holds(self, order: Ordering) -> bool {
+        match self {
+            Self::Eq => order.is_eq(),
+            Self::Ne => order.is_ne(),
+            Self::Lt => order.is_lt(),
+            Self::Le => order.is_le(),
+            Self::Gt => order.is_gt(),
+            Self::Ge => order.is_ge(),
+        }
+    }
+}
+
+/// A result that every row of a chunk shares.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Constant {
+    True,
+    False,
+    Unknown,
+    Fault(Fault),
+}
+
+impl Constant {
+    fn of(b: bool) -> Self {
+        if b { Self::True } else { Self::False }
+    }
+}
+
+/// Plans `rules` into one program. Fails on the first rule that holds a kind
+/// of expression this version does not plan.
+///
+/// # Errors
+///
+/// `Unsupported` with the rule's id and the JSON key of the kind.
+pub fn plan(rules: &[Rule]) -> Result<Program, Unsupported> {
+    // The function collects the fields of every rule, then plans the
+    // expression of each rule into steps and records the slot of its result.
+    //
+    // 1. It builds the tree of fields from all the rules first, so that the
+    //    number of a field does not depend on which rule the planner reaches
+    //    first.
+    // 2. It plans the expression of each rule into the shared list of steps,
+    //    and records the rule's id with the slot of its result.
+
+    // 1. build the tree of fields
+    let fields = FieldTree::of(rules.iter().map(|r| &r.expression));
+
+    // 2. plan each rule
+    let mut planner = Planner {
+        fields: &fields,
+        steps: Vec::new(),
+    };
+    let rules = rules
+        .iter()
+        .map(|r| match planner.expr(&r.expression) {
+            Ok(slot) => Ok((r.rule_id, slot)),
+            // The planner reports the kind, and only this loop knows the
+            // rule's id.
+            Err(key) => Err(Unsupported {
+                rule_id: r.rule_id,
+                key,
+            }),
+        })
+        .collect::<Result<_, _>>()?;
+    let steps = planner.steps;
+    Ok(Program {
+        fields,
+        steps,
+        rules,
+    })
+}
+
+/// The state of `plan` while it plans: the tree of fields and the steps so
+/// far.
+struct Planner<'f> {
+    fields: &'f FieldTree,
+    steps: Vec<Step>,
+}
+
+impl Planner<'_> {
+    /// Plans `e` where a condition is expected, and returns the slot of its
+    /// result. Fails with the JSON key of the first kind of node that it does
+    /// not plan.
+    fn expr(&mut self, e: &Expr) -> Result<usize, &'static str> {
+        let step = match e {
+            Expr::Bool(b) => Step::Constant(Constant::of(*b)),
+            // A null where a condition is expected is unknown (ADR-0005).
+            Expr::None => Step::Constant(Constant::Unknown),
+            // The language has no truthiness (ADR-0041), so any other literal
+            // where a condition is expected is a fault on every record.
+            Expr::Int(_) | Expr::Float(_) | Expr::Text(_) | Expr::List(_) => {
+                Step::Constant(Constant::Fault(Fault::NotBoolean))
+            }
+            Expr::Eq(l, r) => return self.compare(Comparison::Eq, l, r),
+            Expr::Ne(l, r) => return self.compare(Comparison::Ne, l, r),
+            Expr::Lt(l, r) => return self.compare(Comparison::Lt, l, r),
+            Expr::Le(l, r) => return self.compare(Comparison::Le, l, r),
+            Expr::Gt(l, r) => return self.compare(Comparison::Gt, l, r),
+            Expr::Ge(l, r) => return self.compare(Comparison::Ge, l, r),
+            _ => return Err(e.key()),
+        };
+        Ok(self.push(step))
+    }
+
+    /// Plans a comparison of `left` with `right`.
+    fn compare(
+        &mut self,
+        op: Comparison,
+        left: &Expr,
+        right: &Expr,
+    ) -> Result<usize, &'static str> {
+        let step = match (self.operand(left)?, self.operand(right)?) {
+            // No row can change the result of two literals, so the planner
+            // compares them itself.
+            (Operand::Literal(l), Operand::Literal(r)) => Step::Constant(fold(op, l, r)),
+            // The loops hold the field on the left.
+            (literal @ Operand::Literal(_), field @ Operand::Field(_)) => Step::Compare {
+                op: op.mirrored(),
+                left: field,
+                right: literal,
+            },
+            (field @ Operand::Field(_), literal @ Operand::Literal(_)) => Step::Compare {
+                op,
+                left: field,
+                right: literal,
+            },
+            (Operand::Field(_), Operand::Field(_)) => return Err(right.key()),
+        };
+        Ok(self.push(step))
+    }
+
+    /// What `e` is as an operand of a comparison. Fails with the JSON key of a
+    /// kind that this version does not compare.
+    fn operand(&self, e: &Expr) -> Result<Operand, &'static str> {
+        match e {
+            Expr::Field(path) => Ok(Operand::Field(self.fields.field_of(path))),
+            Expr::Int(i) => Ok(Operand::Literal(Literal::Int(*i))),
+            Expr::Float(x) => Ok(Operand::Literal(Literal::Float(*x))),
+            _ => Err(e.key()),
+        }
+    }
+
+    /// Appends `step` and returns its slot.
+    fn push(&mut self, step: Step) -> usize {
+        self.steps.push(step);
+        self.steps.len() - 1
+    }
+}
+
+/// The result of comparing two literals.
+fn fold(op: Comparison, left: Literal, right: Literal) -> Constant {
+    let order = match (left, right) {
+        (Literal::Int(l), Literal::Int(r)) => l.cmp(&r),
+        // An int widens to a float (ADR-0041). The comparison of IEEE 754
+        // makes `-0.0` equal to `0.0`, and a float literal is finite, so the
+        // two always have an order.
+        (l, r) => as_f64(l)
+            .partial_cmp(&as_f64(r))
+            .expect("a float literal is finite"),
+    };
+    Constant::of(op.holds(order))
+}
+
+/// A number literal as a float.
+fn as_f64(l: Literal) -> f64 {
+    match l {
+        // An int above 2^53 rounds to the nearest float.
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "an int widens to a float (ADR-0041)"
+        )]
+        Literal::Int(i) => i as f64,
+        Literal::Float(x) => x,
+    }
+}
+
+/// A rule that holds a kind of expression this version does not plan.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Unsupported {
+    pub rule_id: Uuid,
+    pub key: &'static str,
+}
+
+impl fmt::Display for Unsupported {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "rule {} holds `{}`, which this version does not evaluate",
+            self.rule_id, self.key
+        )
+    }
+}
+
+impl std::error::Error for Unsupported {}
+
+impl Program {
+    /// The fields that the rules read, as a tree of paths. A caller asks its
+    /// adapter for these fields and hands their columns over in the order of
+    /// `FieldTree::paths`.
+    #[must_use]
+    pub fn fields(&self) -> &FieldTree {
+        &self.fields
+    }
+
+    /// The steps in order.
+    pub(crate) fn steps(&self) -> &[Step] {
+        &self.steps
+    }
+
+    /// The id of each rule with the slot of its result.
+    pub(crate) fn rules(&self) -> &[(Uuid, usize)] {
+        &self.rules
+    }
+}

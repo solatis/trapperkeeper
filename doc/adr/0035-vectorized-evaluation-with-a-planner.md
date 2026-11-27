@@ -1,6 +1,6 @@
 # 0035. Vectorized evaluation with a planner
 
-Date: 2026-11-26.
+Date: 2026-11-27.
 
 ## Context
 
@@ -33,6 +33,20 @@ underlying types run the same compiled loops. Bind picks one compiled loop per
 step from the column descriptions (`adr/0036`), and the sensor keeps the result
 of bind for each schema of a source (owner, 2026-11-16). An invocation builds no
 program.
+
+The program is a flat list of steps, and each step writes one slot. A field or
+a subexpression that several rules share is one slot (owner, 2026-11-27). The
+program gives its fields as a tree of paths, so an adapter looks up a shared
+prefix once. The caller hands one column per field in the order of the
+program. A field that the source lacks has no column, and bind makes it a null
+on every row (owner, 2026-11-27).
+
+The result of a step for a chunk is three bitmaps: the rows that are known,
+the rows that are true and the rows that faulted (owner, 2026-11-27).
+
+A run gives for each rule a bitmap of the matched records, a bitmap of the
+faulted records, and the faulted records with their faults (owner,
+2026-11-27).
 
 The loops are compiled when an SDK is built, one per type and layout, from
 generic code. Nothing is compiled at run time (owner, 2026-11-13).
@@ -68,6 +82,21 @@ speed as the interpreter.
 
 A second evaluator for single rows, because two implementations must agree on
 every edge case.
+
+A tree of operator nodes per rule, because it shares only the reads of fields.
+
+One byte per row with four states as the result of a step, because a logic
+step would then run about eight times as many operations as on bitmaps.
+
+A map from path to column as the input of a run, because it costs a lookup per
+field per batch and leaves the sharing of prefixes to the adapter.
+
+A kind of column that is null on every row, for a field that the source lacks,
+because bind then cannot tell that the field is absent, and the description
+would gain a kind that holds no memory.
+
+One byte per record that holds the outcome and the fault, because it takes
+eight times the memory of a bitmap, and the faults are rare.
 
 ## Consequences
 

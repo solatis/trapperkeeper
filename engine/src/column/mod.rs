@@ -16,8 +16,9 @@ pub use marking::{
     CHUNK_ROWS, CHUNK_WORDS, Float, Marking, Present, clear_nan, present_all, present_from_bits,
     present_from_mask,
 };
+pub(crate) use marking::{Test, pack};
 pub use text::{INLINE, Piece, Text, Texts, Unit, Units, Utf8, View, Views};
-pub use values::{Bits, Booleans, Floats, Ints, Strided};
+pub use values::{Bits, Booleans, Floats, Ints, Number, Strided};
 
 /// A marking that covers another number of rows than the values of its
 /// column.
@@ -43,9 +44,8 @@ impl std::error::Error for Mismatch {}
 #[derive(Debug, Clone, Copy)]
 pub enum Kind<'a> {
     Ints(Ints<'a>, Marking<'a>),
-    // Besides its marking, every NaN of a float column is no value. A reader of
-    // the column runs `clear_nan` after the loop of the marking to clear those
-    // rows.
+    // Besides its marking, every NaN of a float column is no value, and
+    // `Column::present` clears those rows.
     Floats(Floats<'a>, Marking<'a>),
     Booleans(Booleans<'a>, Marking<'a>),
     /// Texts, where the marking says which rows have no text.
@@ -147,6 +147,43 @@ impl<'a> Column<'a> {
     #[must_use]
     pub fn kind(&self) -> &Kind<'a> {
         &self.kind
+    }
+
+    /// Writes into `out` the bitmap of the rows `start .. start + rows` that
+    /// have a value. Bit `i` of `out` is row `start + i`, and the bits from
+    /// `rows` on are 0.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `rows` is above `CHUNK_ROWS` or the chunk reaches past the
+    /// column.
+    pub fn present(&self, start: usize, rows: usize, out: &mut Present) {
+        // `present_all` knows no length, so this bound holds a chunk of an
+        // unmarked column inside the column too.
+        assert!(
+            start.checked_add(rows).is_some_and(|end| end <= self.rows),
+            "a chunk of {rows} rows from row {start} of {}",
+            self.rows
+        );
+        let (Kind::Ints(_, marking)
+        | Kind::Floats(_, marking)
+        | Kind::Booleans(_, marking)
+        | Kind::Text(_, marking)
+        | Kind::List(_, marking)) = &self.kind;
+        match marking {
+            Marking::Never => present_all(rows, out),
+            Marking::Bitmap(bits) => present_from_bits(*bits, start, rows, out),
+            Marking::ByteMask(mask) => present_from_mask(*mask, start, rows, out),
+        }
+        // A NaN is no value in every source (ADR-0005), so the NaN pass runs
+        // after the marking's loop and clears the rows it set.
+        if let Kind::Floats(values, _) = &self.kind {
+            match values {
+                Floats::F16(v) => clear_nan(*v, start, rows, out),
+                Floats::F32(v) => clear_nan(*v, start, rows, out),
+                Floats::F64(v) => clear_nan(*v, start, rows, out),
+            }
+        }
     }
 }
 

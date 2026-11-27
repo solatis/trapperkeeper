@@ -4,6 +4,11 @@
 use std::marker::PhantomData;
 use std::mem::{align_of, size_of};
 use std::ptr::NonNull;
+use std::simd::Simd;
+use std::simd::cmp::{SimdPartialEq, SimdPartialOrd};
+use std::simd::num::{SimdFloat, SimdInt, SimdUint};
+
+use super::Kind;
 
 /// Values of one fixed-width type in a source's memory. The values lie
 /// `stride` bytes apart, and the run borrows the memory for `'a`.
@@ -275,4 +280,87 @@ impl Booleans<'_> {
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
+}
+
+pub(super) mod sealed {
+    use std::simd::{Simd, SimdCast, SimdElement};
+
+    use super::super::Kind;
+    use super::Strided;
+
+    /// The part of `Number` that only this crate can name, so no crate
+    /// outside the engine implements `Number` for a type of its own.
+    // `Send`, `Sync` and `'static` let a loop that holds a value of the type
+    // be shared between threads.
+    pub trait Number: Copy + PartialOrd + Send + Sync + 'static + SimdElement + SimdCast {
+        /// The values of `kind` when it is a column of this type.
+        fn values<'a>(kind: &Kind<'a>) -> Option<Strided<'a, Self>>;
+
+        /// For 64 lanes, whether `left` is below `right`, with lane `i` in
+        /// bit `i`.
+        fn lt_lanes(left: Simd<Self, 64>, right: Simd<Self, 64>) -> u64;
+
+        /// For 64 lanes, whether `left` equals `right`, with lane `i` in bit
+        /// `i`.
+        fn eq_lanes(left: Simd<Self, 64>, right: Simd<Self, 64>) -> u64;
+
+        /// 64 lanes converted to `C`, each as Rust's `as` converts it.
+        fn convert_lanes<C: super::Number>(lanes: Simd<Self, 64>) -> Simd<C, 64>;
+
+        /// The value converted to `C` as Rust's `as` converts it, so it
+        /// matches a lane of `convert_lanes`.
+        fn convert<C: super::Number>(self) -> C;
+    }
+}
+
+/// A number type that a column can hold.
+// The trait is sealed, because the engine owns the closed list of number
+// types and no other crate extends it (ADR-0036).
+pub trait Number: sealed::Number {}
+
+// Writes the impls of `Number` for each number type, with the variant of
+// `Ints` or `Floats` that holds a column of it.
+macro_rules! numbers {
+    ($($t:ty => $kind:ident($values:ident::$variant:ident)),* $(,)?) => {$(
+        impl sealed::Number for $t {
+            fn values<'a>(kind: &Kind<'a>) -> Option<Strided<'a, Self>> {
+                match kind {
+                    Kind::$kind($values::$variant(v), _) => Some(*v),
+                    _ => None,
+                }
+            }
+
+            fn lt_lanes(left: Simd<Self, 64>, right: Simd<Self, 64>) -> u64 {
+                left.simd_lt(right).to_bitmask()
+            }
+
+            fn eq_lanes(left: Simd<Self, 64>, right: Simd<Self, 64>) -> u64 {
+                left.simd_eq(right).to_bitmask()
+            }
+
+            fn convert_lanes<C: Number>(lanes: Simd<Self, 64>) -> Simd<C, 64> {
+                lanes.cast::<C>()
+            }
+
+            fn convert<C: Number>(self) -> C {
+                Simd::<Self, 1>::splat(self).cast::<C>()[0]
+            }
+        }
+
+        impl Number for $t {}
+    )*};
+}
+
+numbers! {
+    i8 => Ints(Ints::I8),
+    i16 => Ints(Ints::I16),
+    i32 => Ints(Ints::I32),
+    i64 => Ints(Ints::I64),
+    u8 => Ints(Ints::U8),
+    u16 => Ints(Ints::U16),
+    u32 => Ints(Ints::U32),
+    u64 => Ints(Ints::U64),
+    f16 => Floats(Floats::F16),
+    f32 => Floats(Floats::F32),
+    f64 => Floats(Floats::F64),
 }

@@ -7,18 +7,20 @@ into the bitmap of a chunk, and the pass that clears the rows whose float is a
 NaN. It also describes text columns and list columns, which share the offsets
 and the fixed-width layouts of `layout.rs`. A record is a row of a list column.
 The elements of all records are one column of their own, or each record is a
-column of its own. It evaluates no rule.
+column of its own. The executor reads a column through `Column::present`,
+which writes the rows that have a value, and through `pack`, which tests the
+values of a chunk.
 
 **Map**:
 
 | File         | What                                                                                                                                                                            | When to read                                                                                                                                                                                       |
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `values.rs`  | where the values lie: a run with a stride, a run of bits, and the number and boolean types                                                                                      | what a stride is; building a run from raw memory and what the adapter promises; which number and boolean types a column holds                                                                      |
+| `values.rs`  | where the values lie: a run with a stride, a run of bits, the number and boolean types, and the trait `Number`                                                                  | what a stride is; building a run from raw memory and what the adapter promises; which number and boolean types a column holds; which number types a loop can be generic over                       |
 | `marking.rs` | the markings, the chunk size, the bitmap of a chunk, the loops that make it, the NaN pass, and `pack`, the loop under them that tests a chunk's rows through a `Source`         | how a source says "no value"; the bit order of a chunk's bitmap; why a NaN row has no value; adding a marking; how `pack` reads 64 rows at a time                                                  |
 | `layout.rs`  | the offsets and the fixed-width layouts, generic over what their rows point into                                                                                                | which offset types are supported; what an adapter promises about offsets; how a numpy view with a step, such as `a[::2]`, is described; adding a layout of rows                                    |
 | `text.rs`    | the trait `Texts` and the layouts of a text column                                                                                                                              | writing a loop over text; what an adapter promises about text bytes and pieces; the layout of a view; why a numpy cell loses its trailing zeros; why UTF-32 is read as units; adding a text layout |
 | `list.rs`    | the trait `Lists`, the layouts of a list column, the shape of a column (its scalar type and how deep its lists nest) and the layout in which each record is a column of its own | writing a loop over a list; which lists may overlap; lists of texts, lists of lists and masked arrays of masked arrays; adding a list layout                                                       |
-| `mod.rs`     | `Column`, its kinds and the check that a marking covers as many rows as the values                                                                                              | building a column; adding a kind of column                                                                                                                                                         |
+| `mod.rs`     | `Column`, its kinds, the check that a marking covers as many rows as the values, and `Column::present`                                                                          | building a column; adding a kind of column; the rows of a chunk that have a value                                                                                                                  |
 
 **Invariants**:
 
@@ -45,6 +47,10 @@ column of its own. It evaluates no rule.
   have its own layout and marking, so a loop dispatches once per record.
 - `Text::Utf32` is the one layout that is not UTF-8, and no function gives a
   `&str` or a `char` for it.
+- `pack` runs under the markings, the NaN pass and the comparisons of the
+  executor. A change to `pack` changes how the engine reads memory, so it is
+  a case for the Miri workflow, which the root `AGENTS.md` says when an agent
+  may start.
 - A new layout or loop gets a property in `engine/tests/column.rs` that builds
   it from generated data and reads the data back. The property runs under
   Miri in the nightly workflow `miri.yml`.

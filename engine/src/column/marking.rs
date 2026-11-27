@@ -6,7 +6,7 @@ use std::simd::cmp::{SimdPartialEq, SimdPartialOrd};
 use std::simd::num::SimdFloat;
 use std::simd::{Simd, SimdElement};
 
-use super::values::{Bits, Strided};
+use super::values::{Bits, Number, Strided};
 
 /// Rows in one chunk, at most. The executor works on a column in chunks of
 /// this size, which ADR-0035 sets. No measurement has fixed the number yet.
@@ -131,7 +131,7 @@ pub fn present_from_bits(bits: Bits<'_>, start: usize, rows: usize, out: &mut Pr
 }
 
 /// Where `pack` reads the rows of a chunk.
-trait Source: Copy {
+pub(crate) trait Source: Copy {
     /// 64 rows of the source, as `Test::lanes` takes them.
     type Lanes;
     /// One row of the source, as `Test::one` takes it.
@@ -186,7 +186,7 @@ impl<T: SimdElement> Source for Strided<'_, T> {
 /// A test that `pack` applies to each row of a chunk.
 // The two methods give the same answer for the same row, so the vector arm
 // and the scalar arm of `pack` agree.
-trait Test<S: Source> {
+pub(crate) trait Test<S: Source> {
     /// The answers for 64 rows, with the answer for lane `i` in bit `i`.
     fn lanes(&self, rows: S::Lanes) -> u64;
     /// The answer for one row.
@@ -214,7 +214,13 @@ impl Test<Strided<'_, u8>> for ZeroByte {
 ///
 /// Panics when `rows` is above `CHUNK_ROWS` or the chunk reaches past the end
 /// of `source`.
-fn pack<S: Source, X: Test<S>>(source: S, start: usize, rows: usize, out: &mut Present, test: &X) {
+pub(crate) fn pack<S: Source, X: Test<S>>(
+    source: S,
+    start: usize,
+    rows: usize,
+    out: &mut Present,
+    test: &X,
+) {
     // The bound keeps the chunk inside `out`, and the unchecked reads of the
     // scalar loop trust it.
     assert!(
@@ -322,7 +328,7 @@ mod sealed {
 /// A float type that a column can hold.
 // The trait is sealed, because the engine owns the closed list of float types
 // and no other crate extends it (ADR-0036).
-pub trait Float: sealed::Sealed {}
+pub trait Float: Number + sealed::Sealed {}
 
 impl sealed::Sealed for f16 {
     fn not_nan(values: Strided<'_, Self>, start: usize, rows: usize, out: &mut Present) {

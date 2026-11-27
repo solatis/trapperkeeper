@@ -1,7 +1,8 @@
-//! The rule model: what a rule is, the tree of its expression, their JSON
+//! The rule engine: what a rule is, the tree of its expression, their JSON
 //! form, the parser and the printer of a rule's text, and the validation of
-//! a rule. The crate also holds the description of a column, which the loops
-//! that evaluate a rule will read. No code of this crate evaluates a rule yet.
+//! a rule. The crate plans a rule set into a program, binds the program to the
+//! column types of a schema and runs it over the columns of a batch, which it
+//! describes in `column`.
 
 // The half-precision float of numpy and pandas columns is nightly's `f16`,
 // and ADR-0036 names this feature, as ADR-0009 asks.
@@ -22,8 +23,10 @@ compile_error!("amd64 builds target x86-64-v3: add `-C target-cpu=x86-64-v3` to 
 // The crate root exports nothing of `column`, because its names, such as
 // `Strided`, are general and read better as `column::Strided`.
 pub mod column;
+pub mod exec;
 pub mod expr;
 pub mod limits;
+pub mod plan;
 pub mod rule;
 pub mod text;
 pub mod validate;

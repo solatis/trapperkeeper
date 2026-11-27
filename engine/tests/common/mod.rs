@@ -324,6 +324,19 @@ pub fn scope() -> impl Strategy<Value = BTreeMap<String, String>> {
     btree_map(text(), text(), 0..=MAX_SCOPE_TAGS)
 }
 
+/// A rule with the id `rule_id` and the expression `e`, which observes
+/// every record and has no title and no scope.
+pub fn observing(rule_id: Uuid, e: Expr) -> Rule {
+    Rule {
+        rule_id,
+        rule_title: None,
+        action: Action::Observe,
+        sample_rate: 1.0,
+        scope: BTreeMap::new(),
+        expression: e,
+    }
+}
+
 /// A rule that `validate` accepts: a version 7 UUID as its id, a sample rate
 /// in (0, 1], a scope within the caps and an expression from `valid_expr()`.
 pub fn rule() -> impl Strategy<Value = Rule> {
