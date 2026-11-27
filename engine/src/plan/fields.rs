@@ -140,9 +140,6 @@ impl FieldNode {
 fn paths_in(e: &Expr) -> Vec<&[Segment]> {
     match e {
         Expr::Field(path) => vec![path],
-        // The path of a quantifier's element starts at the element, so it is
-        // no field of the record.
-        Expr::Element { .. } => Vec::new(),
         _ => e
             .children()
             .into_iter()
