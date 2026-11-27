@@ -30,9 +30,9 @@ columns of a schema and runs it.
 
 **Why**:
 
-- One program per rule set, the field list in the planner, and the fields as
-  a tree of paths, so that an adapter looks up a prefix that several paths
-  share once:
+- One program per rule set, and the planner as the place that lists the
+  fields. The fields form a tree of paths, so an adapter looks up a prefix
+  that several paths share once:
   `doc/adr/0035-vectorized-evaluation-with-a-planner.md`.
 - A null where a condition is expected is unknown, and a literal that is no
   boolean there is a fault: `doc/adr/0005-one-vocabulary-for-failure-behavior.md`
@@ -40,5 +40,5 @@ columns of a schema and runs it.
 
 **How to**: a new kind of expression gets a `Step` variant, an arm in
 `Planner::expr`, an arm in `bind_step` of `src/exec/bind.rs`, an arm in the
-reference interpreter of `tests/evaluation.rs`, and the kind in its strategy
-`condition`, which generates the rules there.
+reference interpreter of `tests/evaluation.rs`, and a case in the strategy
+`condition` of that file, which generates the rules of its properties.
