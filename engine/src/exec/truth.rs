@@ -130,8 +130,8 @@ impl Truth {
         //    fault, as ADR-0005 defines `and`.
         let mut out = Self::EMPTY;
         for k in 0..CHUNK_WORDS {
-            let (left_false, right_false) = (self.falses(k), right.falses(k));
             // 1. decide the faults
+            let (left_false, right_false) = (self.falses(k), right.falses(k));
             let fault = self.fault[k] | right.fault[k] & !left_false;
 
             // 2. decide true, false and unknown
