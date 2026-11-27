@@ -330,14 +330,14 @@ pub trait Number: sealed::Number {}
 // `Ints` or `Floats` that holds a column of it, whether it is a float and
 // whether it is signed.
 macro_rules! numbers {
-    ($($t:ty => $kind:ident($values:ident::$variant:ident), $float:expr, $signed:expr);* $(;)?) => {$(
+    ($($t:ty => $kind:ident::$variant:ident, $float:expr, $signed:expr);* $(;)?) => {$(
         impl sealed::Number for $t {
             const FLOAT: bool = $float;
             const SIGNED: bool = $signed;
 
             fn values<'a>(kind: &Kind<'a>) -> Option<Strided<'a, Self>> {
                 match kind {
-                    Kind::$kind($values::$variant(v), _) => Some(*v),
+                    Kind::$kind($kind::$variant(v), _) => Some(*v),
                     _ => None,
                 }
             }
@@ -364,15 +364,15 @@ macro_rules! numbers {
 }
 
 numbers! {
-    i8 => Ints(Ints::I8), false, true;
-    i16 => Ints(Ints::I16), false, true;
-    i32 => Ints(Ints::I32), false, true;
-    i64 => Ints(Ints::I64), false, true;
-    u8 => Ints(Ints::U8), false, false;
-    u16 => Ints(Ints::U16), false, false;
-    u32 => Ints(Ints::U32), false, false;
-    u64 => Ints(Ints::U64), false, false;
-    f16 => Floats(Floats::F16), true, true;
-    f32 => Floats(Floats::F32), true, true;
-    f64 => Floats(Floats::F64), true, true;
+    i8 => Ints::I8, false, true;
+    i16 => Ints::I16, false, true;
+    i32 => Ints::I32, false, true;
+    i64 => Ints::I64, false, true;
+    u8 => Ints::U8, false, false;
+    u16 => Ints::U16, false, false;
+    u32 => Ints::U32, false, false;
+    u64 => Ints::U64, false, false;
+    f16 => Floats::F16, true, true;
+    f32 => Floats::F32, true, true;
+    f64 => Floats::F64, true, true;
 }
