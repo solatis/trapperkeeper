@@ -29,8 +29,9 @@ impl fmt::Display for SchemaMismatch {
 impl std::error::Error for SchemaMismatch {}
 
 impl Bound {
-    /// Runs the program over a batch of `rows` records, with one column per
-    /// field as `bind` took them.
+    /// Runs the program over a batch of `rows` records. `columns` holds one
+    /// column per field, of the types that `bind` saw, or `None` for a field
+    /// that the source lacks.
     ///
     /// # Errors
     ///
@@ -49,17 +50,22 @@ impl Bound {
         // 2. For each chunk, it writes the bitmap of the rows with a value of
         //    each field once. Every step that reads the field shares it.
         // 3. It runs the steps in order. Each writes the result of its slot
-        //    from the bitmaps of its fields.
+        //    from the bitmaps of its fields or the results of earlier steps.
         // 4. It appends the matched and the faulted records of each rule to
         //    the outcomes, with the fault of each faulted record.
 
         // 1. check the batch
+        // A missing or an extra column is reported at the first field number
+        // that the two lists do not share.
         if columns.len() != self.types.len() {
             return Err(SchemaMismatch {
                 field: columns.len().min(self.types.len()),
             });
         }
         for (field, (c, t)) in columns.iter().zip(&self.types).enumerate() {
+            // `FieldType::of` gives `Absent` for `None`, so a field that bind
+            // saw as absent is absent in each batch, and it has no rows to
+            // count.
             if FieldType::of(c.as_ref()) != *t || c.as_ref().is_some_and(|c| c.rows() != rows) {
                 return Err(SchemaMismatch { field });
             }
@@ -67,6 +73,7 @@ impl Bound {
 
         let mut present = vec![[0; CHUNK_WORDS]; columns.len()];
         let mut truths = Vec::with_capacity(self.steps.len());
+        // The outcomes take the id of each rule, in the order of the rule set.
         let mut outcomes = Outcomes::new(rows, self.rules.iter().map(|&(id, _)| id));
         // 2. write the presence of each field
         for start in (0..rows).step_by(CHUNK_ROWS) {
@@ -83,6 +90,8 @@ impl Bound {
             truths.clear();
             for step in &self.steps {
                 let truth = run_step(step, &truths, &present, columns, start, chunk);
+                // A step's result lands at the index of its slot, because a
+                // slot is the place of its step.
                 truths.push(truth);
             }
 
@@ -116,6 +125,8 @@ fn run_step(
             chunk(columns, start, rows, &mut truth);
             Truth::compared(&truth, all_present(present, fields))
         }
+        // A type fault happens only on values that are there (ADR-0005), so a
+        // row where a field is null stays unknown.
         BoundStep::Faulted { fields, .. } => Truth::faulted(all_present(present, fields)),
         BoundStep::Presence { field, negated } => {
             Truth::null_test(&present[*field], *negated, rows)
@@ -128,6 +139,8 @@ fn run_step(
 
 /// The rows on which every field of `fields` has a value.
 fn all_present(present: &[Present], fields: &[usize]) -> Present {
+    // A comparison reads one or two fields, so the bitmap of all ones that
+    // the fold starts from is always narrowed to a field's rows.
     fields.iter().fold([u64::MAX; CHUNK_WORDS], |rows, &f| {
         std::array::from_fn(|k| rows[k] & present[f][k])
     })
@@ -136,6 +149,11 @@ fn all_present(present: &[Present], fields: &[usize]) -> Present {
 /// The fault of the record at `row` of the chunk in the result of `slot`,
 /// which faulted on that row.
 fn fault_of(steps: &[BoundStep], truths: &[Truth], slot: usize, row: usize) -> Fault {
+    // The function walks back from the slot of a rule to the step that raised
+    // the fault on the row. A `not` passes on the fault of its operand. An
+    // `and` or an `or` faulted because one of its operands did, and the walk
+    // takes the operand whose fault counts. The walk ends at a fault constant
+    // or a type fault, which are the only steps that raise a fault.
     let mut slot = slot;
     loop {
         match &steps[slot] {
@@ -143,8 +161,8 @@ fn fault_of(steps: &[BoundStep], truths: &[Truth], slot: usize, row: usize) -> F
                 return *fault;
             }
             BoundStep::Not(a) => slot = *a,
-            // Written order counts a fault of the left operand first, and the
-            // right operand faulted on the row where the left one did not.
+            // Written order counts the fault of the left operand first. When
+            // the left operand did not fault on the row, the right one did.
             BoundStep::And(a, b) | BoundStep::Or(a, b) => {
                 slot = if truths[*a].faulted_at(row) { *a } else { *b };
             }
