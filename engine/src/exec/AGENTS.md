@@ -1,28 +1,31 @@
 # engine/src/exec/
 
-**What**: the executor. It binds a `Program` to the column types of one schema
+**What**: the executor. It binds a `Program`, the planned rule set of
+`src/plan/`, to the column types of one schema
 and runs the bound program over each batch of that schema, one chunk of 2048
 rows at a time. A run returns, for each rule, the records it matched and the
 records it faulted on, each with its fault. It knows no rule text.
 
 **Map**:
 
-| File         | What                                                                                                     | When to read                                                                                                                                          |
-| ------------ | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mod.rs`     | the module and what it exports                                                                           | what a caller of the executor can reach                                                                                                               |
-| `bind.rs`    | `Bound`, the type of a field as bind sees it, and the binding of each step to its loop                   | how a comparison picks its loop; how a literal converts to the column's type; which comparisons are a type fault at bind; how a boolean field is read |
-| `run.rs`     | `Bound::run`, the presence of each field per chunk, and the fault of a faulted record                    | how a batch runs chunk by chunk; what `run` checks about a batch                                                                                      |
-| `number.rs`  | the orders as types, the tests of `pack` that compare numbers, and the common type of two number columns | writing a loop that compares numbers; why an int literal outside the column's type decides every row; in which type two number fields compare         |
-| `truth.rs`   | `Truth`, the result of a step for one chunk                                                              | how a step's result is held                                                                                                                           |
-| `outcome.rs` | `Outcomes`, `RuleOutcome`, `Outcome` and `Fault`                                                         | what a run returns; the faults                                                                                                                        |
+| File         | What                                                                                                                              | When to read                                                                                                                                          |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mod.rs`     | the module and what it exports                                                                                                    | what a caller of the executor can reach                                                                                                               |
+| `bind.rs`    | `Bound`, the type of a field as bind sees it, and the binding of each step to its loop                                            | how a comparison picks its loop; how a literal converts to the column's type; which comparisons are a type fault at bind; how a boolean field is read |
+| `run.rs`     | `Bound::run`, the presence of each field per chunk, and the fault of a faulted record                                             | how a batch runs chunk by chunk; what `run` checks about a batch                                                                                      |
+| `number.rs`  | the six comparisons as types, such as `Less`, the tests of `pack` that compare numbers, and the common type of two number columns | writing a loop that compares numbers; why an int literal outside the column's type decides every row; in which type two number fields compare         |
+| `truth.rs`   | `Truth`, the result of a step for one chunk                                                                                       | how a step's result is held                                                                                                                           |
+| `outcome.rs` | `Outcomes`, `RuleOutcome`, `Outcome` and `Fault`                                                                                  | what a run returns; the faults                                                                                                                        |
 
 **Invariants**:
 
-- A true row is known, and a faulted row is neither known nor true. A row
-  where a field of a comparison has no value is unknown.
-- Both operands of `and` and `or` run on every row. The logic step then clears
-  the faults of the right operand on the rows that the left operand decided,
-  which keeps the written order of the faults without a branch per row.
+- A row of a step's result is true, false, unknown or faulted, and a row is
+  known when it is true or false. A row where a field of a comparison has no
+  value is unknown.
+- `and` and `or` run both operands on every row. Their step then clears the
+  faults of the right operand on the rows that the left operand already
+  decided. This keeps the written order of the faults without a branch per
+  row.
 - A loop writes every word of its bitmap and sets no bit at or past the
   chunk's rows.
 - `run` reads no column whose type or row count differs from what bind saw,
