@@ -1,5 +1,6 @@
 //! Strategies for the engine's tests: expression trees, and rules that hold
-//! them.
+//! them. The module also holds the helpers that build and check the bitmap of
+//! a chunk.
 
 // Each test crate compiles this module and uses only part of it.
 #![allow(dead_code)]
@@ -9,6 +10,8 @@ use std::collections::BTreeMap;
 use proptest::collection::{btree_map, vec};
 use proptest::prelude::*;
 use proptest::sample::{Index, select};
+use proptest::test_runner::TestCaseError;
+use trapperkeeper_engine::column::{CHUNK_ROWS, CHUNK_WORDS, Present};
 use trapperkeeper_engine::expr::{Expr, Segment, TypeName};
 use trapperkeeper_engine::limits::{MAX_SCOPE_TAGS, MAX_TAG_LENGTH};
 use trapperkeeper_engine::{Action, Rule};
@@ -342,4 +345,47 @@ pub fn rule() -> impl Strategy<Value = Rule> {
             expression,
         },
     )
+}
+
+/// The most rows of a generated column that a chunk is cut from. It exceeds
+/// two chunks, so a chunk of `CHUNK_ROWS` rows can start at any row below
+/// `CHUNK_ROWS`.
+pub const MAX_ROWS: usize = 5000;
+
+/// Whether bit `row` of the bitmap of a chunk is set.
+pub fn bit(out: &Present, row: usize) -> bool {
+    out[row / 64] >> (row % 64) & 1 == 1
+}
+
+/// Checks that `out` is the bitmap of `expected`: one bit per row, and no bit
+/// set from the end of `expected` on.
+pub fn assert_bitmap(out: &Present, expected: &[bool]) -> Result<(), TestCaseError> {
+    for (row, want) in expected.iter().enumerate() {
+        prop_assert_eq!(bit(out, row), *want, "row {}", row);
+    }
+    // A later step combines whole words, so a stray bit past the chunk would
+    // count as a row.
+    prop_assert!((expected.len()..CHUNK_WORDS * 64).all(|row| !bit(out, row)));
+    Ok(())
+}
+
+/// The start and the length of a chunk of a column of `len` rows, picked by
+/// two generated indexes. The first picks the start inside the column, and the
+/// second picks a length of at most `CHUNK_ROWS` that stays inside it, so every
+/// start is reached, also one that is no multiple of 64.
+pub fn chunk_of(len: usize, (at, size): (Index, Index)) -> (usize, usize) {
+    let start = at.index(len + 1);
+    (start, size.index((len - start).min(CHUNK_ROWS) + 1))
+}
+
+/// Packs booleans into bytes from bit `offset` on, lowest bit first, as a
+/// source bitmap holds them. The bits before `offset` are set, so a loop that
+/// reads them shows.
+pub fn packed(bools: &[bool], offset: usize) -> Vec<u8> {
+    let mut bytes = vec![0u8; (offset + bools.len()).div_ceil(8)];
+    let bits = std::iter::repeat_n(true, offset).chain(bools.iter().copied());
+    for (at, bit) in bits.enumerate() {
+        bytes[at / 8] |= u8::from(bit) << (at % 8);
+    }
+    bytes
 }

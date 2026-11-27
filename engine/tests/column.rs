@@ -6,9 +6,12 @@
 // The half-precision column holds nightly's `f16` (ADR-0036).
 #![feature(f16)]
 
+mod common;
+
 use std::mem::size_of;
 use std::ops::Range;
 
+use common::{MAX_ROWS, assert_bitmap, chunk_of, packed};
 use proptest::collection::vec;
 use proptest::prelude::*;
 use proptest::sample::Index;
@@ -18,28 +21,6 @@ use trapperkeeper_engine::column::{
     SizedLists, Strided, Text, Texts, Units, Utf8, View, Views, clear_nan, present_all,
     present_from_bits, present_from_mask,
 };
-
-/// The most rows of a generated column that a chunk is cut from. It exceeds
-/// two chunks, so a chunk of `CHUNK_ROWS` rows can start at any row below
-/// `CHUNK_ROWS`.
-const MAX_ROWS: usize = 5000;
-
-/// Whether bit `row` of the bitmap of a chunk is set.
-fn bit(out: &Present, row: usize) -> bool {
-    out[row / 64] >> (row % 64) & 1 == 1
-}
-
-/// Checks that `out` is the bitmap of `expected`: one bit per row, and no bit
-/// set from the end of `expected` on.
-fn assert_bitmap(out: &Present, expected: &[bool]) -> Result<(), TestCaseError> {
-    for (row, want) in expected.iter().enumerate() {
-        prop_assert_eq!(bit(out, row), *want, "row {}", row);
-    }
-    // A later step combines whole words, so a stray bit past the chunk would
-    // count as a row.
-    prop_assert!((expected.len()..CHUNK_WORDS * 64).all(|row| !bit(out, row)));
-    Ok(())
-}
 
 /// The bitmap of a chunk of `values` after its marking `present`, with the rows
 /// whose float is a NaN cleared. Every `step`-th value of `values` is a row,
@@ -60,27 +41,6 @@ fn nan_cleared<T: Float>(
     present_from_bits(present, start, rows, &mut out);
     clear_nan(run, start, rows, &mut out);
     out
-}
-
-/// The start and the length of a chunk of a column of `len` rows, picked by
-/// two generated indexes. The first picks the start inside the column, and the
-/// second picks a length of at most `CHUNK_ROWS` that stays inside it, so every
-/// start is reached, also one that is no multiple of 64.
-fn chunk_of(len: usize, (at, size): (Index, Index)) -> (usize, usize) {
-    let start = at.index(len + 1);
-    (start, size.index((len - start).min(CHUNK_ROWS) + 1))
-}
-
-/// Packs booleans into bytes from bit `offset` on, lowest bit first, as a
-/// source bitmap holds them. The bits before `offset` are set, so a loop that
-/// reads them shows.
-fn packed(bools: &[bool], offset: usize) -> Vec<u8> {
-    let mut bytes = vec![0u8; (offset + bools.len()).div_ceil(8)];
-    let bits = std::iter::repeat_n(true, offset).chain(bools.iter().copied());
-    for (at, bit) in bits.enumerate() {
-        bytes[at / 8] |= u8::from(bit) << (at % 8);
-    }
-    bytes
 }
 
 /// Texts for the layouts: empty texts, texts of one to four bytes per
