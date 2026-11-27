@@ -1,6 +1,6 @@
 //! The rule engine. It holds the rule and the tree of its expression with
 //! their JSON form, parses and prints a rule's text, and validates a rule. It
-//! also evaluates rules: `plan` turns a rule set into a program, `exec` binds
+//! also evaluates rules. `plan` turns a rule set into a program, `exec` binds
 //! the program to the columns of a schema and runs it over a batch, and
 //! `column` describes those columns.
 
