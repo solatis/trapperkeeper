@@ -25,9 +25,11 @@ pub(crate) struct LessEqual;
 pub(crate) struct Greater;
 pub(crate) struct GreaterEqual;
 
-// A NaN is no value (ADR-0005), and a lane without a value is unknown
-// whatever the loop gives for it. So `<=` can be the negation of `>`, and the
-// orders need only the two lane tests of `Number`.
+// A NaN is no value (ADR-0005), and `Truth::compared` clears the result of a
+// row without a value, whatever the loop gives for it. So `<=` can be the
+// negation of `>`, and the orders need only the two lane tests of `Number`.
+// On a NaN, `lanes` and `one` then answer differently, and the answer is
+// cleared.
 impl Order for Equal {
     fn lanes<T: Number>(left: Simd<T, 64>, right: Simd<T, 64>) -> u64 {
         T::eq_lanes(left, right)
@@ -202,7 +204,8 @@ pub(crate) enum Side {
 }
 
 impl<T: TryFrom<i64>> Converted<T> {
-    /// `literal` in the type `T`.
+    /// Converts `literal` to `T`, or says on which side of the type it lies
+    /// when `T` cannot hold it.
     pub(crate) fn of(literal: i64) -> Self {
         match T::try_from(literal) {
             Ok(v) => Self::Within(v),
@@ -214,8 +217,8 @@ impl<T: TryFrom<i64>> Converted<T> {
     }
 }
 
-/// The result, on every row with a value, of a comparison whose literal lies
-/// on `side` of the column's type.
+/// The result of `column op literal` on every row with a value, for a
+/// literal that lies on `side` of the column's type.
 pub(crate) fn outside(op: Comparison, side: Side) -> bool {
     let above = matches!(side, Side::Above);
     match op {
@@ -237,6 +240,8 @@ enum Common {
     Left,
     Right,
     F64,
+    // A signed type wider than both, for a signed and an unsigned int, such
+    // as `i16` for an `i8` against a `u8`.
     I16,
     I32,
     I64,
@@ -366,6 +371,11 @@ fn in_type<C: Number, L: Number, R: Number, O: Order>(
 /// Writes into `out` whether each of the rows `start .. start + rows` of
 /// `left` compares with the same row of `right` as `O` says, both converted to
 /// the common type of their pair.
+///
+/// # Panics
+///
+/// Panics when the two columns hold different numbers of values, when `rows`
+/// is above `CHUNK_ROWS` or when the chunk reaches past the columns.
 pub(crate) fn compare_columns<L: Number, R: Number, O: Order>(
     left: Strided<'_, L>,
     right: Strided<'_, R>,
