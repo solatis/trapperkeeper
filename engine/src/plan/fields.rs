@@ -7,8 +7,8 @@ use crate::expr::{Expr, Segment};
 /// is the place of the path in `paths`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FieldTree {
-    // The tree that an adapter walks, so that it looks up a shared prefix of
-    // two paths once.
+    // The tree that an adapter, the code that describes the columns of a
+    // source, walks to look up a prefix that two paths share once.
     root: FieldNode,
     // The paths in field order, which is the order of the columns that a
     // caller hands over.
@@ -30,12 +30,15 @@ impl FieldTree {
         // The function inserts every path into the tree and then numbers the
         // nodes that end a path.
         //
-        // 1. It walks every expression and inserts each path that it reads. A
-        //    child keeps the place where a rule first read it.
+        // 1. It walks every expression and inserts each path that it reads.
+        //    The children of a node stay in the order in which the rules first
+        //    read them, and two reads of one path end at one node, which is
+        //    one field.
         // 2. It numbers the nodes that end a path in a depth-first walk and
-        //    records each path in that order. The numbers come after the
-        //    inserts, so the order of the fields is the order of a walk over
-        //    the finished tree, which an adapter follows.
+        //    records each path in that order. Numbering the finished tree
+        //    makes the order of the fields the order of a walk over it, so an
+        //    adapter that walks the tree meets the fields in the order of the
+        //    columns that the caller hands over.
 
         // 1. insert each path
         let mut root = FieldNode::default();
@@ -140,6 +143,8 @@ impl FieldNode {
 fn paths_in(e: &Expr) -> Vec<&[Segment]> {
     match e {
         Expr::Field(path) => vec![path],
+        // An element of a quantifier is a leaf with no children, and its path
+        // starts at the element, so it adds no field of the record.
         _ => e
             .children()
             .into_iter()
