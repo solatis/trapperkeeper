@@ -247,33 +247,52 @@ enum Common {
 
 /// The common type of a column of `L` and a column of `R`.
 const fn common<L: Number, R: Number>() -> Common {
-    // The function tests the pair in a chain, and the first case that applies
-    // gives the type. The floats come first, because a pair that holds a
-    // float compares as a float whatever the int is.
     let (l, r) = (size_of::<L>(), size_of::<R>());
-    if L::FLOAT && R::FLOAT || L::SIGNED == R::SIGNED && !L::FLOAT && !R::FLOAT {
-        // Two floats, or two ints of one signedness: the wider type holds
-        // every value of the narrower one.
-        if l >= r { Common::Left } else { Common::Right }
-    } else if L::FLOAT || R::FLOAT {
+    match (L::FLOAT, R::FLOAT) {
+        // The wider float type holds every value of the narrower one.
+        (true, true) => wider(l, r),
         // An int widens to a float64 (ADR-0041).
-        Common::F64
-    } else {
-        // A signed int and an unsigned one. A signed type twice as wide as
-        // the unsigned one holds every value of it.
-        let unsigned = if L::SIGNED { r } else { l };
-        let signed = if L::SIGNED { l } else { r };
-        let width = if 2 * unsigned > signed {
-            2 * unsigned
-        } else {
-            signed
-        };
-        match width {
-            2 => Common::I16,
-            4 => Common::I32,
-            8 => Common::I64,
-            _ => Common::SignedU64(L::SIGNED),
+        (true, false) | (false, true) => Common::F64,
+        // The wider int type of one signedness holds every value of the
+        // narrower one.
+        (false, false) if L::SIGNED == R::SIGNED => wider(l, r),
+        (false, false) => {
+            // A signed type twice as wide as an unsigned one holds every value
+            // of it, and no int type holds every value of a `u64` and of a
+            // signed type.
+            let (signed, unsigned) = if L::SIGNED { (l, r) } else { (r, l) };
+            let width = if 2 * unsigned > signed {
+                2 * unsigned
+            } else {
+                signed
+            };
+            match width {
+                2 => Common::I16,
+                4 => Common::I32,
+                8 => Common::I64,
+                _ => Common::SignedU64(L::SIGNED),
+            }
         }
+    }
+}
+
+/// The side of a pair whose type is `l` bytes wide on the left and `r` on the
+/// right, whichever is wider.
+const fn wider(l: usize, r: usize) -> Common {
+    if l >= r { Common::Left } else { Common::Right }
+}
+
+/// The result of `O` for a row whose signed value is negative, when the
+/// signed value stands on the left if `signed_left` and on the right
+/// otherwise. A negative value orders below every `u64`.
+fn negative_side<O: Order>(signed_left: bool) -> bool {
+    // The booleans stand in for the two values, because `false` orders below
+    // `true` as the negative value orders below the `u64`.
+    let (negative, unsigned) = (false, true);
+    if signed_left {
+        O::one(negative, unsigned)
+    } else {
+        O::one(unsigned, negative)
     }
 }
 
@@ -298,10 +317,9 @@ impl<L: Number, R: Number, O: Order> Test<Pair<'_, L, R>> for Columns<L, R, O> {
                 } else {
                     R::lt_lanes(right, Simd::splat(R::default()))
                 };
-                // A negative value orders below every `u64`, so the order
-                // decides a row with a negative value, and the other rows
-                // compare as `u64`.
-                let below = if O::one(!signed_left, signed_left) {
+                // The order decides a row with a negative value, and the
+                // other rows compare as `u64`.
+                let below = if negative_side::<O>(signed_left) {
                     u64::MAX
                 } else {
                     0
@@ -326,9 +344,8 @@ impl<L: Number, R: Number, O: Order> Test<Pair<'_, L, R>> for Columns<L, R, O> {
                 } else {
                     right < R::default()
                 };
-                // A negative value orders below every `u64`.
                 if negative {
-                    O::one(!signed_left, signed_left)
+                    negative_side::<O>(signed_left)
                 } else {
                     O::one::<u64>(left.convert(), right.convert())
                 }
