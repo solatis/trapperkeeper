@@ -197,8 +197,8 @@ impl<'a, L: Copy, R: Copy> Pair<'a, L, R> {
     ///
     /// Panics when the two runs hold different numbers of values.
     pub(crate) fn new(left: Strided<'a, L>, right: Strided<'a, R>) -> Self {
-        // The unchecked reads of `pack` check the row against the length of
-        // the left run only.
+        // `pack` bounds its unchecked reads by `len`, which is the length of
+        // the left run, so the right run must be as long.
         assert_eq!(
             left.len(),
             right.len(),
@@ -235,7 +235,7 @@ impl<L: SimdElement, R: SimdElement> Source for Pair<'_, L, R> {
 // An impl gives the same answer in both methods for the same row, because
 // `pack` takes the vector arm for a source whose values lie one after the
 // other and the scalar arm otherwise. The tests run both arms over the same
-// data, with strides of one and two values. A comparison of the executor may
+// data, with strides of one to three values. A comparison of the executor may
 // answer differently for a row without a value, whose result it clears.
 pub(crate) trait Test<S: Source> {
     /// The answers for 64 rows, with the answer for lane `i` in bit `i`.
@@ -272,8 +272,8 @@ pub(crate) fn pack<S: Source, X: Test<S>>(
     out: &mut Present,
     test: &X,
 ) {
-    // The bound keeps the chunk inside `out`, and the unchecked reads of the
-    // scalar loop trust it.
+    // The bound keeps the chunk inside `out` and inside `source`, and the
+    // unchecked reads of the scalar loop trust it.
     assert!(
         rows <= CHUNK_ROWS
             && start
@@ -287,14 +287,15 @@ pub(crate) fn pack<S: Source, X: Test<S>>(
     // Values that lie one after the other load 64 at a time into a vector,
     // and `Test::lanes` gives one word per load. The rows after the last full
     // group of 64 are left to the scalar loop, so no load reads past the
-    // chunk. A strided source reads every row in the scalar loop, because its
-    // values are not adjacent in memory.
+    // chunk.
     let first = if source.is_contiguous() {
         for (k, word) in out.iter_mut().take(rows / 64).enumerate() {
             *word = test.lanes(source.lanes(start + 64 * k));
         }
         rows / 64 * 64
     } else {
+        // A strided source reads every row in the scalar loop, because its
+        // values are not adjacent in memory.
         0
     };
     for row in first..rows {
