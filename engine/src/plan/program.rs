@@ -23,8 +23,9 @@ pub struct Program {
     rules: Vec<(Uuid, usize)>,
 }
 
-/// One step of a program. An operand is the number of an earlier slot or of a
-/// field.
+/// One step of a program. A step reads fields by their numbers and the
+/// results of earlier steps by their slots, and a comparison may hold a
+/// literal.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum Step {
     // A result that no field decides, the same on every row.
@@ -36,7 +37,8 @@ pub(crate) enum Step {
         left: Operand,
         right: Operand,
     },
-    // A field where a condition is expected, which must hold a boolean.
+    // A field where a condition is expected. It faults on a row whose value
+    // is not a boolean.
     Condition(usize),
     // `is None`, or `is not None` when `negated`, which is never unknown
     // (ADR-0005).
@@ -44,8 +46,9 @@ pub(crate) enum Step {
         field: usize,
         negated: bool,
     },
-    // The logic of ADR-0005 over earlier slots. `And` and `Or` hold their
-    // operands in written order.
+    // The logic of ADR-0005 over the results of earlier steps. `And` and `Or`
+    // hold their operands in written order, because a fault of the right
+    // operand does not count where the left one decided the result.
     Not(usize),
     And(usize, usize),
     Or(usize, usize),
@@ -67,8 +70,8 @@ pub(crate) enum Literal {
 }
 
 // Two literals are one step when their bits are equal, so `0.0` and `-0.0`
-// are two steps. An `f64` has no `Eq` of its own, because a NaN equals
-// nothing, and a literal float is never a NaN.
+// are two steps. Equality of the bits is reflexive, which `Eq` asks for and
+// `==` on an `f64` is not for a NaN.
 impl PartialEq for Literal {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -133,7 +136,8 @@ impl Comparison {
     }
 }
 
-/// A result that every row of a chunk shares.
+/// A result that every row of a chunk, the rows that the executor runs at
+/// once, shares.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum Constant {
     True,
@@ -161,8 +165,8 @@ pub fn plan(rules: &[Rule]) -> Result<Program, Unsupported> {
     // 1. It builds the tree of fields from all the rules first, so that the
     //    number of a field does not depend on which rule the planner reaches
     //    first.
-    // 2. It plans the expression of each rule into the shared list of steps,
-    //    and records the rule's id with the slot of its result.
+    // 2. It plans the rules one after another into one list of steps, so a
+    //    later rule reuses a step that an earlier rule planned.
 
     // 1. build the tree of fields
     let fields = FieldTree::of(rules.iter().map(|r| &r.expression));
@@ -236,6 +240,8 @@ impl Planner<'_> {
             Expr::Le(l, r) => return self.compare(Comparison::Le, l, r),
             Expr::Gt(l, r) => return self.compare(Comparison::Gt, l, r),
             Expr::Ge(l, r) => return self.compare(Comparison::Ge, l, r),
+            // Any other kind, such as arithmetic, a quantifier or a text
+            // method, is not planned yet.
             _ => return Err(e.key()),
         };
         Ok(self.push(step))
@@ -294,7 +300,7 @@ impl Planner<'_> {
             // No row can change the result of two literals, so the planner
             // compares them itself.
             (Operand::Literal(l), Operand::Literal(r)) => Step::Constant(fold(op, l, r)),
-            // The loops hold the field on the left.
+            // The executor's loops hold the field on the left.
             (literal @ Operand::Literal(_), field @ Operand::Field(_)) => Step::Compare {
                 op: op.mirrored(),
                 left: field,
@@ -320,6 +326,9 @@ impl Planner<'_> {
             Expr::Int(i) => Ok(Operand::Literal(Literal::Int(*i))),
             Expr::Float(x) => Ok(Operand::Literal(Literal::Float(*x))),
             Expr::Bool(b) => Ok(Operand::Literal(Literal::Bool(*b))),
+            // Arithmetic, a function or a text is not compared yet. `None`
+            // beside an ordering lands here too, which validation refuses
+            // before a rule reaches the planner.
             _ => Err(e.key()),
         }
     }
@@ -342,7 +351,7 @@ impl Planner<'_> {
 fn fold(op: Comparison, left: Literal, right: Literal) -> Constant {
     // The function tests the pair of literals in a chain, and the first case
     // that applies gives the order. The boolean cases come before the number
-    // cases, because a number case widens every literal to a float.
+    // cases, because the last number case widens any pair it gets to floats.
     let order = match (left, right) {
         // An ordering is for numbers only (ADR-0041).
         (Literal::Bool(_), Literal::Bool(_)) if op.is_ordering() => {
@@ -354,9 +363,9 @@ fn fold(op: Comparison, left: Literal, right: Literal) -> Constant {
             return Constant::Fault(Fault::Incompatible);
         }
         (Literal::Int(l), Literal::Int(r)) => l.cmp(&r),
-        // An int widens to a float (ADR-0041). The comparison of IEEE 754
-        // makes `-0.0` equal to `0.0`, and a float literal is finite, so the
-        // two always have an order.
+        // An int widens to a float (ADR-0041). `partial_cmp` compares as IEEE
+        // 754 does, so `-0.0` equals `0.0`. It gives an order for any two
+        // finite floats, and a float literal is finite.
         (l, r) => as_f64(l)
             .partial_cmp(&as_f64(r))
             .expect("a float literal is finite"),
@@ -382,6 +391,7 @@ fn as_f64(l: Literal) -> f64 {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Unsupported {
     pub rule_id: Uuid,
+    /// The JSON key of the kind that the planner refused, such as `add`.
     pub key: &'static str,
 }
 
@@ -406,7 +416,7 @@ impl Program {
         &self.fields
     }
 
-    /// The steps in order.
+    /// The steps, each at the index of its slot.
     pub(crate) fn steps(&self) -> &[Step] {
         &self.steps
     }
