@@ -7,16 +7,19 @@ columns of a schema and runs it.
 
 **Map**:
 
-| File         | What                                                                     | When to read                                                                                             |
-| ------------ | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
-| `mod.rs`     | the module and what it exports                                           | what a caller of the planner can reach                                                                   |
-| `fields.rs`  | `FieldTree` and `FieldNode`: the tree of the paths and the field numbers | how an adapter learns which fields to read and in which order; why a path under a quantifier is no field |
-| `program.rs` | `Program`, its steps, `plan` and `Unsupported`                           | what a step is; how a comparison becomes a step; which kinds this version plans; how two literals fold   |
+| File         | What                                                                     | When to read                                                                                                                   |
+| ------------ | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| `mod.rs`     | the module and what it exports                                           | what a caller of the planner can reach                                                                                         |
+| `fields.rs`  | `FieldTree` and `FieldNode`: the tree of the paths and the field numbers | how an adapter learns which fields to read and in which order; why a path under a quantifier is no field                       |
+| `program.rs` | `Program`, its steps, `plan` and `Unsupported`                           | what a step is; how a comparison becomes a step; which kinds this version plans; how two literals fold; how rules share a step |
 
 **Invariants**:
 
 - A step reads only slots before its own, and the slot of a step is its place
   in the list.
+- Two equal steps are one slot, so rules that share a comparison or a
+  subexpression share its result. Two float literals are equal when their bits
+  are.
 - The field numbers are the order of a depth-first walk over the tree, with
   the children of a node in the order in which the rules first read them. A
   caller hands its columns over in that order.

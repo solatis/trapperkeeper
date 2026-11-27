@@ -107,3 +107,22 @@ fn an_unsupported_kind_is_refused_with_its_rule() {
         })
     );
 }
+
+/// Two rules with the same comparison share the step that compares.
+#[test]
+fn rules_share_an_equal_comparison() {
+    let gt = || {
+        Expr::Gt(
+            Box::new(Expr::Field(vec![Segment::Key("x".into())])),
+            Box::new(Expr::Int(5)),
+        )
+    };
+    let rules = [
+        observing(Uuid::from_u128(1), gt()),
+        observing(Uuid::from_u128(2), Expr::Not(Box::new(gt()))),
+    ];
+    let program = plan(&rules).expect("the rules plan");
+    // The program shows its steps only through `Debug`, and each step that
+    // compares prints as one `Compare`.
+    assert_eq!(format!("{program:?}").matches("Compare").count(), 1);
+}

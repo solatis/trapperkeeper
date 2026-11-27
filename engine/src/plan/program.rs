@@ -1,7 +1,9 @@
 //! The program of a rule set: its steps, and the planner that makes them.
 
 use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::fmt;
+use std::hash::{Hash, Hasher};
 
 use uuid::Uuid;
 
@@ -23,7 +25,7 @@ pub struct Program {
 
 /// One step of a program. An operand is the number of an earlier slot or of a
 /// field.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum Step {
     // A result that no field decides, the same on every row.
     Constant(Constant),
@@ -42,21 +44,45 @@ pub(crate) enum Step {
 }
 
 /// What a comparison compares: a field by its number, or a literal.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum Operand {
     Field(usize),
     Literal(Literal),
 }
 
 /// A literal that a comparison holds.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy)]
 pub(crate) enum Literal {
     Int(i64),
     Float(f64),
 }
 
+// Two literals are one step when their bits are equal, so `0.0` and `-0.0`
+// are two steps. An `f64` has no `Eq` of its own, because a NaN equals
+// nothing, and a literal float is never a NaN.
+impl PartialEq for Literal {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Int(a), Self::Int(b)) => a == b,
+            (Self::Float(a), Self::Float(b)) => a.to_bits() == b.to_bits(),
+            _ => false,
+        }
+    }
+}
+
+impl Eq for Literal {}
+
+impl Hash for Literal {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            Self::Int(i) => (0u8, *i).hash(state),
+            Self::Float(x) => (1u8, x.to_bits()).hash(state),
+        }
+    }
+}
+
 /// The six comparisons.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum Comparison {
     Eq,
     Ne,
@@ -92,7 +118,7 @@ impl Comparison {
 }
 
 /// A result that every row of a chunk shares.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum Constant {
     True,
     False,
@@ -129,6 +155,7 @@ pub fn plan(rules: &[Rule]) -> Result<Program, Unsupported> {
     let mut planner = Planner {
         fields: &fields,
         steps: Vec::new(),
+        seen: HashMap::new(),
     };
     let rules = rules
         .iter()
@@ -150,11 +177,12 @@ pub fn plan(rules: &[Rule]) -> Result<Program, Unsupported> {
     })
 }
 
-/// The state of `plan` while it plans: the tree of fields and the steps so
-/// far.
+/// The state of `plan` while it plans: the tree of fields, the steps so far,
+/// and the slot of each step that it has planned.
 struct Planner<'f> {
     fields: &'f FieldTree,
     steps: Vec<Step>,
+    seen: HashMap<Step, usize>,
 }
 
 impl Planner<'_> {
@@ -246,9 +274,16 @@ impl Planner<'_> {
         }
     }
 
-    /// Appends `step` and returns its slot.
+    /// Appends `step` and returns its slot, or returns the slot of an equal
+    /// step that it has planned.
     fn push(&mut self, step: Step) -> usize {
-        self.steps.push(step);
+        // An equal step reads the same slots and fields, so it gives the same
+        // result, and several rules share it.
+        if let Some(&slot) = self.seen.get(&step) {
+            return slot;
+        }
+        self.steps.push(step.clone());
+        self.seen.insert(step, self.steps.len() - 1);
         self.steps.len() - 1
     }
 }
