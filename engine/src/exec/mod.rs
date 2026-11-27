@@ -3,7 +3,7 @@
 //! `CHUNK_ROWS` rows at a time. ADR-0035 gives the reasons.
 
 mod bind;
-pub(crate) mod number;
+mod number;
 mod outcome;
 mod run;
 mod truth;

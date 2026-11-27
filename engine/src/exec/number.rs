@@ -92,27 +92,27 @@ impl Order for GreaterEqual {
 macro_rules! with_order {
     ($op:expr, |$O:ident| $body:expr) => {
         match $op {
-            Comparison::Eq => {
+            $crate::plan::Comparison::Eq => {
                 type $O = $crate::exec::number::Equal;
                 $body
             }
-            Comparison::Ne => {
+            $crate::plan::Comparison::Ne => {
                 type $O = $crate::exec::number::NotEqual;
                 $body
             }
-            Comparison::Lt => {
+            $crate::plan::Comparison::Lt => {
                 type $O = $crate::exec::number::Less;
                 $body
             }
-            Comparison::Le => {
+            $crate::plan::Comparison::Le => {
                 type $O = $crate::exec::number::LessEqual;
                 $body
             }
-            Comparison::Gt => {
+            $crate::plan::Comparison::Gt => {
                 type $O = $crate::exec::number::Greater;
                 $body
             }
-            Comparison::Ge => {
+            $crate::plan::Comparison::Ge => {
                 type $O = $crate::exec::number::GreaterEqual;
                 $body
             }
