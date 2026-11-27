@@ -46,7 +46,9 @@ comparison for every value of the field (owner, 2026-11-27). An int field
 compared with a float literal widens to a float64, so an int above 2^53 may
 compare equal to a float that it does not equal (owner, 2026-11-11,
 2026-11-27). Two int fields compare exactly, in a type that holds every value
-of both (owner, 2026-11-27).
+of both (owner, 2026-11-27). Two float fields compare in the wider of their two
+types, and an int field compared with a float field widens to a float64
+(owner, 2026-11-27).
 
 A rule declares no types. A literal or an operator fixes the type of the
 field it meets. In `a == b`, where both operands are fields, the values in the

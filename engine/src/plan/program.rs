@@ -29,8 +29,8 @@ pub struct Program {
 pub(crate) enum Step {
     // A result that no field decides, the same on every row.
     Constant(Constant),
-    // One of the six comparisons of a field with a literal. The field is
-    // always on the left.
+    // One of the six comparisons of a field with a literal or with another
+    // field. A field is always on the left.
     Compare {
         op: Comparison,
         left: Operand,
@@ -258,7 +258,9 @@ impl Planner<'_> {
                 left: field,
                 right: literal,
             },
-            (Operand::Field(_), Operand::Field(_)) => return Err(right.key()),
+            (left @ Operand::Field(_), right @ Operand::Field(_)) => {
+                Step::Compare { op, left, right }
+            }
         };
         Ok(self.push(step))
     }

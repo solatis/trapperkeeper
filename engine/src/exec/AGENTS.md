@@ -7,14 +7,14 @@ records it faulted on, each with its fault. It knows no rule text.
 
 **Map**:
 
-| File         | What                                                                                   | When to read                                                                                                             |
-| ------------ | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `mod.rs`     | the module and what it exports                                                         | what a caller of the executor can reach                                                                                  |
-| `bind.rs`    | `Bound`, the type of a field as bind sees it, and the binding of each step to its loop | how a comparison picks its loop; how a literal converts to the column's type; which comparisons are a type fault at bind |
-| `run.rs`     | `Bound::run`, the presence of each field per chunk, and the fault of a faulted record  | how a batch runs chunk by chunk; what `run` checks about a batch                                                         |
-| `number.rs`  | the orders as types and the tests of `pack` that compare numbers                       | writing a loop that compares numbers; why an int literal outside the column's type decides every row                     |
-| `truth.rs`   | `Truth`, the result of a step for one chunk                                            | how a step's result is held                                                                                              |
-| `outcome.rs` | `Outcomes`, `RuleOutcome`, `Outcome` and `Fault`                                       | what a run returns; the faults                                                                                           |
+| File         | What                                                                                                     | When to read                                                                                                                                  |
+| ------------ | -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mod.rs`     | the module and what it exports                                                                           | what a caller of the executor can reach                                                                                                       |
+| `bind.rs`    | `Bound`, the type of a field as bind sees it, and the binding of each step to its loop                   | how a comparison picks its loop; how a literal converts to the column's type; which comparisons are a type fault at bind                      |
+| `run.rs`     | `Bound::run`, the presence of each field per chunk, and the fault of a faulted record                    | how a batch runs chunk by chunk; what `run` checks about a batch                                                                              |
+| `number.rs`  | the orders as types, the tests of `pack` that compare numbers, and the common type of two number columns | writing a loop that compares numbers; why an int literal outside the column's type decides every row; in which type two number fields compare |
+| `truth.rs`   | `Truth`, the result of a step for one chunk                                                              | how a step's result is held                                                                                                                   |
+| `outcome.rs` | `Outcomes`, `RuleOutcome`, `Outcome` and `Fault`                                                         | what a run returns; the faults                                                                                                                |
 
 **Invariants**:
 
@@ -38,5 +38,10 @@ records it faulted on, each with its fault. It knows no rule text.
 - Nulls, NaNs and faults: `doc/adr/0005-one-vocabulary-for-failure-behavior.md`.
 - The three outcomes of a record: `doc/adr/0006-conformance-fixtures-are-the-evaluation-spec.md`.
 
-**How to**: `cargo test -p trapperkeeper-engine --test evaluation` runs the
-tests of the executor.
+**How to**:
+
+- `cargo test -p trapperkeeper-engine --test evaluation` runs the tests of the
+  executor.
+- A new number type is one entry of `numbers!` in `src/column/values.rs`, a
+  variant of `FieldType`, and one arm of `with_int!` or `with_float!` in
+  `bind.rs`. The comparisons of two fields then cover it in every pair.

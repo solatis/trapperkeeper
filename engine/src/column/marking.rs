@@ -183,6 +183,54 @@ impl<T: SimdElement> Source for Strided<'_, T> {
     }
 }
 
+/// Two runs that a comparison of two fields reads side by side, row by row.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Pair<'a, L, R> {
+    left: Strided<'a, L>,
+    right: Strided<'a, R>,
+}
+
+impl<'a, L: Copy, R: Copy> Pair<'a, L, R> {
+    /// The pair of `left` and `right`.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the two runs hold different numbers of values.
+    pub(crate) fn new(left: Strided<'a, L>, right: Strided<'a, R>) -> Self {
+        // The unchecked reads of `pack` check the row against the length of
+        // the left run only.
+        assert_eq!(
+            left.len(),
+            right.len(),
+            "the runs of a pair have one length"
+        );
+        Self { left, right }
+    }
+}
+
+impl<L: SimdElement, R: SimdElement> Source for Pair<'_, L, R> {
+    type Lanes = (Simd<L, 64>, Simd<R, 64>);
+    type One = (L, R);
+
+    fn len(&self) -> usize {
+        self.left.len()
+    }
+
+    fn is_contiguous(&self) -> bool {
+        self.left.is_contiguous() && self.right.is_contiguous()
+    }
+
+    fn lanes(&self, row: usize) -> Self::Lanes {
+        (self.left.lanes(row), self.right.lanes(row))
+    }
+
+    unsafe fn one(&self, row: usize) -> (L, R) {
+        // SAFETY: the caller keeps `row` below `len`, which is the length of
+        // both runs.
+        unsafe { (self.left.one(row), self.right.one(row)) }
+    }
+}
+
 /// A test that `pack` applies to each row of a chunk.
 // The two methods give the same answer for the same row, so the vector arm
 // and the scalar arm of `pack` agree.

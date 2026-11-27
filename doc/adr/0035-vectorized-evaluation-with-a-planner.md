@@ -53,7 +53,10 @@ faulted records, and the faulted records with their faults (owner,
 2026-11-27).
 
 The loops are compiled when an SDK is built, one per type and layout, from
-generic code. Nothing is compiled at run time (owner, 2026-11-13).
+generic code. Nothing is compiled at run time (owner, 2026-11-13). A
+comparison of two number fields has one loop per pair of number types, which
+reads both columns in place. Generic code and a macro produce the pairs, so
+no pair is written by hand (owner, 2026-11-27).
 
 For each "no value" convention, one loop turns the source's marking into a
 bitmap per chunk. A comparison loop reads only that bitmap and never sees the
@@ -91,6 +94,9 @@ A tree of operator nodes per rule, because it shares only the reads of fields.
 
 One byte per row with four states as the result of a step, because a logic
 step would then run about eight times as many operations as on bitmaps.
+
+Widening each chunk of two number columns into a scratch buffer of a common
+type, because that is a format between the source and the loop (`adr/0036`).
 
 Running the right operand of `and` and `or` only on the rows that the left
 operand left open, because every loop would then take a selection of rows.

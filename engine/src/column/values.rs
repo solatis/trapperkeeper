@@ -292,7 +292,15 @@ pub(super) mod sealed {
     /// outside the engine implements `Number` for a type of its own.
     // `Send`, `Sync` and `'static` let a loop that holds a value of the type
     // be shared between threads.
-    pub trait Number: Copy + PartialOrd + Send + Sync + 'static + SimdElement + SimdCast {
+    pub trait Number:
+        Copy + Default + PartialOrd + Send + Sync + 'static + SimdElement + SimdCast
+    {
+        /// Whether the type is a float.
+        const FLOAT: bool;
+
+        /// Whether the type holds negative values.
+        const SIGNED: bool;
+
         /// The values of `kind` when it is a column of this type.
         fn values<'a>(kind: &Kind<'a>) -> Option<Strided<'a, Self>>;
 
@@ -319,10 +327,14 @@ pub(super) mod sealed {
 pub trait Number: sealed::Number {}
 
 // Writes the impls of `Number` for each number type, with the variant of
-// `Ints` or `Floats` that holds a column of it.
+// `Ints` or `Floats` that holds a column of it, whether it is a float and
+// whether it is signed.
 macro_rules! numbers {
-    ($($t:ty => $kind:ident($values:ident::$variant:ident)),* $(,)?) => {$(
+    ($($t:ty => $kind:ident($values:ident::$variant:ident), $float:expr, $signed:expr);* $(;)?) => {$(
         impl sealed::Number for $t {
+            const FLOAT: bool = $float;
+            const SIGNED: bool = $signed;
+
             fn values<'a>(kind: &Kind<'a>) -> Option<Strided<'a, Self>> {
                 match kind {
                     Kind::$kind($values::$variant(v), _) => Some(*v),
@@ -352,15 +364,15 @@ macro_rules! numbers {
 }
 
 numbers! {
-    i8 => Ints(Ints::I8),
-    i16 => Ints(Ints::I16),
-    i32 => Ints(Ints::I32),
-    i64 => Ints(Ints::I64),
-    u8 => Ints(Ints::U8),
-    u16 => Ints(Ints::U16),
-    u32 => Ints(Ints::U32),
-    u64 => Ints(Ints::U64),
-    f16 => Floats(Floats::F16),
-    f32 => Floats(Floats::F32),
-    f64 => Floats(Floats::F64),
+    i8 => Ints(Ints::I8), false, true;
+    i16 => Ints(Ints::I16), false, true;
+    i32 => Ints(Ints::I32), false, true;
+    i64 => Ints(Ints::I64), false, true;
+    u8 => Ints(Ints::U8), false, false;
+    u16 => Ints(Ints::U16), false, false;
+    u32 => Ints(Ints::U32), false, false;
+    u64 => Ints(Ints::U64), false, false;
+    f16 => Floats(Floats::F16), true, true;
+    f32 => Floats(Floats::F32), true, true;
+    f64 => Floats(Floats::F64), true, true;
 }

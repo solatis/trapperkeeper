@@ -1,11 +1,11 @@
-//! The comparisons of number columns with a literal. Each comparison is a
-//! `Test` of `pack`, which the compiler instantiates per type and per
-//! operator.
+//! The comparisons of number columns with a literal and with another number
+//! column of any type. Each comparison is a `Test` of `pack`, which the
+//! compiler instantiates per type and per operator.
 
 use std::marker::PhantomData;
 use std::simd::Simd;
 
-use crate::column::{Number, Present, Strided, Test, pack};
+use crate::column::{Number, Pair, Present, Strided, Test, pack};
 use crate::plan::Comparison;
 
 /// One of the six comparisons, as a type, so that each loop is compiled for
@@ -219,4 +219,136 @@ pub(crate) fn outside(op: Comparison, above: bool) -> bool {
         Comparison::Lt | Comparison::Le => above,
         Comparison::Gt | Comparison::Ge => !above,
     }
+}
+
+/// The type in which two number columns compare, which the pair of their types
+/// decides.
+#[derive(Debug, Clone, Copy)]
+enum Common {
+    // The type of the left column, or of the right one, holds every value of
+    // the other.
+    Left,
+    Right,
+    F64,
+    I16,
+    I32,
+    I64,
+    // A signed int against a `u64`, which no int type holds both of. `true`
+    // when the signed int is on the left.
+    SignedU64(bool),
+}
+
+/// The common type of a column of `L` and a column of `R`.
+const fn common<L: Number, R: Number>() -> Common {
+    // The function tests the pair in a chain, and the first case that applies
+    // gives the type. The floats come first, because a pair that holds a
+    // float compares as a float whatever the int is.
+    let (l, r) = (size_of::<L>(), size_of::<R>());
+    if L::FLOAT && R::FLOAT || L::SIGNED == R::SIGNED && !L::FLOAT && !R::FLOAT {
+        // Two floats, or two ints of one signedness: the wider type holds
+        // every value of the narrower one.
+        if l >= r { Common::Left } else { Common::Right }
+    } else if L::FLOAT || R::FLOAT {
+        // An int widens to a float64 (ADR-0041).
+        Common::F64
+    } else {
+        // A signed int and an unsigned one. A signed type twice as wide as
+        // the unsigned one holds every value of it.
+        let unsigned = if L::SIGNED { r } else { l };
+        let signed = if L::SIGNED { l } else { r };
+        let width = if 2 * unsigned > signed {
+            2 * unsigned
+        } else {
+            signed
+        };
+        match width {
+            2 => Common::I16,
+            4 => Common::I32,
+            8 => Common::I64,
+            _ => Common::SignedU64(L::SIGNED),
+        }
+    }
+}
+
+/// The test of `pack` that compares the values of two number columns in the
+/// common type of their pair.
+struct Columns<L, R, O> {
+    order: PhantomData<(L, R, O)>,
+}
+
+impl<L: Number, R: Number, O: Order> Test<Pair<'_, L, R>> for Columns<L, R, O> {
+    fn lanes(&self, (left, right): (Simd<L, 64>, Simd<R, 64>)) -> u64 {
+        match const { common::<L, R>() } {
+            Common::Left => O::lanes(left, R::convert_lanes(right)),
+            Common::Right => O::lanes(L::convert_lanes(left), right),
+            Common::F64 => in_type::<f64, L, R, O>(left, right),
+            Common::I16 => in_type::<i16, L, R, O>(left, right),
+            Common::I32 => in_type::<i32, L, R, O>(left, right),
+            Common::I64 => in_type::<i64, L, R, O>(left, right),
+            Common::SignedU64(signed_left) => {
+                let negative = if signed_left {
+                    L::lt_lanes(left, Simd::splat(L::default()))
+                } else {
+                    R::lt_lanes(right, Simd::splat(R::default()))
+                };
+                // A negative value orders below every `u64`, so the order
+                // decides a row with a negative value, and the other rows
+                // compare as `u64`.
+                let below = if O::one(!signed_left, signed_left) {
+                    u64::MAX
+                } else {
+                    0
+                };
+                let rest = in_type::<u64, L, R, O>(left, right);
+                negative & below | !negative & rest
+            }
+        }
+    }
+
+    fn one(&self, (left, right): (L, R)) -> bool {
+        match const { common::<L, R>() } {
+            Common::Left => O::one(left, right.convert()),
+            Common::Right => O::one(left.convert(), right),
+            Common::F64 => O::one::<f64>(left.convert(), right.convert()),
+            Common::I16 => O::one::<i16>(left.convert(), right.convert()),
+            Common::I32 => O::one::<i32>(left.convert(), right.convert()),
+            Common::I64 => O::one::<i64>(left.convert(), right.convert()),
+            Common::SignedU64(signed_left) => {
+                let negative = if signed_left {
+                    left < L::default()
+                } else {
+                    right < R::default()
+                };
+                // A negative value orders below every `u64`.
+                if negative {
+                    O::one(!signed_left, signed_left)
+                } else {
+                    O::one::<u64>(left.convert(), right.convert())
+                }
+            }
+        }
+    }
+}
+
+/// The comparison of 64 lanes of `L` with 64 lanes of `R`, both converted to
+/// `C`.
+fn in_type<C: Number, L: Number, R: Number, O: Order>(
+    left: Simd<L, 64>,
+    right: Simd<R, 64>,
+) -> u64 {
+    O::lanes(L::convert_lanes::<C>(left), R::convert_lanes::<C>(right))
+}
+
+/// Writes into `out` whether each of the rows `start .. start + rows` of
+/// `left` compares with the same row of `right` as `O` says, both converted to
+/// the common type of their pair.
+pub(crate) fn compare_columns<L: Number, R: Number, O: Order>(
+    left: Strided<'_, L>,
+    right: Strided<'_, R>,
+    start: usize,
+    rows: usize,
+    out: &mut Present,
+) {
+    let test = Columns::<L, R, O> { order: PhantomData };
+    pack(Pair::new(left, right), start, rows, out, &test);
 }

@@ -5,7 +5,9 @@ use std::fmt;
 
 use uuid::Uuid;
 
-use super::number::{Converted, compare_widened, compare_with_literal, outside, with_order};
+use super::number::{
+    Converted, compare_columns, compare_widened, compare_with_literal, outside, with_order,
+};
 use super::outcome::Fault;
 use crate::column::{Booleans, Column, Floats, Ints, Kind, Number, Present, present_all};
 use crate::plan::{Comparison, Constant, Literal, Operand, Program, Step};
@@ -72,6 +74,9 @@ pub(crate) type ChunkLoop =
 pub enum BindError {
     /// The columns are not one per field of the program.
     Columns { expected: usize, given: usize },
+    /// A comparison of two fields whose types this version does not compare,
+    /// such as two text fields.
+    Unsupported { left: usize, right: usize },
 }
 
 impl fmt::Display for BindError {
@@ -83,6 +88,10 @@ impl fmt::Display for BindError {
                     "the program reads {expected} fields and got {given} columns"
                 )
             }
+            Self::Unsupported { left, right } => write!(
+                f,
+                "this version does not compare the types of fields {left} and {right}"
+            ),
         }
     }
 }
@@ -130,6 +139,17 @@ macro_rules! with_int {
     };
 }
 
+/// Runs `$body` with `$T` as the number type of the field type `$t`.
+macro_rules! with_number {
+    ($t:expr, |$T:ident| $body:expr) => {
+        if $t.is_int() {
+            with_int!($t, |$T| $body)
+        } else {
+            with_float!($t, |$T| $body)
+        }
+    };
+}
+
 /// Runs `$body` with `$T` as the float type of the field type `$t`.
 macro_rules! with_float {
     ($t:expr, |$T:ident| $body:expr) => {
@@ -157,7 +177,9 @@ impl Program {
     ///
     /// # Errors
     ///
-    /// `BindError::Columns` when the columns are not one per field.
+    /// `BindError::Columns` when the columns are not one per field, and
+    /// `BindError::Unsupported` for a comparison of two fields whose types
+    /// this version does not compare.
     pub fn bind(&self, columns: &[Option<Column<'_>>]) -> Result<Bound, BindError> {
         let expected = self.fields().paths().len();
         if columns.len() != expected {
@@ -167,7 +189,11 @@ impl Program {
             });
         }
         let types: Vec<FieldType> = columns.iter().map(|c| FieldType::of(c.as_ref())).collect();
-        let steps = self.steps().iter().map(|s| bind_step(s, &types)).collect();
+        let steps = self
+            .steps()
+            .iter()
+            .map(|s| bind_step(s, &types))
+            .collect::<Result<_, _>>()?;
         Ok(Bound {
             types,
             steps,
@@ -176,9 +202,10 @@ impl Program {
     }
 }
 
-/// Binds `step` to the field types `types`.
-fn bind_step(step: &Step, types: &[FieldType]) -> BoundStep {
-    match step {
+/// Binds `step` to the field types `types`. Fails for a comparison of two
+/// fields whose types this version does not compare.
+fn bind_step(step: &Step, types: &[FieldType]) -> Result<BoundStep, BindError> {
+    Ok(match step {
         Step::Constant(c) => BoundStep::Constant(*c),
         Step::Not(a) => BoundStep::Not(*a),
         Step::And(a, b) => BoundStep::And(*a, *b),
@@ -188,10 +215,17 @@ fn bind_step(step: &Step, types: &[FieldType]) -> BoundStep {
             left: Operand::Field(f),
             right: Operand::Literal(literal),
         } => bind_literal(*op, *f, types[*f], *literal),
-        // The planner puts a literal on the right of a field and compares no
-        // two fields yet.
-        Step::Compare { .. } => unreachable!("the planner holds the field on the left"),
-    }
+        Step::Compare {
+            op,
+            left: Operand::Field(l),
+            right: Operand::Field(r),
+        } => bind_fields(*op, *l, types[*l], *r, types[*r])?,
+        // The planner puts a field on the left of every comparison.
+        Step::Compare {
+            left: Operand::Literal(_),
+            ..
+        } => unreachable!("the planner holds a field on the left"),
+    })
 }
 
 /// Binds a comparison of field `f`, of type `t`, with `literal`.
@@ -215,6 +249,54 @@ fn bind_literal(op: Comparison, f: usize, t: FieldType, literal: Literal) -> Bou
         // The literal, int or float, converts to the column's float type.
         (_, literal) => with_float!(t, |T| float_literal::<T>(op, f, literal)),
     }
+}
+
+/// Binds a comparison of field `l`, of type `lt`, with field `r`, of type
+/// `rt`. Fails for two text fields or two list fields, which this version
+/// does not compare.
+fn bind_fields(
+    op: Comparison,
+    l: usize,
+    lt: FieldType,
+    r: usize,
+    rt: FieldType,
+) -> Result<BoundStep, BindError> {
+    let fields = vec![l, r];
+    Ok(match (lt, rt) {
+        (FieldType::Absent, _) | (_, FieldType::Absent) => BoundStep::Constant(Constant::Unknown),
+        // The macros write one arm per pair of number types, so the compiler
+        // instantiates one loop per pair and operator.
+        _ if lt.is_number() && rt.is_number() => {
+            let chunk: ChunkLoop =
+                with_number!(lt, |L| with_number!(rt, |R| with_order!(op, |O| {
+                    Box::new(
+                        move |cols: &[Option<Column<'_>>],
+                              start: usize,
+                              rows: usize,
+                              out: &mut Present| {
+                            compare_columns::<L, R, O>(
+                                values_of(cols, l),
+                                values_of(cols, r),
+                                start,
+                                rows,
+                                out,
+                            );
+                        },
+                    )
+                })));
+            BoundStep::Loop { fields, chunk }
+        }
+        (FieldType::Text, FieldType::Text)
+        | (FieldType::List, FieldType::List)
+        | (
+            FieldType::BoolBytes | FieldType::BoolBits,
+            FieldType::BoolBytes | FieldType::BoolBits,
+        ) => return Err(BindError::Unsupported { left: l, right: r }),
+        _ => BoundStep::Faulted {
+            fault: Fault::Incompatible,
+            fields,
+        },
+    })
 }
 
 /// The step that compares int field `f` with the literal `i`, converted to the
@@ -321,6 +403,11 @@ impl FieldType {
             Kind::Text(..) => Self::Text,
             Kind::List(..) => Self::List,
         }
+    }
+
+    /// Whether the field holds numbers.
+    fn is_number(self) -> bool {
+        self.is_int() || matches!(self, Self::F16 | Self::F32 | Self::F64)
     }
 
     /// Whether the field holds ints.

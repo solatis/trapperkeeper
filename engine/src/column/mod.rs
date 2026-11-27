@@ -16,7 +16,7 @@ pub use marking::{
     CHUNK_ROWS, CHUNK_WORDS, Float, Marking, Present, clear_nan, present_all, present_from_bits,
     present_from_mask,
 };
-pub(crate) use marking::{Test, pack};
+pub(crate) use marking::{Pair, Test, pack};
 pub use text::{INLINE, Piece, Text, Texts, Unit, Units, Utf8, View, Views};
 pub use values::{Bits, Booleans, Floats, Ints, Number, Strided};
 

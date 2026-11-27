@@ -23,7 +23,7 @@ use trapperkeeper_engine::Rule;
 use trapperkeeper_engine::column::{
     AnyOffsets, Bits, Booleans, Column, Floats, Ints, Marking, Offsets, Piece, Strided, Text, Utf8,
 };
-use trapperkeeper_engine::exec::{Fault, Outcome, SchemaMismatch};
+use trapperkeeper_engine::exec::{BindError, Fault, Outcome, SchemaMismatch};
 use trapperkeeper_engine::expr::{Expr, Segment};
 use trapperkeeper_engine::plan::{FieldTree, plan};
 use uuid::Uuid;
@@ -235,6 +235,73 @@ fn a_false_left_operand_of_and_keeps_the_fault_on_its_right_from_happening() {
     );
 }
 
+/// The outcome of the rule `e` for each record of a batch where `a` and `b`
+/// are the fields `a` and `b`.
+fn outcomes_of_pair(e: Expr, a: Column<'_>, b: Column<'_>) -> Vec<Outcome> {
+    let program = plan(&[observing(Uuid::from_u128(1), e)]).expect("the rule plans");
+    let columns = [Some(a), Some(b)];
+    let run = program
+        .bind(&columns)
+        .expect("one column per field")
+        .run(a.rows(), &columns)
+        .expect("the batch fits the bind");
+    (0..a.rows())
+        .map(|row| run.rules()[0].outcome(row))
+        .collect()
+}
+
+/// The comparison `op` of the field `a` with the field `b`.
+fn a_with_b(op: fn(Box<Expr>, Box<Expr>) -> Expr) -> Expr {
+    let named = |name: &str| Box::new(Expr::Field(vec![Segment::Key(name.into())]));
+    op(named("a"), named("b"))
+}
+
+#[test]
+fn a_negative_int_orders_below_every_u64() {
+    let signed = [-1i8, 5, 5];
+    let unsigned = [3u64, u64::MAX, 5];
+    let a = Column::ints(Ints::I8(Strided::from_slice(&signed)), Marking::Never).expect("unmarked");
+    let b =
+        Column::ints(Ints::U64(Strided::from_slice(&unsigned)), Marking::Never).expect("unmarked");
+    assert_eq!(
+        outcomes_of_pair(a_with_b(Expr::Lt), a, b),
+        [Matched, Matched, NotMatched]
+    );
+    assert_eq!(
+        outcomes_of_pair(a_with_b(Expr::Ge), b, a),
+        [Matched, Matched, Matched]
+    );
+}
+
+#[test]
+fn a_signed_and_an_unsigned_int_compare_exactly() {
+    let signed = [-1i8, 127];
+    let unsigned = [255u8, 127];
+    let a = Column::ints(Ints::I8(Strided::from_slice(&signed)), Marking::Never).expect("unmarked");
+    let b =
+        Column::ints(Ints::U8(Strided::from_slice(&unsigned)), Marking::Never).expect("unmarked");
+    // As `i8`, 255 would read as -1, and as `u8`, -1 would read as 255.
+    assert_eq!(
+        outcomes_of_pair(a_with_b(Expr::Eq), a, b),
+        [NotMatched, Matched]
+    );
+}
+
+#[test]
+fn two_floats_compare_in_the_wider_type() {
+    let halves = [0.1f16, 2.0];
+    let doubles = [0.1f64, 2.0];
+    let a = Column::floats(Floats::F16(Strided::from_slice(&halves)), Marking::Never)
+        .expect("unmarked");
+    let b = Column::floats(Floats::F64(Strided::from_slice(&doubles)), Marking::Never)
+        .expect("unmarked");
+    // The `f16` nearest to 0.1 widens to an `f64` that is not 0.1.
+    assert_eq!(
+        outcomes_of_pair(a_with_b(Expr::Eq), a, b),
+        [NotMatched, Matched]
+    );
+}
+
 #[test]
 fn a_strided_column_over_three_chunks_compares_every_row() {
     // Every second value is a row, so the run has a stride of two values and
@@ -379,6 +446,9 @@ fn reference(e: &Expr, record: &[Value]) -> Tri {
 /// `holds` accepts the order of the two values.
 fn compare(l: &Expr, r: &Expr, record: &[Value], holds: fn(Ordering) -> bool) -> Tri {
     let order = match (l, r) {
+        (Expr::Field(a), Expr::Field(b)) => {
+            order_of_fields(record[field_number(a)], record[field_number(b)])
+        }
         (Expr::Field(p), literal) => order_with_literal(record[field_number(p)], literal),
         // The order of a literal with a field is the order of the field with
         // the literal, reversed.
@@ -408,6 +478,22 @@ fn order_with_literal(v: Value, literal: &Expr) -> Result<Option<Ordering>, Faul
         (Value::Float(f, w), Expr::Float(x)) => ieee(f, float_as(*x, w)),
         (Value::Bool(_) | Value::Text, _) => return Err(Fault::Incompatible),
         _ => unreachable!("a generated literal is a number"),
+    };
+    Ok(Some(order))
+}
+
+/// The order of the values of two fields, `None` when either is a null, or
+/// the fault of comparing them.
+fn order_of_fields(a: Value, b: Value) -> Result<Option<Ordering>, Fault> {
+    let order = match (a, b) {
+        (Value::Null, _) | (_, Value::Null) => return Ok(None),
+        (Value::Int(i), Value::Int(j)) => i.cmp(&j),
+        // Two floats compare in the wider of their widths, which holds both
+        // values, so they compare exactly. An int widens to a float64.
+        (Value::Float(x, _), Value::Float(y, _)) => ieee(x, y),
+        (Value::Int(i), Value::Float(y, _)) => ieee(i as f64, y),
+        (Value::Float(x, _), Value::Int(j)) => ieee(x, j as f64),
+        _ => return Err(Fault::Incompatible),
     };
     Ok(Some(order))
 }
@@ -724,6 +810,8 @@ fn condition(n: usize) -> impl Strategy<Value = Expr> {
             let (f, lit) = (Box::new(field_named(f)), Box::new(lit));
             if flip { op(lit, f) } else { op(f, lit) }
         });
+    let fields = (select(ops.clone()), 0..n, 0..n)
+        .prop_map(|(op, a, b)| op(Box::new(field_named(a)), Box::new(field_named(b))));
     let folded =
         (select(ops), literal(), literal()).prop_map(|(op, a, b)| op(Box::new(a), Box::new(b)));
     let literal_condition = prop_oneof![
@@ -731,7 +819,7 @@ fn condition(n: usize) -> impl Strategy<Value = Expr> {
         Just(Expr::None),
         literal()
     ];
-    let leaf = prop_oneof![6 => comparison, 1 => folded, 1 => literal_condition];
+    let leaf = prop_oneof![6 => comparison, 3 => fields, 1 => folded, 1 => literal_condition];
     // Up to three levels of `not`, `and` and `or` over the leaves.
     leaf.prop_recursive(3, 24, 4, |inner| {
         prop_oneof![
@@ -780,7 +868,13 @@ proptest! {
         // 1. plan, bind and run the rules
         let program = plan(&rules).expect("the generated kinds plan");
         let columns = t.columns(program.fields());
-        let outcomes = program.bind(&columns)?.run(t.rows, &columns)?;
+        let bound = match program.bind(&columns) {
+            // A generated rule may compare two fields whose types this
+            // version does not compare, and that rule set does not run.
+            Err(BindError::Unsupported { .. }) => return Ok(()),
+            other => other?,
+        };
+        let outcomes = bound.run(t.rows, &columns)?;
 
         // 2. check each record against the reference
         for row in 0..t.rows {
