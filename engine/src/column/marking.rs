@@ -232,8 +232,11 @@ impl<L: SimdElement, R: SimdElement> Source for Pair<'_, L, R> {
 }
 
 /// A test that `pack` applies to each row of a chunk.
-// The two methods give the same answer for the same row, so the vector arm
-// and the scalar arm of `pack` agree.
+// An impl gives the same answer in both methods for the same row, because
+// `pack` takes the vector arm for a source whose values lie one after the
+// other and the scalar arm otherwise. The tests run both arms over the same
+// data, with strides of one and two values. A comparison of the executor may
+// answer differently for a row without a value, whose result it clears.
 pub(crate) trait Test<S: Source> {
     /// The answers for 64 rows, with the answer for lane `i` in bit `i`.
     fn lanes(&self, rows: S::Lanes) -> u64;
@@ -343,9 +346,9 @@ impl Test<Strided<'_, f64>> for NotNan {
 /// a NaN when its bits without the sign lie above these.
 const F16_INFINITY: u16 = f16::INFINITY.to_bits();
 
-// The test of a half-precision float runs on its 16 bits as ints. Every
-// target tests the bits without widening a lane, which aarch64 without its
-// half-precision extension does for a test of `f16` lanes.
+// The test of a half-precision float runs on its 16 bits as ints, which no
+// target converts. A test of `f16` lanes would widen each lane on aarch64
+// without its half-precision extension.
 impl Test<Strided<'_, u16>> for NotNan {
     fn lanes(&self, values: Simd<u16, 64>) -> u64 {
         // `0x7fff` clears the sign bit, so a negative NaN tests like a
