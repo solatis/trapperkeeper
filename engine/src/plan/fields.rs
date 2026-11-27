@@ -7,8 +7,8 @@ use crate::expr::{Expr, Segment};
 /// is the place of the path in `paths`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FieldTree {
-    // The tree that an adapter, the code that describes the columns of a
-    // source, walks to look up a prefix that two paths share once.
+    // An adapter, the code that describes the columns of a source, walks
+    // this tree, so it looks up a prefix that two paths share once.
     root: FieldNode,
     // The paths in field order, which is the order of the columns that a
     // caller hands over.
@@ -143,8 +143,9 @@ impl FieldNode {
 fn paths_in(e: &Expr) -> Vec<&[Segment]> {
     match e {
         Expr::Field(path) => vec![path],
-        // An element of a quantifier is a leaf with no children, and its path
-        // starts at the element, so it adds no field of the record.
+        // `Expr::Element`, the element of a quantifier, has no children, so
+        // this arm gives no path for it. Its path starts at the element and
+        // is no field of the record.
         _ => e
             .children()
             .into_iter()
