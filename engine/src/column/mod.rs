@@ -176,7 +176,7 @@ impl<'a> Column<'a> {
             Marking::ByteMask(mask) => present_from_mask(*mask, start, rows, out),
         }
         // A NaN is no value in every source (ADR-0005), so the NaN pass runs
-        // after the marking's loop and clears the rows it set.
+        // after the marking's loop and clears the NaN rows from its bitmap.
         if let Kind::Floats(values, _) = &self.kind {
             match values {
                 Floats::F16(v) => clear_nan(*v, start, rows, out),
