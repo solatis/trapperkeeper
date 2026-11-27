@@ -7,11 +7,11 @@ columns of a schema and runs it.
 
 **Map**:
 
-| File         | What                                                                     | When to read                                                                                                                   |
-| ------------ | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
-| `mod.rs`     | the module and what it exports                                           | what a caller of the planner can reach                                                                                         |
-| `fields.rs`  | `FieldTree` and `FieldNode`: the tree of the paths and the field numbers | how an adapter learns which fields to read and in which order; why a path under a quantifier is no field                       |
-| `program.rs` | `Program`, its steps, `plan` and `Unsupported`                           | what a step is; how a comparison becomes a step; which kinds this version plans; how two literals fold; how rules share a step |
+| File         | What                                                                     | When to read                                                                                                                                               |
+| ------------ | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mod.rs`     | the module and what it exports                                           | what a caller of the planner can reach                                                                                                                     |
+| `fields.rs`  | `FieldTree` and `FieldNode`: the tree of the paths and the field numbers | how an adapter, the code that describes the columns of a source, learns which fields to read and in which order; why a path under a quantifier is no field |
+| `program.rs` | `Program`, its steps, `plan` and `Unsupported`                           | what a step is; how a comparison becomes a step; which kinds this version plans; how two literals fold; how rules share a step                             |
 
 **Invariants**:
 
@@ -30,8 +30,9 @@ columns of a schema and runs it.
 
 **Why**:
 
-- One program per rule set, the field list and the prefix sharing in the
-  planner, and the fields as a tree of paths:
+- One program per rule set, the field list in the planner, and the fields as
+  a tree of paths, so that an adapter looks up a prefix that several paths
+  share once:
   `doc/adr/0035-vectorized-evaluation-with-a-planner.md`.
 - A null where a condition is expected is unknown, and a literal that is no
   boolean there is a fault: `doc/adr/0005-one-vocabulary-for-failure-behavior.md`
@@ -39,5 +40,5 @@ columns of a schema and runs it.
 
 **How to**: a new kind of expression gets a `Step` variant, an arm in
 `Planner::expr`, an arm in `bind_step` of `src/exec/bind.rs`, an arm in the
-reference interpreter of `tests/evaluation.rs`, and the kind in the generated
-rules there.
+reference interpreter of `tests/evaluation.rs`, and the kind in its strategy
+`condition`, which generates the rules there.
