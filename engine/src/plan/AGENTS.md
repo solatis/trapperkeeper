@@ -35,5 +35,6 @@ columns of a schema and runs it.
   and `doc/adr/0041-the-rule-language.md`.
 
 **How to**: a new kind of expression gets a `Step` variant, an arm in
-`Planner::expr`, an arm in `bind_step` of `src/exec/bind.rs`, and tests in
-`tests/evaluation.rs`.
+`Planner::expr`, an arm in `bind_step` of `src/exec/bind.rs`, an arm in the
+reference interpreter of `tests/evaluation.rs`, and the kind in the generated
+rules there.

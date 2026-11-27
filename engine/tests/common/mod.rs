@@ -48,7 +48,7 @@ const UNARY: [Unary; 16] = [
 
 /// The kinds of node with two operands that may hold the literal `None` on
 /// either side.
-const BINARY: [Binary; 4] = [Expr::Eq, Expr::Ne, Expr::StartsWith, Expr::EndsWith];
+pub const BINARY: [Binary; 4] = [Expr::Eq, Expr::Ne, Expr::StartsWith, Expr::EndsWith];
 
 /// The orderings and the arithmetic operators. Validation refuses the
 /// literal `None` on either side of them.
