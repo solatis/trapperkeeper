@@ -15,7 +15,9 @@ pub enum Fault {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Outcome {
     Matched,
-    // A rule whose expression gives false or unknown does not match.
+    // A rule whose expression gives false or unknown does not match. Unknown
+    // is the null of a boolean, as a comparison on a null gives it
+    // (ADR-0005).
     NotMatched,
     NotEvaluated(Fault),
 }
@@ -108,6 +110,7 @@ impl RuleOutcome {
     pub fn outcome(&self, row: usize) -> Outcome {
         assert!(row < self.rows, "record {row} of a batch of {}", self.rows);
         let bit = |words: &[u64]| words[row / 64] >> (row % 64) & 1 == 1;
+        // A faulted record is never true, so no record is in both bitmaps.
         if bit(&self.matched) {
             Outcome::Matched
         } else if bit(&self.faulted) {
@@ -124,8 +127,10 @@ impl RuleOutcome {
     }
 
     /// Appends the matched and the faulted records of one chunk, whose first
-    /// record is `start` and which holds `rows` records. `fault_of` gives the
-    /// fault of a faulted record by its row in the chunk.
+    /// record is `start` and which holds `rows` records. `start` is the number
+    /// of records appended before, and a chunk other than the last holds a
+    /// multiple of 64 records. `fault_of` takes the row of a faulted record in
+    /// the chunk and gives its fault.
     pub(crate) fn append(
         &mut self,
         matched: &[u64],
@@ -137,6 +142,8 @@ impl RuleOutcome {
         // A chunk starts at a multiple of 64 records, so its words follow the
         // words of the chunk before it.
         let words = rows.div_ceil(64);
+        // The loops set no bit from `rows` on, so the last word adds no
+        // record past the chunk.
         self.matched.extend_from_slice(&matched[..words]);
         self.faulted.extend_from_slice(&faulted[..words]);
         for (k, &word) in faulted[..words].iter().enumerate() {
