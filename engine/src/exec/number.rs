@@ -10,6 +10,9 @@ use crate::plan::Comparison;
 
 /// One of the six comparisons, as a type, so that each loop is compiled for
 /// its operator.
+// `Truth::compared` clears the result of a row without a value, such as a
+// NaN, so `<=` can be the negation of `>` and the impls need only the two lane
+// tests of `Number`. On a NaN, `lanes` and `one` then answer differently.
 pub(crate) trait Order {
     /// For 64 lanes, whether the comparison holds, with lane `i` in bit `i`.
     fn lanes<T: Number>(left: Simd<T, 64>, right: Simd<T, 64>) -> u64;
@@ -25,11 +28,6 @@ pub(crate) struct LessEqual;
 pub(crate) struct Greater;
 pub(crate) struct GreaterEqual;
 
-// A NaN is no value (ADR-0005), and `Truth::compared` clears the result of a
-// row without a value, whatever the loop gives for it. So `<=` can be the
-// negation of `>`, and the orders need only the two lane tests of `Number`.
-// On a NaN, `lanes` and `one` then answer differently, and the answer is
-// cleared.
 impl Order for Equal {
     fn lanes<T: Number>(left: Simd<T, 64>, right: Simd<T, 64>) -> u64 {
         T::eq_lanes(left, right)
