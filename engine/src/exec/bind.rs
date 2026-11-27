@@ -22,6 +22,8 @@ pub struct Bound {
     // columns of each batch.
     pub(super) types: Vec<FieldType>,
     pub(super) steps: Vec<BoundStep>,
+    // The id of each rule with the slot that holds its result, from the
+    // program.
     pub(super) rules: Vec<(Uuid, usize)>,
 }
 
@@ -55,7 +57,8 @@ pub(crate) enum BoundStep {
         fields: Vec<usize>,
         chunk: ChunkLoop,
     },
-    // A type fault, which faults on the rows where all `fields` have a value.
+    // A type fault, which faults on the rows where all `fields` have a value
+    // and is unknown on the others.
     Faulted {
         fault: Fault,
         fields: Vec<usize>,
@@ -66,14 +69,16 @@ pub(crate) enum BoundStep {
         field: usize,
         negated: bool,
     },
-    // The logic of ADR-0005 over earlier slots.
+    // The logic of ADR-0005 over the results of earlier steps, by their
+    // slots.
     Not(usize),
     And(usize, usize),
     Or(usize, usize),
 }
 
-/// The loop of a step. It reads the columns of a batch and writes into its
-/// bitmap the true rows of `start .. start + rows`, which make one chunk.
+/// The loop of a step. It takes the columns of a batch, the first row `start`
+/// of a chunk and its row count `rows`, and writes into its bitmap the true
+/// rows of the chunk, with row `start` at bit 0.
 pub(crate) type ChunkLoop =
     Box<dyn Fn(&[Option<Column<'_>>], usize, usize, &mut Present) + Send + Sync>;
 
@@ -276,11 +281,15 @@ fn bind_literal(op: Comparison, f: usize, t: FieldType, literal: Literal) -> Bou
             fault: Fault::Unordered,
             fields: vec![f],
         },
+        // The arm before takes the orderings, so `op` is `==` or `!=` here.
         // `x == False` holds where `x` is false, and `x != True` too.
         (FieldType::Bool, Literal::Bool(b)) => BoundStep::Loop {
             fields: vec![f],
             chunk: booleans_equal(f, b == (op == Comparison::Eq)),
         },
+        // A boolean literal against a number, a text or a list field, and a
+        // number literal against a boolean, a text or a list field, compare
+        // values of types that do not compare.
         (_, Literal::Bool(_)) | (FieldType::Bool | FieldType::Text | FieldType::List, _) => {
             BoundStep::Faulted {
                 fault: Fault::Incompatible,
@@ -310,6 +319,9 @@ fn bind_fields(
 ) -> Result<BoundStep, BindError> {
     let fields = vec![l, r];
     Ok(match (lt, rt) {
+        // A field without a value on any row makes the comparison unknown on
+        // every row (ADR-0005), whatever the other field holds, so this arm
+        // comes before the arms that fault or refuse a pair of types.
         (FieldType::Absent, _) | (_, FieldType::Absent) => BoundStep::Constant(Constant::Unknown),
         // The macros write one arm per pair of number types, so the compiler
         // instantiates one loop per pair and operator.
@@ -387,6 +399,9 @@ fn int_literal<T: Number + TryFrom<i64>>(op: Comparison, f: usize, i: i64) -> Bo
 /// The step that compares float field `f` with `literal`, converted to the
 /// field's type. A literal beyond the type's range converts to an infinity.
 fn float_literal<T: Number>(op: Comparison, f: usize, literal: Literal) -> BoundStep {
+    // Rounding the literal to the column's type decides an ordering near it,
+    // so on an `f16` column `x > 0.1` compares with the `f16` nearest to 0.1
+    // (ADR-0041).
     let literal: T = match literal {
         Literal::Int(i) => convert(i),
         Literal::Float(x) => convert(x),
@@ -444,7 +459,8 @@ fn write_booleans(
         _ => unreachable!("run checked the type of the column"),
     };
     match booleans {
-        // A bit-packed column holds its values as a bitmap of the chunk does.
+        // A bit-packed boolean column has the bit order of a chunk's bitmap,
+        // so the loop of a bitmap copies its true rows.
         Booleans::Bits(bits) => present_from_bits(bits, start, rows, out),
         // The loop of a byte mask sets the rows whose byte is zero, which are
         // the false rows here.
@@ -467,6 +483,9 @@ fn invert(out: &mut Present, rows: usize) {
 
 /// `value` converted to `C` as Rust's `as` converts it.
 fn convert<F: Number, C: Number>(value: F) -> C {
+    // The sealed trait that holds `convert` cannot be named outside
+    // `column`, so a call on a concrete type finds no method. The bound
+    // `F: Number` brings it into reach.
     value.convert()
 }
 
