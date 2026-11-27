@@ -34,8 +34,9 @@ step from the column descriptions (`adr/0036`), and the sensor keeps the result
 of bind for each schema of a source (owner, 2026-11-16). An invocation builds no
 program.
 
-The program is a flat list of steps, and each step writes one slot. A field or
-a subexpression that several rules share is one slot (owner, 2026-11-27). The
+The program is a flat list of steps. Each step writes its result for a chunk
+into one slot, and a later step reads it from there. A field or a
+subexpression that several rules share is one slot (owner, 2026-11-27). The
 program gives its fields as a tree of paths, so an adapter looks up a shared
 prefix once. The caller hands one column per field in the order of the
 program. A field that the source lacks has no column, and bind makes it a null
@@ -45,8 +46,9 @@ The result of a step for a chunk is three bitmaps: the rows that are known,
 the rows that are true and the rows that faulted (owner, 2026-11-27). Both
 operands of `and` and `or` run on every row, and the logic step clears the
 faults of the rows that the left operand decided. The owner expects this to
-be faster than a selection of rows, also where a guard such as `y != 0`
-decides most rows (owner, 2026-11-27).
+be faster than running the right operand only on the rows that the left one
+left open, also where a guard such as `y != 0` decides most rows (owner,
+2026-11-27).
 
 A run gives for each rule a bitmap of the matched records, a bitmap of the
 faulted records, and the faulted records with their faults (owner,
@@ -96,7 +98,8 @@ One byte per row with four states as the result of a step, because a logic
 step would then run about eight times as many operations as on bitmaps.
 
 Widening each chunk of two number columns into a scratch buffer of a common
-type, because that is a format between the source and the loop (`adr/0036`).
+type, because the loops read a source in place, with no format between the
+source and the loop (`adr/0036`).
 
 Running the right operand of `and` and `or` only on the rows that the left
 operand left open, because every loop would then take a selection of rows.
@@ -109,7 +112,8 @@ because bind then cannot tell that the field is absent, and the description
 would gain a kind that holds no memory.
 
 One byte per record that holds the outcome and the fault, because it takes
-eight times the memory of a bitmap, and the faults are rare.
+eight times the memory of a bitmap. The list of faulted records stays empty
+when no record faults.
 
 ## Consequences
 
