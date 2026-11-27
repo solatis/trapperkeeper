@@ -109,8 +109,8 @@ A map from path to column as the input of a run, because it costs a lookup per
 field per batch and leaves the sharing of prefixes to the adapter.
 
 A kind of column that is null on every row, for a field that the source lacks,
-because bind then cannot tell that the field is absent, and the description
-would gain a kind that holds no memory.
+because bind already knows from a missing column that the field is null on
+every row, and the description would gain a kind that holds no memory.
 
 One byte per record that holds the outcome and the fault, because it takes
 eight times the memory of a bitmap. The bitmaps need a list of the faulted
