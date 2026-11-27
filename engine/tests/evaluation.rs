@@ -385,8 +385,8 @@ fn two_floats_compare_in_the_wider_type() {
 fn a_strided_column_over_three_chunks_compares_every_row() {
     // Every second value is a row, so the run has a stride of two values and
     // `pack`, the loop of the column module over a chunk, reads it one row at
-    // a time. A chunk holds `CHUNK_ROWS` rows,
-    // 2048, so 5000 rows make three chunks.
+    // a time. A chunk holds `CHUNK_ROWS` rows, 2048, so 5000 rows make three
+    // chunks.
     let values: Vec<i64> = (0..10_000).collect();
     // SAFETY: the pointer is the vector's, the stride is two `i64`, and 5000
     // rows two values apart lie inside the 10000 values.
@@ -427,7 +427,7 @@ fn a_batch_of_another_type_is_refused() {
 
 // The property tests below compare the executor with a reference interpreter
 // that evaluates a rule on one record at a time, as ADR-0005 and ADR-0041
-// define it. The conformance fixtures replace the interpreter.
+// define it.
 
 /// The width of a float field, which a literal compared with the field takes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1148,9 +1148,10 @@ proptest! {
         // 2. run each record alone
         // A word holds 64 rows and a chunk 2048. The records at the edges of
         // the words and of the chunks, and every 97th record, keep a batch of
-        // 5000 rows from costing 5000 runs of one record. 97 is a prime, so
-        // the sampled records fall at every place within a word.
+        // 5000 rows from costing 5000 runs of one record.
         let edges = [0, 1, 63, 64, 2047, 2048, 2049, 4095, 4096, t.rows.saturating_sub(1)];
+        // 97 is a prime, so the sampled records fall at every place within a
+        // word.
         let rows = edges.into_iter().chain((0..t.rows).step_by(97)).filter(|&r| r < t.rows);
         for row in rows {
             let one = t.alone(row);
