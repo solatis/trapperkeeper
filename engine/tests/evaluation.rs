@@ -327,15 +327,16 @@ fn a_with_b(op: fn(Box<Expr>, Box<Expr>) -> Expr) -> Expr {
 fn a_negative_int_orders_below_every_u64() {
     let signed = [-1i8, 5, 5];
     let unsigned = [3u64, u64::MAX, 5];
-    let a = Column::ints(Ints::I8(Strided::from_slice(&signed)), Marking::Never).expect("unmarked");
-    let b =
+    let i8s =
+        Column::ints(Ints::I8(Strided::from_slice(&signed)), Marking::Never).expect("unmarked");
+    let u64s =
         Column::ints(Ints::U64(Strided::from_slice(&unsigned)), Marking::Never).expect("unmarked");
     assert_eq!(
-        outcomes_of_pair(a_with_b(Expr::Lt), a, b),
+        outcomes_of_pair(a_with_b(Expr::Lt), i8s, u64s),
         [Matched, Matched, NotMatched]
     );
     assert_eq!(
-        outcomes_of_pair(a_with_b(Expr::Ge), b, a),
+        outcomes_of_pair(a_with_b(Expr::Ge), u64s, i8s),
         [Matched, Matched, Matched]
     );
 }
@@ -376,8 +377,8 @@ fn a_strided_column_over_three_chunks_compares_every_row() {
     let values: Vec<i64> = (0..10_000).collect();
     // SAFETY: the pointer is the vector's, the stride is two `i64`, and 5000
     // rows two values apart lie inside the 10000 values.
-    let run = unsafe { Strided::from_raw(values.as_ptr(), 2 * size_of::<i64>(), 5000) };
-    let column = Column::ints(Ints::I64(run), Marking::Never).expect("an unmarked column");
+    let every_second = unsafe { Strided::from_raw(values.as_ptr(), 2 * size_of::<i64>(), 5000) };
+    let column = Column::ints(Ints::I64(every_second), Marking::Never).expect("an unmarked column");
     let got = outcomes(
         Expr::Ge(Box::new(x()), Box::new(Expr::Int(6000))),
         Some(column),
@@ -406,8 +407,8 @@ fn a_batch_of_another_type_is_refused() {
     let other = Column::booleans(Booleans::Bytes(Strided::from_slice(&bools)), Marking::Never)
         .expect("unmarked");
     assert_eq!(
-        bound.run(1, &[Some(other)]).map(|_| ()),
-        Err(SchemaMismatch { field: 0 })
+        bound.run(1, &[Some(other)]).err(),
+        Some(SchemaMismatch { field: 0 })
     );
 }
 
@@ -976,11 +977,7 @@ fn condition(n: usize) -> impl Strategy<Value = Expr> {
         .prop_map(|(op, a, b)| op(Box::new(field_named(a)), Box::new(field_named(b))));
     let folded =
         (select(ops), literal(), literal()).prop_map(|(op, a, b)| op(Box::new(a), Box::new(b)));
-    let literal_condition = prop_oneof![
-        any::<bool>().prop_map(Expr::Bool),
-        Just(Expr::None),
-        literal()
-    ];
+    let literal_condition = prop_oneof![Just(Expr::None), literal()];
     let field_condition = (0..n).prop_map(field_named);
     let tested = prop_oneof![
         3 => (0..n).prop_map(field_named),

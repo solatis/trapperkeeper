@@ -100,8 +100,8 @@ fn an_unsupported_kind_is_refused_with_its_rule() {
         observing(id, Expr::Gt(Box::new(sum), Box::new(Expr::Int(2)))),
     ];
     assert_eq!(
-        plan(&rules).map(|_| ()),
-        Err(Unsupported {
+        plan(&rules).err(),
+        Some(Unsupported {
             rule_id: id,
             key: "add"
         })
