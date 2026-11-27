@@ -9,7 +9,10 @@ use super::number::{
     Converted, compare_columns, compare_widened, compare_with_literal, outside, with_order,
 };
 use super::outcome::Fault;
-use crate::column::{Booleans, Column, Floats, Ints, Kind, Number, Present, present_all};
+use crate::column::{
+    Booleans, CHUNK_WORDS, Column, Floats, Ints, Kind, Number, Present, present_all,
+    present_from_bits, present_from_mask,
+};
 use crate::plan::{Comparison, Constant, Literal, Operand, Program, Step};
 
 /// A program bound to the column types of one schema. It runs over every
@@ -207,6 +210,7 @@ impl Program {
 fn bind_step(step: &Step, types: &[FieldType]) -> Result<BoundStep, BindError> {
     Ok(match step {
         Step::Constant(c) => BoundStep::Constant(*c),
+        Step::Condition(f) => bind_condition(*f, types[*f]),
         Step::Not(a) => BoundStep::Not(*a),
         Step::And(a, b) => BoundStep::And(*a, *b),
         Step::Or(a, b) => BoundStep::Or(*a, *b),
@@ -228,13 +232,44 @@ fn bind_step(step: &Step, types: &[FieldType]) -> Result<BoundStep, BindError> {
     })
 }
 
+/// Binds field `f`, of type `t`, where a condition is expected.
+fn bind_condition(f: usize, t: FieldType) -> BoundStep {
+    match t {
+        // A null where a condition is expected is unknown (ADR-0005).
+        FieldType::Absent => BoundStep::Constant(Constant::Unknown),
+        _ if t.is_bool() => BoundStep::Loop {
+            fields: vec![f],
+            chunk: booleans_equal(f, true),
+        },
+        _ => BoundStep::Faulted {
+            fault: Fault::NotBoolean,
+            fields: vec![f],
+        },
+    }
+}
+
 /// Binds a comparison of field `f`, of type `t`, with `literal`.
 fn bind_literal(op: Comparison, f: usize, t: FieldType, literal: Literal) -> BoundStep {
+    // The function tests the pair of the field's type and the literal in a
+    // chain, and the first case that applies gives the step. The absent field
+    // and the boolean cases come before the number cases, because the number
+    // cases take every other pair.
     match (t, literal) {
         // A field without a value on any row makes the comparison unknown on
         // every row (ADR-0005).
         (FieldType::Absent, _) => BoundStep::Constant(Constant::Unknown),
-        (FieldType::BoolBytes | FieldType::BoolBits | FieldType::Text | FieldType::List, _) => {
+        // An ordering is for numbers only (ADR-0041).
+        (_, Literal::Bool(_)) if t.is_bool() && op.is_ordering() => BoundStep::Faulted {
+            fault: Fault::Unordered,
+            fields: vec![f],
+        },
+        // `x == False` holds where `x` is false, and `x != True` too.
+        (_, Literal::Bool(b)) if t.is_bool() => BoundStep::Loop {
+            fields: vec![f],
+            chunk: booleans_equal(f, b == (op == Comparison::Eq)),
+        },
+        (_, Literal::Bool(_))
+        | (FieldType::BoolBytes | FieldType::BoolBits | FieldType::Text | FieldType::List, _) => {
             BoundStep::Faulted {
                 fault: Fault::Incompatible,
                 fields: vec![f],
@@ -286,12 +321,32 @@ fn bind_fields(
                 })));
             BoundStep::Loop { fields, chunk }
         }
-        (FieldType::Text, FieldType::Text)
-        | (FieldType::List, FieldType::List)
-        | (
-            FieldType::BoolBytes | FieldType::BoolBits,
-            FieldType::BoolBytes | FieldType::BoolBits,
-        ) => return Err(BindError::Unsupported { left: l, right: r }),
+        // An ordering is for numbers only (ADR-0041).
+        _ if lt.is_bool() && rt.is_bool() && op.is_ordering() => BoundStep::Faulted {
+            fault: Fault::Unordered,
+            fields,
+        },
+        _ if lt.is_bool() && rt.is_bool() => {
+            let equal = op == Comparison::Eq;
+            let chunk: ChunkLoop = Box::new(
+                move |cols: &[Option<Column<'_>>], start: usize, rows: usize, out: &mut Present| {
+                    let mut right = [0; CHUNK_WORDS];
+                    write_booleans(cols, l, start, rows, out);
+                    write_booleans(cols, r, start, rows, &mut right);
+                    // A set bit marks the rows whose two booleans differ.
+                    for (word, other) in out.iter_mut().zip(right) {
+                        *word ^= other;
+                    }
+                    if equal {
+                        invert(out, rows);
+                    }
+                },
+            );
+            BoundStep::Loop { fields, chunk }
+        }
+        (FieldType::Text, FieldType::Text) | (FieldType::List, FieldType::List) => {
+            return Err(BindError::Unsupported { left: l, right: r });
+        }
         _ => BoundStep::Faulted {
             fault: Fault::Incompatible,
             fields,
@@ -324,6 +379,7 @@ fn float_literal<T: Number>(op: Comparison, f: usize, literal: Literal) -> Bound
     let literal: T = match literal {
         Literal::Int(i) => convert(i),
         Literal::Float(x) => convert(x),
+        Literal::Bool(_) => unreachable!("`bind_literal` faults a boolean against a number"),
     };
     let chunk: ChunkLoop = with_order!(op, |O| Box::new(
         move |cols: &[Option<Column<'_>>], start: usize, rows: usize, out: &mut Present| {
@@ -346,6 +402,55 @@ fn widened<T: Number>(op: Comparison, f: usize, x: f64) -> BoundStep {
     BoundStep::Loop {
         fields: vec![f],
         chunk,
+    }
+}
+
+/// The loop that writes the rows of boolean field `f` that hold `value`.
+fn booleans_equal(f: usize, value: bool) -> ChunkLoop {
+    Box::new(
+        move |cols: &[Option<Column<'_>>], start: usize, rows: usize, out: &mut Present| {
+            write_booleans(cols, f, start, rows, out);
+            if !value {
+                invert(out, rows);
+            }
+        },
+    )
+}
+
+/// Writes into `out` the rows `start .. start + rows` of boolean field `f`
+/// that are true.
+fn write_booleans(
+    cols: &[Option<Column<'_>>],
+    f: usize,
+    start: usize,
+    rows: usize,
+    out: &mut Present,
+) {
+    let booleans = match cols[f].as_ref().map(Column::kind) {
+        Some(Kind::Booleans(b, _)) => *b,
+        // `run` checks each column against the type that bind saw, and bind
+        // made this loop for a boolean field.
+        _ => unreachable!("run checked the type of the column"),
+    };
+    match booleans {
+        // A bit-packed column holds its values as a bitmap of the chunk does.
+        Booleans::Bits(bits) => present_from_bits(bits, start, rows, out),
+        // The loop of a byte mask sets the rows whose byte is zero, which are
+        // the false rows here.
+        Booleans::Bytes(bytes) => {
+            present_from_mask(bytes, start, rows, out);
+            invert(out, rows);
+        }
+    }
+}
+
+/// Swaps the set and the clear bits of the first `rows` rows of `out`, and
+/// leaves the bits from `rows` on clear.
+fn invert(out: &mut Present, rows: usize) {
+    let mut all = [0; CHUNK_WORDS];
+    present_all(rows, &mut all);
+    for (word, held) in out.iter_mut().zip(all) {
+        *word = !*word & held;
     }
 }
 
@@ -403,6 +508,11 @@ impl FieldType {
             Kind::Text(..) => Self::Text,
             Kind::List(..) => Self::List,
         }
+    }
+
+    /// Whether the field holds booleans.
+    fn is_bool(self) -> bool {
+        matches!(self, Self::BoolBytes | Self::BoolBits)
     }
 
     /// Whether the field holds numbers.

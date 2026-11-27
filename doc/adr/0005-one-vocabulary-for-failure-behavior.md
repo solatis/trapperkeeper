@@ -1,6 +1,6 @@
 # 0005. One vocabulary for failure behavior
 
-Date: 2026-11-26.
+Date: 2026-11-27.
 
 ## Context
 
@@ -86,10 +86,10 @@ operations are faults and what a fault does. SQL engines have their own
 answers, and they differ on a division by zero.
 
 A fault is an operation that cannot be done on values that are there (owner,
-2026-11-13):
+2026-11-13, 2026-11-27):
 
 - two values have incompatible types
-- an ordering compares text
+- an ordering compares values that are not numbers, such as text or booleans
 - a division by zero
 - an integer overflow
 - a value that is no boolean where a condition is expected

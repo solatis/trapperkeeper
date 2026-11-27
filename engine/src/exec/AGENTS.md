@@ -7,14 +7,14 @@ records it faulted on, each with its fault. It knows no rule text.
 
 **Map**:
 
-| File         | What                                                                                                     | When to read                                                                                                                                  |
-| ------------ | -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mod.rs`     | the module and what it exports                                                                           | what a caller of the executor can reach                                                                                                       |
-| `bind.rs`    | `Bound`, the type of a field as bind sees it, and the binding of each step to its loop                   | how a comparison picks its loop; how a literal converts to the column's type; which comparisons are a type fault at bind                      |
-| `run.rs`     | `Bound::run`, the presence of each field per chunk, and the fault of a faulted record                    | how a batch runs chunk by chunk; what `run` checks about a batch                                                                              |
-| `number.rs`  | the orders as types, the tests of `pack` that compare numbers, and the common type of two number columns | writing a loop that compares numbers; why an int literal outside the column's type decides every row; in which type two number fields compare |
-| `truth.rs`   | `Truth`, the result of a step for one chunk                                                              | how a step's result is held                                                                                                                   |
-| `outcome.rs` | `Outcomes`, `RuleOutcome`, `Outcome` and `Fault`                                                         | what a run returns; the faults                                                                                                                |
+| File         | What                                                                                                     | When to read                                                                                                                                          |
+| ------------ | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mod.rs`     | the module and what it exports                                                                           | what a caller of the executor can reach                                                                                                               |
+| `bind.rs`    | `Bound`, the type of a field as bind sees it, and the binding of each step to its loop                   | how a comparison picks its loop; how a literal converts to the column's type; which comparisons are a type fault at bind; how a boolean field is read |
+| `run.rs`     | `Bound::run`, the presence of each field per chunk, and the fault of a faulted record                    | how a batch runs chunk by chunk; what `run` checks about a batch                                                                                      |
+| `number.rs`  | the orders as types, the tests of `pack` that compare numbers, and the common type of two number columns | writing a loop that compares numbers; why an int literal outside the column's type decides every row; in which type two number fields compare         |
+| `truth.rs`   | `Truth`, the result of a step for one chunk                                                              | how a step's result is held                                                                                                                           |
+| `outcome.rs` | `Outcomes`, `RuleOutcome`, `Outcome` and `Fault`                                                         | what a run returns; the faults                                                                                                                        |
 
 **Invariants**:
 

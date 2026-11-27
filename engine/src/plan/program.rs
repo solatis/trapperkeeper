@@ -36,6 +36,8 @@ pub(crate) enum Step {
         left: Operand,
         right: Operand,
     },
+    // A field where a condition is expected, which must hold a boolean.
+    Condition(usize),
     // The logic of ADR-0005 over earlier slots. `And` and `Or` hold their
     // operands in written order.
     Not(usize),
@@ -55,6 +57,7 @@ pub(crate) enum Operand {
 pub(crate) enum Literal {
     Int(i64),
     Float(f64),
+    Bool(bool),
 }
 
 // Two literals are one step when their bits are equal, so `0.0` and `-0.0`
@@ -65,6 +68,7 @@ impl PartialEq for Literal {
         match (self, other) {
             (Self::Int(a), Self::Int(b)) => a == b,
             (Self::Float(a), Self::Float(b)) => a.to_bits() == b.to_bits(),
+            (Self::Bool(a), Self::Bool(b)) => a == b,
             _ => false,
         }
     }
@@ -77,6 +81,7 @@ impl Hash for Literal {
         match self {
             Self::Int(i) => (0u8, *i).hash(state),
             Self::Float(x) => (1u8, x.to_bits()).hash(state),
+            Self::Bool(b) => (2u8, *b).hash(state),
         }
     }
 }
@@ -102,6 +107,11 @@ impl Comparison {
             Self::Ge => Self::Le,
             Self::Eq | Self::Ne => self,
         }
+    }
+
+    /// Whether the comparison orders its operands, which only numbers allow.
+    pub(crate) fn is_ordering(self) -> bool {
+        !matches!(self, Self::Eq | Self::Ne)
     }
 
     /// Whether the comparison holds for two values whose order is `order`.
@@ -192,6 +202,7 @@ impl Planner<'_> {
     fn expr(&mut self, e: &Expr) -> Result<usize, &'static str> {
         let step = match e {
             Expr::Bool(b) => Step::Constant(Constant::of(*b)),
+            Expr::Field(path) => Step::Condition(self.fields.field_of(path)),
             // A null where a condition is expected is unknown (ADR-0005).
             Expr::None => Step::Constant(Constant::Unknown),
             // The language has no truthiness (ADR-0041), so any other literal
@@ -272,6 +283,7 @@ impl Planner<'_> {
             Expr::Field(path) => Ok(Operand::Field(self.fields.field_of(path))),
             Expr::Int(i) => Ok(Operand::Literal(Literal::Int(*i))),
             Expr::Float(x) => Ok(Operand::Literal(Literal::Float(*x))),
+            Expr::Bool(b) => Ok(Operand::Literal(Literal::Bool(*b))),
             _ => Err(e.key()),
         }
     }
@@ -292,7 +304,19 @@ impl Planner<'_> {
 
 /// The result of comparing two literals.
 fn fold(op: Comparison, left: Literal, right: Literal) -> Constant {
+    // The function tests the pair of literals in a chain, and the first case
+    // that applies gives the order. The boolean cases come before the number
+    // cases, because a number case widens every literal to a float.
     let order = match (left, right) {
+        // An ordering is for numbers only (ADR-0041).
+        (Literal::Bool(_), Literal::Bool(_)) if op.is_ordering() => {
+            return Constant::Fault(Fault::Unordered);
+        }
+        (Literal::Bool(l), Literal::Bool(r)) => l.cmp(&r),
+        // A boolean and a number have types that do not compare.
+        (Literal::Bool(_), _) | (_, Literal::Bool(_)) => {
+            return Constant::Fault(Fault::Incompatible);
+        }
         (Literal::Int(l), Literal::Int(r)) => l.cmp(&r),
         // An int widens to a float (ADR-0041). The comparison of IEEE 754
         // makes `-0.0` equal to `0.0`, and a float literal is finite, so the
@@ -314,6 +338,7 @@ fn as_f64(l: Literal) -> f64 {
         )]
         Literal::Int(i) => i as f64,
         Literal::Float(x) => x,
+        Literal::Bool(_) => unreachable!("`fold` handles a boolean before it widens"),
     }
 }
 

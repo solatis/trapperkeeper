@@ -5,6 +5,8 @@
 pub enum Fault {
     /// Two values of types that do not compare.
     Incompatible,
+    /// An ordering of values that are not numbers, such as two booleans.
+    Unordered,
     /// A value that is not a boolean where a condition is expected.
     NotBoolean,
 }

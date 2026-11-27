@@ -194,6 +194,53 @@ fn a_number_against_a_text_field_faults_where_the_text_is_there() {
 }
 
 #[test]
+fn a_boolean_field_is_a_condition_and_compares_with_a_boolean() {
+    // A byte that is not zero is true, and the third row has no value.
+    let bytes = [0u8, 7, 1];
+    let mask = [0u8, 0, 1];
+    let column = Column::booleans(
+        Booleans::Bytes(Strided::from_slice(&bytes)),
+        Marking::ByteMask(Strided::from_slice(&mask)),
+    )
+    .expect("one byte of mask per row");
+    assert_eq!(
+        outcomes(x(), Some(column)),
+        [NotMatched, Matched, NotMatched]
+    );
+    assert_eq!(
+        outcomes(
+            Expr::Eq(Box::new(x()), Box::new(Expr::Bool(false))),
+            Some(column)
+        ),
+        [Matched, NotMatched, NotMatched]
+    );
+    // An ordering is for numbers only, and the row without a value stays
+    // unknown.
+    assert_eq!(
+        outcomes(
+            Expr::Lt(Box::new(x()), Box::new(Expr::Bool(true))),
+            Some(column)
+        ),
+        [
+            NotEvaluated(Fault::Unordered),
+            NotEvaluated(Fault::Unordered),
+            NotMatched
+        ]
+    );
+}
+
+#[test]
+fn a_number_field_where_a_condition_is_expected_faults() {
+    let values = [1i32];
+    let column = Column::ints(Ints::I32(Strided::from_slice(&values)), Marking::Never)
+        .expect("an unmarked column");
+    assert_eq!(
+        outcomes(x(), Some(column)),
+        [NotEvaluated(Fault::NotBoolean)]
+    );
+}
+
+#[test]
 fn a_number_where_a_condition_is_expected_faults_on_every_record() {
     assert_eq!(
         outcomes(Expr::Int(1), None),
@@ -410,6 +457,11 @@ fn reference(e: &Expr, record: &[Value]) -> Tri {
         // A null where a condition is expected is unknown.
         Expr::None => Tri::Unknown,
         Expr::Int(_) | Expr::Float(_) => Tri::Fault(Fault::NotBoolean),
+        Expr::Field(p) => match record[field_number(p)] {
+            Value::Bool(b) => Tri::of(b),
+            Value::Null => Tri::Unknown,
+            _ => Tri::Fault(Fault::NotBoolean),
+        },
         Expr::Not(x) => match reference(x, record) {
             Tri::True => Tri::False,
             Tri::False => Tri::True,
@@ -432,30 +484,36 @@ fn reference(e: &Expr, record: &[Value]) -> Tri {
                 right => right,
             },
         }),
-        Expr::Eq(l, r) => compare(l, r, record, Ordering::is_eq),
-        Expr::Ne(l, r) => compare(l, r, record, Ordering::is_ne),
-        Expr::Lt(l, r) => compare(l, r, record, Ordering::is_lt),
-        Expr::Le(l, r) => compare(l, r, record, Ordering::is_le),
-        Expr::Gt(l, r) => compare(l, r, record, Ordering::is_gt),
-        Expr::Ge(l, r) => compare(l, r, record, Ordering::is_ge),
+        Expr::Eq(l, r) => compare(l, r, record, Ordering::is_eq, false),
+        Expr::Ne(l, r) => compare(l, r, record, Ordering::is_ne, false),
+        Expr::Lt(l, r) => compare(l, r, record, Ordering::is_lt, true),
+        Expr::Le(l, r) => compare(l, r, record, Ordering::is_le, true),
+        Expr::Gt(l, r) => compare(l, r, record, Ordering::is_gt, true),
+        Expr::Ge(l, r) => compare(l, r, record, Ordering::is_ge, true),
         _ => unreachable!("the generated rules hold no other kind"),
     }
 }
 
 /// Evaluates the comparison of `l` with `r` on `record`, which holds when
-/// `holds` accepts the order of the two values.
-fn compare(l: &Expr, r: &Expr, record: &[Value], holds: fn(Ordering) -> bool) -> Tri {
+/// `holds` accepts the order of the two values. `ordering` is false for `==`
+/// and `!=`.
+fn compare(
+    l: &Expr,
+    r: &Expr,
+    record: &[Value],
+    holds: fn(Ordering) -> bool,
+    ordering: bool,
+) -> Tri {
     let order = match (l, r) {
         (Expr::Field(a), Expr::Field(b)) => {
-            order_of_fields(record[field_number(a)], record[field_number(b)])
+            order_of_fields(record[field_number(a)], record[field_number(b)], ordering)
         }
-        (Expr::Field(p), literal) => order_with_literal(record[field_number(p)], literal),
+        (Expr::Field(p), literal) => order_with_literal(record[field_number(p)], literal, ordering),
         // The order of a literal with a field is the order of the field with
         // the literal, reversed.
-        (literal, Expr::Field(p)) => {
-            order_with_literal(record[field_number(p)], literal).map(|o| o.map(Ordering::reverse))
-        }
-        (a, b) => Ok(Some(order_of_literals(a, b))),
+        (literal, Expr::Field(p)) => order_with_literal(record[field_number(p)], literal, ordering)
+            .map(|o| o.map(Ordering::reverse)),
+        (a, b) => order_of_literals(a, b, ordering).map(Some),
     };
     match order {
         Ok(Some(o)) => Tri::of(holds(o)),
@@ -464,11 +522,13 @@ fn compare(l: &Expr, r: &Expr, record: &[Value], holds: fn(Ordering) -> bool) ->
     }
 }
 
-/// The order of the field value `v` and the number `literal`, `None` when
-/// `v` is a null, or the fault of comparing them.
-fn order_with_literal(v: Value, literal: &Expr) -> Result<Option<Ordering>, Fault> {
+/// The order of the field value `v` and `literal`, `None` when `v` is a
+/// null, or the fault of comparing them. `ordering` is false for `==` and
+/// `!=`.
+fn order_with_literal(v: Value, literal: &Expr, ordering: bool) -> Result<Option<Ordering>, Fault> {
     let order = match (v, literal) {
         (Value::Null, _) => return Ok(None),
+        (Value::Bool(a), Expr::Bool(b)) => booleans(a, *b, ordering)?,
         (Value::Int(i), Expr::Int(j)) => i.cmp(&i128::from(*j)),
         // An int widens to a float.
         (Value::Int(i), Expr::Float(x)) => ieee(i as f64, *x),
@@ -476,17 +536,17 @@ fn order_with_literal(v: Value, literal: &Expr) -> Result<Option<Ordering>, Faul
         // nearest value of that width.
         (Value::Float(f, w), Expr::Int(j)) => ieee(f, int_as(*j, w)),
         (Value::Float(f, w), Expr::Float(x)) => ieee(f, float_as(*x, w)),
-        (Value::Bool(_) | Value::Text, _) => return Err(Fault::Incompatible),
-        _ => unreachable!("a generated literal is a number"),
+        _ => return Err(Fault::Incompatible),
     };
     Ok(Some(order))
 }
 
 /// The order of the values of two fields, `None` when either is a null, or
-/// the fault of comparing them.
-fn order_of_fields(a: Value, b: Value) -> Result<Option<Ordering>, Fault> {
+/// the fault of comparing them. `ordering` is false for `==` and `!=`.
+fn order_of_fields(a: Value, b: Value, ordering: bool) -> Result<Option<Ordering>, Fault> {
     let order = match (a, b) {
         (Value::Null, _) | (_, Value::Null) => return Ok(None),
+        (Value::Bool(x), Value::Bool(y)) => booleans(x, y, ordering)?,
         (Value::Int(i), Value::Int(j)) => i.cmp(&j),
         // Two floats compare in the wider of their widths, which holds both
         // values, so they compare exactly. An int widens to a float64.
@@ -498,11 +558,24 @@ fn order_of_fields(a: Value, b: Value) -> Result<Option<Ordering>, Fault> {
     Ok(Some(order))
 }
 
-/// The order of two number literals, where an int widens to a float.
-fn order_of_literals(a: &Expr, b: &Expr) -> Ordering {
+/// The order of two literals, where an int widens to a float, or the fault
+/// of comparing them. `ordering` is false for `==` and `!=`.
+fn order_of_literals(a: &Expr, b: &Expr, ordering: bool) -> Result<Ordering, Fault> {
     match (a, b) {
-        (Expr::Int(i), Expr::Int(j)) => i.cmp(j),
-        _ => ieee(number(a), number(b)),
+        (Expr::Bool(x), Expr::Bool(y)) => booleans(*x, *y, ordering),
+        (Expr::Bool(_), _) | (_, Expr::Bool(_)) => Err(Fault::Incompatible),
+        (Expr::Int(i), Expr::Int(j)) => Ok(i.cmp(j)),
+        _ => Ok(ieee(number(a), number(b))),
+    }
+}
+
+/// The order of two booleans for `==` and `!=`, or the fault of an ordering,
+/// which is for numbers only.
+fn booleans(a: bool, b: bool, ordering: bool) -> Result<Ordering, Fault> {
+    if ordering {
+        Err(Fault::Unordered)
+    } else {
+        Ok(a.cmp(&b))
     }
 }
 
@@ -787,9 +860,11 @@ fn table() -> impl Strategy<Value = Table> {
     })
 }
 
-/// A number literal near the generated values or at the edge of a type.
+/// A boolean, or a number literal near the generated values or at the edge
+/// of a type.
 fn literal() -> impl Strategy<Value = Expr> {
     prop_oneof![
+        1 => any::<bool>().prop_map(Expr::Bool),
         3 => (-6i64..6).prop_map(Expr::Int),
         1 => select(vec![i64::MIN, -129, 255, 256, 65504, 65520, 1 << 53, i64::MAX]).prop_map(Expr::Int),
         2 => select(vec![0.0, -0.0, 0.1, 2.5, -3.0, 1e10, 1e300]).prop_map(Expr::Float),
@@ -819,7 +894,14 @@ fn condition(n: usize) -> impl Strategy<Value = Expr> {
         Just(Expr::None),
         literal()
     ];
-    let leaf = prop_oneof![6 => comparison, 3 => fields, 1 => folded, 1 => literal_condition];
+    let field_condition = (0..n).prop_map(field_named);
+    let leaf = prop_oneof![
+        6 => comparison,
+        3 => fields,
+        1 => folded,
+        1 => literal_condition,
+        2 => field_condition,
+    ];
     // Up to three levels of `not`, `and` and `or` over the leaves.
     leaf.prop_recursive(3, 24, 4, |inner| {
         prop_oneof![
