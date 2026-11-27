@@ -130,20 +130,73 @@ pub fn present_from_bits(bits: Bits<'_>, start: usize, rows: usize, out: &mut Pr
     }
 }
 
-/// A test that a loop applies to each value of a chunk.
-// The two methods give the same answer for the same value, so the vector arm
+/// Where `pack` reads the rows of a chunk.
+trait Source: Copy {
+    /// 64 rows of the source, as `Test::lanes` takes them.
+    type Lanes;
+    /// One row of the source, as `Test::one` takes it.
+    type One;
+
+    /// The number of rows.
+    fn len(&self) -> usize;
+
+    /// Whether the values lie one after the other, so that `lanes` can load
+    /// them.
+    fn is_contiguous(&self) -> bool;
+
+    /// The 64 rows from `row` on.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the values do not lie one after the other or the rows reach
+    /// past the end.
+    fn lanes(&self, row: usize) -> Self::Lanes;
+
+    /// The row `row`, without the bound check.
+    ///
+    /// # Safety
+    ///
+    /// `row` is below `len`.
+    unsafe fn one(&self, row: usize) -> Self::One;
+}
+
+impl<T: SimdElement> Source for Strided<'_, T> {
+    type Lanes = Simd<T, 64>;
+    type One = T;
+
+    fn len(&self) -> usize {
+        Strided::len(self)
+    }
+
+    fn is_contiguous(&self) -> bool {
+        self.as_slice().is_some()
+    }
+
+    fn lanes(&self, row: usize) -> Simd<T, 64> {
+        let values = self.as_slice().expect("the values lie one after the other");
+        Simd::from_slice(&values[row..row + 64])
+    }
+
+    unsafe fn one(&self, row: usize) -> T {
+        // SAFETY: the caller keeps `row` below `len`.
+        unsafe { self.get_unchecked(row) }
+    }
+}
+
+/// A test that `pack` applies to each row of a chunk.
+// The two methods give the same answer for the same row, so the vector arm
 // and the scalar arm of `pack` agree.
-trait Test<T: SimdElement> {
-    /// The answers for 64 values, with the answer for lane `i` in bit `i`.
-    fn lanes(&self, values: Simd<T, 64>) -> u64;
-    /// The answer for one value.
-    fn one(&self, value: T) -> bool;
+trait Test<S: Source> {
+    /// The answers for 64 rows, with the answer for lane `i` in bit `i`.
+    fn lanes(&self, rows: S::Lanes) -> u64;
+    /// The answer for one row.
+    fn one(&self, row: S::One) -> bool;
 }
 
 /// The test of a byte mask: the byte is zero, so the row has a value.
 struct ZeroByte;
 
-impl Test<u8> for ZeroByte {
+impl Test<Strided<'_, u8>> for ZeroByte {
     fn lanes(&self, values: Simd<u8, 64>) -> u64 {
         values.simd_eq(Simd::splat(0)).to_bitmask()
     }
@@ -153,49 +206,44 @@ impl Test<u8> for ZeroByte {
     }
 }
 
-/// Writes into `out` the bitmap of the rows `start .. start + rows` of `run`,
-/// with a bit set where `test` says so. Every word of `out` is written, and the
-/// bits from `rows` on are 0.
+/// Writes into `out` the bitmap of the rows `start .. start + rows` of
+/// `source`, with a bit set where `test` says so. Every word of `out` is
+/// written, and the bits from `rows` on are 0.
 ///
 /// # Panics
 ///
-/// Panics when `rows` is above `CHUNK_ROWS` or the chunk reaches past `run`.
-fn pack<T: SimdElement, X: Test<T>>(
-    run: Strided<'_, T>,
-    start: usize,
-    rows: usize,
-    out: &mut Present,
-    test: &X,
-) {
+/// Panics when `rows` is above `CHUNK_ROWS` or the chunk reaches past the end
+/// of `source`.
+fn pack<S: Source, X: Test<S>>(source: S, start: usize, rows: usize, out: &mut Present, test: &X) {
     // The bound keeps the chunk inside `out`, and the unchecked reads of the
-    // strided arm trust it.
+    // scalar loop trust it.
     assert!(
-        rows <= CHUNK_ROWS && start.checked_add(rows).is_some_and(|end| end <= run.len()),
+        rows <= CHUNK_ROWS
+            && start
+                .checked_add(rows)
+                .is_some_and(|end| end <= source.len()),
         "a chunk of {rows} rows from row {start} of {}",
-        run.len()
+        source.len()
     );
-    // The arms below write only the words that hold rows.
+    // The loops below write only the words that hold rows.
     out.fill(0);
     // Values that lie one after the other load 64 at a time into a vector,
-    // and `Test::lanes` gives one word per load. A strided run reads one value
-    // at a time, because its values are not adjacent in memory.
-    if let Some(values) = run.as_slice() {
-        let (groups, tail) = values[start..start + rows].as_chunks::<64>();
-        for (word, group) in out.iter_mut().zip(groups) {
-            *word = test.lanes(Simd::from_array(*group));
+    // and `Test::lanes` gives one word per load. The rows after the last full
+    // group of 64 are left to the scalar loop, so no load reads past the
+    // chunk. A strided source reads every row in the scalar loop, because its
+    // values are not adjacent in memory.
+    let first = if source.is_contiguous() {
+        for (k, word) in out.iter_mut().take(rows / 64).enumerate() {
+            *word = test.lanes(source.lanes(start + 64 * k));
         }
-        // The rows after the last full group of 64 are tested one by one, so
-        // no load reads past the chunk.
-        let first = groups.len() * 64;
-        for (i, value) in tail.iter().enumerate() {
-            set_if(out, first + i, test.one(*value));
-        }
+        rows / 64 * 64
     } else {
-        for row in 0..rows {
-            // SAFETY: the assertion above keeps `start + row` below `len`.
-            let value = unsafe { run.get_unchecked(start + row) };
-            set_if(out, row, test.one(value));
-        }
+        0
+    };
+    for row in first..rows {
+        // SAFETY: the assertion above keeps `start + row` below `len`.
+        let value = unsafe { source.one(start + row) };
+        set_if(out, row, test.one(value));
     }
 }
 
@@ -217,7 +265,7 @@ pub fn present_from_mask(mask: Strided<'_, u8>, start: usize, rows: usize, out: 
 /// The test of a float: the value is not a NaN, so the row keeps its value.
 struct NotNan;
 
-impl Test<f32> for NotNan {
+impl Test<Strided<'_, f32>> for NotNan {
     fn lanes(&self, values: Simd<f32, 64>) -> u64 {
         !values.is_nan().to_bitmask()
     }
@@ -227,7 +275,7 @@ impl Test<f32> for NotNan {
     }
 }
 
-impl Test<f64> for NotNan {
+impl Test<Strided<'_, f64>> for NotNan {
     fn lanes(&self, values: Simd<f64, 64>) -> u64 {
         !values.is_nan().to_bitmask()
     }
@@ -241,9 +289,10 @@ impl Test<f64> for NotNan {
 /// a NaN when its bits without the sign lie above these.
 const F16_INFINITY: u16 = f16::INFINITY.to_bits();
 
-// The test of a half-precision float runs on its 16 bits, because the lanes
-// of `std::simd` do not take `f16`.
-impl Test<u16> for NotNan {
+// The test of a half-precision float runs on its 16 bits as ints. Every
+// target tests the bits without widening a lane, which aarch64 without its
+// half-precision extension does for a test of `f16` lanes.
+impl Test<Strided<'_, u16>> for NotNan {
     fn lanes(&self, values: Simd<u16, 64>) -> u64 {
         // `0x7fff` clears the sign bit, so a negative NaN tests like a
         // positive one.
