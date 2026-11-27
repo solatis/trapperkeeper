@@ -20,6 +20,14 @@ pub(crate) struct Truth {
 const NONE: Present = [0; CHUNK_WORDS];
 
 impl Truth {
+    /// A result with no row true, false or faulted, which a logic step fills
+    /// word by word.
+    const EMPTY: Self = Self {
+        known: NONE,
+        true_rows: NONE,
+        fault: NONE,
+    };
+
     /// The result of `c` on the first `rows` rows of a chunk.
     pub(crate) fn constant(c: Constant, rows: usize) -> Self {
         let mut all = NONE;
@@ -60,7 +68,7 @@ impl Truth {
     /// `present` is the rows with a value. It is true on the rows without a
     /// value, or, when `negated`, on the rows with one, and it is never
     /// unknown.
-    pub(crate) fn present(present: &Present, negated: bool, rows: usize) -> Self {
+    pub(crate) fn null_test(present: &Present, negated: bool, rows: usize) -> Self {
         let mut all = NONE;
         present_all(rows, &mut all);
         Self {
@@ -115,7 +123,7 @@ impl Truth {
         //    (ADR-0005).
         // 2. Of the other rows, a row is false where either operand is false,
         //    true where both are true, and unknown otherwise.
-        let mut out = Self::faulted(NONE);
+        let mut out = Self::EMPTY;
         for k in 0..CHUNK_WORDS {
             let (left_false, right_false) = (self.falses(k), right.falses(k));
             // 1. decide the faults
@@ -142,7 +150,7 @@ impl Truth {
         //    (ADR-0005).
         // 2. Of the other rows, a row is true where either operand is true,
         //    false where both are false, and unknown otherwise.
-        let mut out = Self::faulted(NONE);
+        let mut out = Self::EMPTY;
         for k in 0..CHUNK_WORDS {
             // 1. decide the faults
             let fault = self.fault[k] | right.fault[k] & !self.true_rows[k];

@@ -117,7 +117,9 @@ fn run_step(
             Truth::compared(&truth, all_present(present, fields))
         }
         BoundStep::Faulted { fields, .. } => Truth::faulted(all_present(present, fields)),
-        BoundStep::Presence { field, negated } => Truth::present(&present[*field], *negated, rows),
+        BoundStep::Presence { field, negated } => {
+            Truth::null_test(&present[*field], *negated, rows)
+        }
         BoundStep::Not(a) => truths[*a].not(),
         BoundStep::And(a, b) => truths[*a].and(&truths[*b]),
         BoundStep::Or(a, b) => truths[*a].or(&truths[*b]),
