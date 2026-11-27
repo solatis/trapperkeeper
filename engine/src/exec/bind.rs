@@ -242,7 +242,6 @@ fn bind_step(step: &Step, types: &[FieldType]) -> Result<BoundStep, BindError> {
             left: Operand::Field(l),
             right: Operand::Field(r),
         } => bind_fields(*op, *l, types[*l], *r, types[*r])?,
-        // The planner puts a field on the left of every comparison.
         Step::Compare {
             left: Operand::Literal(_),
             ..
@@ -371,6 +370,8 @@ fn bind_fields(
         (FieldType::Text, FieldType::Text) | (FieldType::List, FieldType::List) => {
             return Err(BindError::Unsupported { left: l, right: r });
         }
+        // Any other pair, such as a number and a text or a boolean and a
+        // number, holds types that do not compare (ADR-0005).
         _ => BoundStep::Faulted {
             fault: Fault::Incompatible,
             fields,
