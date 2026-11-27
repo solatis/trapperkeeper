@@ -23,7 +23,8 @@ baseline widens them with `fcvtl` and makes no call.
 Every amd64 build targets `x86-64-v3`, which brings AVX2, FMA, F16C and BMI2
 (owner, 2026-11-27). The level is old enough to require, since Intel's Haswell
 of 2013 has it (owner, 2026-11-27). `.cargo/config.toml` sets
-`-C target-cpu=x86-64-v3` for every target whose architecture is `x86_64`.
+`-C target-cpu=x86-64-v3` for every target whose architecture is `x86_64`, both
+for the compiler and for rustdoc, which compiles the doctests.
 
 A `RUSTFLAGS` in the environment replaces the flags of `.cargo/config.toml`
 instead of adding to them. The engine crate therefore refuses to compile for
