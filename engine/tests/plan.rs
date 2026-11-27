@@ -1,5 +1,5 @@
-//! The properties of the planner: the tree of fields and the refusal of a kind
-//! that this version does not plan.
+//! The properties of the planner: the tree of fields, the refusal of a kind
+//! that this version does not plan, and the sharing of an equal step.
 
 mod common;
 
