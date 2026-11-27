@@ -46,7 +46,8 @@ pub(crate) enum Step {
         field: usize,
         negated: bool,
     },
-    // The logic of ADR-0005 over the results of earlier steps. `And` and `Or`
+    // `not`, `and` and `or` of ADR-0005 over the results of earlier steps,
+    // with true, false and unknown. `And` and `Or`
     // hold their operands in written order, because a fault of the right
     // operand does not count where the left one decided the result.
     Not(usize),
@@ -70,8 +71,8 @@ pub(crate) enum Literal {
 }
 
 // Two literals are one step when their bits are equal, so `0.0` and `-0.0`
-// are two steps. Equality of the bits is reflexive, which `Eq` asks for and
-// `==` on an `f64` is not for a NaN.
+// are two steps. `Eq` asks that every value equals itself. Equal bits give
+// that, while `==` on an `f64` does not for a NaN.
 impl PartialEq for Literal {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -136,8 +137,8 @@ impl Comparison {
     }
 }
 
-/// A result that every row of a chunk, the rows that the executor runs at
-/// once, shares.
+/// A result that every row of a chunk shares. A chunk is the rows that the
+/// executor runs at once.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum Constant {
     True,
@@ -365,7 +366,8 @@ fn fold(op: Comparison, left: Literal, right: Literal) -> Constant {
         (Literal::Int(l), Literal::Int(r)) => l.cmp(&r),
         // An int widens to a float (ADR-0041). `partial_cmp` compares as IEEE
         // 754 does, so `-0.0` equals `0.0`. It gives an order for any two
-        // finite floats, and a float literal is finite.
+        // finite floats. A float literal is finite, because JSON has no form
+        // for a NaN or an infinity and the parser builds neither.
         (l, r) => as_f64(l)
             .partial_cmp(&as_f64(r))
             .expect("a float literal is finite"),
