@@ -40,7 +40,7 @@ each `f16` lane through a call.
 
 Copies of the loops compiled with `#[target_feature]`, chosen once at run time
 with `is_x86_feature_detected!`, because they double the compiled loops and add
-a check to each call, for CPUs older than 2013.
+a check to each call only to serve CPUs older than 2013.
 
 ## Consequences
 
