@@ -47,9 +47,9 @@ pub(crate) enum Step {
         negated: bool,
     },
     // `not`, `and` and `or` of ADR-0005 over the results of earlier steps,
-    // with true, false and unknown. `And` and `Or`
-    // hold their operands in written order, because a fault of the right
-    // operand does not count where the left one decided the result.
+    // with true, false and unknown. `And` and `Or` hold their operands in
+    // written order, because a fault of the right operand does not count
+    // where the left one decided the result.
     Not(usize),
     And(usize, usize),
     Or(usize, usize),
@@ -364,10 +364,10 @@ fn fold(op: Comparison, left: Literal, right: Literal) -> Constant {
             return Constant::Fault(Fault::Incompatible);
         }
         (Literal::Int(l), Literal::Int(r)) => l.cmp(&r),
-        // An int widens to a float (ADR-0041). `partial_cmp` compares as IEEE
-        // 754 does, so `-0.0` equals `0.0`. It gives an order for any two
-        // finite floats. A float literal is finite, because JSON has no form
-        // for a NaN or an infinity and the parser builds neither.
+        // `partial_cmp` compares as IEEE 754 does, so `-0.0` equals `0.0`. It
+        // gives an order for any two finite floats. A float literal is finite,
+        // because JSON has no form for a NaN or an infinity and the parser
+        // builds neither.
         (l, r) => as_f64(l)
             .partial_cmp(&as_f64(r))
             .expect("a float literal is finite"),
