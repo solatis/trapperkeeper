@@ -784,7 +784,59 @@ impl Field {
     }
 }
 
+impl Field {
+    /// The field of a batch that holds only record `row`, with the type, the
+    /// stride and the marking of this field.
+    fn alone(&self, row: usize) -> Self {
+        let at = row * self.step;
+        // The run of one row keeps the stride, so it holds the value and the
+        // filler after it.
+        let span = at..at + self.step;
+        let values = match &self.values {
+            Values::I8(v) => Values::I8(v[span].to_vec()),
+            Values::I16(v) => Values::I16(v[span].to_vec()),
+            Values::I32(v) => Values::I32(v[span].to_vec()),
+            Values::I64(v) => Values::I64(v[span].to_vec()),
+            Values::U8(v) => Values::U8(v[span].to_vec()),
+            Values::U16(v) => Values::U16(v[span].to_vec()),
+            Values::U32(v) => Values::U32(v[span].to_vec()),
+            Values::U64(v) => Values::U64(v[span].to_vec()),
+            Values::F16(v) => Values::F16(v[span].to_vec()),
+            Values::F32(v) => Values::F32(v[span].to_vec()),
+            Values::F64(v) => Values::F64(v[span].to_vec()),
+            Values::BoolBytes(v) => Values::BoolBytes(v[span].to_vec()),
+            Values::BoolBits(b, _) => Values::BoolBits(vec![b[row]], packed(&[b[row]], 0)),
+            Values::Text(_) => Values::Text(vec![0; 2]),
+        };
+        let present = vec![self.present[row]];
+        let bitmap = match self.mark {
+            Mark::Bitmap(offset) => packed(&present, offset),
+            _ => Vec::new(),
+        };
+        Self {
+            values,
+            step: self.step,
+            mark: self.mark,
+            mask: vec![u8::from(!present[0])],
+            present,
+            bitmap,
+        }
+    }
+}
+
 impl Table {
+    /// The batch that holds only record `row`.
+    fn alone(&self, row: usize) -> Self {
+        Self {
+            rows: 1,
+            fields: self
+                .fields
+                .iter()
+                .map(|f| f.as_ref().map(|f| f.alone(row)))
+                .collect(),
+        }
+    }
+
     /// The record at `row`, with the value of field `f{i}` at index `i`.
     fn record(&self, row: usize) -> Vec<Value> {
         self.fields
@@ -1016,6 +1068,51 @@ proptest! {
             for (rule, outcome) in rules.iter().zip(outcomes.rules()) {
                 let expected = reference(&rule.expression, &record).outcome();
                 prop_assert_eq!(outcome.outcome(row), expected, "{:?} at row {}", rule.expression, row);
+            }
+        }
+    }
+
+    /// A batch gives each record the outcome that the record gets alone.
+    #[test]
+    fn a_batch_gives_each_record_its_outcome_alone(
+        (t, rules) in table().prop_flat_map(|t| {
+            let n = t.fields.len();
+            (Just(t), rules_over(n))
+        })
+    ) {
+        // The test runs the rules over the whole batch and over records
+        // alone, then compares the outcomes of each record.
+        //
+        // 1. It binds the rules to the columns of the batch and runs them over
+        //    the batch.
+        // 2. It runs the same bound program over a batch of one record for
+        //    each record it checks. One bind serves both, because a batch of
+        //    one record keeps the type and the layout of each field.
+        // 3. It checks that the record has the same outcome in both runs.
+
+        // 1. run the batch
+        let program = plan(&rules).expect("the generated kinds plan");
+        let columns = t.columns(program.fields());
+        let bound = match program.bind(&columns) {
+            // A generated rule may compare two fields whose types this
+            // version does not compare, and that rule set does not run.
+            Err(BindError::Unsupported { .. }) => return Ok(()),
+            other => other?,
+        };
+        let whole = bound.run(t.rows, &columns)?;
+
+        // 2. run each record alone
+        // The edges of the words and of the chunks, and every 97th record,
+        // bound the cost of a batch of up to 5000 runs of one record.
+        let edges = [0, 1, 63, 64, 2047, 2048, 2049, 4095, 4096, t.rows.saturating_sub(1)];
+        let rows = edges.into_iter().chain((0..t.rows).step_by(97)).filter(|&r| r < t.rows);
+        for row in rows {
+            let one = t.alone(row);
+            let alone = bound.run(1, &one.columns(program.fields()))?;
+
+            // 3. compare the outcomes of the record
+            for (w, a) in whole.rules().iter().zip(alone.rules()) {
+                prop_assert_eq!(w.outcome(row), a.outcome(0), "record {}", row);
             }
         }
     }
