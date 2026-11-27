@@ -25,8 +25,9 @@ fn path() -> impl Strategy<Value = Vec<Segment>> {
     vec(segment, 1..4)
 }
 
-/// The fields of the nodes from `node` down, in the order of a depth-first
-/// walk.
+/// The fields of the nodes from `node` down, in preorder: a node's own field
+/// first, then the fields below its children, in the order that the node
+/// stores its children.
 fn walk(node: &FieldNode) -> Vec<usize> {
     node.field()
         .into_iter()
@@ -60,6 +61,7 @@ proptest! {
         //    fields in the order of their numbers.
 
         // 1. plan the generated rules
+        // The planner needs no unique ids, so all rules share one.
         let rules: Vec<Rule> = reads
             .iter()
             .map(|(p, i)| {
@@ -71,12 +73,16 @@ proptest! {
 
         // 2. check that each path appears once
         let paths = program.fields().paths();
+        // A `Segment` has no order and no hash, so the paths that the rules
+        // read are made unique in a list.
         let mut read: Vec<&Vec<Segment>> = Vec::new();
         for (p, _) in &reads {
             if !read.contains(&p) {
                 read.push(p);
             }
         }
+        // `paths` holds every path that a rule reads and no more paths than
+        // there are, so it holds each one once.
         prop_assert_eq!(paths.len(), read.len());
         prop_assert!(read.iter().all(|p| paths.contains(p)));
 
@@ -95,6 +101,8 @@ fn an_unsupported_kind_is_refused_with_its_rule() {
         Box::new(Expr::Field(vec![Segment::Key("x".into())])),
         Box::new(Expr::Int(1)),
     );
+    // The first rule plans, so the error names the second rule, which holds
+    // the kind.
     let rules = [
         observing(Uuid::from_u128(1), Expr::Bool(true)),
         observing(id, Expr::Gt(Box::new(sum), Box::new(Expr::Int(2)))),
@@ -117,6 +125,8 @@ fn rules_share_an_equal_comparison() {
             Box::new(Expr::Int(5)),
         )
     };
+    // The `not` makes the comparison a subexpression of the second rule, so
+    // the test covers sharing below the top of a rule.
     let rules = [
         observing(Uuid::from_u128(1), gt()),
         observing(Uuid::from_u128(2), Expr::Not(Box::new(gt()))),
