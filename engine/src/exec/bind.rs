@@ -399,9 +399,9 @@ fn int_literal<T: Number + TryFrom<i64>>(op: Comparison, f: usize, i: i64) -> Bo
 /// The step that compares float field `f` with `literal`, converted to the
 /// field's type. A literal beyond the type's range converts to an infinity.
 fn float_literal<T: Number>(op: Comparison, f: usize, literal: Literal) -> BoundStep {
-    // Rounding the literal to the column's type decides an ordering near it,
-    // so on an `f16` column `x > 0.1` compares with the `f16` nearest to 0.1
-    // (ADR-0041).
+    // The literal rounds to the column's type, so a value near the literal
+    // compares with the rounded literal. On an `f16` column, `x > 0.1`
+    // compares with the `f16` nearest to 0.1 (ADR-0041).
     let literal: T = match literal {
         Literal::Int(i) => convert(i),
         Literal::Float(x) => convert(x),
