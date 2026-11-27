@@ -346,9 +346,9 @@ impl Test<Strided<'_, f64>> for NotNan {
 /// a NaN when its bits without the sign lie above these.
 const F16_INFINITY: u16 = f16::INFINITY.to_bits();
 
-// The test of a half-precision float runs on its 16 bits as ints, which no
-// target converts. A test of `f16` lanes would widen each lane on aarch64
-// without its half-precision extension.
+// The test of a half-precision float compares its 16 bits as an int, so no
+// target converts a lane. A test of `f16` lanes would widen each lane on
+// aarch64 without its half-precision extension.
 impl Test<Strided<'_, u16>> for NotNan {
     fn lanes(&self, values: Simd<u16, 64>) -> u64 {
         // `0x7fff` clears the sign bit, so a negative NaN tests like a
