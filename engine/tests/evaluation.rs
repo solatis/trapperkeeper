@@ -39,10 +39,14 @@ fn x() -> Expr {
 /// the field `x`, or no column for a source that lacks `x`.
 fn outcomes(e: Expr, column: Option<Column<'_>>) -> Vec<Outcome> {
     let program = plan(&[observing(Uuid::from_u128(1), e)]).expect("the rule plans");
+    // A rule that reads no field, such as a literal condition, has no field
+    // to take a column.
     let columns: Vec<Option<Column<'_>>> = match program.fields().paths().len() {
         0 => Vec::new(),
         _ => vec![column],
     };
+    // A batch without a column has three records, which the tests without a
+    // column expect.
     let rows = column.map_or(3, |c| c.rows());
     let bound = program.bind(&columns).expect("the columns fit the program");
     let run = bound.run(rows, &columns).expect("the batch fits the bind");
@@ -60,6 +64,7 @@ use Outcome::{Matched, NotEvaluated, NotMatched};
 
 #[test]
 fn a_comparison_matches_the_rows_whose_value_holds_it() {
+    // The bitmap starts at bit 0 of its first byte.
     let bitmap = packed(&[true, true, false, true], 0);
     let column = ints(&[1, 7, 9, 9], &bitmap);
     // The third row has no value, so its comparison is unknown and the rule
@@ -169,6 +174,7 @@ fn a_nan_is_no_value() {
 
 #[test]
 fn a_field_that_the_source_lacks_matches_no_record() {
+    // `outcomes` runs a batch of three records when it has no column.
     assert_eq!(
         outcomes(Expr::Lt(Box::new(x()), Box::new(Expr::Int(5))), None),
         [NotMatched; 3]
@@ -283,6 +289,8 @@ fn a_false_left_operand_of_and_keeps_the_fault_on_its_right_from_happening() {
         Expr::Eq(named("t"), Box::new(Expr::Int(1))),
     ]);
     let program = plan(&[observing(Uuid::from_u128(1), rule)]).expect("the rule plans");
+    // The planner numbers the fields in the order that the rule first reads
+    // them, so `y` is field 0 and `t` field 1.
     let columns = [Some(y), Some(t)];
     let run = program
         .bind(&columns)
@@ -303,7 +311,8 @@ fn a_false_left_operand_of_and_keeps_the_fault_on_its_right_from_happening() {
 }
 
 /// The outcome of the rule `e` for each record of a batch where `a` and `b`
-/// are the fields `a` and `b`.
+/// are the fields `a` and `b`. The rule reads `a` first, because the planner
+/// numbers the fields in the order that a rule first reads them.
 fn outcomes_of_pair(e: Expr, a: Column<'_>, b: Column<'_>) -> Vec<Outcome> {
     let program = plan(&[observing(Uuid::from_u128(1), e)]).expect("the rule plans");
     let columns = [Some(a), Some(b)];
@@ -335,6 +344,8 @@ fn a_negative_int_orders_below_every_u64() {
         outcomes_of_pair(a_with_b(Expr::Lt), i8s, u64s),
         [Matched, Matched, NotMatched]
     );
+    // With the `u64` column on the left, the test of the sign runs on the
+    // right operand.
     assert_eq!(
         outcomes_of_pair(a_with_b(Expr::Ge), u64s, i8s),
         [Matched, Matched, Matched]
@@ -373,7 +384,8 @@ fn two_floats_compare_in_the_wider_type() {
 #[test]
 fn a_strided_column_over_three_chunks_compares_every_row() {
     // Every second value is a row, so the run has a stride of two values and
-    // the loop reads it one row at a time.
+    // `pack` reads it one row at a time. A chunk holds `CHUNK_ROWS` rows,
+    // 2048, so 5000 rows make three chunks.
     let values: Vec<i64> = (0..10_000).collect();
     // SAFETY: the pointer is the vector's, the stride is two `i64`, and 5000
     // rows two values apart lie inside the 10000 values.
@@ -490,7 +502,8 @@ fn reference(e: &Expr, record: &[Value]) -> Tri {
         },
         Expr::And(items) => items.iter().fold(Tri::True, |left, item| match left {
             // A false left operand decides the `and`, so the right one is not
-            // evaluated and its fault does not happen.
+            // evaluated and its fault does not happen. A fault of the left
+            // operand counts first in written order, so it decides too.
             Tri::False | Tri::Fault(_) => left,
             _ => match reference(item, record) {
                 Tri::True => left,
@@ -498,14 +511,16 @@ fn reference(e: &Expr, record: &[Value]) -> Tri {
             },
         }),
         Expr::Or(items) => items.iter().fold(Tri::False, |left, item| match left {
-            // A true left operand decides the `or`.
+            // A true left operand decides the `or`, and a fault of the left
+            // operand counts first.
             Tri::True | Tri::Fault(_) => left,
             _ => match reference(item, record) {
                 Tri::False => left,
                 right => right,
             },
         }),
-        // A test for a null is never unknown.
+        // A test for a null is never unknown (ADR-0005). `x == None` is such a
+        // test, so its arms come before the comparisons.
         Expr::IsNone(x) => Tri::of(is_null(x, record)),
         Expr::IsNotNone(x) => Tri::of(!is_null(x, record)),
         Expr::Eq(l, r) if **r == Expr::None => Tri::of(is_null(l, record)),
@@ -572,6 +587,8 @@ fn order_with_literal(v: Value, literal: &Expr, ordering: bool) -> Result<Option
         // nearest value of that width.
         (Value::Float(f, w), Expr::Int(j)) => ieee(f, int_as(*j, w)),
         (Value::Float(f, w), Expr::Float(x)) => ieee(f, float_as(*x, w)),
+        // `None` beside an ordering never appears, because validation refuses
+        // it, so the other pairs are values of types that do not compare.
         _ => return Err(Fault::Incompatible),
     };
     Ok(Some(order))
@@ -595,7 +612,8 @@ fn order_of_fields(a: Value, b: Value, ordering: bool) -> Result<Option<Ordering
 }
 
 /// The order of two literals, where an int widens to a float, or the fault
-/// of comparing them. `ordering` is false for `==` and `!=`.
+/// of comparing them, for a rule that compares two literals, which the
+/// planner folds. `ordering` is false for `==` and `!=`.
 fn order_of_literals(a: &Expr, b: &Expr, ordering: bool) -> Result<Ordering, Fault> {
     match (a, b) {
         (Expr::Bool(x), Expr::Bool(y)) => booleans(*x, *y, ordering),
@@ -640,7 +658,8 @@ fn float_as(x: f64, w: Width) -> f64 {
 }
 
 /// `i` rounded to the nearest float of width `w`, in one rounding, as the
-/// executor converts it.
+/// executor converts it. Converting to `f64` first and then to `f32` rounds
+/// twice and can land on another value.
 fn int_as(i: i64, w: Width) -> f64 {
     match w {
         Width::F16 => f64::from(i as f16),
@@ -689,7 +708,11 @@ struct Field {
     step: usize,
     mark: Mark,
     present: Vec<bool>,
+    // The rows with a value, from bit `offset` on, when `mark` is `Bitmap`,
+    // and empty otherwise.
     bitmap: Vec<u8>,
+    // One byte per row, 1 for a row without a value. Every field holds it,
+    // and only a field whose `mark` is `ByteMask` hands it over.
     mask: Vec<u8>,
 }
 
@@ -779,6 +802,7 @@ impl Field {
             Values::F32(v) => float(v[at].into(), Width::F32),
             Values::F64(v) => float(v[at], Width::F64),
             Values::BoolBytes(v) => Value::Bool(v[at] != 0),
+            // A bit-packed field has a step of 1, so its row is its index.
             Values::BoolBits(bools, _) => Value::Bool(bools[row]),
             Values::Text(_) => Value::Text,
         }
@@ -806,6 +830,7 @@ impl Field {
             Values::F32(v) => Values::F32(v[span].to_vec()),
             Values::F64(v) => Values::F64(v[span].to_vec()),
             Values::BoolBytes(v) => Values::BoolBytes(v[span].to_vec()),
+            // A bit-packed field has a step of 1, so its row is its index.
             Values::BoolBits(b, _) => Values::BoolBits(vec![b[row]], packed(&[b[row]], 0)),
             Values::Text(_) => Values::Text(vec![0; 2]),
         };
@@ -862,6 +887,7 @@ fn int_values<T>(n: usize) -> impl Strategy<Value = Vec<T>>
 where
     T: Arbitrary + TryFrom<i64> + Default + Clone + std::fmt::Debug + 'static,
 {
+    // A negative value that an unsigned type cannot hold becomes 0.
     let near_zero = (-6i64..6).prop_map(|i| T::try_from(i).unwrap_or_default());
     vec(prop_oneof![3 => near_zero, 1 => any::<T>()], n)
 }
@@ -869,6 +895,8 @@ where
 /// A float near the literals, a value that is no number, or any float.
 fn float() -> impl Strategy<Value = f64> {
     prop_oneof![
+        // 0.1 rounds in `f16` and `f32`, 2.5 and -3.0 are exact in every
+        // width, 1e10 overflows `f16`, and a NaN is a null.
         2 => select(vec![0.0, -0.0, 0.1, 1.0, 2.5, -3.0, 1e10, f64::NAN, f64::INFINITY]),
         1 => (-6i32..6).prop_map(f64::from),
         1 => any::<f64>(),
@@ -907,6 +935,8 @@ fn field(rows: usize) -> impl Strategy<Value = Field> {
         (0usize..8).prop_map(Mark::Bitmap),
         Just(Mark::ByteMask)
     ];
+    // Four rows in five have a value, a choice that leaves most comparisons
+    // with values and some with nulls.
     (1usize..3, mark, vec(prop::bool::weighted(0.8), rows)).prop_flat_map(
         move |(step, mark, present)| {
             values(rows, step).prop_map(move |values| {
@@ -939,9 +969,12 @@ fn field(rows: usize) -> impl Strategy<Value = Field> {
     )
 }
 
-/// A batch of up to `MAX_ROWS` rows, so that it crosses two chunk boundaries,
-/// with one to four fields, some of which the source lacks.
+/// A batch of up to `MAX_ROWS` rows, with one to four fields, some of which
+/// the source lacks. A chunk holds `CHUNK_ROWS` rows, 2048, so a batch of more
+/// than 4096 rows crosses two chunk boundaries.
 fn table() -> impl Strategy<Value = Table> {
+    // Half of the batches have fewer than 70 rows, so many cases run fast and
+    // still cross the boundary of a word of 64 rows.
     prop_oneof![0usize..70, 0..MAX_ROWS].prop_flat_map(|rows| {
         let f = prop_oneof![6 => field(rows).prop_map(Some), 1 => Just(None)];
         vec(f, 1..5).prop_map(move |fields| Table { rows, fields })
@@ -954,6 +987,10 @@ fn literal() -> impl Strategy<Value = Expr> {
     prop_oneof![
         1 => any::<bool>().prop_map(Expr::Bool),
         3 => (-6i64..6).prop_map(Expr::Int),
+        // -129 lies below `i8`, 255 and 256 are the top of `u8` and one past
+        // it, 65504 is the largest `f16`, 65520 the first int that `f16`
+        // rounds to infinity, and 2^53 the edge past which `f64` no longer
+        // holds every int.
         1 => select(vec![i64::MIN, -129, 255, 256, 65504, 65520, 1 << 53, i64::MAX]).prop_map(Expr::Int),
         2 => select(vec![0.0, -0.0, 0.1, 2.5, -3.0, 1e10, 1e300]).prop_map(Expr::Float),
     ]
@@ -965,8 +1002,10 @@ fn field_named(i: usize) -> Expr {
 }
 
 /// An expression where a condition is expected, over `n` fields, with the
-/// kinds that this version plans.
+/// kinds of node that this version plans: comparisons, null tests, `not`,
+/// `and`, `or`, fields and literals.
 fn condition(n: usize) -> impl Strategy<Value = Expr> {
+    // `==` and `!=` from `BINARY`, and the four orderings from `NUMERIC`.
     let ops: Vec<_> = BINARY[..2].iter().chain(&NUMERIC[..4]).copied().collect();
     let comparison =
         (select(ops.clone()), 0..n, literal(), any::<bool>()).prop_map(|(op, f, lit, flip)| {
@@ -975,8 +1014,10 @@ fn condition(n: usize) -> impl Strategy<Value = Expr> {
         });
     let fields = (select(ops.clone()), 0..n, 0..n)
         .prop_map(|(op, a, b)| op(Box::new(field_named(a)), Box::new(field_named(b))));
+    // Two literals, which the planner folds into a constant.
     let folded =
         (select(ops), literal(), literal()).prop_map(|(op, a, b)| op(Box::new(a), Box::new(b)));
+    // A number where a condition is expected faults on every record.
     let literal_condition = prop_oneof![Just(Expr::None), literal()];
     let field_condition = (0..n).prop_map(field_named);
     let tested = prop_oneof![
@@ -1004,6 +1045,7 @@ fn condition(n: usize) -> impl Strategy<Value = Expr> {
         2 => null_test,
     ];
     // Up to three levels of `not`, `and` and `or` over the leaves.
+    // At most 24 nodes in all, and up to 4 items in an `and` or an `or`.
     leaf.prop_recursive(3, 24, 4, |inner| {
         prop_oneof![
             inner.clone().prop_map(|x| Expr::Not(Box::new(x))),
@@ -1043,10 +1085,10 @@ proptest! {
         // The test runs the rules through the planner, bind and the executor,
         // then checks each record against the reference interpreter.
         //
-        // 1. It plans the rules, binds them to the table's columns and runs
-        //    them.
-        // 2. It evaluates each rule on each record with the reference
-        //    interpreter and checks that both give the same outcome.
+        // 1. It runs the rules through the planner, bind and the executor, as
+        //    a sensor would.
+        // 2. It checks each record against the reference interpreter, which
+        //    evaluates one record at a time.
 
         // 1. plan, bind and run the rules
         let program = plan(&rules).expect("the generated kinds plan");
@@ -1062,6 +1104,8 @@ proptest! {
         // 2. check each record against the reference
         for row in 0..t.rows {
             let record = t.record(row);
+            // `rules()` holds one outcome per rule, in the order of the rule
+            // set.
             for (rule, outcome) in rules.iter().zip(outcomes.rules()) {
                 let expected = reference(&rule.expression, &record).outcome();
                 prop_assert_eq!(outcome.outcome(row), expected, "{:?} at row {}", rule.expression, row);
@@ -1080,8 +1124,7 @@ proptest! {
         // The test runs the rules over the whole batch and over records
         // alone, then compares the outcomes of each record.
         //
-        // 1. It binds the rules to the columns of the batch and runs them over
-        //    the batch.
+        // 1. It runs the rules over the whole batch.
         // 2. It runs the same bound program over a batch of one record for
         //    each record it checks. One bind serves both, because a batch of
         //    one record keeps the type and the layout of each field.
@@ -1099,8 +1142,9 @@ proptest! {
         let whole = bound.run(t.rows, &columns)?;
 
         // 2. run each record alone
-        // The edges of the words and of the chunks, and every 97th record,
-        // bound the cost of a batch of up to 5000 runs of one record.
+        // A word holds 64 rows and a chunk 2048. The records at the edges of
+        // the words and of the chunks, and every 97th record, keep a batch of
+        // 5000 rows from costing 5000 runs of one record.
         let edges = [0, 1, 63, 64, 2047, 2048, 2049, 4095, 4096, t.rows.saturating_sub(1)];
         let rows = edges.into_iter().chain((0..t.rows).step_by(97)).filter(|&r| r < t.rows);
         for row in rows {
