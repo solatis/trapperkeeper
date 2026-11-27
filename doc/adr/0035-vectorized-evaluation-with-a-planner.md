@@ -35,8 +35,9 @@ of bind for each schema of a source (owner, 2026-11-16). An invocation builds no
 program.
 
 The program is a flat list of steps. Each step writes its result for a chunk
-into one slot, and a later step reads it from there. A field or a
-subexpression that several rules share is one slot (owner, 2026-11-27). The
+into one slot, and a later step reads it from there. A subexpression that
+several rules share is one slot, and a field that several rules read is one
+column with one bitmap of the rows that have a value (owner, 2026-11-27). The
 program gives its fields as a tree of paths, so an adapter looks up a shared
 prefix once. The caller hands one column per field in the order of the
 program. A field that the source lacks has no column, and bind makes it a null
@@ -46,9 +47,9 @@ The result of a step for a chunk is three bitmaps: the rows that are known,
 the rows that are true and the rows that faulted (owner, 2026-11-27). Both
 operands of `and` and `or` run on every row, and the logic step clears the
 faults of the rows that the left operand decided. The owner expects this to
-be faster than running the right operand only on the rows that the left one
-left open, also where a guard such as `y != 0` decides most rows (owner,
-2026-11-27).
+be faster than a run of the right operand on only the rows that the left one
+left open. The owner expects it also where a guard such as `y != 0` decides
+most rows (owner, 2026-11-27).
 
 A run gives for each rule a bitmap of the matched records, a bitmap of the
 faulted records, and the faulted records with their faults (owner,
@@ -112,8 +113,9 @@ because bind then cannot tell that the field is absent, and the description
 would gain a kind that holds no memory.
 
 One byte per record that holds the outcome and the fault, because it takes
-eight times the memory of a bitmap. The list of faulted records stays empty
-when no record faults.
+eight times the memory of a bitmap. The bitmaps need a list of the faulted
+records beside them for the kind of each fault, and that list stays empty when
+no record faults.
 
 ## Consequences
 
