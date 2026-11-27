@@ -26,7 +26,7 @@ columns of a schema and runs it.
 - A comparison step holds its field on the left. The planner swaps a literal
   on the left and mirrors the operator.
 - `plan` refuses a rule set with a kind of node that it does not plan, and
-  names the first rule that holds one. It runs no rule with a part skipped.
+  names the first rule that holds one, so no rule runs with a part skipped.
 
 **Why**:
 
