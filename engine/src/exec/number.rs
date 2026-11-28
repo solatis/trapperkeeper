@@ -451,8 +451,8 @@ pub(crate) fn compare_columns<L: Number, R: Number, O: Order>(
 }
 
 /// What `pack` runs to compute `element == needle` for each element of a
-/// number column of type `R` and one needle value of type `L`, which a list
-/// search takes from the needle field of a record.
+/// number column of type `R` and one needle value of type `L`. A list search
+/// takes the needle, on each record, from the field on the left of `in`.
 pub(crate) struct EqualsNumber<L, R> {
     needle: L,
     element: PhantomData<R>,
