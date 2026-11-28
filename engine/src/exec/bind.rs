@@ -97,8 +97,8 @@ pub enum BindError {
     /// The caller passed a different number of columns than the program has
     /// fields.
     Columns { expected: usize, given: usize },
-    /// The program tests two fields for equality whose types this version
-    /// cannot compare yet, which are two list fields.
+    /// The program compares two list fields with `==` or `!=`, which this
+    /// version cannot do yet.
     Unsupported { left: usize, right: usize },
 }
 
@@ -347,6 +347,8 @@ fn bind_fields(
             fields,
             chunk: text::fields_equal(l, r, op == Comparison::Eq),
         },
+        // Two lists can be equal, and this version has no loop that compares
+        // them, so bind refuses the pair.
         (FieldType::List, FieldType::List) if !op.is_ordering() => {
             return Err(BindError::Unsupported { left: l, right: r });
         }
