@@ -488,8 +488,9 @@ impl<'a, T: Texts<'a, Unit: 'a>> Source for TextRows<'a, T> {
         self.0.len()
     }
 
-    // The texts of a chunk have different lengths, so no 64 of them load as
-    // one vector, and `pack` reads every row through `one`.
+    // The texts of a chunk have different lengths, so no 64 of them load into
+    // one vector, and a text comparison never runs on 64 rows at once. `pack`
+    // reads every row through `one`.
     fn is_contiguous(&self) -> bool {
         false
     }
