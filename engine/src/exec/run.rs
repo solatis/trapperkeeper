@@ -128,9 +128,7 @@ fn run_step(
         // A type fault happens only on values that are there (ADR-0005), so a
         // row where a field is null stays unknown.
         BoundStep::Faulted { fields, .. } => Truth::faulted(all_present(present, fields)),
-        BoundStep::Presence { field, negated } => {
-            Truth::null_test(&present[*field], *negated, rows)
-        }
+        BoundStep::IsNull(f) => Truth::null_test(&present[*f], rows),
         BoundStep::Not(a) => truths[*a].not(),
         BoundStep::And(a, b) => truths[*a].and(&truths[*b]),
         BoundStep::Or(a, b) => truths[*a].or(&truths[*b]),
@@ -168,7 +166,7 @@ fn fault_of(steps: &[BoundStep], truths: &[Truth], slot: usize, row: usize) -> F
             }
             // Only a fault constant, a type fault and the logic steps set a
             // fault bit.
-            BoundStep::Constant(_) | BoundStep::Loop { .. } | BoundStep::Presence { .. } => {
+            BoundStep::Constant(_) | BoundStep::Loop { .. } | BoundStep::IsNull(_) => {
                 unreachable!("a step that never faults has no faulted row")
             }
         }

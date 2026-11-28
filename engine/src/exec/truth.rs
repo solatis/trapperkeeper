@@ -67,17 +67,16 @@ impl Truth {
         }
     }
 
-    /// The result of a null test on the first `rows` rows of a chunk, where
-    /// `present` is the rows with a value. It is true on the rows without a
-    /// value, or, when `negated`, on the rows with one, and it is never
-    /// unknown.
-    pub(crate) fn null_test(present: &Present, negated: bool, rows: usize) -> Self {
+    /// The result of `x is None` on the first `rows` rows of a chunk, where
+    /// `present` marks the rows on which `x` has a value. The result is true
+    /// on the rows without a value and false on the others, never unknown.
+    pub(crate) fn null_test(present: &Present, rows: usize) -> Self {
         let mut all = NONE;
         present_all(rows, &mut all);
         Self {
             // `Column::present` sets no bit from `rows` on, so only the rows
             // without a value need the mask of the chunk's rows.
-            true_rows: zip(present, &all, |p, a| if negated { p } else { !p & a }),
+            true_rows: zip(present, &all, |p, a| !p & a),
             known: all,
             fault: NONE,
         }

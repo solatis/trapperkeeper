@@ -40,12 +40,10 @@ pub(crate) enum Step {
     // A field where a condition is expected. It faults on a row whose value
     // is not a boolean.
     Condition(usize),
-    // `is None`, or `is not None` when `negated`, which is never unknown
-    // (ADR-0005).
-    IsNull {
-        field: usize,
-        negated: bool,
-    },
+    // `x is None` for the field with this number. It is true or false on
+    // every row and never unknown (ADR-0005). `x is not None` is a `Not`
+    // over this step.
+    IsNull(usize),
     // `not`, `and` and `or` of ADR-0005 over the results of earlier steps,
     // with true, false and unknown. `And` and `Or` hold their operands in
     // written order, because a fault of the right operand does not count
@@ -228,13 +226,13 @@ impl Planner<'_> {
             Expr::Not(x) => Step::Not(self.expr(x)?),
             Expr::And(items) => return self.chain(items, Constant::True, Step::And),
             Expr::Or(items) => return self.chain(items, Constant::False, Step::Or),
-            Expr::IsNone(x) => return self.null_test(x, false),
-            Expr::IsNotNone(x) => return self.null_test(x, true),
+            Expr::IsNone(x) => return self.null_test(x),
+            Expr::IsNotNone(x) => Step::Not(self.null_test(x)?),
             // `x == None` is `x is None`, and `x != None` is `x is not None`.
-            Expr::Eq(l, r) if **r == Expr::None => return self.null_test(l, false),
-            Expr::Eq(l, r) if **l == Expr::None => return self.null_test(r, false),
-            Expr::Ne(l, r) if **r == Expr::None => return self.null_test(l, true),
-            Expr::Ne(l, r) if **l == Expr::None => return self.null_test(r, true),
+            Expr::Eq(l, r) if **r == Expr::None => return self.null_test(l),
+            Expr::Eq(l, r) if **l == Expr::None => return self.null_test(r),
+            Expr::Ne(l, r) if **r == Expr::None => Step::Not(self.null_test(l)?),
+            Expr::Ne(l, r) if **l == Expr::None => Step::Not(self.null_test(r)?),
             Expr::Eq(l, r) => return self.compare(Comparison::Eq, l, r),
             Expr::Ne(l, r) => return self.compare(Comparison::Ne, l, r),
             Expr::Lt(l, r) => return self.compare(Comparison::Lt, l, r),
@@ -271,19 +269,16 @@ impl Planner<'_> {
         Ok(slot)
     }
 
-    /// Plans the test whether `e` is a null, or, when `negated`, whether it is
-    /// not. Fails with the JSON key of a kind that this version does not
-    /// test.
-    fn null_test(&mut self, e: &Expr, negated: bool) -> Result<usize, &'static str> {
+    /// Plans `e is None` and returns the slot of its result. Fails with the
+    /// JSON key of `e` when `e` is a kind of expression that this version
+    /// cannot test for a null, such as arithmetic.
+    fn null_test(&mut self, e: &Expr) -> Result<usize, &'static str> {
         let step = match e {
-            Expr::Field(path) => Step::IsNull {
-                field: self.fields.field_of(path),
-                negated,
-            },
-            Expr::None => Step::Constant(Constant::of(!negated)),
+            Expr::Field(path) => Step::IsNull(self.fields.field_of(path)),
+            Expr::None => Step::Constant(Constant::True),
             // A literal other than `None` is never a null.
             Expr::Bool(_) | Expr::Int(_) | Expr::Float(_) | Expr::Text(_) | Expr::List(_) => {
-                Step::Constant(Constant::of(negated))
+                Step::Constant(Constant::False)
             }
             _ => return Err(e.key()),
         };

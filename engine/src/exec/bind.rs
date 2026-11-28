@@ -63,12 +63,9 @@ pub(crate) enum BoundStep {
         fault: Fault,
         fields: Vec<usize>,
     },
-    // A null test, true where `field` has no value or, when `negated`, where
-    // it has one.
-    Presence {
-        field: usize,
-        negated: bool,
-    },
+    // `x is None` for the field with this number: true on the rows where the
+    // field has no value.
+    IsNull(usize),
     // The logic of ADR-0005 over the results of earlier steps, by their
     // slots.
     Not(usize),
@@ -222,13 +219,8 @@ fn bind_step(step: &Step, types: &[FieldType]) -> Result<BoundStep, BindError> {
         Step::Constant(c) => BoundStep::Constant(*c),
         Step::Condition(f) => bind_condition(*f, types[*f]),
         // A field that the source lacks is a null on every row.
-        Step::IsNull { field, negated } if types[*field] == FieldType::Absent => {
-            BoundStep::Constant(Constant::of(!*negated))
-        }
-        Step::IsNull { field, negated } => BoundStep::Presence {
-            field: *field,
-            negated: *negated,
-        },
+        Step::IsNull(f) if types[*f] == FieldType::Absent => BoundStep::Constant(Constant::True),
+        Step::IsNull(f) => BoundStep::IsNull(*f),
         Step::Not(a) => BoundStep::Not(*a),
         Step::And(a, b) => BoundStep::And(*a, *b),
         Step::Or(a, b) => BoundStep::Or(*a, *b),
