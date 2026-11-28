@@ -472,9 +472,14 @@ fn in_x(needle: Expr) -> Expr {
 
 #[test]
 fn a_text_literal_is_found_in_utf8_and_utf32_cells() {
+    // `é` is two bytes in UTF-8 and one unit in UTF-32, so each layout finds
+    // it in its own encoding. `cafe` holds a plain `e`, which neither
+    // encoding takes for `é`.
     let texts = ["caf\u{e9}".to_string(), "cafe".to_string()];
     let rule = || in_x(Expr::Text("\u{e9}".into()));
     let pieces = TextBuffers::new(&texts, TextLayout::Pieces { step: 1 });
+    // The cells have one unit of slack, so each text ends in a zero unit, and
+    // they lie end to end.
     let cells = TextBuffers::new(&texts, TextLayout::Utf32 { slack: 1, step: 1 });
     for buffers in [pieces, cells] {
         let lent = buffers.lend();
@@ -744,9 +749,8 @@ fn reference(e: &Expr, record: &[Value]) -> Tri {
         Expr::Le(l, r) => compare(l, r, record, Ordering::is_le, true),
         Expr::Gt(l, r) => compare(l, r, record, Ordering::is_gt, true),
         Expr::Ge(l, r) => compare(l, r, record, Ordering::is_ge, true),
-        // `x in [a, b]` is `x == a or x == b` (ADR-0005), so the arm builds
-        // that `or` and evaluates it with the arms above.
-        // `x in y` with a field `y` searches the value of `y`.
+        // `x in y` with a field `y` searches the value of `y`. These arms come
+        // before the membership arms, which take a written list.
         Expr::In(needle, y) if matches!(**y, Expr::Field(_)) => search(needle, y, record),
         Expr::NotIn(needle, y) if matches!(**y, Expr::Field(_)) => {
             match search(needle, y, record) {
@@ -755,6 +759,8 @@ fn reference(e: &Expr, record: &[Value]) -> Tri {
                 other => other,
             }
         }
+        // `x in [a, b]` is `x == a or x == b` (ADR-0005), so the arm builds
+        // that `or` and evaluates it with the arms above.
         Expr::In(needle, list) => reference(&either_equal(needle, list), record),
         Expr::NotIn(needle, list) => {
             reference(&Expr::Not(Box::new(either_equal(needle, list))), record)
@@ -796,8 +802,9 @@ fn search(needle: &Expr, y: &Expr, record: &[Value]) -> Tri {
                 Tri::False
             }
         }
-        // A text searched for a needle that is no text, and a number or a
-        // boolean, cannot be searched, as Python raises a type error.
+        // A text cannot be searched for a needle that is no text, and a number
+        // or a boolean cannot be searched at all, as Python raises a type
+        // error.
         _ => Tri::Fault(Fault::Incompatible),
     }
 }
@@ -810,8 +817,9 @@ fn field_number_of(y: &Expr) -> usize {
     }
 }
 
-/// Returns the value of a number, boolean or text literal. A float literal
-/// takes the width of the list elements, which are `f64`.
+/// Returns the value of a number, boolean or text literal. The width of a
+/// float plays no part in `order_of_fields`, which compares floats as `f64`.
+/// It is `F64` here, the width of the generated list elements.
 fn value_of(literal: &Expr) -> Value {
     match literal {
         Expr::Int(i) => Value::Int((*i).into()),
@@ -822,7 +830,8 @@ fn value_of(literal: &Expr) -> Value {
     }
 }
 
-/// Whether the needle `n` equals the element `item`, which has a value.
+/// Whether the needle `n` equals the element `item`. A null element equals
+/// nothing.
 fn equal(n: &Value, item: &Value) -> bool {
     let kind = |v: &Value| match v {
         Value::Int(_) | Value::Float(..) => Some(Kind::Number),
@@ -831,6 +840,9 @@ fn equal(n: &Value, item: &Value) -> bool {
         Value::List(_) => Some(Kind::List),
         Value::Null => None,
     };
+    // `order_of_fields` answers orderings and faults on two kinds, which an
+    // equality turns into false. A list needle never gets here, because bind
+    // refuses it.
     kind(n) == kind(item) && order_of_fields(n, item, false) == Ok(Some(Ordering::Equal))
 }
 
@@ -895,7 +907,8 @@ fn compare(
 }
 
 /// The kinds of value that can be equal to each other: an int equals a float,
-/// and a boolean or a text equals only its own kind.
+/// and a boolean, a text or a list equals only its own kind. Bind refuses to
+/// compare two lists.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Kind {
     Number,
@@ -1069,8 +1082,9 @@ struct ListValues {
     elements: Elements,
     // One byte per element, 1 for an element without a value.
     mask: Vec<u8>,
-    // The end of each record in the elements, after a 0, which are the
-    // offsets of an offsets layout.
+    // `ends[i]` is the index of the first element of record `i`, and the last
+    // entry is the number of elements. These are the offsets of an offsets
+    // layout.
     ends: Vec<u64>,
     // Whether each record is a column of its own, as in a numpy array of
     // dtype `object`, or a range of one element column.
@@ -1084,7 +1098,8 @@ enum Elements {
     Floats(Vec<f64>),
     // One byte per element, where a byte that is not zero is true.
     Bools(Vec<u8>),
-    // The texts, their bytes end to end and the end of each text after a 0.
+    // The texts, and their bytes end to end with the offsets of each text,
+    // which an offsets layout of the elements reads.
     Texts(Vec<String>, Vec<u8>, Vec<u32>),
 }
 
@@ -1150,6 +1165,8 @@ impl ListValues {
     fn record(&self, row: usize) -> Vec<Value> {
         self.range(row)
             .map(|i| match &self.elements {
+                // The mask arm comes first, because an element without a value
+                // is a null whatever it holds.
                 _ if self.mask[i] != 0 => Value::Null,
                 Elements::Ints(v) => Value::Int(v[i].into()),
                 // A NaN element is a null, as a NaN row is.
@@ -1312,10 +1329,11 @@ fn strided<T: Copy>(buffer: &[T], step: usize, rows: usize) -> Strided<'_, T> {
 }
 
 impl Field {
-    /// Borrows the buffers of a text field for its column. Returns `None` for
-    /// a field of any other type. A text column borrows the pieces and the list
-    /// of buffers that `LentTexts` holds, so they must live longer than the
-    /// column, and `column` cannot make them itself.
+    /// Borrows the buffers of a text or list field for its column. Returns
+    /// `None` for a field of any other type. A text column borrows the pieces
+    /// and the list of buffers that `LentTexts` holds, and a list column
+    /// borrows its element columns, so they must live longer than the column,
+    /// and `column` cannot make them itself.
     fn lend(&self) -> Option<Lent<'_>> {
         match &self.values {
             Values::Text(_, _, buffers) => Some(Lent::Texts(buffers.lend())),
@@ -1324,13 +1342,15 @@ impl Field {
                     .map(|r| l.elements(l.range(r)))
                     .collect(),
             )),
+            // The mask has one byte per element, so its length is the number
+            // of elements.
             Values::List(l) => Some(Lent::Elements(vec![l.elements(0..l.mask.len())])),
             _ => None,
         }
     }
 
     /// Builds the column that describes this field's buffers. `lent` holds
-    /// the borrowed buffers of a text field, as `lend` gives them.
+    /// what `lend` borrowed for a text or list field.
     fn column<'a>(&'a self, lent: Option<&'a Lent<'a>>) -> Column<'a> {
         let rows = self.present.len();
         let marking = match self.mark {
@@ -1367,6 +1387,8 @@ impl Field {
                     unreachable!("a list field lends its elements")
                 };
                 let list = if l.per_record {
+                    // `PerRecord` takes the shape of each record's column, a
+                    // scalar, and the list is one level deeper.
                     let shape = Shape {
                         scalar: l.scalar(),
                         depth: 0,
@@ -1490,7 +1512,7 @@ impl Table {
             .collect()
     }
 
-    /// Borrows the buffers of the text fields, one entry per field, for
+    /// Borrows the buffers of the text and list fields, one entry per field, for
     /// `columns`. The caller keeps the result in a binding of its own while
     /// it uses the columns.
     fn lend(&self) -> Vec<Option<Lent<'_>>> {
@@ -1577,6 +1599,7 @@ fn list_values(rows: usize) -> impl Strategy<Value = Values> {
         let elements = match kind {
             0 => vec(-6i64..6, n).prop_map(Elements::Ints).boxed(),
             1 => vec(float(), n).prop_map(Elements::Floats).boxed(),
+            // A byte of 2 is true, as a byte of 1 is.
             2 => vec(0u8..3, n).prop_map(Elements::Bools).boxed(),
             _ => vec(text_value(), n).prop_map(texts_elements).boxed(),
         };
@@ -1613,7 +1636,8 @@ fn field(rows: usize) -> impl Strategy<Value = Field> {
         move |(step, mark, present)| {
             values(rows, step).prop_map(move |values| {
                 // A bit-packed boolean column has one bit per row and no
-                // stride, and a text layout makes its own stride.
+                // stride, a text layout makes its own stride, and a list
+                // field has no stride of its own.
                 let step = if matches!(
                     values,
                     Values::Text(..) | Values::BoolBits(..) | Values::List(_)
@@ -1734,6 +1758,8 @@ fn condition(n: usize) -> impl Strategy<Value = Expr> {
         }
     });
     // A search of a field for a literal, for another field or for `None`.
+    // `y` may be a field of any type, and a number or a boolean there gives
+    // the fault `Incompatible`.
     let sought = prop_oneof![literal(), (0..n).prop_map(field_named), Just(Expr::None)];
     let search = (sought, 0..n, any::<bool>()).prop_map(|(x, y, negated)| {
         let (x, y) = (Box::new(x), Box::new(field_named(y)));
@@ -1804,9 +1830,8 @@ proptest! {
         let lent = t.lend();
         let columns = t.columns(&lent, program.fields());
         let bound = match program.bind(&columns) {
-            // A generated rule may compare two list fields, or search for a
-            // list field, which this version does not run, and that rule set
-            // does not run.
+            // Bind refuses a rule that compares two list fields or searches
+            // for a list field, and the property skips that rule set.
             Err(BindError::Unsupported { .. }) => return Ok(()),
             other => other?,
         };
@@ -1848,9 +1873,8 @@ proptest! {
         let lent = t.lend();
         let columns = t.columns(&lent, program.fields());
         let bound = match program.bind(&columns) {
-            // A generated rule may compare two list fields, or search for a
-            // list field, which this version does not run, and that rule set
-            // does not run.
+            // Bind refuses a rule that compares two list fields or searches
+            // for a list field, and the property skips that rule set.
             Err(BindError::Unsupported { .. }) => return Ok(()),
             other => other?,
         };
