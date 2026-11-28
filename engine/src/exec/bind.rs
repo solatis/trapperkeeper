@@ -10,8 +10,8 @@ use super::number::{
 };
 use super::outcome::Fault;
 use crate::column::{
-    Booleans, CHUNK_WORDS, Column, Floats, Ints, Kind, Number, Present, present_all,
-    present_from_bits, present_from_mask,
+    Booleans, CHUNK_WORDS, Column, Kind, Number, NumberType, Present, present_all,
+    present_from_bits, present_from_mask, with_float, with_int, with_number,
 };
 use crate::plan::{Comparison, Constant, Literal, Operand, Program, Step};
 
@@ -30,17 +30,7 @@ pub struct Bound {
 /// The type of a field's column as bind sees it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum FieldType {
-    I8,
-    I16,
-    I32,
-    I64,
-    U8,
-    U16,
-    U32,
-    U64,
-    F16,
-    F32,
-    F64,
+    Number(NumberType),
     Bool,
     Text,
     List,
@@ -107,79 +97,6 @@ impl fmt::Display for BindError {
 }
 
 impl std::error::Error for BindError {}
-
-/// Runs `$body` with `$T` as the int type of the field type `$t`.
-macro_rules! with_int {
-    ($t:expr, |$T:ident| $body:expr) => {
-        match $t {
-            FieldType::I8 => {
-                type $T = i8;
-                $body
-            }
-            FieldType::I16 => {
-                type $T = i16;
-                $body
-            }
-            FieldType::I32 => {
-                type $T = i32;
-                $body
-            }
-            FieldType::I64 => {
-                type $T = i64;
-                $body
-            }
-            FieldType::U8 => {
-                type $T = u8;
-                $body
-            }
-            FieldType::U16 => {
-                type $T = u16;
-                $body
-            }
-            FieldType::U32 => {
-                type $T = u32;
-                $body
-            }
-            FieldType::U64 => {
-                type $T = u64;
-                $body
-            }
-            _ => unreachable!("the caller checked that the field holds ints"),
-        }
-    };
-}
-
-/// Runs `$body` with `$T` as the number type of the field type `$t`.
-macro_rules! with_number {
-    ($t:expr, |$T:ident| $body:expr) => {
-        if $t.is_int() {
-            with_int!($t, |$T| $body)
-        } else {
-            with_float!($t, |$T| $body)
-        }
-    };
-}
-
-/// Runs `$body` with `$T` as the float type of the field type `$t`.
-macro_rules! with_float {
-    ($t:expr, |$T:ident| $body:expr) => {
-        match $t {
-            FieldType::F16 => {
-                type $T = f16;
-                $body
-            }
-            FieldType::F32 => {
-                type $T = f32;
-                $body
-            }
-            FieldType::F64 => {
-                type $T = f64;
-                $body
-            }
-            _ => unreachable!("the caller checked that the field holds floats"),
-        }
-    };
-}
 
 impl Program {
     /// Binds the program to the types of `columns`, one per field in the order
@@ -289,12 +206,16 @@ fn bind_literal(op: Comparison, f: usize, t: FieldType, literal: Literal) -> Bou
         }
         // An int widens to a float (ADR-0041), so the column's ints widen to
         // the float literal.
-        (_, Literal::Float(x)) if t.is_int() => {
-            with_int!(t, |T| widened::<T>(op, f, x))
+        (FieldType::Number(n), Literal::Float(x)) if !n.is_float() => {
+            with_int!(n, |T| widened::<T>(op, f, x))
         }
-        (_, Literal::Int(i)) if t.is_int() => with_int!(t, |T| int_literal::<T>(op, f, i)),
+        (FieldType::Number(n), Literal::Int(i)) if !n.is_float() => {
+            with_int!(n, |T| int_literal::<T>(op, f, i))
+        }
         // The literal, int or float, converts to the column's float type.
-        (_, literal) => with_float!(t, |T| float_literal::<T>(op, f, literal)),
+        (FieldType::Number(n), literal) => {
+            with_float!(n, |T| float_literal::<T>(op, f, literal))
+        }
     }
 }
 
@@ -316,9 +237,9 @@ fn bind_fields(
         (FieldType::Absent, _) | (_, FieldType::Absent) => BoundStep::Constant(Constant::Unknown),
         // The macros write one arm per pair of number types, so the compiler
         // instantiates one loop per pair and operator.
-        _ if lt.is_number() && rt.is_number() => {
+        (FieldType::Number(ln), FieldType::Number(rn)) => {
             let chunk: ChunkLoop =
-                with_number!(lt, |L| with_number!(rt, |R| with_order!(op, |O| {
+                with_number!(ln, |L| with_number!(rn, |R| with_order!(op, |O| {
                     Box::new(
                         move |cols: &[Option<Column<'_>>],
                               start: usize,
@@ -515,40 +436,11 @@ impl FieldType {
             return Self::Absent;
         };
         match c.kind() {
-            Kind::Ints(Ints::I8(_), _) => Self::I8,
-            Kind::Ints(Ints::I16(_), _) => Self::I16,
-            Kind::Ints(Ints::I32(_), _) => Self::I32,
-            Kind::Ints(Ints::I64(_), _) => Self::I64,
-            Kind::Ints(Ints::U8(_), _) => Self::U8,
-            Kind::Ints(Ints::U16(_), _) => Self::U16,
-            Kind::Ints(Ints::U32(_), _) => Self::U32,
-            Kind::Ints(Ints::U64(_), _) => Self::U64,
-            Kind::Floats(Floats::F16(_), _) => Self::F16,
-            Kind::Floats(Floats::F32(_), _) => Self::F32,
-            Kind::Floats(Floats::F64(_), _) => Self::F64,
+            Kind::Ints(v, _) => Self::Number(v.number_type()),
+            Kind::Floats(v, _) => Self::Number(v.number_type()),
             Kind::Booleans(..) => Self::Bool,
             Kind::Text(..) => Self::Text,
             Kind::List(..) => Self::List,
         }
-    }
-
-    /// Whether the field holds numbers.
-    fn is_number(self) -> bool {
-        self.is_int() || matches!(self, Self::F16 | Self::F32 | Self::F64)
-    }
-
-    /// Whether the field holds ints.
-    fn is_int(self) -> bool {
-        matches!(
-            self,
-            Self::I8
-                | Self::I16
-                | Self::I32
-                | Self::I64
-                | Self::U8
-                | Self::U16
-                | Self::U32
-                | Self::U64
-        )
     }
 }

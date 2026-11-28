@@ -328,11 +328,10 @@ pub(super) mod sealed {
 // types and no other crate extends it (ADR-0036).
 pub trait Number: sealed::Number {}
 
-// Writes the impls of `Number` for each number type, with the variant of
-// `Ints` or `Floats` that holds a column of it, whether it is a float and
-// whether it is signed.
-macro_rules! numbers {
-    ($($t:ty => $kind:ident::$variant:ident, $float:expr, $signed:expr);* $(;)?) => {$(
+// Writes the impl of `Number` for one number type. `$kind::$variant` is the
+// variant of `Ints` or `Floats` that holds a column of the type.
+macro_rules! number {
+    ($t:ty, $kind:ident::$variant:ident, $float:expr, $signed:expr) => {
         impl sealed::Number for $t {
             const FLOAT: bool = $float;
             const SIGNED: bool = $signed;
@@ -364,19 +363,127 @@ macro_rules! numbers {
         }
 
         impl Number for $t {}
-    )*};
+    };
 }
 
+// Writes everything that names each number type, from the one list below:
+// the impls of `Number`, the enum `NumberType`, and the macros `with_int!`,
+// `with_float!` and `with_number!`. The first token is a `$`, which the
+// macros that this macro writes need for their own variables, because a
+// `$` inside a macro's body would otherwise belong to this macro.
+macro_rules! numbers {
+    (
+        $d:tt
+        ints { $($it:ty => $iv:ident, $signed:expr;)* }
+        floats { $($ft:ty => $fv:ident;)* }
+    ) => {
+        $(number!($it, Ints::$iv, false, $signed);)*
+        $(number!($ft, Floats::$fv, true, true);)*
+
+        /// The type of the values of a number column.
+        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+        pub(crate) enum NumberType {
+            $($iv,)*
+            $($fv,)*
+        }
+
+        impl NumberType {
+            /// Whether the type is a float type.
+            pub(crate) fn is_float(self) -> bool {
+                matches!(self, $(Self::$fv)|*)
+            }
+        }
+
+        impl Ints<'_> {
+            /// The type of the values.
+            pub(crate) fn number_type(&self) -> NumberType {
+                match self {
+                    $(Self::$iv(_) => NumberType::$iv,)*
+                }
+            }
+        }
+
+        impl Floats<'_> {
+            /// The type of the values.
+            pub(crate) fn number_type(&self) -> NumberType {
+                match self {
+                    $(Self::$fv(_) => NumberType::$fv,)*
+                }
+            }
+        }
+
+        /// Turns a `NumberType` that is only known at run time into a Rust
+        /// type that the compiler sees. `with_int!(n, |T| body)` expands to
+        /// a `match` on `n` with one arm per int type, and each arm compiles
+        /// `body` with `T` set to that type, such as `i8` or `u64`. Code that
+        /// is generic over `T` thus gets one copy per type, each with the
+        /// SIMD instructions of its type. A float type panics.
+        macro_rules! with_int {
+            ($d n:expr, |$d T:ident| $d body:expr) => {
+                match $d n {
+                    $($crate::column::NumberType::$iv => {
+                        type $d T = $it;
+                        $d body
+                    })*
+                    _ => unreachable!("the caller checked that the field holds ints"),
+                }
+            };
+        }
+        pub(crate) use with_int;
+
+        /// `with_int!` for the float types: `with_float!(n, |T| body)` compiles
+        /// `body` once with `T` as `f16`, once as `f32` and once as `f64`,
+        /// and runs the copy for `n`. An int type panics.
+        macro_rules! with_float {
+            ($d n:expr, |$d T:ident| $d body:expr) => {
+                match $d n {
+                    $($crate::column::NumberType::$fv => {
+                        type $d T = $ft;
+                        $d body
+                    })*
+                    _ => unreachable!("the caller checked that the field holds floats"),
+                }
+            };
+        }
+        pub(crate) use with_float;
+
+        /// `with_int!` for every number type, int or float.
+        macro_rules! with_number {
+            ($d n:expr, |$d T:ident| $d body:expr) => {
+                match $d n {
+                    $($crate::column::NumberType::$iv => {
+                        type $d T = $it;
+                        $d body
+                    })*
+                    $($crate::column::NumberType::$fv => {
+                        type $d T = $ft;
+                        $d body
+                    })*
+                }
+            };
+        }
+        pub(crate) use with_number;
+    };
+}
+
+// The number types that a column can hold. Each int type says whether it is
+// signed. The variant of `Ints` or `Floats` that holds a column of the type
+// has the name of its `NumberType`.
 numbers! {
-    i8 => Ints::I8, false, true;
-    i16 => Ints::I16, false, true;
-    i32 => Ints::I32, false, true;
-    i64 => Ints::I64, false, true;
-    u8 => Ints::U8, false, false;
-    u16 => Ints::U16, false, false;
-    u32 => Ints::U32, false, false;
-    u64 => Ints::U64, false, false;
-    f16 => Floats::F16, true, true;
-    f32 => Floats::F32, true, true;
-    f64 => Floats::F64, true, true;
+    $
+    ints {
+        i8 => I8, true;
+        i16 => I16, true;
+        i32 => I32, true;
+        i64 => I64, true;
+        u8 => U8, false;
+        u16 => U16, false;
+        u32 => U32, false;
+        u64 => U64, false;
+    }
+    floats {
+        f16 => F16;
+        f32 => F32;
+        f64 => F64;
+    }
 }

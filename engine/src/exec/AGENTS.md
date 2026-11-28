@@ -45,10 +45,8 @@ records it faulted on, each with its fault. It knows no rule text.
 
 - `cargo test -p trapperkeeper-engine --test evaluation` runs the tests of the
   executor.
-- A new number type needs a variant of `Ints` or `Floats` and an entry of
-  `numbers!` in `src/column/values.rs`. In `bind.rs` it needs a variant of
-  `FieldType`, an arm in `FieldType::of`, an entry in `FieldType::is_int` or
-  `FieldType::is_number`, and an arm of `with_int!` or `with_float!`. No
-  compiler check covers `is_int`, and an int type missing from it reaches the
-  `unreachable!` of `with_float!`. The comparisons of two fields then cover
-  the type in every pair.
+- A new number type needs a variant of `Ints` or `Floats` and a line in the
+  list of `numbers!` in `src/column/values.rs`. The list writes the type's
+  `Number` impl, its `NumberType` variant and its arm in `with_int!`,
+  `with_float!` and `with_number!`, so the comparisons of `bind.rs` cover the
+  type with no change there.

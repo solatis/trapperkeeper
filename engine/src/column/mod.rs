@@ -19,6 +19,7 @@ pub use marking::{
 pub(crate) use marking::{Pair, Test, pack};
 pub use text::{INLINE, Piece, Text, Texts, Unit, Units, Utf8, View, Views};
 pub use values::{Bits, Booleans, Floats, Ints, Number, Strided};
+pub(crate) use values::{NumberType, with_float, with_int, with_number};
 
 /// A marking that covers another number of rows than the values of its
 /// column.
