@@ -154,25 +154,38 @@ impl Program {
     }
 }
 
-/// Specializes one step for the field types `types`. Fails when the step
-/// compares two fields whose types this version cannot compare yet.
+/// Turns one step of the program into the step that the executor runs, for a
+/// schema in which field `i` has the column type `types[i]`. A comparison gets
+/// the loop that was compiled for the types of its columns, and a step that
+/// reads no column is copied as it is. Fails when the step compares two
+/// fields whose types this version cannot compare yet.
 fn bind_step(step: &Step, types: &[FieldType]) -> Result<BoundStep, BindError> {
+    // Each arm handles one kind of step. Only the steps that read a column
+    // depend on `types`, and each of them hands its field's type to a function
+    // that picks the loop.
     Ok(match step {
         Step::Constant(c) => BoundStep::Constant(*c),
+        // A field used as a condition, as `x` is in `x and y`, which is true,
+        // false, unknown or a fault depending on the field's type.
         Step::Condition(f) => bind_condition(*f, types[*f]),
         // A field without a column has no value on any row, so `x is None`
         // is true everywhere.
         Step::IsNull(f) if types[*f] == FieldType::Absent => BoundStep::Constant(Constant::True),
         Step::IsNull(f) => BoundStep::IsNull(*f),
         Step::Member { field, values } => member::bind_member(*field, types[*field], values),
+        // `not`, `and` and `or` read the results of earlier steps by their
+        // slots and no column, so they stay as the planner made them.
         Step::Not(a) => BoundStep::Not(*a),
         Step::And(a, b) => BoundStep::And(*a, *b),
         Step::Or(a, b) => BoundStep::Or(*a, *b),
+        // A field against a literal, as in `x > 5`, whose loop depends on the
+        // type of the field's column.
         Step::Compare {
             op,
             left: Operand::Field(f),
             right: Operand::Literal(literal),
         } => bind_literal(*op, *f, types[*f], literal),
+        // Two fields, as in `x < y`, whose loop depends on both types.
         Step::Compare {
             op,
             left: Operand::Field(l),
@@ -185,8 +198,8 @@ fn bind_step(step: &Step, types: &[FieldType]) -> Result<BoundStep, BindError> {
     })
 }
 
-/// Specializes a field `f` of type `t` that is used on its own as a
-/// condition, as `x` is in `x and y`.
+/// Builds the step of field `f`, whose column has type `t`, used on its own as
+/// a condition, as `x` is in `x and y`.
 fn bind_condition(f: usize, t: FieldType) -> BoundStep {
     match t {
         // A missing field is null on every row, and a null used as a
@@ -205,8 +218,8 @@ fn bind_condition(f: usize, t: FieldType) -> BoundStep {
     }
 }
 
-/// Specializes `x op literal`, where `x` is field `f` and its column has
-/// type `t`.
+/// Builds the step of `x op literal`, where `x` is field `f` and its column
+/// has type `t`.
 fn bind_literal(op: Comparison, f: usize, t: FieldType, literal: &Literal) -> BoundStep {
     // The arms test the pair (column type, literal) from the most specific
     // case to the least. The missing field, the orderings that fault, the
@@ -269,8 +282,8 @@ fn bind_literal(op: Comparison, f: usize, t: FieldType, literal: &Literal) -> Bo
     }
 }
 
-/// Specializes `x op y`, where `x` is field `l` with column type `lt` and `y`
-/// is field `r` with column type `rt`. Fails for `==` and `!=` on two list
+/// Builds the step of `x op y`, where `x` is field `l` with column type `lt`
+/// and `y` is field `r` with column type `rt`. Fails for `==` and `!=` on two list
 /// fields, which this version cannot compare yet.
 fn bind_fields(
     op: Comparison,
