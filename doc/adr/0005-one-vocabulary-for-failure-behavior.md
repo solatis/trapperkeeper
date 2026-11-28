@@ -69,10 +69,10 @@ of `in`, as in `None in tags`, the test is true when the list `tags` holds a
 null element (owner, 2026-11-16). Only the literal `None` has this meaning.
 `a == b` on two fields that both hold a null gives unknown.
 
-The meaning of `in` follows the type of its right side. A list that the rule
-writes, as in `x in [1, 2]`, is a test of membership. A field that holds a
-text is a search for a substring, and a field that holds a list is a search
-among its elements (owner, 2026-11-28).
+The meaning of `in` follows the type of its right side. When the rule writes
+the list, as in `x in [1, 2]`, `in` tests membership. When the right side is a
+field that holds a text, `in` searches the text for a substring, and when the
+field holds a list, `in` searches its elements (owner, 2026-11-28).
 
 Validation (`adr/0033`) refuses the literal `None` beside an ordering or an
 arithmetic operator, under a minus, and after `in` and `not in`, because such a
@@ -244,8 +244,8 @@ gives unknown for every record and matches nothing in silence. A check of
 types, which is to be built together with the planner of `adr/0035`, would
 refuse these forms (owner, 2026-11-16).
 
-An adapter keeps the rows whose value has another type than the column in a
-column of their own (`adr/0036`). A rule gives each such record what its
+An adapter puts the rows whose value has a type other than the column's into
+a second column (`adr/0036`). A rule gives each such record what its
 operator gives for the record's own type. So `x == "a"` is false for a record
 that holds an int, and `x > 5` is a fault for a record that holds a text.
 
