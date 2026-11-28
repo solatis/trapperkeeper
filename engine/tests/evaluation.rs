@@ -200,7 +200,8 @@ fn a_number_never_equals_a_text() {
         [NotMatched, NotMatched]
     );
     // The second row has no text, so `!=` is unknown there and does not
-    // match. Only this check tells that row apart from a false one.
+    // match. Under `==` a false row and an unknown row both give
+    // `NotMatched`, so only `!=` shows that the second row is unknown.
     assert_eq!(
         outcomes(
             Expr::Ne(Box::new(x()), Box::new(Expr::Int(1))),
@@ -372,13 +373,15 @@ fn a_utf8_text_equals_its_utf32_cells() {
     let utf8 =
         Column::text(Text::Pieces(Strided::from_slice(&pieces)), Marking::Never).expect("unmarked");
     // The cells hold the same texts as the pieces, except the last row, whose
-    // `y` differs from `x`.
+    // `y` differs from `x`. Each row has four units, enough for `café`, and
+    // the zero units after a shorter text end it.
     let mut cells = vec![0u32; 3 * 4];
     for (row, text) in ["caf\u{e9}", "\u{1f600}", "y"].iter().enumerate() {
         for (at, c) in text.chars().enumerate() {
             cells[4 * row + at] = u32::from(c);
         }
     }
+    // Three rows of four units, four units apart.
     let layout = Fixed::new(4, 4, 3, Units::utf32(&cells)).expect("the cells hold every row");
     let utf32 = Column::text(Text::Utf32(layout), Marking::Never).expect("unmarked");
     // `é` is two bytes in UTF-8 and one unit in UTF-32, and the emoji four
@@ -388,6 +391,7 @@ fn a_utf8_text_equals_its_utf32_cells() {
         outcomes_of_pair(a_with_b(Expr::Eq), utf8, utf32),
         [Matched, Matched, NotMatched]
     );
+    // The swapped operands run the loop with the UTF-32 column on the left.
     assert_eq!(
         outcomes_of_pair(a_with_b(Expr::Ne), utf32, utf8),
         [NotMatched, NotMatched, Matched]
@@ -406,7 +410,8 @@ fn a_membership_list_matches_in_any_order() {
         Column::ints(Ints::I64(Strided::from_slice(&values)), Marking::Never).expect("unmarked");
     let (a, one) = (Expr::Text("a".into()), Expr::Int(1));
     // A text never equals an int, so the text adds nothing in either place
-    // and neither order faults.
+    // and neither order faults. If that equality faulted, the `or` behind
+    // `in` would count the fault only where the int did not match first.
     assert_eq!(
         outcomes(x_in(vec![a.clone(), one.clone()]), Some(column)),
         [Matched, NotMatched]
@@ -442,9 +447,10 @@ fn a_long_list_finds_its_values_by_binary_search() {
     let values: Vec<i32> = (0..100).collect();
     let column =
         Column::ints(Ints::I32(Strided::from_slice(&values)), Marking::Never).expect("unmarked");
-    // The twelve even numbers from 10 to 32 lie above the eight values that
-    // a vector compare takes, so each row is looked up in the sorted list.
-    // The list is written in descending order, and the set sorts it.
+    // The list holds the twelve even numbers from 10 to 32. A membership set
+    // of more than eight values, the engine's `SPLAT_LIMIT`, looks each row
+    // up by binary search. The list is written in descending order, and the
+    // membership step sorts its values at bind.
     let list = (5..17).rev().map(|i| Expr::Int(2 * i)).collect();
     let expected: Vec<Outcome> = (0..100)
         .map(|v| {
@@ -943,7 +949,9 @@ fn strided<T: Copy>(buffer: &[T], step: usize, rows: usize) -> Strided<'_, T> {
 
 impl Field {
     /// Borrows the buffers of a text field for its column, and `None` for a
-    /// field of any other type.
+    /// field of any other type. A text column borrows the pieces and the list
+    /// of buffers that `LentTexts` holds, so they must live longer than the
+    /// column, and `column` cannot make them itself.
     fn lend(&self) -> Option<LentTexts<'_>> {
         match &self.values {
             Values::Text(_, _, buffers) => Some(buffers.lend()),
@@ -1042,6 +1050,9 @@ impl Field {
             Values::BoolBytes(v) => Values::BoolBytes(v[span].to_vec()),
             // A bit-packed field has a step of 1, so its row is its index.
             Values::BoolBits(b, _) => Values::BoolBits(vec![b[row]], packed(&[b[row]], 0)),
+            // The one-row buffers take their cell width from this text alone.
+            // Bind only knows that the column holds texts, so the bound
+            // program still runs over them.
             Values::Text(texts, layout, _) => {
                 let one = [texts[row].clone()];
                 Values::Text(one.to_vec(), *layout, TextBuffers::new(&one, *layout))
@@ -1086,7 +1097,8 @@ impl Table {
     }
 
     /// Borrows the buffers of the text fields, one entry per field, for
-    /// `columns`.
+    /// `columns`. The caller keeps the result in a binding of its own while
+    /// it uses the columns.
     fn lend(&self) -> Vec<Option<LentTexts<'_>>> {
         self.fields
             .iter()
@@ -1164,11 +1176,11 @@ fn values(rows: usize, step: usize) -> impl Strategy<Value = Values> {
 
 /// The text literals of the generated rules: an empty text, a text of one
 /// byte, a text of four-byte characters and a text longer than the 12 bytes
-/// that a view holds itself.
+/// that an Arrow string view holds inline.
 const LITERAL_TEXTS: [&str; 4] = ["", "a", "\u{1f600}\u{1f600}", "longer than a view holds"];
 
-/// Generates the text of a row: mostly one of the literals, so that `==`
-/// matches some rows, and otherwise any text of a column.
+/// Generates the text of a row: half of the time one of the literals, so
+/// that `==` matches some rows, and otherwise any text of a column.
 fn text_value() -> impl Strategy<Value = String> {
     prop_oneof![
         1 => select(LITERAL_TEXTS.to_vec()).prop_map(String::from),
@@ -1188,9 +1200,8 @@ fn field(rows: usize) -> impl Strategy<Value = Field> {
     (1usize..3, mark, vec(prop::bool::weighted(0.8), rows)).prop_flat_map(
         move |(step, mark, present)| {
             values(rows, step).prop_map(move |values| {
-                // A text column and a bit-packed boolean column have no
-                // stride of their own here, because the text layouts make
-                // their own.
+                // A bit-packed boolean column has one bit per row and no
+                // stride, and a text layout makes its own stride.
                 let step = if matches!(values, Values::Text(..) | Values::BoolBits(..)) {
                     1
                 } else {
@@ -1396,7 +1407,8 @@ proptest! {
         //    alone must match.
         // 2. It runs the same bound program over a batch of one record for
         //    each record it checks. One bind serves both, because a batch of
-        //    one record keeps the type and the layout of each field.
+        //    one record keeps the type of each field and the kind of its
+        //    layout.
         // 3. It checks that the record has the same outcome in both runs.
 
         // 1. run the batch
