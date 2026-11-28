@@ -95,7 +95,7 @@ impl<T: Number + TryFrom<i64>> NumberSet<T> {
                         values.push(v);
                     }
                 }
-                Literal::Float(x) => widened.push(positive_zero(x)),
+                Literal::Float(x) => widened.push(x),
                 Literal::Bool(_) | Literal::Text(_) => {
                     unreachable!("`bind_member` keeps only numbers for a number column")
                 }
@@ -116,8 +116,8 @@ impl<T: Number> NumberSet<T> {
         let values = kept
             .iter()
             .map(|literal| match **literal {
-                Literal::Int(i) => positive_zero(convert::<i64, T>(i)),
-                Literal::Float(x) => positive_zero(convert::<f64, T>(x)),
+                Literal::Int(i) => convert::<i64, T>(i),
+                Literal::Float(x) => convert::<f64, T>(x),
                 Literal::Bool(_) | Literal::Text(_) => {
                     unreachable!("`bind_member` keeps only numbers for a number column")
                 }
@@ -144,15 +144,8 @@ fn sorted<U: Number>(mut values: Vec<U>) -> Vec<U> {
     values
 }
 
-/// Returns `v`, with `-0.0` turned into `0.0`. The two are equal, and a
-/// binary search would tell them apart.
-fn positive_zero<U: Number>(v: U) -> U {
-    if v == U::default() { U::default() } else { v }
-}
-
 /// Whether the sorted set `set` holds `v`.
 fn contains<U: Number>(set: &[U], v: U) -> bool {
-    let v = positive_zero(v);
     // A NaN row has no order. It is a row without a value, whose result
     // `StepResult::compared` throws away, so any answer serves.
     set.binary_search_by(|x| x.partial_cmp(&v).unwrap_or(Ordering::Less))
@@ -173,7 +166,7 @@ fn lanes_in<U: Number>(set: &[U], lanes: Simd<U, 64>) -> u64 {
             .to_array()
             .iter()
             .enumerate()
-            .fold(0, |hits, (i, &v)| hits | u64::from(contains(set, v)) << i)
+            .fold(0, |hits, (i, &v)| hits | (u64::from(contains(set, v)) << i))
     }
 }
 
@@ -234,9 +227,9 @@ impl TextSet {
     fn of(kept: &[&Literal]) -> Self {
         let texts: Vec<_> = kept
             .iter()
-            .filter_map(|l| match l {
-                Literal::Text(t) => Some(t),
-                _ => None,
+            .map(|l| match l {
+                Literal::Text(t) => t,
+                _ => unreachable!("`bind_member` keeps only texts for a text column"),
             })
             .collect();
         let mut utf8: Vec<Box<[u8]>> = texts.iter().map(|t| Box::from(t.utf8())).collect();
