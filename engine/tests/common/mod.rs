@@ -455,8 +455,9 @@ pub enum TextLayout {
     /// `step - 1` cells of other bytes between two rows, as in a stepped
     /// numpy view.
     Bytes { slack: usize, step: usize },
-    /// numpy `U` cells with the characters of the longest text plus `slack`.
-    Utf32 { slack: usize },
+    /// numpy `U` cells with the characters of the longest text plus `slack`,
+    /// and `step - 1` cells of other units between two rows.
+    Utf32 { slack: usize, step: usize },
 }
 
 /// Generates any layout of a text column.
@@ -471,8 +472,8 @@ pub fn text_layout() -> impl Strategy<Value = TextLayout> {
         (0usize..5, offset).prop_map(|(lead, offset)| TextLayout::Offsets { lead, offset }),
         Just(TextLayout::Views),
         (1usize..4).prop_map(|step| TextLayout::Pieces { step }),
-        (0usize..3, 1usize..3).prop_map(|(slack, step)| TextLayout::Bytes { slack, step }),
-        (0usize..3).prop_map(|slack| TextLayout::Utf32 { slack }),
+        (0usize..3, 1usize..4).prop_map(|(slack, step)| TextLayout::Bytes { slack, step }),
+        (0usize..3, 1usize..4).prop_map(|(slack, step)| TextLayout::Utf32 { slack, step }),
     ]
 }
 
@@ -514,6 +515,7 @@ enum Buffers {
     Utf32 {
         units: Vec<u32>,
         width: usize,
+        step: usize,
     },
 }
 
@@ -581,7 +583,7 @@ impl TextBuffers {
                 }
                 Buffers::Bytes { bytes, width, step }
             }
-            TextLayout::Utf32 { slack } => {
+            TextLayout::Utf32 { slack, step } => {
                 let chars = texts
                     .iter()
                     .map(|t| t.chars().map(u32::from).collect::<Vec<_>>())
@@ -592,8 +594,9 @@ impl TextBuffers {
                     let start = units.len();
                     units.extend_from_slice(text);
                     units.resize(start + width, 0);
+                    units.resize(start + step * width, u32::from('y'));
                 }
-                Buffers::Utf32 { units, width }
+                Buffers::Utf32 { units, width, step }
             }
         };
         Self {
@@ -656,14 +659,13 @@ impl LentTexts<'_> {
         let rows = self.buffers.rows;
         match &self.buffers.buffers {
             Buffers::Offsets { offset, .. } => {
-                let all = self.offsets().expect("an offsets layout");
-                let at = match offset {
-                    OffsetType::I32 => 0,
-                    OffsetType::I64 => 1,
-                    OffsetType::U32 => 2,
-                    OffsetType::U64 => 3,
-                };
-                Text::Offsets(all[at])
+                let [i32s, i64s, u32s, u64s] = self.offsets().expect("an offsets layout");
+                Text::Offsets(match offset {
+                    OffsetType::I32 => i32s,
+                    OffsetType::I64 => i64s,
+                    OffsetType::U32 => u32s,
+                    OffsetType::U64 => u64s,
+                })
             }
             // SAFETY: each long view names the buffer and the offset that its
             // text was copied to, and the texts are UTF-8.
@@ -684,8 +686,8 @@ impl LentTexts<'_> {
                         .expect("the cells hold every row"),
                 )
             }
-            Buffers::Utf32 { units, width } => Text::Utf32(
-                Fixed::new(*width, *width, rows, Units::utf32(units))
+            Buffers::Utf32 { units, width, step } => Text::Utf32(
+                Fixed::new(*width, step * width, rows, Units::utf32(units))
                     .expect("the cells hold every row"),
             ),
         }

@@ -304,7 +304,7 @@ proptest! {
     /// longest text and for a wider one, contiguous and stepped, and
     /// `Fixed::new` refuses one row too many and a step below the width.
     #[test]
-    fn byte_cells_read_back_their_texts(texts in texts(), slack in 0usize..3, step in 1usize..3) {
+    fn byte_cells_read_back_their_texts(texts in texts(), slack in 0usize..3, step in 1usize..4) {
         // With a `slack` of 0, the longest text fills its cell with no zero
         // after it.
         let buffers = TextBuffers::new(&texts, TextLayout::Bytes { slack, step });
@@ -322,13 +322,14 @@ proptest! {
         prop_assert_eq!(column.map(|c| c.rows()), Ok(texts.len()));
     }
 
-    /// numpy `U` cells read back the characters of their texts as units.
+    /// numpy `U` cells read back the characters of their texts as units,
+    /// contiguous and stepped.
     #[test]
-    fn utf32_cells_read_back_their_texts(texts in texts(), slack in 0usize..3) {
+    fn utf32_cells_read_back_their_texts(texts in texts(), slack in 0usize..3, step in 1usize..4) {
         // A text is compared as the `u32` values of its characters, because
         // the reader returns units and no `char`.
         let expected = texts.iter().map(|t| t.chars().map(u32::from).collect::<Vec<_>>()).collect::<Vec<_>>();
-        let buffers = TextBuffers::new(&texts, TextLayout::Utf32 { slack });
+        let buffers = TextBuffers::new(&texts, TextLayout::Utf32 { slack, step });
         let lent = buffers.lend();
         let Text::Utf32(layout) = lent.text() else { unreachable!("a UTF-32 layout") };
         prop_assert_eq!(layout.len(), expected.len());
