@@ -82,11 +82,9 @@ impl<'a, T: Texts<'a, Unit: Encoded + 'a>> Test<TextRows<'a, T>> for AgainstText
     }
 
     fn one(&self, row: &'a [T::Unit]) -> bool {
-        // A row equals the literal when its units equal the literal's units
-        // in the same encoding, so a UTF-32 layout compares code points and
-        // every other layout compares bytes (ADR-0041). A row without a
-        // value gives whatever its units say, and `StepResult::compared`
-        // makes it unknown under `==` and `!=` alike.
+        // `of` gives the literal in the column's encoding (ADR-0041). A row
+        // without a value compares whatever units it holds, and
+        // `StepResult::compared` makes it unknown.
         (row == T::Unit::of(&self.literal)) == self.equal
     }
 }
@@ -165,7 +163,9 @@ fn same_text(left: Form<'_>, right: Form<'_>) -> bool {
 /// order.
 fn same_code_points(bytes: &[u8], units: &[u32]) -> bool {
     // Every text layout whose units are bytes holds UTF-8 in every row, also
-    // in a row without a value (`Texts`), so the decode cannot fail.
+    // in a row without a value (`Texts`), so the decode cannot fail. The
+    // checked decode keeps the loop free of `unsafe`, which
+    // `from_utf8_unchecked` would need.
     let text = str::from_utf8(bytes).expect("a text layout of bytes holds UTF-8");
     // A UTF-32 unit that is no code point, such as a lone surrogate, equals
     // no character.
