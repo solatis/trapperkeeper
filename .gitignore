@@ -1,7 +1,3 @@
-# The per-issue plans of the tk-* workflow (.claude/skills/tk-workflow). No plan
-# is ever committed.
-.plans/
-
 /target/
 
 # The database that serve and migrate create in the working directory with
