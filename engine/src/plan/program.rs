@@ -63,14 +63,17 @@ pub(crate) enum Step {
         field: usize,
         values: Vec<Literal>,
     },
-    // `x in y` with a field `y`, whose meaning bind picks from the type of
-    // `y`: a substring search for `"err" in message`, and a search among the
-    // elements for `5 in tags`.
+    // `x in y` with a field `y`. Bind, which specializes the program for a
+    // schema, picks its meaning from the type of `y`: a substring search for
+    // `"err" in message`, and a search among the elements for `5 in tags`. Any
+    // other pair, such as `5 in message`, is the fault `Incompatible`.
     Search {
         needle: Operand,
         haystack: usize,
     },
-    // `None in y`: true where the list `y` holds a null element (ADR-0005).
+    // `None in y`: true where the list `y` holds a null element (ADR-0005),
+    // unknown where `y` has no value, and the fault `Incompatible` where `y`
+    // holds a text, a number or a boolean.
     HoldsNull(usize),
     // `not`, `and` and `or` over the results of earlier steps, by their
     // slots. They follow the three-valued logic of ADR-0005, where a row is
@@ -374,13 +377,15 @@ impl Planner<'_> {
             }
             // Bind picks the meaning of a search from the type of `y`. A
             // written list as the needle is refused with its key, because
-            // list equality does not exist.
+            // list equality does not exist, and bind refuses a list field as
+            // the needle for the same reason.
             Expr::Field(path) => {
                 let needle = self.operand(needle)?;
                 let haystack = self.fields.field_of(path);
                 Ok(self.push(Step::Search { needle, haystack }))
             }
-            // A text literal on the right, as in `x in "abc"`, is not run.
+            // Any other right side, such as the text literal of `x in "abc"`
+            // or arithmetic, has no step that this version builds.
             _ => Err(e.key()),
         }
     }
