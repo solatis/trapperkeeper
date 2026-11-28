@@ -478,8 +478,8 @@ fn a_text_literal_is_found_in_utf8_and_utf32_cells() {
     let texts = ["caf\u{e9}".to_string(), "cafe".to_string()];
     let rule = || in_x(Expr::Text("\u{e9}".into()));
     let pieces = TextBuffers::new(&texts, TextLayout::Pieces { step: 1 });
-    // The cells have one unit of slack, so each text ends in a zero unit, and
-    // they lie end to end.
+    // With one unit of slack, every cell ends in a zero unit, which the
+    // search must not take for part of the text.
     let cells = TextBuffers::new(&texts, TextLayout::Utf32 { slack: 1, step: 1 });
     for buffers in [pieces, cells] {
         let lent = buffers.lend();
@@ -817,9 +817,8 @@ fn field_number_of(y: &Expr) -> usize {
     }
 }
 
-/// Returns the value of a number, boolean or text literal. The width of a
-/// float plays no part in `order_of_fields`, which compares floats as `f64`.
-/// It is `F64` here, the width of the generated list elements.
+/// Returns the value of a number, boolean or text literal. A float takes the
+/// width `F64`, which `order_of_fields` does not read.
 fn value_of(literal: &Expr) -> Value {
     match literal {
         Expr::Int(i) => Value::Int((*i).into()),
@@ -840,9 +839,9 @@ fn equal(n: &Value, item: &Value) -> bool {
         Value::List(_) => Some(Kind::List),
         Value::Null => None,
     };
-    // `order_of_fields` answers orderings and faults on two kinds, which an
-    // equality turns into false. A list needle never gets here, because bind
-    // refuses it.
+    // `order_of_fields` gives a fault for two values of different kinds, and
+    // an equality of two kinds is false, so the kinds are compared first. A
+    // list needle never gets here, because bind refuses it.
     kind(n) == kind(item) && order_of_fields(n, item, false) == Ok(Some(Ordering::Equal))
 }
 
@@ -1082,9 +1081,8 @@ struct ListValues {
     elements: Elements,
     // One byte per element, 1 for an element without a value.
     mask: Vec<u8>,
-    // `ends[i]` is the index of the first element of record `i`, and the last
-    // entry is the number of elements. These are the offsets of an offsets
-    // layout.
+    // `offsets[i]` is the index of the first element of record `i`, and the
+    // last entry is the number of elements, as an offsets layout reads them.
     offsets: Vec<u64>,
     // Whether each record is a column of its own, as in a numpy array of
     // dtype `object`, or a range of one element column.
@@ -1387,8 +1385,9 @@ impl Field {
                     unreachable!("a list field lends its elements")
                 };
                 let list = if l.per_record {
-                    // `PerRecord` takes the shape of each record's column, a
-                    // scalar, and the list is one level deeper.
+                    // `PerRecord::new` takes the shape of the records' columns,
+                    // which hold scalars and have depth 0. The list column's
+                    // own shape is one level deeper.
                     let shape = Shape {
                         scalar: l.scalar(),
                         depth: 0,
@@ -1830,8 +1829,9 @@ proptest! {
         let lent = t.lend();
         let columns = t.columns(&lent, program.fields());
         let bound = match program.bind(&columns) {
-            // Bind refuses a rule that compares two list fields or searches
-            // for a list field, and the property skips that rule set.
+            // Bind refuses a rule that tests two list fields for equality or
+            // searches for a list field, and the property skips that rule
+            // set.
             Err(BindError::Unsupported { .. }) => return Ok(()),
             other => other?,
         };
@@ -1873,8 +1873,9 @@ proptest! {
         let lent = t.lend();
         let columns = t.columns(&lent, program.fields());
         let bound = match program.bind(&columns) {
-            // Bind refuses a rule that compares two list fields or searches
-            // for a list field, and the property skips that rule set.
+            // Bind refuses a rule that tests two list fields for equality or
+            // searches for a list field, and the property skips that rule
+            // set.
             Err(BindError::Unsupported { .. }) => return Ok(()),
             other => other?,
         };
