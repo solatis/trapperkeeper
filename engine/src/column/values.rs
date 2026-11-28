@@ -288,48 +288,58 @@ pub(super) mod sealed {
     use super::super::Kind;
     use super::Strided;
 
-    /// The part of `Number` that only this crate can name, so no crate
-    /// outside the engine implements `Number` for a type of its own.
-    // `Send`, `Sync` and `'static` let a loop that holds a value of the type
-    // be shared between threads. `Default` gives the zero that a test of the
-    // sign compares with, and `PartialOrd` lets the scalar arm of a loop
-    // compare two values.
+    /// The part of `Number` that only this crate can see. Other crates can
+    /// use `Number` but cannot implement it for their own types.
+    ///
+    /// It holds what the comparison loops need from a number type, so that
+    /// they can be written once, generic over the type.
+    // Why each bound is there:
+    // - `Send`, `Sync` and `'static` let a compiled loop that holds a literal
+    //   of the type be shared between threads.
+    // - `Default` gives 0, which the sign test of a signed int compares with.
+    // - `PartialOrd` lets the row-by-row loop compare two values.
     pub trait Number:
         Copy + Default + PartialOrd + Send + Sync + 'static + SimdElement + SimdCast
     {
-        /// Whether the type is a float. The executor picks the type in which
-        /// two number columns compare from this and from `SIGNED`.
+        /// Whether the type is a float. Together with `SIGNED` and the size
+        /// of the type, it decides in which type two number columns compare.
         const FLOAT: bool;
 
-        /// Whether the type holds negative values.
+        /// Whether the type can hold negative values.
         const SIGNED: bool;
 
-        /// The values of `kind` when it is a column of this type.
+        /// Returns the values of a column when the column holds this type,
+        /// and `None` otherwise.
         fn values<'a>(kind: &Kind<'a>) -> Option<Strided<'a, Self>>;
 
-        /// For 64 lanes, whether `left` is below `right`, with lane `i` in
-        /// bit `i`.
+        /// Compares 64 pairs at once and returns one bit per pair, set where
+        /// `left < right`. Pair `i` is bit `i`.
+        // `std::simd` implements `<` separately for each element type, each
+        // with its own mask type, so generic code cannot call it. Each type's
+        // impl of this method calls it instead.
         fn lt_lanes(left: Simd<Self, 64>, right: Simd<Self, 64>) -> u64;
 
-        /// For 64 lanes, whether `left` equals `right`, with lane `i` in bit
-        /// `i`.
+        /// Compares 64 pairs at once and returns one bit per pair, set where
+        /// `left == right`. Pair `i` is bit `i`.
         fn eq_lanes(left: Simd<Self, 64>, right: Simd<Self, 64>) -> u64;
 
-        /// Converts each of 64 lanes to `C`, as Rust's `as` converts a value.
+        /// Converts 64 values to `C`, each the way Rust's `as` would.
         fn convert_lanes<C: super::Number>(lanes: Simd<Self, 64>) -> Simd<C, 64>;
 
-        /// Converts the value to `C`, as one lane of `convert_lanes` does.
+        /// Converts one value to `C`, the same way as `convert_lanes`.
         fn convert<C: super::Number>(self) -> C;
     }
 }
 
-/// A number type that a column can hold.
-// The trait is sealed, because the engine owns the closed list of number
-// types and no other crate extends it (ADR-0036).
+/// A number type that a column can hold: one of the eight int types, `f16`,
+/// `f32` or `f64`.
+// Other crates cannot add a number type, because the engine's loops only
+// exist for the types in the list of `numbers!` below (ADR-0036).
 pub trait Number: sealed::Number {}
 
-// Writes the impl of `Number` for one number type. `$kind::$variant` is the
-// variant of `Ints` or `Floats` that holds a column of the type.
+// Writes the impl of `Number` for one number type. `$kind::$variant` names
+// the variant of `Ints` or `Floats` that holds a column of the type, such as
+// `Ints::I8` for `i8`.
 macro_rules! number {
     ($t:ty, $kind:ident::$variant:ident, $float:expr, $signed:expr) => {
         impl sealed::Number for $t {
@@ -366,11 +376,15 @@ macro_rules! number {
     };
 }
 
-// Writes everything that names each number type, from the one list below:
-// the impls of `Number`, the enum `NumberType`, and the macros `with_int!`,
-// `with_float!` and `with_number!`. The first token is a `$`, which the
-// macros that this macro writes need for their own variables, because a
-// `$` inside a macro's body would otherwise belong to this macro.
+// Writes every piece of code that must name each number type, from the one
+// list below, so a new type is one line in that list and a variant of
+// `Ints` or `Floats`. It writes the impls of `Number`, the enum
+// `NumberType`, and the macros `with_int!`, `with_float!` and
+// `with_number!`.
+//
+// The list starts with a `$` token, used below as `$d`. The macros written
+// here need `$` for their own variables, and a `$` typed directly in this
+// body would refer to the variables of `numbers!` instead.
 macro_rules! numbers {
     (
         $d:tt
