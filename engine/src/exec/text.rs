@@ -18,12 +18,14 @@ use super::bind::ChunkLoop;
 
 /// A unit of text in which a text literal has a form of its own: a byte of
 /// UTF-8 or a unit of UTF-32.
+// `Ord` lets the text set of a membership step sort its texts and search
+// them.
 pub(super) trait Encoded: Unit + Ord {
     /// Returns `literal` in this encoding.
     fn of(literal: &TextLiteral) -> &[Self];
 
-    /// Returns the list of texts in this encoding, out of the same texts in
-    /// UTF-8 and in UTF-32.
+    /// Picks the list in this encoding from a set of texts that a membership
+    /// step holds in both encodings.
     fn pick<'s>(utf8: &'s [Box<[u8]>], utf32: &'s [Box<[u32]>]) -> &'s [Box<[Self]>];
 
     /// Returns the text `units` tagged with its encoding.
@@ -72,14 +74,19 @@ struct AgainstText {
 }
 
 impl<'a, T: Texts<'a, Unit: Encoded + 'a>> Test<TextRows<'a, T>> for AgainstText {
+    // A text source has no lanes, because `TextRows` tells `pack` that its
+    // rows do not lie next to each other, so `pack` reads every row through
+    // `one`.
     fn lanes(&self, (): ()) -> u64 {
         unreachable!("a text source is never contiguous")
     }
 
-    // A row equals the literal when its units equal the literal's units in
-    // the same encoding, so a UTF-32 layout compares code points and every
-    // other layout compares bytes (ADR-0041).
     fn one(&self, row: &'a [T::Unit]) -> bool {
+        // A row equals the literal when its units equal the literal's units
+        // in the same encoding, so a UTF-32 layout compares code points and
+        // every other layout compares bytes (ADR-0041). A row without a
+        // value gives whatever its units say, and `StepResult::compared`
+        // makes it unknown under `==` and `!=` alike.
         (row == T::Unit::of(&self.literal)) == self.equal
     }
 }
@@ -90,9 +97,8 @@ pub(super) fn equals_literal(f: usize, literal: Arc<TextLiteral>, equal: bool) -
     let test = AgainstText { literal, equal };
     Box::new(
         move |cols: &[Option<Column<'_>>], start: usize, rows: usize, out: &mut Present| {
-            // Bind knows that the column holds texts, and each batch may
-            // hold them in another layout, so the loop picks the layout per
-            // chunk.
+            // Bind only knows that the column holds texts. Each batch may hold
+            // them in another layout, so the loop picks the layout per chunk.
             with_texts!(texts_of(cols, f), |t| pack(
                 TextRows::new(t),
                 start,
@@ -114,6 +120,7 @@ where
     L: Texts<'a, Unit: Encoded + 'a>,
     R: Texts<'a, Unit: Encoded + 'a>,
 {
+    // As for `AgainstText`, `pack` reads every row through `one`.
     fn lanes(&self, (): ()) -> u64 {
         unreachable!("a text source is never contiguous")
     }
@@ -138,22 +145,23 @@ pub(super) fn fields_equal(l: usize, r: usize, equal: bool) -> ChunkLoop {
     )
 }
 
-/// Whether two texts hold the same characters, in whatever encodings they
-/// come.
+/// Returns whether two texts hold the same characters, in whatever
+/// encodings they come.
 fn same_text(left: Form<'_>, right: Form<'_>) -> bool {
     match (left, right) {
         // Within one encoding, two texts are equal when their units are.
         (Form::Utf8(a), Form::Utf8(b)) => a == b,
         (Form::Utf32(a), Form::Utf32(b)) => a == b,
         // A UTF-8 text and a UTF-32 text are equal when their code points
-        // are, so equal texts are equal in any two sources (ADR-0041).
+        // are (ADR-0041).
         (Form::Utf8(bytes), Form::Utf32(units)) | (Form::Utf32(units), Form::Utf8(bytes)) => {
             same_code_points(bytes, units)
         }
     }
 }
 
-/// Whether the UTF-8 text `bytes` holds the code points `units`, in order.
+/// Returns whether the UTF-8 text `bytes` holds the code points `units`, in
+/// order.
 fn same_code_points(bytes: &[u8], units: &[u32]) -> bool {
     // A text layout of bytes holds UTF-8 in every row, so the decode cannot
     // fail.
@@ -168,7 +176,8 @@ pub(super) fn texts_of<'a>(cols: &[Option<Column<'a>>], f: usize) -> Text<'a> {
     match cols[f].as_ref().map(Column::kind) {
         Some(Kind::Text(t, _)) => *t,
         // Bind made this loop for a text column, and `run` refuses a batch
-        // whose column has another type.
+        // whose column has another type. A field without a column gets no
+        // loop, because bind makes its step a constant.
         _ => unreachable!("run checked the type of the column"),
     }
 }
