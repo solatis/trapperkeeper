@@ -33,10 +33,10 @@ pub(super) fn bind_search(
     types: &[FieldType],
 ) -> Result<BoundStep, BindError> {
     // The cases are the types of the needle and of `y`, and the first that
-    // applies returns. The missing fields come first, because a search of a
-    // null, or for a null, is unknown whatever the other side is (ADR-0005).
-    // The list needle comes next, so that `[1] in 5` is refused like
-    // `[1] in tags`.
+    // applies returns. The fields without a column come first, because a
+    // search of a null, or for a null, is unknown whatever the other side is
+    // (ADR-0005). A list field as the needle comes next, so that bind refuses
+    // it whatever `y` is.
     let needle_type = match needle {
         Operand::Field(n) => Some(types[*n]),
         Operand::Literal(_) => None,
@@ -104,7 +104,7 @@ pub(super) fn bind_holds_null(haystack: usize, t: FieldType) -> BoundStep {
 /// column.
 struct ContainsText {
     // The escaped literal, which `regex` compiles into a substring search
-    // over bytes, so a UTF-8 row needs no check before the search.
+    // over bytes, so a UTF-8 row needs no check that its bytes are UTF-8.
     utf8: Regex,
     utf32: Box<[u32]>,
 }
@@ -179,6 +179,9 @@ where
     fn one(&self, (needle, haystack): (&'a [N::Unit], &'a [H::Unit])) -> bool {
         let mut units = self.units.borrow_mut();
         match (N::Unit::form(needle), H::Unit::form(haystack)) {
+            // The needle changes from row to row, and a pattern built per row
+            // would cost more than one `str::contains`, so this case uses no
+            // `regex`.
             (Form::Utf8(n), Form::Utf8(h)) => utf8(h).contains(utf8(n)),
             (Form::Utf32(n), Form::Utf32(h)) => contains_units(h, n),
             (Form::Utf8(n), Form::Utf32(h)) => contains_units(h, decoded(n, &mut units)),
@@ -248,6 +251,8 @@ impl Needle {
                 ) | (Some(Scalar::Bool), Literal::Bool(_))
                     | (Some(Scalar::Text), Literal::Text(_))
             ),
+            // A boolean never equals a number, so `1 in [True]` is false,
+            // while Python says it is true (ADR-0041).
             (Operand::Field(_), t) => matches!(
                 (scalar, t),
                 (
@@ -270,7 +275,9 @@ impl Needle {
 type ElementTest<'c> = Box<dyn Fn(usize, usize, &mut Present) + 'c>;
 
 /// Returns the test of the element column `elements` against `needle`. A
-/// needle field takes its value from row `row` of `cols`, where it has one.
+/// needle field takes its value from row `row` of `cols`. On a row where the
+/// needle has no value, the test compares whatever its memory holds, and
+/// `StepResult::searched` makes the row unknown.
 fn element_test<'c>(
     needle: &Needle,
     cols: &[Option<Column<'c>>],
@@ -295,7 +302,8 @@ fn never<'c>() -> ElementTest<'c> {
 /// Returns the test of the element column `elements` against `literal`.
 fn literal_test<'c>(literal: &Literal, elements: &'c Column<'c>) -> ElementTest<'c> {
     // The sets of `member.rs` convert the literal to the element type as
-    // `==` does, so a list search and a membership agree on every pair.
+    // `==` does, so a list search and a membership agree on every pair. The
+    // sets take their values as a list of literals, which here holds one.
     let kept = [literal];
     match (elements.kind(), literal) {
         (Kind::Ints(v, _), Literal::Int(_) | Literal::Float(_)) => {
@@ -326,6 +334,8 @@ fn literal_test<'c>(literal: &Literal, elements: &'c Column<'c>) -> ElementTest<
 
 /// Returns the test that marks the number elements found in `set`.
 fn number_test<'c, T: Number>(elements: &'c Column<'c>, set: NumberSet<T>) -> ElementTest<'c> {
+    // The set is empty when `T` cannot hold the literal, as 300 for a `u8`
+    // column.
     if set.is_empty() {
         return never();
     }
@@ -388,6 +398,8 @@ fn needle_number<'c, L: Number>(
     row: usize,
     elements: &'c Column<'c>,
 ) -> ElementTest<'c> {
+    // A row without a value reads whatever the memory holds, as the doc
+    // comment of `element_test` says.
     let value = L::values(needle.kind()).expect("a number column").get(row);
     with_number!(number_type(elements), |R| pair_test::<L, R>(
         value, elements
@@ -412,6 +424,8 @@ fn number_type(c: &Column<'_>) -> NumberType {
 
 /// Searches the rows `range` of the element column `elements` with `test`,
 /// and returns whether an element matched and whether an element is a null.
+/// The scan stops at the first match, so the second answer covers only the
+/// elements before it, and a match decides the search on its own.
 fn scan(elements: &Column<'_>, range: Range<usize>, test: &ElementTest<'_>) -> (bool, bool) {
     // A list may hold more elements than a chunk has rows, so the range is
     // read in parts of up to `CHUNK_ROWS`, and the scan stops at the first
@@ -476,8 +490,8 @@ fn null_search(haystack: usize) -> SearchLoop {
               undecided: &mut Present| {
             matched.fill(0);
             undecided.fill(0);
-            // A search that matches nothing reports only whether an element
-            // is a null.
+            // `Needle::Never` matches no element, so `scan` reports only
+            // whether a record has a null element, which marks the record.
             let mut mark = |row: usize, (_, null): (bool, bool)| {
                 matched[row / 64] |= u64::from(null) << (row % 64);
             };
@@ -504,6 +518,7 @@ fn for_each_record<'c>(
     needle: &Needle,
     mark: &mut impl FnMut(usize, (bool, bool)),
 ) {
+    // `storage` and `elements` both give the element column of a layout.
     match list {
         List::Offsets(AnyOffsets::I32(o)) => {
             shared(cols, o, o.storage(), start, rows, needle, mark);
@@ -566,7 +581,8 @@ fn lists_of<'a>(cols: &[Option<Column<'a>>], f: usize) -> List<'a> {
     match cols[f].as_ref().map(Column::kind) {
         Some(Kind::List(l, _)) => *l,
         // Bind made this loop for a list column, and `run` refuses a batch
-        // whose column has another type.
+        // whose column has another type. A field without a column gets no
+        // loop, because bind makes its step a constant.
         _ => unreachable!("run checked the type of the column"),
     }
 }
