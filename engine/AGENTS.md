@@ -6,9 +6,9 @@ tree of a rule's expression, their JSON form and the validation of a rule.
 Validation checks the rule's own fields, holds its expression to a depth and a
 printed length, checks its patterns, and refuses the literal `None` beside an
 operator that cannot take it. The crate also parses a rule's text into the tree
-and prints a tree as text. It plans a rule set into one program, binds the
-program to the column types of a schema and runs it over the columns of a
-batch, which it describes in `src/column/`. It depends on no server, store or
+and prints a tree as text. It evaluates rules: it plans a rule set into one
+program, specializes the program for the column types of a schema, and runs
+it over the columns of each batch, which it describes in `src/column/`. It depends on no server, store or
 HTTP code.
 
 **Map**:
@@ -30,7 +30,7 @@ HTTP code.
 | `tests/text.rs`       | valid and faulty rule texts, the sentence of every reason but `TooComplex`, the round trip and the limits of the parser                                                                                           | what an error says for a mistake; adding a faulty text                                                                                                                                                        |
 | `tests/model.rs`      | the defects of the fields and of the expression, the round-trip and refusal properties of a rule, the edges of the depth and the printed length, and the read-back of chains that validate                        | how the JSON form of a rule and validation are tested; adding a refusal reason and its defect; how the limits of an expression are tested                                                                     |
 | `tests/column.rs`     | the properties of the column description, which also run under Miri nightly                                                                                                                                       | how a layout or a marking loop is tested; what runs under Miri                                                                                                                                                |
-| `tests/plan.rs`       | the properties of the field tree, the refusal of a kind that the planner does not plan, and the sharing of an equal comparison                                                                                    | how the planner is tested                                                                                                                                                                                     |
+| `tests/plan.rs`       | the properties of the field tree, the refusal of an expression the planner does not support, and the sharing of a comparison that two rules both make                                                             | how the planner is tested                                                                                                                                                                                     |
 | `tests/evaluation.rs` | the tests of the executor over columns built by hand, a reference interpreter that the executor must agree with on generated rules and batches, and the property that a batch gives each record its outcome alone | how evaluation is tested                                                                                                                                                                                      |
 
 **Invariants**:
