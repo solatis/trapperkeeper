@@ -79,6 +79,27 @@ pub(super) fn bind_search(
     })
 }
 
+/// Builds the step of `None in y`, where `y` is field `haystack` and its
+/// column has type `t`: true where the list `y` holds a null element, and
+/// false where it holds none or is empty.
+pub(super) fn bind_holds_null(haystack: usize, t: FieldType) -> BoundStep {
+    let fields = vec![haystack];
+    match t {
+        FieldType::Absent => BoundStep::Constant(Constant::Unknown),
+        FieldType::List(_) => BoundStep::Search {
+            fields,
+            chunk: null_search(haystack),
+        },
+        // `None` cannot be searched for in a text, as Python raises a type
+        // error for `None in "abc"`, and a number or a boolean cannot be
+        // searched at all.
+        FieldType::Text | FieldType::Number(_) | FieldType::Bool => BoundStep::Faulted {
+            fault: Fault::Incompatible,
+            fields,
+        },
+    }
+}
+
 /// What `pack` runs to find the text literal `needle` in each row of a text
 /// column.
 struct ContainsText {
@@ -438,6 +459,34 @@ fn list_search(haystack: usize, needle: Needle) -> SearchLoop {
                 start,
                 rows,
                 &needle,
+                &mut mark,
+            );
+        },
+    )
+}
+
+/// Builds the loop of `None in y`, where `y` is the list field `haystack`. It
+/// marks the records that hold a null element and leaves none undecided.
+fn null_search(haystack: usize) -> SearchLoop {
+    Box::new(
+        move |cols: &[Option<Column<'_>>],
+              start: usize,
+              rows: usize,
+              matched: &mut Present,
+              undecided: &mut Present| {
+            matched.fill(0);
+            undecided.fill(0);
+            // A search that matches nothing reports only whether an element
+            // is a null.
+            let mut mark = |row: usize, (_, null): (bool, bool)| {
+                matched[row / 64] |= u64::from(null) << (row % 64);
+            };
+            for_each_record(
+                cols,
+                lists_of(cols, haystack),
+                start,
+                rows,
+                &Needle::Never,
                 &mut mark,
             );
         },
