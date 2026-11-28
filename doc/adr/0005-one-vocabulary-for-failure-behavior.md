@@ -66,25 +66,23 @@ Five tests are never unknown: `is None`, `is not None`, `x == None`,
 `None` in a membership list matches a null, so `x in ("paid", None)` means
 `x == "paid" or x == None` (owner, 2026-11-14). With the literal on the left
 of `in`, as in `None in tags`, the test is true when the list `tags` holds a
-null element (owner, 2026-11-16). A search of a field that holds a list, as
-in `5 in tags`, is true when an element equals the value on the left of `in`.
-When no element can equal that value, the search is false, or unknown where an
-element is a null, as `any` over the equalities of the elements gives (owner,
-2026-11-28). Only the literal `None` has this meaning.
+null element (owner, 2026-11-16). Only the literal `None` has this meaning.
 `a == b` on two fields that both hold a null gives unknown.
 
 The meaning of `in` follows the type of its right side. When the rule writes
 the list, as in `x in [1, 2]`, `in` tests membership. When the right side is a
 field that holds a text, `in` searches the text for a substring, and when the
-field holds a list, `in` searches its elements (owner, 2026-11-28).
+field holds a list, `in` searches its elements (owner, 2026-11-28). A list
+search gives what `any` over the equalities of the elements gives. It is true
+when an element equals the value on the left of `in`, unknown when none does
+and an element is a null, and false otherwise, also when no element can equal
+that value (owner, 2026-11-28).
 
 Validation (`adr/0033`) refuses the literal `None` beside an ordering or an
 arithmetic operator, under a minus, and after `in` and `not in`, because such a
 rule could never match. A field that holds a null there is data, so `x + 1` is a
 null and `x < y` is unknown (owner, 2026-11-14). A search `x in y`, where `y`
-is a field, gives unknown when `y` holds a null (owner, 2026-11-16). A list
-search also gives unknown when no element equals the needle and an element is
-a null, as `any` does.
+is a field, gives unknown when `y` holds a null (owner, 2026-11-16).
 
 A rule differs from SQL in three places. The first is the literal `None`.
 Under `==`, under `!=`, in a membership list and on the left of `in` it tests
