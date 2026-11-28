@@ -144,7 +144,7 @@ fn a_written_list_as_the_needle_is_refused() {
     let id = Uuid::from_u128(7);
     let rule = Expr::In(
         Box::new(Expr::List(vec![Expr::Int(1), Expr::Int(2)])),
-        Box::new(Expr::Field(vec![Segment::Key("lol".into())])),
+        Box::new(Expr::Field(vec![Segment::Key("tags".into())])),
     );
     assert_eq!(
         plan(&[observing(id, rule)]).err(),
