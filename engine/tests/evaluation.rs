@@ -473,13 +473,13 @@ fn in_x(needle: Expr) -> Expr {
 #[test]
 fn a_text_literal_is_found_in_utf8_and_utf32_cells() {
     let texts = ["caf\u{e9}".to_string(), "cafe".to_string()];
-    let needle = || in_x(Expr::Text("\u{e9}".into()));
+    let rule = || in_x(Expr::Text("\u{e9}".into()));
     let pieces = TextBuffers::new(&texts, TextLayout::Pieces { step: 1 });
     let cells = TextBuffers::new(&texts, TextLayout::Utf32 { slack: 1, step: 1 });
     for buffers in [pieces, cells] {
         let lent = buffers.lend();
         let column = Column::text(lent.text(), Marking::Never).expect("unmarked");
-        assert_eq!(outcomes(needle(), Some(column)), [Matched, NotMatched]);
+        assert_eq!(outcomes(rule(), Some(column)), [Matched, NotMatched]);
     }
 }
 
@@ -499,7 +499,7 @@ fn an_empty_needle_is_found_in_every_text() {
 }
 
 #[test]
-fn a_needle_of_another_type_is_found_in_no_list() {
+fn a_needle_of_another_type_matches_no_element() {
     // Three records: `[1, 2]`, `[]` and `[None]`.
     let values = [1i64, 2, 0];
     let mask = [0u8, 0, 1];
@@ -1230,13 +1230,13 @@ fn the_same_rule_searches_a_text_on_one_schema_and_a_list_on_another() {
         .expect("unmarked");
     let run = |y: Column<'_>| {
         let columns = [Some(x), Some(y)];
-        let run = program
+        let outcomes = program
             .bind(&columns)
             .expect("one column per field")
             .run(2, &columns)
             .expect("the batch fits the bind");
         (0..2)
-            .map(|row| run.rules()[0].outcome(row))
+            .map(|row| outcomes.rules()[0].outcome(row))
             .collect::<Vec<_>>()
     };
 

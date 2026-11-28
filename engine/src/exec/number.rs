@@ -455,7 +455,7 @@ pub(crate) fn compare_columns<L: Number, R: Number, O: Order>(
 /// search takes from the needle field of a record.
 pub(crate) struct EqualsNumber<L, R> {
     needle: L,
-    order: PhantomData<R>,
+    element: PhantomData<R>,
 }
 
 impl<L: Number, R: Number> EqualsNumber<L, R> {
@@ -463,7 +463,7 @@ impl<L: Number, R: Number> EqualsNumber<L, R> {
     pub(crate) fn new(needle: L) -> Self {
         Self {
             needle,
-            order: PhantomData,
+            element: PhantomData,
         }
     }
 }
