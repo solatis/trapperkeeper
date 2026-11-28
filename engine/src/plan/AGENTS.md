@@ -5,7 +5,7 @@
 runs from first to last. Each step stores its result under its index in the
 list, its _slot_, and later steps read earlier results by slot. The planner
 also lists the fields that the rules read, as a tree of paths, and gives each
-field a number. It reads rules only and knows nothing about columns or types;
+field a number. It reads rules only and knows nothing about columns or types.
 `src/exec/` binds a program to the columns of a schema and runs it.
 
 **Map**:
