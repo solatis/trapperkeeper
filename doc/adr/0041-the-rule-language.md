@@ -1,6 +1,6 @@
 # 0041. The rule language
 
-Date: 2026-11-27.
+Date: 2026-11-28.
 
 ## Context
 
@@ -36,14 +36,11 @@ Functions and methods come from a closed list. The functions are `len`,
 and `list` (owner, 2026-11-14). The pattern of `re.search`, `re.match` and
 `re.fullmatch` is a text literal.
 
-`==` and `!=` compare values of any two types, and two values of types that
-cannot be equal are not equal (`adr/0005`). Ordering is for numbers only
-(owner, 2026-11-11, 2026-11-13, 2026-11-28). A boolean is a type of its own
-and never equals a number, so `True == 1` is false, while Python says it is
-true.
-A text from a numpy `U` array is UTF-32, and every other source holds UTF-8.
-A UTF-8 text and a UTF-32 text are equal when their code points are equal
-(owner, 2026-11-28).
+`==` and `!=` compare values of any two types. Two values of different types
+are not equal, except an int and a float, which can be (`adr/0005`). Ordering
+is for numbers only (owner, 2026-11-11, 2026-11-13, 2026-11-28). A boolean is
+a type of its own and never equals a number, so `True == 1` is false, while
+Python says it is true.
 
 A literal converts to the type of the field it is compared with. So
 `x == 0.1` compares with 0.1 as a float32 where `x` holds float32 values, and
@@ -80,12 +77,14 @@ compiled size, 10 MiB in `regex` 1.13. Validation sets no cap of its own
 (owner, 2026-11-16).
 
 The engine reads text in the encoding that its source holds, which is UTF-8,
-or UTF-32 for the fixed-width cells of numpy's `U` type. It converts neither
-(owner, 2026-11-21, 2026-11-26). A loop compares text in the encoding of its
-column, and the planner (`adr/0035`) encodes each literal of a rule in both
-encodings when it plans (owner, 2026-11-26). Two UTF-8 texts are equal exactly
-when their code points are, and two UTF-32 texts exactly when their units are,
-so equality needs no decoding in either.
+or UTF-32 for the fixed-width cells of numpy's `U` type (owner, 2026-11-21,
+2026-11-26). A loop compares text in the encoding of its column, and the
+planner (`adr/0035`) encodes each literal of a rule in both encodings when it
+plans (owner, 2026-11-26). Two UTF-8 texts are equal exactly when their code
+points are, and two UTF-32 texts exactly when their units are, so a
+comparison within one encoding needs no decoding. A UTF-8 text and a UTF-32
+text are equal when their code points are equal, and their comparison decodes
+the UTF-8 side (owner, 2026-11-28).
 
 A bare name is a field of the record. A key that cannot be a bare name is
 written with the word `record` and brackets, as in `record["unit price"]`. A
