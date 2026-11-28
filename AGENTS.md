@@ -21,10 +21,11 @@ workspace whose members are the engine and the server, and the root
 `Cargo.toml` lists them. Only directories that have code exist. The table names
 the other directories so that the layout is fixed before they arrive. A
 component directory has its own `AGENTS.md`, and inside `server/` each module
-directory gets one as it appears. Of the milestones of this repository on
-GitHub, the open one with the lowest number is the active one. Its description
-states a goal and the list of what is done when the goal is met, and the next
-issues come from what that list still lacks.
+directory gets one as it appears.
+
+The active milestone is the open milestone on GitHub with the lowest number.
+Its description states a goal and lists what must be true for the goal to be
+met, and the next issues cover what that list still lacks.
 
 | Directory      | What                                                                   | Exists                      |
 | -------------- | ---------------------------------------------------------------------- | --------------------------- |
@@ -210,7 +211,7 @@ walkthrough, and notes at single lines.
     holds no mark such as `(owner, 2026-11-10)`. The record in `doc/adr/`
     says how the decision was made, and it may carry that trace.
 
-New code is written this way.
+New code follows these rules.
 
 ## Prose
 
