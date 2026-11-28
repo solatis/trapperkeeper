@@ -70,6 +70,8 @@ pub(crate) enum Step {
         needle: Operand,
         haystack: usize,
     },
+    // `None in y`: true where the list `y` holds a null element (ADR-0005).
+    HoldsNull(usize),
     // `not`, `and` and `or` over the results of earlier steps, by their
     // slots. They follow the three-valued logic of ADR-0005, where a row is
     // true, false or unknown. `And` and `Or` keep the operands in the order
@@ -365,6 +367,11 @@ impl Planner<'_> {
         match right {
             // A list that the rule writes is a test of membership.
             Expr::List(items) => self.membership(needle, items),
+            // `None in y` looks for a null element of `y` (ADR-0005).
+            Expr::Field(path) if *needle == Expr::None => {
+                let haystack = self.fields.field_of(path);
+                Ok(self.push(Step::HoldsNull(haystack)))
+            }
             // Bind picks the meaning of a search from the type of `y`. A
             // written list as the needle is refused with its key, because
             // list equality does not exist.

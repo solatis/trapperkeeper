@@ -192,6 +192,7 @@ fn bind_step(step: &Step, types: &[FieldType]) -> Result<BoundStep, BindError> {
         Step::IsNull(f) => BoundStep::IsNull(*f),
         Step::Member { field, values } => member::bind_member(*field, types[*field], values),
         Step::Search { needle, haystack } => search::bind_search(needle, *haystack, types)?,
+        Step::HoldsNull(haystack) => search::bind_holds_null(*haystack, types[*haystack]),
         // `not`, `and` and `or` read the results of earlier steps by their
         // slots and no column, so they stay as the planner made them.
         Step::Not(a) => BoundStep::Not(*a),

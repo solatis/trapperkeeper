@@ -767,6 +767,15 @@ fn reference(e: &Expr, record: &[Value]) -> Tri {
 /// searched for the needle as a substring, and a list for an element that
 /// equals the needle (ADR-0005).
 fn search(needle: &Expr, y: &Expr, record: &[Value]) -> Tri {
+    // `None in y` looks for a null element (ADR-0005), and a text, a number
+    // or a boolean cannot be searched for `None`.
+    if *needle == Expr::None {
+        return match &record[field_number_of(y)] {
+            Value::Null => Tri::Unknown,
+            Value::List(items) => Tri::of(items.contains(&Value::Null)),
+            _ => Tri::Fault(Fault::Incompatible),
+        };
+    }
     let needle = match needle {
         Expr::Field(p) => record[field_number(p)].clone(),
         literal => value_of(literal),
@@ -1176,6 +1185,29 @@ fn texts_elements(texts: Vec<String>) -> Elements {
         }))
         .collect();
     Elements::Texts(texts, bytes, ends)
+}
+
+#[test]
+fn none_in_a_list_finds_a_null_element() {
+    // The records are `[1, None]`, `[2]` and `[]`.
+    let elements = Elements::Ints(vec![1, 0, 2]);
+    let values = ListValues::new(elements, &[true, false, true], &[2, 1, 0], false);
+    let column = values.elements(0..3);
+    // SAFETY: the ends are in order, start at 0 and end at the number of
+    // elements.
+    let layout = unsafe { Offsets::new(&values.ends, &column) };
+    let list =
+        Column::list(List::Offsets(AnyOffsets::U64(layout)), Marking::Never).expect("unmarked");
+    // `None in y` is true where an element is a null and false elsewhere,
+    // also for the empty list, so it is never unknown on a list.
+    assert_eq!(
+        outcomes(in_x(Expr::None), Some(list)),
+        [Matched, NotMatched, NotMatched]
+    );
+    assert_eq!(
+        outcomes(Expr::NotIn(Box::new(Expr::None), Box::new(x())), Some(list)),
+        [NotMatched, Matched, Matched]
+    );
 }
 
 #[test]
@@ -1701,8 +1733,8 @@ fn condition(n: usize) -> impl Strategy<Value = Expr> {
             Expr::In(x, list)
         }
     });
-    // A search of a field for a literal or for another field.
-    let sought = prop_oneof![literal(), (0..n).prop_map(field_named)];
+    // A search of a field for a literal, for another field or for `None`.
+    let sought = prop_oneof![literal(), (0..n).prop_map(field_named), Just(Expr::None)];
     let search = (sought, 0..n, any::<bool>()).prop_map(|(x, y, negated)| {
         let (x, y) = (Box::new(x), Box::new(field_named(y)));
         if negated {
