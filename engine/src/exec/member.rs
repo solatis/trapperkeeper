@@ -1,7 +1,8 @@
 //! The sets of a membership step, built once at bind for the column's type,
 //! and the tests that look a row up in them. A set holds the literals of a
 //! list such as `x in [1, 2, 3]`, so one lookup per row gives what
-//! `x == 1 or x == 2 or x == 3` gives.
+//! `x == 1 or x == 2 or x == 3` gives. A list search with a literal needle
+//! uses these sets too, with a set of one value.
 
 use std::cmp::Ordering;
 use std::simd::Simd;
@@ -76,10 +77,10 @@ fn can_equal(t: FieldType, literal: &Literal) -> bool {
     )
 }
 
-/// The values of a membership step that a number column of type `T` can
-/// equal. `values` holds them in `T`. On an int column, `widened` holds the
-/// float literals, which compare with the row widened to `f64`, as in
-/// `x == 2.0` (ADR-0041).
+/// The values of a membership step or a list search that a number column of
+/// type `T` can equal. `values` holds them in `T`. On an int column, `widened`
+/// holds the float literals, which compare with the row widened to `f64`, as
+/// in `x == 2.0` (ADR-0041).
 pub(super) struct NumberSet<T> {
     values: Vec<T>,
     widened: Vec<f64>,
@@ -225,8 +226,9 @@ fn flags_loop(f: usize, kept: &[&Literal]) -> ChunkLoop {
     }
 }
 
-/// The texts of a membership step in both encodings, each list sorted, so
-/// that a row is looked up in the list of its column's encoding.
+/// The texts of a membership step or a list search in both encodings, each
+/// list sorted, so that a row is looked up in the list of its column's
+/// encoding.
 pub(super) struct TextSet {
     utf8: Vec<Box<[u8]>>,
     utf32: Vec<Box<[u32]>>,
