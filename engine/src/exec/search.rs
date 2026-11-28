@@ -211,6 +211,8 @@ fn decoded<'u>(bytes: &[u8], units: &'u mut Vec<u32>) -> &'u [u32] {
 fn substring_field(n: usize, h: usize) -> ChunkLoop {
     Box::new(
         move |cols: &[Option<Column<'_>>], start: usize, rows: usize, out: &mut Present| {
+            // `ContainsField` holds a `RefCell`, which is not `Sync`, so each
+            // call builds its own test and the boxed loop stays `Send + Sync`.
             let test = ContainsField {
                 units: RefCell::new(Vec::new()),
             };
@@ -235,9 +237,10 @@ enum Needle {
 }
 
 impl Needle {
-    /// Returns what a search for `needle`, whose column type is `needle_type`
-    /// when it is a field, compares with the elements of a list whose
-    /// records have shape `shape`.
+    /// Decides what a list search compares each element with, from the
+    /// needle, its column type `needle_type` when it is a field, and the shape
+    /// of the list's records. Returns `Never` when no element can equal the
+    /// needle.
     fn of(needle: &Operand, needle_type: Option<FieldType>, shape: Shape) -> Self {
         // A record of depth 1 holds scalars. A deeper record holds lists, and
         // no scalar equals a list.
@@ -424,13 +427,12 @@ fn number_type(c: &Column<'_>) -> NumberType {
 
 /// Searches the rows `range` of the element column `elements` with `test`,
 /// and returns whether an element matched and whether an element is a null.
-/// The scan stops after the part that holds the first match, so the second
-/// answer covers the elements up to the end of that part, and a match decides
-/// the search on its own.
+/// It reads the range in parts of up to `CHUNK_ROWS` elements and stops after
+/// the part with the first match. The null answer then covers only the
+/// elements up to the end of that part, which does not matter, because a
+/// match decides the search on its own.
 fn scan(elements: &Column<'_>, range: Range<usize>, test: &ElementTest<'_>) -> (bool, bool) {
-    // A list may hold more elements than a chunk has rows, so the range is
-    // read in parts of up to `CHUNK_ROWS`, and the scan stops at the first
-    // match.
+    // A list may hold more elements than a chunk has rows.
     let (mut hit, mut null) = (false, false);
     let mut at = range.start;
     while at < range.end && !hit {
