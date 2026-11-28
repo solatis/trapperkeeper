@@ -33,8 +33,7 @@ that built the unit. It returns the text of the message, and the merge stage
 sends it.
 
 Every change to a rule file meets the same requirements, whoever asks for
-it. They are the section "Changing a rule" of
-`.claude/skills/tk-workflow/SKILL.md`.
+it. The rules of the workflow state them in one section.
 
 The history that these requirements need lives in the decision records. A
 rule of weight has a record, and a change that brings back one of its
@@ -88,5 +87,4 @@ owner's wording, and it misses a complaint that he worded in a way the
 search did not try.
 
 The requirements hold for a change the owner asks for in the chat only when
-the session has loaded the workflow skill. The root `AGENTS.md` points at
-the section for that reason.
+the session has loaded the rules of the workflow.
