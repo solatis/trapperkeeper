@@ -1,6 +1,7 @@
-//! The planner. It turns a rule set into one `Program`, a flat list of steps
-//! where each step writes its result into the slot with its own number. It
-//! lists the fields that the rules read as a tree of paths. ADR-0035 gives the
+//! The planner. It turns the expression trees of a rule set into one
+//! `Program`, a flat list of steps that the executor runs in order, and it
+//! lists the fields that the rules read, so the caller knows which columns
+//! to pass. It knows nothing about columns or types. ADR-0035 gives the
 //! reasons.
 
 mod fields;
