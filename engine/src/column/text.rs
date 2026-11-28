@@ -8,6 +8,7 @@ use std::ptr::NonNull;
 use std::slice;
 
 use super::layout::{self, AnyOffsets, Fixed, Offset, Offsets, Storage};
+use super::marking::Source;
 use super::values::Strided;
 
 mod sealed {
@@ -457,3 +458,64 @@ impl Text<'_> {
         self.len() == 0
     }
 }
+
+/// The rows of a text layout, as a source that `pack` reads one row at a
+/// time.
+// A blanket `impl<T: Texts> Source for T` would overlap the impl for
+// `Strided<T>`, because `Strided<Piece>` is a layout too, so the layout
+// sits in a wrapper. The lifetime ties the rows that `one` returns to the
+// layout.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct TextRows<'a, T>(T, PhantomData<&'a ()>);
+
+impl<'a, T: Texts<'a>> TextRows<'a, T> {
+    /// Reads the rows of `layout`.
+    pub(crate) fn new(layout: T) -> Self {
+        Self(layout, PhantomData)
+    }
+}
+
+impl<'a, T: Texts<'a, Unit: 'a>> Source for TextRows<'a, T> {
+    type Lanes = ();
+    type One = &'a [T::Unit];
+
+    fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    // The texts of a chunk have different lengths, so no 64 of them load as
+    // one vector, and `pack` reads every row through `one`.
+    fn is_contiguous(&self) -> bool {
+        false
+    }
+
+    fn lanes(&self, _: usize) {
+        unreachable!("`pack` loads 64 rows only from a contiguous source")
+    }
+
+    // `Texts::get` checks the row itself, so the call needs no `unsafe` block.
+    unsafe fn one(&self, row: usize) -> &'a [T::Unit] {
+        self.0.get(row)
+    }
+}
+
+/// Runs `$body` with `$t` bound to the layout of the text column `$text`, so
+/// that a loop written once against `Texts` runs on each layout. The body is
+/// compiled once per layout.
+macro_rules! with_texts {
+    ($text:expr, |$t:ident| $body:expr) => {
+        match $text {
+            // One arm per offset type, because `AnyOffsets` holds each type
+            // in a variant of its own.
+            $crate::column::Text::Offsets($crate::column::AnyOffsets::I32($t)) => $body,
+            $crate::column::Text::Offsets($crate::column::AnyOffsets::I64($t)) => $body,
+            $crate::column::Text::Offsets($crate::column::AnyOffsets::U32($t)) => $body,
+            $crate::column::Text::Offsets($crate::column::AnyOffsets::U64($t)) => $body,
+            $crate::column::Text::Views($t) => $body,
+            $crate::column::Text::Pieces($t) => $body,
+            $crate::column::Text::Bytes($t) => $body,
+            $crate::column::Text::Utf32($t) => $body,
+        }
+    };
+}
+pub(crate) use with_texts;

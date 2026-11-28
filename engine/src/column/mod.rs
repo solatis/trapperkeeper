@@ -18,6 +18,7 @@ pub use marking::{
 };
 pub(crate) use marking::{Pair, Test, pack};
 pub use text::{INLINE, Piece, Text, Texts, Unit, Units, Utf8, View, Views};
+pub(crate) use text::{TextRows, with_texts};
 pub use values::{Bits, Booleans, Floats, Ints, Number, Strided};
 pub(crate) use values::{NumberType, with_float, with_int, with_number};
 

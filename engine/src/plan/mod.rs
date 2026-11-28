@@ -8,5 +8,5 @@ mod fields;
 mod program;
 
 pub use fields::{FieldNode, FieldTree};
-pub(crate) use program::{Comparison, Constant, Literal, Operand, Step};
+pub(crate) use program::{Comparison, Constant, Literal, Operand, Step, TextLiteral};
 pub use program::{Program, Unsupported, plan};

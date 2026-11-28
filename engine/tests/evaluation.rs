@@ -22,14 +22,17 @@ use proptest::prelude::*;
 use proptest::sample::select;
 use trapperkeeper_engine::Rule;
 use trapperkeeper_engine::column::{
-    AnyOffsets, Bits, Booleans, Column, Floats, Ints, Marking, Offsets, Piece, Strided, Text, Utf8,
+    Bits, Booleans, Column, Floats, Ints, Marking, Piece, Strided, Text,
 };
 use trapperkeeper_engine::exec::{BindError, Fault, Outcome, SchemaMismatch};
 use trapperkeeper_engine::expr::{Expr, Segment};
 use trapperkeeper_engine::plan::{FieldTree, plan};
 use uuid::Uuid;
 
-use common::{BINARY, MAX_ROWS, NUMERIC, observing, packed};
+use common::{
+    BINARY, LentTexts, MAX_ROWS, NUMERIC, TextBuffers, TextLayout, column_text, observing, packed,
+    text_layout,
+};
 
 /// Builds the expression for the field `x`.
 fn x() -> Expr {
@@ -204,6 +207,24 @@ fn a_number_never_equals_a_text() {
             Some(column)
         ),
         [Matched, NotMatched]
+    );
+}
+
+#[test]
+fn a_text_ordering_faults_where_the_text_is_there() {
+    let pieces = [Piece::new("a"), Piece::new("b")];
+    let bitmap = packed(&[true, false], 0);
+    let marking = Marking::Bitmap(Bits::new(&bitmap, 0, 2).expect("one bit per row"));
+    let column = Column::text(Text::Pieces(Strided::from_slice(&pieces)), marking)
+        .expect("one bit per text");
+    // The second row has no text, so the ordering is unknown there and
+    // nothing faults.
+    assert_eq!(
+        outcomes(
+            Expr::Lt(Box::new(x()), Box::new(Expr::Text("b".into()))),
+            Some(column)
+        ),
+        [NotEvaluated(Fault::Unordered), NotMatched]
     );
 }
 
@@ -447,17 +468,14 @@ enum Width {
 }
 
 /// The value of one field of a record, as the reference interpreter reads it.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 enum Value {
     // Every int type fits in an `i128`, so the interpreter compares ints
     // exactly.
     Int(i128),
     Float(f64, Width),
     Bool(bool),
-    // The interpreter ignores what a text says, because the generated rules
-    // compare a text only with a number or a boolean, and bind refuses two
-    // text fields.
-    Text,
+    Text(String),
     Null,
 }
 
@@ -501,7 +519,7 @@ fn reference(e: &Expr, record: &[Value]) -> Tri {
         Expr::Bool(b) => Tri::of(*b),
         // `None` used as a condition is unknown.
         Expr::None => Tri::Unknown,
-        Expr::Int(_) | Expr::Float(_) => Tri::Fault(Fault::NotBoolean),
+        Expr::Int(_) | Expr::Float(_) | Expr::Text(_) => Tri::Fault(Fault::NotBoolean),
         Expr::Field(p) => match record[field_number(p)] {
             Value::Bool(b) => Tri::of(b),
             Value::Null => Tri::Unknown,
@@ -576,13 +594,17 @@ fn compare(
     }
     let order = match (l, r) {
         (Expr::Field(a), Expr::Field(b)) => {
-            order_of_fields(record[field_number(a)], record[field_number(b)], ordering)
+            order_of_fields(&record[field_number(a)], &record[field_number(b)], ordering)
         }
-        (Expr::Field(p), literal) => order_with_literal(record[field_number(p)], literal, ordering),
+        (Expr::Field(p), literal) => {
+            order_with_literal(&record[field_number(p)], literal, ordering)
+        }
         // `order_with_literal` takes the field first, so `5 < x` compares
         // `x` with 5 and reverses the order.
-        (literal, Expr::Field(p)) => order_with_literal(record[field_number(p)], literal, ordering)
-            .map(|o| o.map(Ordering::reverse)),
+        (literal, Expr::Field(p)) => {
+            order_with_literal(&record[field_number(p)], literal, ordering)
+                .map(|o| o.map(Ordering::reverse))
+        }
         (a, b) => order_of_literals(a, b, ordering).map(Some),
     };
     match order {
@@ -608,11 +630,12 @@ fn kind(e: &Expr, record: &[Value]) -> Option<Kind> {
         Expr::Field(p) => match record[field_number(p)] {
             Value::Int(_) | Value::Float(..) => Some(Kind::Number),
             Value::Bool(_) => Some(Kind::Bool),
-            Value::Text => Some(Kind::Text),
+            Value::Text(_) => Some(Kind::Text),
             Value::Null => None,
         },
         Expr::Int(_) | Expr::Float(_) => Some(Kind::Number),
         Expr::Bool(_) => Some(Kind::Bool),
+        Expr::Text(_) => Some(Kind::Text),
         _ => unreachable!("a generated operand is a field or a literal"),
     }
 }
@@ -620,17 +643,24 @@ fn kind(e: &Expr, record: &[Value]) -> Option<Kind> {
 /// Compares the field value `v` with `literal`. Returns `None` when `v` is
 /// a null, and a fault when the pair cannot be ordered. `ordering` is true
 /// for `<`, `<=`, `>` and `>=`.
-fn order_with_literal(v: Value, literal: &Expr, ordering: bool) -> Result<Option<Ordering>, Fault> {
+fn order_with_literal(
+    v: &Value,
+    literal: &Expr,
+    ordering: bool,
+) -> Result<Option<Ordering>, Fault> {
     let order = match (v, literal) {
         (Value::Null, _) => return Ok(None),
-        (Value::Bool(a), Expr::Bool(b)) => booleans(a, *b, ordering)?,
+        (Value::Bool(a), Expr::Bool(b)) => booleans(*a, *b, ordering)?,
         (Value::Int(i), Expr::Int(j)) => i.cmp(&i128::from(*j)),
         // An int widens to a float.
-        (Value::Int(i), Expr::Float(x)) => ieee(i as f64, *x),
+        (Value::Int(i), Expr::Float(x)) => ieee(*i as f64, *x),
         // A literal takes the width of the float field, so it rounds to the
         // nearest value of that width.
-        (Value::Float(f, w), Expr::Int(j)) => ieee(f, int_as(*j, w)),
-        (Value::Float(f, w), Expr::Float(x)) => ieee(f, float_as(*x, w)),
+        (Value::Float(f, w), Expr::Int(j)) => ieee(*f, int_as(*j, *w)),
+        (Value::Float(f, w), Expr::Float(x)) => ieee(*f, float_as(*x, *w)),
+        // Two texts are equal when their characters are, whatever layout
+        // the column has. An ordering of texts falls through to the fault.
+        (Value::Text(a), Expr::Text(b)) if !ordering => a.cmp(b),
         // `literal()` never makes `None`, so no generated rule has `None < x`,
         // which validation would refuse. `compare` decides the equality of
         // two kinds, so only an ordering with a value that is not a number
@@ -643,16 +673,16 @@ fn order_with_literal(v: Value, literal: &Expr, ordering: bool) -> Result<Option
 /// Compares the values of two fields. Returns `None` when either is a
 /// null, and a fault when the pair cannot be ordered. `ordering` is true
 /// for `<`, `<=`, `>` and `>=`.
-fn order_of_fields(a: Value, b: Value, ordering: bool) -> Result<Option<Ordering>, Fault> {
+fn order_of_fields(a: &Value, b: &Value, ordering: bool) -> Result<Option<Ordering>, Fault> {
     let order = match (a, b) {
         (Value::Null, _) | (_, Value::Null) => return Ok(None),
-        (Value::Bool(x), Value::Bool(y)) => booleans(x, y, ordering)?,
-        (Value::Int(i), Value::Int(j)) => i.cmp(&j),
+        (Value::Bool(x), Value::Bool(y)) => booleans(*x, *y, ordering)?,
+        (Value::Int(i), Value::Int(j)) => i.cmp(j),
         // Two floats compare in the wider of their two widths, which holds both
         // values exactly. An int widens to `f64`.
-        (Value::Float(x, _), Value::Float(y, _)) => ieee(x, y),
-        (Value::Int(i), Value::Float(y, _)) => ieee(i as f64, y),
-        (Value::Float(x, _), Value::Int(j)) => ieee(x, j as f64),
+        (Value::Float(x, _), Value::Float(y, _)) => ieee(*x, *y),
+        (Value::Int(i), Value::Float(y, _)) => ieee(*i as f64, *y),
+        (Value::Float(x, _), Value::Int(j)) => ieee(*x, *j as f64),
         // An ordering with a value that is not a number. Two texts never get
         // here, because bind refuses to compare two text fields.
         _ => return Err(Fault::Unordered),
@@ -667,8 +697,12 @@ fn order_of_fields(a: Value, b: Value, ordering: bool) -> Result<Option<Ordering
 fn order_of_literals(a: &Expr, b: &Expr, ordering: bool) -> Result<Ordering, Fault> {
     match (a, b) {
         (Expr::Bool(x), Expr::Bool(y)) => booleans(*x, *y, ordering),
-        // `compare` decides `True == 1`, so only an ordering gets here.
-        (Expr::Bool(_), _) | (_, Expr::Bool(_)) => Err(Fault::Unordered),
+        (Expr::Text(x), Expr::Text(y)) if !ordering => Ok(x.cmp(y)),
+        // `compare` decides `True == 1` and `"a" == 1`, so only an ordering
+        // gets here.
+        (Expr::Bool(_) | Expr::Text(_), _) | (_, Expr::Bool(_) | Expr::Text(_)) => {
+            Err(Fault::Unordered)
+        }
         (Expr::Int(i), Expr::Int(j)) => Ok(i.cmp(j)),
         _ => Ok(ieee(number(a), number(b))),
     }
@@ -739,8 +773,8 @@ enum Values {
     BoolBytes(Vec<u8>),
     // The booleans, and the bytes that hold them one bit per row.
     BoolBits(Vec<bool>, Vec<u8>),
-    // Empty texts, one offset per row and one past the last row.
-    Text(Vec<u32>),
+    // The texts, and their buffers in one layout.
+    Text(Vec<String>, TextLayout, TextBuffers),
 }
 
 /// How a generated field marks its rows without a value.
@@ -789,8 +823,18 @@ fn strided<T: Copy>(buffer: &[T], step: usize, rows: usize) -> Strided<'_, T> {
 }
 
 impl Field {
-    /// Builds the column that describes this field's buffers.
-    fn column(&self) -> Column<'_> {
+    /// Borrows the buffers of a text field for its column, and `None` for a
+    /// field of any other type.
+    fn lend(&self) -> Option<LentTexts<'_>> {
+        match &self.values {
+            Values::Text(_, _, buffers) => Some(buffers.lend()),
+            _ => None,
+        }
+    }
+
+    /// Builds the column that describes this field's buffers. `lent` holds
+    /// the borrowed buffers of a text field, as `lend` gives them.
+    fn column<'a>(&'a self, lent: Option<&'a LentTexts<'a>>) -> Column<'a> {
         let rows = self.present.len();
         let marking = match self.mark {
             Mark::Never => Marking::Never,
@@ -817,12 +861,7 @@ impl Field {
                 Booleans::Bits(Bits::new(bytes, 0, rows).expect("one bit per row")),
                 marking,
             ),
-            Values::Text(offsets) => {
-                // SAFETY: the buffer is empty, which is UTF-8, and every
-                // offset is 0, so each text is the empty range at its start.
-                let texts = unsafe { Offsets::new(offsets, Utf8::new(&[])) };
-                Column::text(Text::Offsets(AnyOffsets::U32(texts)), marking)
-            }
+            Values::Text(..) => Column::text(lent.expect("a text field is lent").text(), marking),
         };
         column.expect("the marking covers the rows")
     }
@@ -856,7 +895,7 @@ impl Field {
             Values::BoolBytes(v) => Value::Bool(v[at] != 0),
             // A bit-packed field has a step of 1, so its row is its index.
             Values::BoolBits(bools, _) => Value::Bool(bools[row]),
-            Values::Text(_) => Value::Text,
+            Values::Text(texts, ..) => Value::Text(texts[row].clone()),
         }
     }
 }
@@ -884,7 +923,10 @@ impl Field {
             Values::BoolBytes(v) => Values::BoolBytes(v[span].to_vec()),
             // A bit-packed field has a step of 1, so its row is its index.
             Values::BoolBits(b, _) => Values::BoolBits(vec![b[row]], packed(&[b[row]], 0)),
-            Values::Text(_) => Values::Text(vec![0; 2]),
+            Values::Text(texts, layout, _) => {
+                let one = [texts[row].clone()];
+                Values::Text(one.to_vec(), *layout, TextBuffers::new(&one, *layout))
+            }
         };
         let present = vec![self.present[row]];
         let bitmap = match self.mark {
@@ -924,12 +966,29 @@ impl Table {
             .collect()
     }
 
-    /// Returns the columns of the fields in `fields`, in that order.
-    fn columns(&self, fields: &FieldTree) -> Vec<Option<Column<'_>>> {
+    /// Borrows the buffers of the text fields, one entry per field, for
+    /// `columns`.
+    fn lend(&self) -> Vec<Option<LentTexts<'_>>> {
+        self.fields
+            .iter()
+            .map(|f| f.as_ref().and_then(Field::lend))
+            .collect()
+    }
+
+    /// Returns the columns of the fields in `fields`, in that order. `lent`
+    /// holds the borrowed buffers that `lend` gives.
+    fn columns<'a>(
+        &'a self,
+        lent: &'a [Option<LentTexts<'a>>],
+        fields: &FieldTree,
+    ) -> Vec<Option<Column<'a>>> {
         fields
             .paths()
             .iter()
-            .map(|p| self.fields[field_number(p)].as_ref().map(Field::column))
+            .map(|p| {
+                let i = field_number(p);
+                self.fields[i].as_ref().map(|f| f.column(lent[i].as_ref()))
+            })
             .collect()
     }
 }
@@ -977,7 +1036,24 @@ fn values(rows: usize, step: usize) -> impl Strategy<Value = Values> {
             let bytes = packed(&b, 0);
             Values::BoolBits(b, bytes)
         }),
-        Just(Values::Text(vec![0; rows + 1])),
+        (vec(text_value(), rows), text_layout()).prop_map(|(texts, layout)| {
+            let buffers = TextBuffers::new(&texts, layout);
+            Values::Text(texts, layout, buffers)
+        }),
+    ]
+}
+
+/// The text literals of the generated rules: an empty text, a text of one
+/// byte, a text of four-byte characters and a text longer than the 12 bytes
+/// that a view holds itself.
+const LITERAL_TEXTS: [&str; 4] = ["", "a", "\u{1f600}\u{1f600}", "longer than a view holds"];
+
+/// Generates the text of a row: mostly one of the literals, so that `==`
+/// matches some rows, and otherwise any text of a column.
+fn text_value() -> impl Strategy<Value = String> {
+    prop_oneof![
+        1 => select(LITERAL_TEXTS.to_vec()).prop_map(String::from),
+        1 => column_text(),
     ]
 }
 
@@ -994,8 +1070,9 @@ fn field(rows: usize) -> impl Strategy<Value = Field> {
         move |(step, mark, present)| {
             values(rows, step).prop_map(move |values| {
                 // A text column and a bit-packed boolean column have no
-                // stride.
-                let step = if matches!(values, Values::Text(_) | Values::BoolBits(..)) {
+                // stride of their own here, because the text layouts make
+                // their own.
+                let step = if matches!(values, Values::Text(..) | Values::BoolBits(..)) {
                     1
                 } else {
                     step
@@ -1034,11 +1111,12 @@ fn table() -> impl Strategy<Value = Table> {
     })
 }
 
-/// Generates a literal: a boolean, or a number near the generated values or
-/// at the edge of a type.
+/// Generates a literal: a boolean, a text, or a number near the generated
+/// values or at the edge of a type.
 fn literal() -> impl Strategy<Value = Expr> {
     prop_oneof![
         1 => any::<bool>().prop_map(Expr::Bool),
+        1 => select(LITERAL_TEXTS.to_vec()).prop_map(|t| Expr::Text(t.into())),
         3 => (-6i64..6).prop_map(Expr::Int),
         // -129 lies below `i8`, 255 and 256 are the top of `u8` and one past
         // it, 65504 is the largest `f16`, 65520 the first int that `f16`
@@ -1146,7 +1224,8 @@ proptest! {
 
         // 1. plan, bind and run the rules
         let program = plan(&rules).expect("the generated kinds plan");
-        let columns = t.columns(program.fields());
+        let lent = t.lend();
+        let columns = t.columns(&lent, program.fields());
         let bound = match program.bind(&columns) {
             // A generated rule may compare two fields whose types this
             // version does not compare, and that rule set does not run.
@@ -1187,7 +1266,8 @@ proptest! {
 
         // 1. run the batch
         let program = plan(&rules).expect("the generated kinds plan");
-        let columns = t.columns(program.fields());
+        let lent = t.lend();
+        let columns = t.columns(&lent, program.fields());
         let bound = match program.bind(&columns) {
             // A generated rule may compare two fields whose types this
             // version does not compare, and that rule set does not run.
@@ -1206,7 +1286,8 @@ proptest! {
         let rows = edges.into_iter().chain((0..t.rows).step_by(97)).filter(|&r| r < t.rows);
         for row in rows {
             let one = t.alone(row);
-            let alone = bound.run(1, &one.columns(program.fields()))?;
+            let lent = one.lend();
+            let alone = bound.run(1, &one.columns(&lent, program.fields()))?;
 
             // 3. compare the outcomes of the record
             for (w, a) in whole.rules().iter().zip(alone.rules()) {

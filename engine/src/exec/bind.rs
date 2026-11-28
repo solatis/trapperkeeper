@@ -14,6 +14,7 @@
 //! to the column's type, and which literals no value of the column can reach.
 
 use std::fmt;
+use std::sync::Arc;
 
 use uuid::Uuid;
 
@@ -21,6 +22,7 @@ use super::number::{
     Converted, compare_columns, compare_widened, compare_with_literal, outside, with_order,
 };
 use super::outcome::Fault;
+use super::text;
 use crate::column::{
     Booleans, CHUNK_WORDS, Column, Kind, Number, NumberType, Present, present_all,
     present_from_bits, present_from_mask, with_float, with_int, with_number,
@@ -167,7 +169,7 @@ fn bind_step(step: &Step, types: &[FieldType]) -> Result<BoundStep, BindError> {
             op,
             left: Operand::Field(f),
             right: Operand::Literal(literal),
-        } => bind_literal(*op, *f, types[*f], *literal),
+        } => bind_literal(*op, *f, types[*f], literal),
         Step::Compare {
             op,
             left: Operand::Field(l),
@@ -202,19 +204,20 @@ fn bind_condition(f: usize, t: FieldType) -> BoundStep {
 
 /// Specializes `x op literal`, where `x` is field `f` and its column has
 /// type `t`.
-fn bind_literal(op: Comparison, f: usize, t: FieldType, literal: Literal) -> BoundStep {
+fn bind_literal(op: Comparison, f: usize, t: FieldType, literal: &Literal) -> BoundStep {
     // The arms test the pair (column type, literal) from the most specific
     // case to the least. The missing field, the orderings that fault, the
-    // booleans and the pairs that can never be equal come first, because the
-    // number arms at the end accept any number column with any literal that
-    // reaches them.
+    // booleans, the texts and the pairs that can never be equal come first,
+    // because the number arms at the end accept any number column with any
+    // literal that reaches them.
     match (t, literal) {
         // A missing field is null on every row, and a comparison with a null
         // is unknown (ADR-0005).
         (FieldType::Absent, _) => BoundStep::Constant(Constant::Unknown),
-        // `x < True`, and `x > 5` on a text column, are a fault, because only
-        // numbers can be ordered (ADR-0041).
-        (FieldType::Bool | FieldType::Text | FieldType::List, _) | (_, Literal::Bool(_))
+        // `x < True`, `x < "a"`, and `x > 5` on a text column, are a fault,
+        // because only numbers can be ordered (ADR-0041).
+        (FieldType::Bool | FieldType::Text | FieldType::List, _)
+        | (_, Literal::Bool(_) | Literal::Text(_))
             if op.is_ordering() =>
         {
             BoundStep::Faulted {
@@ -227,27 +230,30 @@ fn bind_literal(op: Comparison, f: usize, t: FieldType, literal: Literal) -> Bou
         // `x == False` and `x != True` look for false.
         (FieldType::Bool, Literal::Bool(b)) => BoundStep::Loop {
             fields: vec![f],
-            chunk: booleans_equal(f, b == (op == Comparison::Eq)),
+            chunk: booleans_equal(f, *b == (op == Comparison::Eq)),
+        },
+        (FieldType::Text, Literal::Text(text)) => BoundStep::Loop {
+            fields: vec![f],
+            chunk: text::equals_literal(f, Arc::clone(text), op == Comparison::Eq),
         },
         // A pair that can never be equal, such as `x == True` on a number
         // column or `x == 5` on a text column. `==` is false and `!=` true on
         // every row with a value, as Python compares an int with a text.
-        (_, Literal::Bool(_)) | (FieldType::Bool | FieldType::Text | FieldType::List, _) => {
-            BoundStep::Loop {
-                fields: vec![f],
-                chunk: constant_loop(op == Comparison::Ne),
-            }
-        }
+        (_, Literal::Bool(_) | Literal::Text(_))
+        | (FieldType::Bool | FieldType::Text | FieldType::List, _) => BoundStep::Loop {
+            fields: vec![f],
+            chunk: constant_loop(op == Comparison::Ne),
+        },
         // An int column against a float literal, as in `x > 2.5`: each int
         // converts to `f64`, because an int compared with a float compares
         // as a float (ADR-0041). Converting 2.5 to an int instead would make
         // `x == 2.5` true where `x` is 2.
-        (FieldType::Number(n), Literal::Float(x)) if !n.is_float() => {
+        (FieldType::Number(n), &Literal::Float(x)) if !n.is_float() => {
             with_int!(n, |T| widened::<T>(op, f, x))
         }
         // An int column against an int literal, as in `x > 5`: the literal
         // converts to the column's type once, here.
-        (FieldType::Number(n), Literal::Int(i)) if !n.is_float() => {
+        (FieldType::Number(n), &Literal::Int(i)) if !n.is_float() => {
             with_int!(n, |T| int_literal::<T>(op, f, i))
         }
         // A float column against any number literal: the literal converts
@@ -375,14 +381,16 @@ fn int_literal<T: Number + TryFrom<i64>>(op: Comparison, f: usize, i: i64) -> Bo
 /// Builds the step for `x op literal`, where `x` is field `f` and its column
 /// holds the float type `T`. A literal too large for `T` becomes an
 /// infinity, which still compares correctly with every finite value.
-fn float_literal<T: Number>(op: Comparison, f: usize, literal: Literal) -> BoundStep {
+fn float_literal<T: Number>(op: Comparison, f: usize, literal: &Literal) -> BoundStep {
     // The literal rounds to the nearest value of `T`, and the loop compares
     // with that. On an `f16` column, `x > 0.1` compares with the `f16`
     // closest to 0.1 (ADR-0041).
-    let literal: T = match literal {
+    let literal: T = match *literal {
         Literal::Int(i) => convert(i),
         Literal::Float(x) => convert(x),
-        Literal::Bool(_) => unreachable!("`bind_literal` faults a boolean against a number"),
+        Literal::Bool(_) | Literal::Text(_) => {
+            unreachable!("`bind_literal` decides a boolean or a text against a number")
+        }
     };
     let chunk: ChunkLoop = with_order!(op, |O| Box::new(
         move |cols: &[Option<Column<'_>>], start: usize, rows: usize, out: &mut Present| {

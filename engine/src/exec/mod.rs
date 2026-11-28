@@ -7,6 +7,7 @@ mod number;
 mod outcome;
 mod result;
 mod run;
+mod text;
 
 pub use bind::{BindError, Bound};
 pub use outcome::{Fault, Outcome, Outcomes, RuleOutcome};
