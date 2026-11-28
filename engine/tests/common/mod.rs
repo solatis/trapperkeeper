@@ -324,8 +324,8 @@ pub fn scope() -> impl Strategy<Value = BTreeMap<String, String>> {
     btree_map(text(), text(), 0..=MAX_SCOPE_TAGS)
 }
 
-/// A rule with the id `rule_id` and the expression `e`, which observes
-/// every record and has no title and no scope.
+/// Builds a rule with the id `rule_id` and the expression `e`. It only
+/// observes, applies to every record, and has no title and no scope.
 pub fn observing(rule_id: Uuid, e: Expr) -> Rule {
     Rule {
         rule_id,
@@ -360,43 +360,45 @@ pub fn rule() -> impl Strategy<Value = Rule> {
     )
 }
 
-/// The most rows of a generated column that a chunk is cut from. A full chunk
-/// of `CHUNK_ROWS` rows can then start at any row below `CHUNK_ROWS`, and the
-/// 63 rows past two chunks leave room for a last word that is partly filled.
-/// Miri interprets every generated row, so the bound stays at that size.
+/// The largest number of rows in a generated column. With this many rows, a
+/// full chunk of `CHUNK_ROWS` rows can start at any row below `CHUNK_ROWS`,
+/// and the 63 extra rows leave room for a last word that is only partly
+/// filled. Miri interprets every generated row, so the number stays this
+/// small.
 pub const MAX_ROWS: usize = 2 * CHUNK_ROWS + 63;
 
-/// Whether bit `row` of the bitmap of a chunk is set.
+/// Whether the bit of row `row` is set in the bitmap of a chunk.
 pub fn bit(out: &Present, row: usize) -> bool {
     out[row / 64] >> (row % 64) & 1 == 1
 }
 
-/// Checks that `out` is the bitmap of `expected`: one bit per row, and no bit
-/// set from the end of `expected` on.
+/// Checks that `out` has one bit per row of `expected`, set where `expected`
+/// is true, and no bit set past the end of `expected`.
 pub fn assert_bitmap(out: &Present, expected: &[bool]) -> Result<(), TestCaseError> {
     for (row, want) in expected.iter().enumerate() {
         prop_assert_eq!(bit(out, row), *want, "row {}", row);
     }
-    // A later step combines whole words, so a stray bit past the chunk would
-    // count as a row.
+    // The executor combines whole words, so a stray bit past the chunk would
+    // count as an extra row.
     prop_assert!((expected.len()..CHUNK_WORDS * 64).all(|row| !bit(out, row)));
     Ok(())
 }
 
-/// The start and the length of a chunk of a column of `len` rows, picked by
-/// two generated indexes. The first index picks any start from 0 to `len`,
-/// also one that is no multiple of 64. The second picks a length of at most
-/// `CHUNK_ROWS` that ends inside the column.
+/// Picks a chunk of a column of `len` rows from two generated indexes and
+/// returns its start and its length. The first index picks any start from 0
+/// to `len`, also one that is not a multiple of 64. The second picks a length
+/// of at most `CHUNK_ROWS` that ends inside the column.
 pub fn chunk_of(len: usize, (at, size): (Index, Index)) -> (usize, usize) {
-    // A start at `len` gives an empty chunk at the end of the column, which a
-    // loop handles too.
+    // A start at `len` gives an empty chunk at the end of the column, which
+    // the loops must handle too.
     let start = at.index(len + 1);
     (start, size.index((len - start).min(CHUNK_ROWS) + 1))
 }
 
-/// Packs booleans into bytes from bit `offset` on, lowest bit first, as a
-/// source bitmap holds them. The bits before `offset` are set, so a test sees
-/// a loop that reads them by mistake.
+/// Packs booleans into bytes, one bit each, lowest bit first, starting at bit
+/// `offset`, the way a source bitmap such as Arrow's stores them. The bits
+/// before `offset` are set, so a loop that reads them by mistake fails the
+/// test.
 pub fn packed(bools: &[bool], offset: usize) -> Vec<u8> {
     let mut bytes = vec![0u8; (offset + bools.len()).div_ceil(8)];
     let bits = std::iter::repeat_n(true, offset).chain(bools.iter().copied());
