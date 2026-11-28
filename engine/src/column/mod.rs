@@ -150,17 +150,19 @@ impl<'a> Column<'a> {
         &self.kind
     }
 
-    /// Writes into `out` the bitmap of the rows `start .. start + rows` that
-    /// have a value. Bit `i` of `out` is row `start + i`, and the bits from
-    /// `rows` on are 0.
+    /// Writes into `out` one bit per row in `start .. start + rows`, set
+    /// where the row has a value. Bit `i` of `out` is row `start + i`, and the
+    /// bits from `rows` on are 0. A float row holding NaN counts as having no
+    /// value.
     ///
     /// # Panics
     ///
     /// Panics when `rows` is above `CHUNK_ROWS` or the chunk reaches past the
     /// column.
     pub fn present(&self, start: usize, rows: usize, out: &mut Present) {
-        // `present_all` knows no length, so this bound holds a chunk of an
-        // unmarked column inside the column too.
+        // The marking loops check the chunk against their own length, but
+        // `present_all` has no length to check, so this assertion covers
+        // that case.
         assert!(
             start.checked_add(rows).is_some_and(|end| end <= self.rows),
             "a chunk of {rows} rows from row {start} of {}",
@@ -176,9 +178,9 @@ impl<'a> Column<'a> {
             Marking::Bitmap(bits) => present_from_bits(*bits, start, rows, out),
             Marking::ByteMask(mask) => present_from_mask(*mask, start, rows, out),
         }
-        // A NaN is no value in every source (ADR-0005). The NaN pass clears
-        // those rows in the bitmap that the marking's loop wrote whole, so it
-        // runs after that loop.
+        // A NaN counts as no value in every source (ADR-0005). The marking
+        // loop above writes the whole bitmap, so the NaN pass must run after
+        // it and only clear bits.
         if let Kind::Floats(values, _) = &self.kind {
             match values {
                 Floats::F16(v) => clear_nan(*v, start, rows, out),
