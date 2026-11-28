@@ -20,7 +20,8 @@ uuid = { version = "1", features = ["serde"] }
 # regex compiles the pattern of `re.search`, `re.match` and `re.fullmatch`,
 # so validation refuses a pattern that a sensor could not compile (ADR-0041).
 # The executor also searches a UTF-8 text for a literal with it, so substring
-# search needs no other dependency.
+# search needs no other dependency. A UTF-32 text, and a needle that comes from
+# another field, are searched without it.
 regex = "1"
 
 [dev-dependencies]
