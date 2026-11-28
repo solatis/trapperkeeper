@@ -274,8 +274,9 @@ fn bind_literal(op: Comparison, f: usize, t: FieldType, literal: &Literal) -> Bo
             chunk: text::equals_literal(f, Arc::clone(text), op == Comparison::Eq),
         },
         // The column and the literal have types that can never be equal, as
-        // in `x == True` on a number column or `x == 5` on a text column. `==`
-        // is false and `!=` true on every row with a value, as in Python.
+        // in `x == True` on a number column or `x == 5` on a text or list
+        // column. `==` is false and `!=` true on every row with a value, as in
+        // Python.
         (_, Literal::Bool(_) | Literal::Text(_))
         | (FieldType::Bool | FieldType::Text | FieldType::List(_), _) => BoundStep::Loop {
             fields: vec![f],
@@ -486,8 +487,8 @@ fn write_booleans(
     rows: usize,
     out: &mut Present,
 ) {
-    // Bind made this loop for a boolean column, and `run` refuses a batch
-    // whose column has another type.
+    // Bind calls this only from the loops of a boolean column, and `run`
+    // refuses a batch whose column has another type.
     let column = cols[f]
         .as_ref()
         .expect("run checked the type of the column");
