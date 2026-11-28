@@ -18,7 +18,7 @@ use crate::plan::{Constant, Literal};
 
 /// The most values for which a number set compares a vector of 64 rows with
 /// each value. Above it, each row takes a binary search.
-// No measurement chose 8. The benchmarks of the evaluator measure it.
+// No measurement chose 8.
 const SPLAT_LIMIT: usize = 8;
 
 /// Builds the step `x in values` for field `f`, whose column has type `t`.
@@ -55,8 +55,8 @@ pub(super) fn bind_member(f: usize, t: FieldType, values: &[Literal]) -> BoundSt
         FieldType::Number(n) => with_int!(n, |T| number_loop(f, NumberSet::<T>::for_int(&kept))),
         FieldType::Bool => flags_loop(f, &kept),
         FieldType::Text => text_loop(f, TextSet::of(&kept)),
-        // No literal can equal a list, so step 2 kept nothing, and step 1
-        // returned for a missing field.
+        // No literal can equal a list, so the filter kept none, and a missing
+        // field returned before the filter.
         FieldType::List | FieldType::Absent => constant_loop(false),
     };
     BoundStep::Loop {
@@ -139,6 +139,9 @@ impl<T: Number> NumberSet<T> {
 }
 
 /// Returns `values` sorted and without repeats, for a binary search.
+// `-0.0` and `0.0` compare equal under `partial_cmp`, `dedup` and the vector
+// compare alike, so the set keeps one of them and a row of either sign finds
+// it.
 fn sorted<U: Number>(mut values: Vec<U>) -> Vec<U> {
     // A literal is never NaN, because JSON cannot write one, so every pair
     // has an order.
@@ -250,9 +253,7 @@ impl TextSet {
 }
 
 impl<'a, T: Texts<'a, Unit: Encoded + 'a>> Test<TextRows<'a, T>> for TextSet {
-    // A text source has no lanes, because `TextRows` tells `pack` that its
-    // rows do not lie next to each other, so `pack` reads every row through
-    // `one`.
+    // As for `AgainstText` in `text.rs`, `pack` reads every row through `one`.
     fn lanes(&self, (): ()) -> u64 {
         unreachable!("a text source is never contiguous")
     }
