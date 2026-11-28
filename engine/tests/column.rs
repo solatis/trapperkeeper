@@ -261,6 +261,8 @@ proptest! {
     /// types, from a buffer that has other bytes before the first text.
     #[test]
     fn offsets_read_back_their_texts(texts in texts(), lead in 0usize..5) {
+        // `offset` picks the layout that `lent.text()` gives the column at the
+        // end.
         let buffers = TextBuffers::new(&texts, TextLayout::Offsets { lead, offset: OffsetType::U64 });
         let lent = buffers.lend();
         for layout in lent.offsets().expect("an offsets layout") {
@@ -302,17 +304,17 @@ proptest! {
 
     /// numpy `S` cells read back their texts, for a cell as wide as the
     /// longest text and for a wider one, contiguous and stepped, and
-    /// `Fixed::new` refuses one row too many and a step below the width.
+    /// `Fixed::new` refuses one row too many and a step of fewer bytes than a
+    /// cell.
     #[test]
     fn byte_cells_read_back_their_texts(texts in texts(), slack in 0usize..3, step in 1usize..4) {
-        // With a `slack` of 0, the longest text fills its cell with no zero
-        // after it.
         let buffers = TextBuffers::new(&texts, TextLayout::Bytes { slack, step });
         let lent = buffers.lend();
         let Text::Bytes(layout) = lent.text() else { unreachable!("a bytes layout") };
         assert_texts(layout, &texts)?;
-        // One more row would reach past the bytes, and a step below the width
-        // would overlap the cells, so both are refused when a cell has bytes.
+        // One more row would reach past the bytes, and a step of fewer bytes
+        // than a cell would overlap the cells, so both are refused when a cell
+        // has bytes.
         let (units, width) = buffers.byte_cells().expect("a bytes layout");
         if width > 0 {
             prop_assert!(Fixed::new(width, step * width, texts.len() + 1, units).is_none());
