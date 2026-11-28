@@ -39,7 +39,9 @@ impl Unit for u32 {
 /// place from the source's memory. A layout whose `Unit` is `u8` holds valid
 /// UTF-8 in every row, so a caller may read a row as a `&str` without a check.
 // A loop compares a column's units with a literal that the planner encoded in
-// the same encoding, so no loop converts a text (ADR-0041). The trait is
+// the same encoding, so no comparison with a literal converts a text
+// (ADR-0041). A comparison of a UTF-8 column with a UTF-32 column decodes the
+// UTF-8 side. The trait is
 // sealed, so only the engine adds a layout. A loop written against the trait
 // runs on every layout.
 pub trait Texts<'a>: Copy + sealed::Sealed {
@@ -463,10 +465,13 @@ impl Text<'_> {
 /// time.
 // A blanket `impl<T: Texts> Source for T` would overlap the impl for
 // `Strided<T>`, because `Strided<Piece>` is a layout too, so the layout
-// sits in a wrapper. The lifetime ties the rows that `one` returns to the
-// layout.
+// sits in a wrapper.
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct TextRows<'a, T>(T, PhantomData<&'a ()>);
+pub(crate) struct TextRows<'a, T>(
+    T,
+    // Ties the rows that `one` returns to the lifetime of the layout.
+    PhantomData<&'a ()>,
+);
 
 impl<'a, T: Texts<'a>> TextRows<'a, T> {
     /// Reads the rows of `layout`.
