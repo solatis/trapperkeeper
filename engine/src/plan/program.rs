@@ -65,8 +65,9 @@ pub(crate) enum Step {
     },
     // `x in y` with a field `y`. Bind, which specializes the program for a
     // schema, picks its meaning from the type of `y`: a substring search for
-    // `"err" in message`, and a search among the elements for `5 in tags`. Any
-    // other pair, such as `5 in message`, is the fault `Incompatible`.
+    // `"err" in message`, and a search among the elements for `5 in tags`. A
+    // text searched for a needle that is no text, as in `5 in message`, and a
+    // number or a boolean `y`, give the fault `Incompatible`.
     Search {
         needle: Operand,
         haystack: usize,
