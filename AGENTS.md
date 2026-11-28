@@ -21,17 +21,17 @@ workspace whose members are the engine and the server, and the root
 `Cargo.toml` lists them. Only directories that have code exist. The table names
 the other directories so that the layout is fixed before they arrive. A
 component directory has its own `AGENTS.md`, and inside `server/` each module
-directory gets one as it appears. M4, M7, M8 and M9 in the table are the
-milestones of this repository on GitHub.
+directory gets one as it appears. The open milestone with the lowest number
+is the active one, and its goals decide the next issues.
 
-| Directory      | What                                                                   | Exists                       |
-| -------------- | ---------------------------------------------------------------------- | ---------------------------- |
-| `server/`      | the server binary: APIs, store, `serve`, `migrate`, `reset-superadmin` | yes, see `server/AGENTS.md`  |
-| `engine/`      | the rule engine crate, embeddable by pipelines                         | yes, see `engine/AGENTS.md`  |
-| `sdk/<lang>/`  | one sensor SDK per language                                            | Rust with M7, Python with M9 |
-| `web/`         | the browser UI                                                         | with M8                      |
-| `conformance/` | the language-neutral evaluation fixtures                               | with M4                      |
-| `agent/`       | the AI agent, a client of the management API                           | not scheduled                |
+| Directory      | What                                                                   | Exists                      |
+| -------------- | ---------------------------------------------------------------------- | --------------------------- |
+| `server/`      | the server binary: APIs, store, `serve`, `migrate`, `reset-superadmin` | yes, see `server/AGENTS.md` |
+| `engine/`      | the rule engine crate, embeddable by pipelines                         | yes, see `engine/AGENTS.md` |
+| `sdk/<lang>/`  | one sensor SDK per language                                            | not yet                     |
+| `web/`         | the browser UI                                                         | not yet                     |
+| `conformance/` | the language-neutral evaluation fixtures                               | not yet                     |
+| `agent/`       | the AI agent, a client of the management API                           | not yet                     |
 
 ## How to
 
@@ -62,24 +62,6 @@ milestones of this repository on GitHub.
   off on that run explicitly.
 - The reasons behind the layout, the toolchain policy and the lint level are
   records `0010`, `0009` and `0011` in `doc/adr/`.
-
-## Workflow
-
-The owner is the repository's maintainer, the only person who opens a stage
-or answers a question. "The question tool" is a `:::question` block sent
-to the Plannotator Inbox in the unit's thread. After sending it, you end
-your turn until the reply arrives. `.claude/skills/tk-workflow/SKILL.md`,
-"The Inbox", says how.
-
-Work moves issue by issue through four stages, each opened by the owner:
-`/tk-start` or `/tk-start-next` (seed), `/tk-plan`, `/tk-build`,
-`/tk-merge`. A stage opens only when the owner invokes its skill; a chat
-message opens none. The rules all stages share (branches, commits, issues,
-the uncommitted plans in `.plans/`, the fast-forward onto `master`) are in
-`.claude/skills/tk-workflow/SKILL.md`. After the last PR of a unit lands,
-`/tk-merge` runs a postmortem, which turns what the owner marked in the
-unit's reviews into proposals for the rules. A change to a rule file follows
-"Changing a rule" in that file, whoever asks for it.
 
 ## Documentation strategy
 
@@ -179,8 +161,7 @@ walkthrough, and notes at single lines.
    in the match matters. Such a construct gets a note when the reader would
    stop at it. The writer already knows what each line does and cannot see
    where a reader stops. It writes a note at each such construct whose
-   effect neither a name nor the line itself states, and `/doc-read` finds
-   the lines that the writer missed. The note says what the line achieves in
+   effect neither a name nor the line itself states. The note says what the line achieves in
    the terms of the problem, or why the line is there. A note that repeats
    its line in other words is deleted, and so is a note that explains what a
    language feature does in general.
@@ -215,8 +196,8 @@ walkthrough, and notes at single lines.
     that shaped it.
 14. Only state what is known. When the owner is in the session, an unknown
     reason, or a function you cannot place under the rules above, is a
-    question to the owner through the question tool, asked before the commit
-    that needs it. Never invent a reason.
+    question to the owner, asked before the commit that needs it. Never
+    invent a reason.
 15. After writing a function's comments, read them back top to bottom as
     separate claims and check each against the code below it. Check each
     walkthrough item against the code from its back-reference to the next
@@ -226,31 +207,7 @@ walkthrough, and notes at single lines.
     holds no mark such as `(owner, 2026-11-10)`. The record in `doc/adr/`
     says how the decision was made, and it may carry that trace.
 
-This is the primary path: new code is written this way. The doc-discipline
-skill in `.claude/skills/doc-discipline/` is the guide for applying these
-rules and holds the worked examples. An agent loads it once, before it writes
-code, a plan or a document, and follows its `checks.md` after a change is
-complete. Two checks run in a subagent of their own and change no file.
-`/doc-read <base>...HEAD <part>` takes the range of a change and the number
-of one of its parts, and returns each line of that part where a reader who
-has not seen the change stops. `/doc-audit <scope>` takes a range or paths
-and returns the changes these rules call for as rows of a report.
-`/doc-audit <scope> plan: <plan>` also reconciles the code against the plan.
-The session that owns a change writes its comments and documents from
-evidence it can name, and it asks the owner where it has none. The step check
-enforces the numbering of walkthroughs and back-references, and it reports
-the two forms that the last rule forbids:
-
-```
-python3 .claude/skills/doc-discipline/scripts/check_steps.py \
-  --deny 'doc/adr/' --deny '\(owner,' <path>...
-```
-
-It reads the whole of each file it is given, prints one line per finding and
-ends with a line that counts them. It does not read block comments. It does
-not check whether a back-reference sits at the right line, whether a function
-that needs a walkthrough has one, or whether a comment is true. `/doc-read`,
-`/doc-audit` and the read-back cover those.
+This is the primary path: new code is written this way.
 
 ## Prose
 
