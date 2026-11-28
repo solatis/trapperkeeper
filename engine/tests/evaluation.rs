@@ -1,11 +1,12 @@
-//! The tests of the executor: rules planned, bound and run over columns built
-//! by hand, and a property that compares the executor with a reference
-//! interpreter on generated rules and batches.
+//! Tests of the executor. The first part runs rules over columns built by
+//! hand and checks the outcome of each record. The second part generates
+//! random rules and batches and checks that the executor agrees with a
+//! simple reference interpreter, which evaluates one record at a time.
 
 // The half-precision column holds nightly's `f16` (ADR-0036).
 #![feature(f16)]
-// The interpreter and the generators round numbers with `as` on purpose,
-// because the language converts a number as `as` does.
+// The interpreter and the generators convert numbers with `as` on purpose,
+// because the language converts numbers the way `as` does.
 #![expect(
     clippy::cast_precision_loss,
     clippy::cast_possible_truncation,
@@ -30,23 +31,23 @@ use uuid::Uuid;
 
 use common::{BINARY, MAX_ROWS, NUMERIC, observing, packed};
 
-/// The field `x` of a record.
+/// Builds the expression for the field `x`.
 fn x() -> Expr {
     Expr::Field(vec![Segment::Key("x".into())])
 }
 
-/// The outcome of the rule `e` for each record of a batch where `column` is
-/// the field `x`, or no column for a source that lacks `x`.
+/// Runs the rule `e` over a batch in which `column` is the field `x`, and
+/// returns the outcome of each record. `None` means that the source has no
+/// column for `x`.
 fn outcomes(e: Expr, column: Option<Column<'_>>) -> Vec<Outcome> {
     let program = plan(&[observing(Uuid::from_u128(1), e)]).expect("the rule plans");
-    // A rule that reads no field, such as a literal condition, has no field
-    // to take a column.
+    // A rule that reads no field, such as `True`, takes no column.
     let columns: Vec<Option<Column<'_>>> = match program.fields().paths().len() {
         0 => Vec::new(),
         _ => vec![column],
     };
-    // A batch without a column has three records, which the tests without a
-    // column expect.
+    // Without a column there is no row count to take, so the batch gets
+    // three records, which the tests without a column expect.
     let rows = column.map_or(3, |c| c.rows());
     let bound = program.bind(&columns).expect("the columns fit the program");
     let run = bound.run(rows, &columns).expect("the batch fits the bind");
@@ -220,8 +221,8 @@ fn a_boolean_field_is_a_condition_and_compares_with_a_boolean() {
         ),
         [Matched, NotMatched, NotMatched]
     );
-    // An ordering is for numbers only, and the row without a value stays
-    // unknown.
+    // `<` on booleans is a fault, except on the row without a value, which
+    // stays unknown.
     assert_eq!(
         outcomes(
             Expr::Lt(Box::new(x()), Box::new(Expr::Bool(true))),
@@ -259,7 +260,7 @@ fn a_test_for_a_null_is_never_unknown() {
         outcomes(Expr::Ne(none(), Box::new(x())), Some(column)),
         [Matched, NotMatched]
     );
-    // A field that the source lacks is a null on every record.
+    // A field without a column is a null on every record.
     assert_eq!(
         outcomes(Expr::Eq(Box::new(x()), none()), None),
         [Matched; 3]
@@ -298,7 +299,7 @@ fn a_false_left_operand_of_and_keeps_the_fault_on_its_right_from_happening() {
         .run(3, &columns)
         .expect("the batch fits the bind");
     // The first row has `y == 0`, so the `and` is false there and the fault
-    // of its right operand does not happen.
+    // of `t == 1` is ignored.
     let got: Vec<Outcome> = (0..3).map(|row| run.rules()[0].outcome(row)).collect();
     assert_eq!(
         got,
@@ -310,9 +311,9 @@ fn a_false_left_operand_of_and_keeps_the_fault_on_its_right_from_happening() {
     );
 }
 
-/// The outcome of the rule `e` for each record of a batch where `a` and `b`
-/// are the fields `a` and `b`. The planner numbers the fields in the order
-/// that a rule first reads them, so the rule reads `a` first.
+/// Runs the rule `e` over a batch with the columns `a` and `b`, and returns
+/// the outcome of each record. The planner numbers fields in the order the
+/// rule first reads them, so `e` must read `a` before `b`.
 fn outcomes_of_pair(e: Expr, a: Column<'_>, b: Column<'_>) -> Vec<Outcome> {
     let program = plan(&[observing(Uuid::from_u128(1), e)]).expect("the rule plans");
     let columns = [Some(a), Some(b)];
@@ -326,7 +327,7 @@ fn outcomes_of_pair(e: Expr, a: Column<'_>, b: Column<'_>) -> Vec<Outcome> {
         .collect()
 }
 
-/// The comparison `op` of the field `a` with the field `b`.
+/// Builds the expression `a op b` for the fields `a` and `b`.
 fn a_with_b(op: fn(Box<Expr>, Box<Expr>) -> Expr) -> Expr {
     let named = |name: &str| Box::new(Expr::Field(vec![Segment::Key(name.into())]));
     op(named("a"), named("b"))
@@ -429,7 +430,8 @@ fn a_batch_of_another_type_is_refused() {
 // that evaluates a rule on one record at a time, as ADR-0005 and ADR-0041
 // define it.
 
-/// The width of a float field, which a literal compared with the field takes.
+/// The width of a float field. A literal compared with the field rounds to
+/// this width.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Width {
     F16,
@@ -445,13 +447,14 @@ enum Value {
     Int(i128),
     Float(f64, Width),
     Bool(bool),
-    // The contents of a text do not count, because a comparison with a text
-    // is a fault or unsupported in this version.
+    // The interpreter ignores what a text says, because this version faults
+    // or refuses every comparison with a text.
     Text,
     Null,
 }
 
-/// The result of an expression on one record (ADR-0005).
+/// The result of an expression on one record: true, false, unknown or a
+/// fault (ADR-0005).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Tri {
     True,
@@ -465,7 +468,7 @@ impl Tri {
         if b { Self::True } else { Self::False }
     }
 
-    /// The outcome of a rule whose expression gives this result.
+    /// Returns the outcome of a rule whose expression gives this result.
     fn outcome(self) -> Outcome {
         match self {
             Self::True => Matched,
@@ -475,7 +478,7 @@ impl Tri {
     }
 }
 
-/// The number of field `f{i}` in a generated rule, read from its one key.
+/// Returns `i` for the field `f{i}` of a generated rule.
 fn field_number(path: &[Segment]) -> usize {
     match path {
         [Segment::Key(name)] => name[1..].parse().expect("a generated field is named f<i>"),
@@ -483,12 +486,12 @@ fn field_number(path: &[Segment]) -> usize {
     }
 }
 
-/// Evaluates `e` where a condition is expected on `record`, which holds the
-/// value of field `f{i}` at index `i`.
+/// Evaluates the condition `e` on one record, where `record[i]` is the
+/// value of field `f{i}`.
 fn reference(e: &Expr, record: &[Value]) -> Tri {
     match e {
         Expr::Bool(b) => Tri::of(*b),
-        // A null where a condition is expected is unknown.
+        // `None` used as a condition is unknown.
         Expr::None => Tri::Unknown,
         Expr::Int(_) | Expr::Float(_) => Tri::Fault(Fault::NotBoolean),
         Expr::Field(p) => match record[field_number(p)] {
@@ -502,9 +505,9 @@ fn reference(e: &Expr, record: &[Value]) -> Tri {
             other => other,
         },
         Expr::And(items) => items.iter().fold(Tri::True, |left, item| match left {
-            // A false left operand decides the `and`, so the right one is not
-            // evaluated and its fault does not happen. A fault of the left
-            // operand counts first in written order, so it decides too.
+            // A false left operand decides the `and`, so a fault on the right
+            // is ignored. A fault on the left always counts, because the left
+            // operand comes first.
             Tri::False | Tri::Fault(_) => left,
             _ => match reference(item, record) {
                 Tri::True => left,
@@ -512,16 +515,16 @@ fn reference(e: &Expr, record: &[Value]) -> Tri {
             },
         }),
         Expr::Or(items) => items.iter().fold(Tri::False, |left, item| match left {
-            // A true left operand decides the `or`, and a fault of the left
-            // operand counts first.
+            // A true left operand decides the `or`, so a fault on the right is
+            // ignored. A fault on the left always counts.
             Tri::True | Tri::Fault(_) => left,
             _ => match reference(item, record) {
                 Tri::False => left,
                 right => right,
             },
         }),
-        // A test for a null is never unknown (ADR-0005). `x == None` is such a
-        // test, so its arms come before the comparisons.
+        // `x == None` is a null test, which is never unknown (ADR-0005), so
+        // its arms come before the comparisons.
         Expr::IsNone(x) => Tri::of(is_null(x, record)),
         Expr::IsNotNone(x) => Tri::of(!is_null(x, record)),
         Expr::Eq(l, r) if **r == Expr::None => Tri::of(is_null(l, record)),
@@ -546,9 +549,9 @@ fn is_null(e: &Expr, record: &[Value]) -> bool {
     }
 }
 
-/// Evaluates the comparison of `l` with `r` on `record`, which holds when
-/// `holds` accepts the order of the two values. `ordering` is false for `==`
-/// and `!=`.
+/// Evaluates `l op r` on `record`. `holds` says whether `op` is true for a
+/// given order of the two values, and `ordering` is true when `op` is `<`,
+/// `<=`, `>` or `>=`.
 fn compare(
     l: &Expr,
     r: &Expr,
@@ -561,8 +564,8 @@ fn compare(
             order_of_fields(record[field_number(a)], record[field_number(b)], ordering)
         }
         (Expr::Field(p), literal) => order_with_literal(record[field_number(p)], literal, ordering),
-        // The order of a literal with a field is the order of the field with
-        // the literal, reversed.
+        // `order_with_literal` takes the field first, so `5 < x` compares
+        // `x` with 5 and reverses the order.
         (literal, Expr::Field(p)) => order_with_literal(record[field_number(p)], literal, ordering)
             .map(|o| o.map(Ordering::reverse)),
         (a, b) => order_of_literals(a, b, ordering).map(Some),
@@ -574,9 +577,9 @@ fn compare(
     }
 }
 
-/// The order of the field value `v` and `literal`, `None` when `v` is a
-/// null, or the fault of comparing them. `ordering` is false for `==` and
-/// `!=`.
+/// Compares the field value `v` with `literal`. Returns `None` when `v` is
+/// a null, and a fault when the two cannot be compared. `ordering` is true
+/// for `<`, `<=`, `>` and `>=`.
 fn order_with_literal(v: Value, literal: &Expr, ordering: bool) -> Result<Option<Ordering>, Fault> {
     let order = match (v, literal) {
         (Value::Null, _) => return Ok(None),
@@ -588,23 +591,24 @@ fn order_with_literal(v: Value, literal: &Expr, ordering: bool) -> Result<Option
         // nearest value of that width.
         (Value::Float(f, w), Expr::Int(j)) => ieee(f, int_as(*j, w)),
         (Value::Float(f, w), Expr::Float(x)) => ieee(f, float_as(*x, w)),
-        // `literal()` makes no `None`, so no generated rule holds one beside
-        // an ordering, as validation would refuse. The other pairs are values
-        // of types that do not compare.
+        // `literal()` never makes `None`, so no generated rule has `None < x`,
+        // which validation would refuse. Every other pair that gets here
+        // cannot be compared.
         _ => return Err(Fault::Incompatible),
     };
     Ok(Some(order))
 }
 
-/// The order of the values of two fields, `None` when either is a null, or
-/// the fault of comparing them. `ordering` is false for `==` and `!=`.
+/// Compares the values of two fields. Returns `None` when either is a
+/// null, and a fault when the two cannot be compared. `ordering` is true
+/// for `<`, `<=`, `>` and `>=`.
 fn order_of_fields(a: Value, b: Value, ordering: bool) -> Result<Option<Ordering>, Fault> {
     let order = match (a, b) {
         (Value::Null, _) | (_, Value::Null) => return Ok(None),
         (Value::Bool(x), Value::Bool(y)) => booleans(x, y, ordering)?,
         (Value::Int(i), Value::Int(j)) => i.cmp(&j),
-        // Two floats compare in the wider of their widths, which holds both
-        // values, so they compare exactly. An int widens to a float64.
+        // Two floats compare in the wider of their two widths, which holds both
+        // values exactly. An int widens to `f64`.
         (Value::Float(x, _), Value::Float(y, _)) => ieee(x, y),
         (Value::Int(i), Value::Float(y, _)) => ieee(i as f64, y),
         (Value::Float(x, _), Value::Int(j)) => ieee(x, j as f64),
@@ -613,9 +617,10 @@ fn order_of_fields(a: Value, b: Value, ordering: bool) -> Result<Option<Ordering
     Ok(Some(order))
 }
 
-/// The order of two literals, where an int widens to a float, or the fault
-/// of comparing them. A generated rule may compare two literals, which the
-/// planner folds into a constant. `ordering` is false for `==` and `!=`.
+/// Compares two literals, converting an int to `f64` when needed, or
+/// returns a fault when they cannot be compared. A generated rule may
+/// compare two literals, which the planner computes ahead of time.
+/// `ordering` is true for `<`, `<=`, `>` and `>=`.
 fn order_of_literals(a: &Expr, b: &Expr, ordering: bool) -> Result<Ordering, Fault> {
     match (a, b) {
         (Expr::Bool(x), Expr::Bool(y)) => booleans(*x, *y, ordering),
@@ -625,8 +630,8 @@ fn order_of_literals(a: &Expr, b: &Expr, ordering: bool) -> Result<Ordering, Fau
     }
 }
 
-/// The order of two booleans for `==` and `!=`, or the fault of an ordering,
-/// which is for numbers only.
+/// Compares two booleans for `==` and `!=`. Returns a fault for `<`, `<=`,
+/// `>` and `>=`, because only numbers can be ordered.
 fn booleans(a: bool, b: bool, ordering: bool) -> Result<Ordering, Fault> {
     if ordering {
         Err(Fault::Unordered)
@@ -635,13 +640,13 @@ fn booleans(a: bool, b: bool, ordering: bool) -> Result<Ordering, Fault> {
     }
 }
 
-/// The order of two floats that are no NaN, as IEEE 754 compares them, so
-/// `-0.0` equals `0.0`.
+/// Compares two floats that are not NaN the way IEEE 754 does, so `-0.0`
+/// equals `0.0`.
 fn ieee(a: f64, b: f64) -> Ordering {
     a.partial_cmp(&b).expect("a NaN is a null and no literal")
 }
 
-/// A number literal as a float.
+/// Converts a number literal to `f64`.
 fn number(e: &Expr) -> f64 {
     match e {
         Expr::Int(i) => *i as f64,
@@ -650,7 +655,7 @@ fn number(e: &Expr) -> f64 {
     }
 }
 
-/// `x` rounded to the nearest float of width `w`.
+/// Rounds `x` to the nearest float of width `w`.
 fn float_as(x: f64, w: Width) -> f64 {
     match w {
         Width::F16 => f64::from(x as f16),
@@ -659,9 +664,9 @@ fn float_as(x: f64, w: Width) -> f64 {
     }
 }
 
-/// `i` rounded to the nearest float of width `w`, in one rounding, as the
-/// executor converts it. Converting to `f64` first and then to `f32` rounds
-/// twice and can land on another value.
+/// Rounds `i` to the nearest float of width `w` in a single rounding, as
+/// the executor does. Converting to `f64` first and then to `f32` would
+/// round twice, which can give a different value.
 fn int_as(i: i64, w: Width) -> f64 {
     match w {
         Width::F16 => f64::from(i as f16),
@@ -670,8 +675,9 @@ fn int_as(i: i64, w: Width) -> f64 {
     }
 }
 
-/// The values of one generated field. A buffer of a number or a byte boolean
-/// holds `step` values per row, and row `r` is the value at `r * step`.
+/// The values of one generated field. A buffer of numbers or of byte
+/// booleans holds `step` values per row, and row `r` is the value at index
+/// `r * step`.
 #[derive(Debug, Clone)]
 enum Values {
     I8(Vec<i8>),
@@ -719,14 +725,14 @@ struct Field {
 }
 
 /// A generated batch: its row count and its fields, where `None` is a field
-/// that the source lacks. The rules name field `i` as `f{i}`.
+/// with no column. The rules name field `i` as `f{i}`.
 #[derive(Debug, Clone)]
 struct Table {
     rows: usize,
     fields: Vec<Option<Field>>,
 }
 
-/// The run of every `step`-th value of `buffer`, `rows` values long.
+/// Describes every `step`-th value of `buffer`, `rows` values in all.
 fn strided<T: Copy>(buffer: &[T], step: usize, rows: usize) -> Strided<'_, T> {
     assert!(
         rows == 0 || (rows - 1) * step < buffer.len(),
@@ -739,7 +745,7 @@ fn strided<T: Copy>(buffer: &[T], step: usize, rows: usize) -> Strided<'_, T> {
 }
 
 impl Field {
-    /// The column that describes this field over its buffers.
+    /// Builds the column that describes this field's buffers.
     fn column(&self) -> Column<'_> {
         let rows = self.present.len();
         let marking = match self.mark {
@@ -777,7 +783,7 @@ impl Field {
         column.expect("the marking covers the rows")
     }
 
-    /// The value of row `row`, as the reference interpreter reads it.
+    /// Returns the value of row `row` for the reference interpreter.
     fn value(&self, row: usize) -> Value {
         if !self.present[row] {
             return Value::Null;
@@ -812,12 +818,12 @@ impl Field {
 }
 
 impl Field {
-    /// The field of a batch that holds only record `row`, with the type, the
-    /// stride and the marking of this field.
+    /// Builds a copy of this field that holds only record `row`, with the same
+    /// type, stride and marking.
     fn alone(&self, row: usize) -> Self {
         let at = row * self.step;
-        // The run of one row keeps the stride, so it holds the value and the
-        // filler after it.
+        // The one-row buffer keeps the stride, so it holds the value and the
+        // filler values after it.
         let span = at..at + self.step;
         let values = match &self.values {
             Values::I8(v) => Values::I8(v[span].to_vec()),
@@ -853,7 +859,7 @@ impl Field {
 }
 
 impl Table {
-    /// The batch that holds only record `row`.
+    /// Builds a batch that holds only record `row`.
     fn alone(&self, row: usize) -> Self {
         Self {
             rows: 1,
@@ -865,7 +871,8 @@ impl Table {
         }
     }
 
-    /// The record at `row`, with the value of field `f{i}` at index `i`.
+    /// Returns record `row` for the reference interpreter: index `i` holds
+    /// the value of field `f{i}`.
     fn record(&self, row: usize) -> Vec<Value> {
         self.fields
             .iter()
@@ -873,7 +880,7 @@ impl Table {
             .collect()
     }
 
-    /// The columns of the fields that `fields` lists, in its order.
+    /// Returns the columns of the fields in `fields`, in that order.
     fn columns(&self, fields: &FieldTree) -> Vec<Option<Column<'_>>> {
         fields
             .paths()
@@ -883,8 +890,8 @@ impl Table {
     }
 }
 
-/// `n` ints of type `T`, mostly near 0 so that they meet the literals, and
-/// some from the whole range of the type.
+/// Generates `n` ints of type `T`: mostly near 0, where the literals are,
+/// and some from the whole range of the type.
 fn int_values<T>(n: usize) -> impl Strategy<Value = Vec<T>>
 where
     T: Arbitrary + TryFrom<i64> + Default + Clone + std::fmt::Debug + 'static,
@@ -894,7 +901,7 @@ where
     vec(prop_oneof![3 => near_zero, 1 => any::<T>()], n)
 }
 
-/// A float near the literals, a value that is no number, or any float.
+/// Generates a float: one near the literals, a NaN, or any float.
 fn float() -> impl Strategy<Value = f64> {
     prop_oneof![
         // 0.1 rounds in `f16` and `f32`, 2.5 and -3.0 are exact in every
@@ -905,8 +912,8 @@ fn float() -> impl Strategy<Value = f64> {
     ]
 }
 
-/// The values of `rows` rows of any column type that this version reads. A
-/// buffer with a stride holds `step` values per row.
+/// Generates the values of `rows` rows of any column type that this version
+/// reads. A buffer with a stride holds `step` values per row.
 fn values(rows: usize, step: usize) -> impl Strategy<Value = Values> {
     let n = rows * step;
     prop_oneof![
@@ -930,15 +937,15 @@ fn values(rows: usize, step: usize) -> impl Strategy<Value = Values> {
     ]
 }
 
-/// A field of `rows` rows with a generated type, stride and marking.
+/// Generates a field of `rows` rows with a random type, stride and marking.
 fn field(rows: usize) -> impl Strategy<Value = Field> {
     let mark = prop_oneof![
         Just(Mark::Never),
         (0usize..8).prop_map(Mark::Bitmap),
         Just(Mark::ByteMask)
     ];
-    // Four rows in five have a value, a choice that leaves most comparisons
-    // with values and some with nulls.
+    // Four rows in five have a value, so most comparisons see values and
+    // some see nulls.
     (1usize..3, mark, vec(prop::bool::weighted(0.8), rows)).prop_flat_map(
         move |(step, mark, present)| {
             values(rows, step).prop_map(move |values| {
@@ -971,9 +978,9 @@ fn field(rows: usize) -> impl Strategy<Value = Field> {
     )
 }
 
-/// A batch of up to `MAX_ROWS` rows, with one to four fields, some of which
-/// the source lacks. A chunk holds `CHUNK_ROWS` rows, 2048, so a batch of more
-/// than 4096 rows crosses two chunk boundaries.
+/// Generates a batch of up to `MAX_ROWS` rows with one to four fields, some
+/// of which have no column. A chunk holds `CHUNK_ROWS` rows, 2048, so a
+/// batch of more than 4096 rows crosses two chunk boundaries.
 fn table() -> impl Strategy<Value = Table> {
     // Half of the batches have fewer than 70 rows, so many cases run fast and
     // still cross the boundary of a word of 64 rows.
@@ -983,8 +990,8 @@ fn table() -> impl Strategy<Value = Table> {
     })
 }
 
-/// A boolean, or a number literal near the generated values or at the edge
-/// of a type.
+/// Generates a literal: a boolean, or a number near the generated values or
+/// at the edge of a type.
 fn literal() -> impl Strategy<Value = Expr> {
     prop_oneof![
         1 => any::<bool>().prop_map(Expr::Bool),
@@ -998,14 +1005,14 @@ fn literal() -> impl Strategy<Value = Expr> {
     ]
 }
 
-/// The field `f{i}`.
+/// Builds the expression for the field `f{i}`.
 fn field_named(i: usize) -> Expr {
     Expr::Field(vec![Segment::Key(format!("f{i}"))])
 }
 
-/// An expression where a condition is expected, over `n` fields, with the
-/// kinds of node that this version plans: comparisons, null tests, `not`,
-/// `and`, `or`, fields and literals.
+/// Generates a condition over `n` fields, built from the expressions this
+/// version supports: comparisons, null tests, `not`, `and`, `or`, fields and
+/// literals.
 fn condition(n: usize) -> impl Strategy<Value = Expr> {
     // `==` and `!=` from `BINARY`, and the four orderings from `NUMERIC`.
     let ops: Vec<_> = BINARY[..2].iter().chain(&NUMERIC[..4]).copied().collect();
@@ -1016,11 +1023,11 @@ fn condition(n: usize) -> impl Strategy<Value = Expr> {
         });
     let fields = (select(ops.clone()), 0..n, 0..n)
         .prop_map(|(op, a, b)| op(Box::new(field_named(a)), Box::new(field_named(b))));
-    // Two literals, which the planner folds into a constant.
+    // Two literals, which the planner computes ahead of time.
     let folded =
         (select(ops), literal(), literal()).prop_map(|(op, a, b)| op(Box::new(a), Box::new(b)));
-    // Where a condition is expected, `None` is unknown, a boolean is itself
-    // and a number faults on every record.
+    // Used as a condition, `None` is unknown, a boolean is itself, and a
+    // number is a fault on every record.
     let literal_condition = prop_oneof![Just(Expr::None), literal()];
     let field_condition = (0..n).prop_map(field_named);
     let tested = prop_oneof![
@@ -1058,7 +1065,7 @@ fn condition(n: usize) -> impl Strategy<Value = Expr> {
     })
 }
 
-/// One to three rules over `n` fields.
+/// Generates one to three rules over `n` fields.
 fn rules_over(n: usize) -> impl Strategy<Value = Vec<Rule>> {
     vec(condition(n), 1..4).prop_map(|es| {
         es.into_iter()
