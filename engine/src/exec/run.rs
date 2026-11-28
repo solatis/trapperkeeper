@@ -162,8 +162,8 @@ fn fault_of(steps: &[BoundStep], results: &[StepResult], slot: usize, row: usize
     // The bitmaps only say that a row is a fault. To find which fault, the
     // loop walks down from the rule's last step to the step where the fault
     // started: a `not` leads to its operand, an `and` or `or` leads to the
-    // operand whose fault counts, and the walk stops at a fault constant or a
-    // comparison that faults, which hold the kind.
+    // operand whose fault counts, and the walk stops at a fault constant or at
+    // a step that cannot be done, which holds the kind.
     let mut slot = slot;
     loop {
         match &steps[slot] {
