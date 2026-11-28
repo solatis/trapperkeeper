@@ -100,7 +100,7 @@ impl<T: Number + TryFrom<i64>> NumberSet<T> {
                 }
                 Literal::Float(x) => widened.push(x),
                 Literal::Bool(_) | Literal::Text(_) => {
-                    unreachable!("`bind_member` keeps only numbers for a number column")
+                    unreachable!("the caller keeps only numbers for a number column")
                 }
             }
         }
@@ -122,7 +122,7 @@ impl<T: Number> NumberSet<T> {
                 Literal::Int(i) => convert::<i64, T>(i),
                 Literal::Float(x) => convert::<f64, T>(x),
                 Literal::Bool(_) | Literal::Text(_) => {
-                    unreachable!("`bind_member` keeps only numbers for a number column")
+                    unreachable!("the caller keeps only numbers for a number column")
                 }
             })
             .collect();
@@ -239,7 +239,7 @@ impl TextSet {
             .iter()
             .map(|l| match l {
                 Literal::Text(t) => t,
-                _ => unreachable!("`bind_member` keeps only texts for a text column"),
+                _ => unreachable!("the caller keeps only texts for a text column"),
             })
             .collect();
         let mut utf8: Vec<Box<[u8]>> = texts.iter().map(|t| Box::from(t.utf8())).collect();

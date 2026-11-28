@@ -131,7 +131,7 @@ impl fmt::Display for BindError {
             }
             Self::Unsupported { left, right } => write!(
                 f,
-                "this version does not compare the types of fields {left} and {right}"
+                "this version does not compare or search the types of fields {left} and {right}"
             ),
         }
     }
