@@ -72,14 +72,17 @@ null element (owner, 2026-11-16). Only the literal `None` has this meaning.
 The meaning of `in` follows the type of its right side. When the rule writes
 the list, as in `x in [1, 2]`, `in` tests membership. When the right side is a
 field that holds a text, `in` searches the text for a substring, and when the
-field holds a list, `in` searches its elements (owner, 2026-11-28).
+field holds a list, `in` searches its elements (owner, 2026-11-28). A list
+search gives what `any` over the equalities of the elements gives. It is true
+when an element equals the value on the left of `in`, unknown when none does
+and an element is a null, and false otherwise, also when no element can equal
+that value (owner, 2026-11-28).
 
 Validation (`adr/0033`) refuses the literal `None` beside an ordering or an
 arithmetic operator, under a minus, and after `in` and `not in`, because such a
 rule could never match. A field that holds a null there is data, so `x + 1` is a
 null and `x < y` is unknown (owner, 2026-11-14). A search `x in y`, where `y`
-is a field, gives unknown only when `y` should hold a list and holds a null
-(owner, 2026-11-16).
+is a field, gives unknown when `y` holds a null (owner, 2026-11-16).
 
 A rule differs from SQL in three places. The first is the literal `None`.
 Under `==`, under `!=`, in a membership list and on the left of `in` it tests
@@ -98,6 +101,7 @@ A fault is an operation that cannot be done on values that are there (owner,
 - a division by zero
 - an integer overflow
 - a value that is no boolean where a condition is expected
+- `in` with a value that it cannot search, such as `5 in "abc"`
 
 `==` compares values of any two types, as in Python, and a text never equals
 an int. So `x == 5` is

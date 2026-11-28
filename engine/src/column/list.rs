@@ -115,6 +115,11 @@ impl<'a, O: Offset> SizedLists<'a, O> {
         }
     }
 
+    /// Returns the element column that the lists point into.
+    pub(crate) fn elements(&self) -> &'a Column<'a> {
+        self.elements
+    }
+
     /// Whether the offsets and the sizes keep the contract of `new`.
     fn valid(offsets: &[O], sizes: &[O], elements: &Column<'_>) -> bool {
         offsets.len() == sizes.len()

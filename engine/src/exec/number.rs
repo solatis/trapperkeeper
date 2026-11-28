@@ -449,3 +449,35 @@ pub(crate) fn compare_columns<L: Number, R: Number, O: Order>(
     let test = Columns::<L, R, O> { order: PhantomData };
     pack(Pair::new(left, right), start, rows, out, &test);
 }
+
+/// What `pack` runs to compute `element == needle` for each element of a
+/// number column of type `R` and one needle value of type `L`. A list search
+/// takes the needle, on each record, from the field on the left of `in`.
+pub(crate) struct EqualsNumber<L, R> {
+    needle: L,
+    element: PhantomData<R>,
+}
+
+impl<L: Number, R: Number> EqualsNumber<L, R> {
+    /// Builds the test of the elements against `needle`.
+    pub(crate) fn new(needle: L) -> Self {
+        Self {
+            needle,
+            element: PhantomData,
+        }
+    }
+}
+
+impl<L: Number, R: Number> Test<Strided<'_, R>> for EqualsNumber<L, R> {
+    // Each pair compares in the type that `common` picks for the needle's
+    // type and the elements' type, as `x == y` on two number fields does.
+    fn lanes(&self, elements: Simd<R, 64>) -> u64 {
+        let pairs = Columns::<L, R, Equal> { order: PhantomData };
+        pairs.lanes((Simd::splat(self.needle), elements))
+    }
+
+    fn one(&self, element: R) -> bool {
+        let pairs = Columns::<L, R, Equal> { order: PhantomData };
+        pairs.one((self.needle, element))
+    }
+}

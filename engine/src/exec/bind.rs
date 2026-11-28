@@ -24,9 +24,10 @@ use super::number::{
     Converted, compare_columns, compare_widened, compare_with_literal, outside, with_order,
 };
 use super::outcome::Fault;
+use super::search;
 use super::text;
 use crate::column::{
-    Booleans, CHUNK_WORDS, Column, Kind, Number, NumberType, Present, present_all,
+    Booleans, CHUNK_WORDS, Column, Kind, Number, NumberType, Present, Shape, present_all,
     present_from_bits, present_from_mask, with_float, with_int, with_number,
 };
 use crate::plan::{Comparison, Constant, Literal, Operand, Program, Step};
@@ -50,29 +51,39 @@ pub(crate) enum FieldType {
     Number(NumberType),
     Bool,
     Text,
-    List,
+    // A list column and the shape of its records. Bind picks the loop over
+    // the elements from their shape, once per schema.
+    List(Shape),
     // The source has no column for the field, so it has no value on any
     // row.
     Absent,
 }
 
-/// A step of a program after bind: each comparison now holds the loop that
-/// computes it.
+/// A step of a program after bind: each comparison and each search now holds
+/// the loop that computes it.
 pub(crate) enum BoundStep {
     Constant(Constant),
-    // A comparison and its loop. The loop writes the rows where the
-    // comparison is true. On a row where one of `fields` has no value, the
+    // A comparison or a substring search and its loop. The loop writes the
+    // rows where it is true. On a row where one of `fields` has no value, the
     // result is unknown whatever the loop wrote.
     Loop {
         fields: Vec<usize>,
         chunk: ChunkLoop,
     },
-    // A comparison that cannot be done, such as an ordering on text. It is a
-    // fault on the rows where all `fields` have a value, and unknown on the
-    // rows where one of them has none (ADR-0005).
+    // A comparison or a search that cannot be done, such as an ordering on
+    // text or `5 in "abc"`. It is a fault on the rows where all `fields` have
+    // a value, and unknown on the rows where one of them has none (ADR-0005).
     Faulted {
         fault: Fault,
         fields: Vec<usize>,
+    },
+    // A search among the elements of a list and its loop. The loop writes
+    // the records that it matched and the records that it left undecided
+    // because of a null element. On a row where one of `fields` has no
+    // value, the result is unknown whatever the loop wrote.
+    Search {
+        fields: Vec<usize>,
+        chunk: SearchLoop,
     },
     // `x is None` for the field with this number: true on the rows where the
     // field has no value.
@@ -84,12 +95,19 @@ pub(crate) enum BoundStep {
     Or(usize, usize),
 }
 
-/// The compiled loop of a comparison. A call gets the columns of a batch,
-/// the first row `start` of a chunk and the chunk's row count `rows`. It
-/// writes a bitmap with one bit per row of the chunk, set where the
-/// comparison is true, with row `start` at bit 0.
+/// The compiled loop of a comparison or a substring search. A call gets the
+/// columns of a batch, the first row `start` of a chunk and the chunk's row
+/// count `rows`. It writes a bitmap with one bit per row of the chunk, set
+/// where the comparison or the search is true, with row `start` at bit 0.
 pub(crate) type ChunkLoop =
     Box<dyn Fn(&[Option<Column<'_>>], usize, usize, &mut Present) + Send + Sync>;
+
+/// The compiled loop of a list search. A call gets the columns of a batch,
+/// the first row `start` of a chunk and the chunk's row count `rows`. It
+/// writes two bitmaps with one bit per row of the chunk: the rows where an
+/// element matched, and the rows without a match where an element is a null.
+pub(crate) type SearchLoop =
+    Box<dyn Fn(&[Option<Column<'_>>], usize, usize, &mut Present, &mut Present) + Send + Sync>;
 
 /// The error of `bind`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -97,8 +115,8 @@ pub enum BindError {
     /// The caller passed a different number of columns than the program has
     /// fields.
     Columns { expected: usize, given: usize },
-    /// The program compares two list fields with `==` or `!=`, which this
-    /// version cannot do yet.
+    /// The program compares two list fields with `==` or `!=`, or searches for
+    /// a list field with `in`, which this version cannot do yet.
     Unsupported { left: usize, right: usize },
 }
 
@@ -113,7 +131,7 @@ impl fmt::Display for BindError {
             }
             Self::Unsupported { left, right } => write!(
                 f,
-                "this version does not compare the types of fields {left} and {right}"
+                "this version does not compare or search the types of fields {left} and {right}"
             ),
         }
     }
@@ -130,8 +148,8 @@ impl Program {
     /// # Errors
     ///
     /// `BindError::Columns` when `columns` does not have one entry per field,
-    /// and `BindError::Unsupported` when the program compares two fields
-    /// whose types this version cannot compare yet.
+    /// and `BindError::Unsupported` when the program compares or searches two
+    /// fields whose types this version cannot handle yet.
     pub fn bind(&self, columns: &[Option<Column<'_>>]) -> Result<Bound, BindError> {
         let expected = self.fields().paths().len();
         if columns.len() != expected {
@@ -155,7 +173,8 @@ impl Program {
 }
 
 /// Specializes one step for the field types `types`. Fails when the step
-/// compares two fields whose types this version cannot compare yet.
+/// compares or searches two fields whose types this version cannot handle
+/// yet.
 fn bind_step(step: &Step, types: &[FieldType]) -> Result<BoundStep, BindError> {
     Ok(match step {
         Step::Constant(c) => BoundStep::Constant(*c),
@@ -165,6 +184,8 @@ fn bind_step(step: &Step, types: &[FieldType]) -> Result<BoundStep, BindError> {
         Step::IsNull(f) if types[*f] == FieldType::Absent => BoundStep::Constant(Constant::True),
         Step::IsNull(f) => BoundStep::IsNull(*f),
         Step::Member { field, values } => member::bind_member(*field, types[*field], values),
+        Step::Search { needle, haystack } => search::bind_search(needle, *haystack, types)?,
+        Step::HoldsNull(haystack) => search::bind_holds_null(*haystack, types[*haystack]),
         Step::Not(a) => BoundStep::Not(*a),
         Step::And(a, b) => BoundStep::And(*a, *b),
         Step::Or(a, b) => BoundStep::Or(*a, *b),
@@ -220,7 +241,7 @@ fn bind_literal(op: Comparison, f: usize, t: FieldType, literal: &Literal) -> Bo
         // An ordering is a fault when either side is not a number, as in
         // `x < True`, `x < "a"`, or `x > 5` on a text, boolean or list column
         // (ADR-0041).
-        (FieldType::Bool | FieldType::Text | FieldType::List, _)
+        (FieldType::Bool | FieldType::Text | FieldType::List(_), _)
         | (_, Literal::Bool(_) | Literal::Text(_))
             if op.is_ordering() =>
         {
@@ -241,10 +262,11 @@ fn bind_literal(op: Comparison, f: usize, t: FieldType, literal: &Literal) -> Bo
             chunk: text::equals_literal(f, Arc::clone(text), op == Comparison::Eq),
         },
         // The column and the literal have types that can never be equal, as
-        // in `x == True` on a number column or `x == 5` on a text column. `==`
-        // is false and `!=` true on every row with a value, as in Python.
+        // in `x == True` on a number column or `x == 5` on a text or list
+        // column. `==` is false and `!=` true on every row with a value, as in
+        // Python.
         (_, Literal::Bool(_) | Literal::Text(_))
-        | (FieldType::Bool | FieldType::Text | FieldType::List, _) => BoundStep::Loop {
+        | (FieldType::Bool | FieldType::Text | FieldType::List(_), _) => BoundStep::Loop {
             fields: vec![f],
             chunk: constant_loop(op == Comparison::Ne),
         },
@@ -350,7 +372,7 @@ fn bind_fields(
         },
         // Two lists can be equal, and this version has no loop that compares
         // them, so bind refuses the pair.
-        (FieldType::List, FieldType::List) if !op.is_ordering() => {
+        (FieldType::List(_), FieldType::List(_)) if !op.is_ordering() => {
             return Err(BindError::Unsupported { left: l, right: r });
         }
         // An ordering of any other pair, such as two texts, two lists or a
@@ -453,11 +475,19 @@ fn write_booleans(
     rows: usize,
     out: &mut Present,
 ) {
-    let booleans = match cols[f].as_ref().map(Column::kind) {
-        Some(Kind::Booleans(b, _)) => *b,
-        // Bind made this loop for a boolean column, and `run` refuses a
-        // batch whose column has another type.
-        _ => unreachable!("run checked the type of the column"),
+    // Bind calls this only from the loops of a boolean column, and `run`
+    // refuses a batch whose column has another type.
+    let column = cols[f]
+        .as_ref()
+        .expect("run checked the type of the column");
+    write_booleans_of(column, start, rows, out);
+}
+
+/// Sets the bit in `out` of each row in `start .. start + rows` where the
+/// boolean column `column` is true.
+pub(super) fn write_booleans_of(column: &Column<'_>, start: usize, rows: usize, out: &mut Present) {
+    let Kind::Booleans(booleans, _) = *column.kind() else {
+        unreachable!("the caller checked that the column holds booleans")
     };
     match booleans {
         // Bit-packed booleans, as Arrow stores them, have the same layout as
@@ -475,7 +505,7 @@ fn write_booleans(
 
 /// Flips the bits of the first `rows` rows of `out`. The bits from `rows`
 /// on stay clear, because they are past the end of the chunk.
-fn invert(out: &mut Present, rows: usize) {
+pub(super) fn invert(out: &mut Present, rows: usize) {
     let mut all = [0; CHUNK_WORDS];
     present_all(rows, &mut all);
     for (word, held) in out.iter_mut().zip(all) {
@@ -529,7 +559,7 @@ impl FieldType {
             Kind::Floats(v, _) => Self::Number(v.number_type()),
             Kind::Booleans(..) => Self::Bool,
             Kind::Text(..) => Self::Text,
-            Kind::List(..) => Self::List,
+            Kind::List(l, _) => Self::List(l.shape()),
         }
     }
 }

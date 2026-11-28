@@ -1,7 +1,8 @@
 //! The sets of a membership step, built once at bind for the column's type,
 //! and the tests that look a row up in them. A set holds the literals of a
 //! list such as `x in [1, 2, 3]`, so one lookup per row gives what
-//! `x == 1 or x == 2 or x == 3` gives.
+//! `x == 1 or x == 2 or x == 3` gives. A list search with a literal needle
+//! uses these sets too, with a set of one value.
 
 use std::cmp::Ordering;
 use std::simd::Simd;
@@ -57,7 +58,7 @@ pub(super) fn bind_member(f: usize, t: FieldType, values: &[Literal]) -> BoundSt
         FieldType::Text => text_loop(f, TextSet::of(&kept)),
         // No literal can equal a list, so the filter kept none, and a missing
         // field returned before the filter.
-        FieldType::List | FieldType::Absent => constant_loop(false),
+        FieldType::List(_) | FieldType::Absent => constant_loop(false),
     };
     BoundStep::Loop {
         fields: vec![f],
@@ -76,11 +77,11 @@ fn can_equal(t: FieldType, literal: &Literal) -> bool {
     )
 }
 
-/// The values of a membership step that a number column of type `T` can
-/// equal. `values` holds them in `T`. On an int column, `widened` holds the
-/// float literals, which compare with the row widened to `f64`, as in
-/// `x == 2.0` (ADR-0041).
-struct NumberSet<T> {
+/// The values of a membership step or a list search that a number column of
+/// type `T` can equal. `values` holds them in `T`. On an int column, `widened`
+/// holds the float literals, which compare with the row widened to `f64`, as
+/// in `x == 2.0` (ADR-0041).
+pub(super) struct NumberSet<T> {
     values: Vec<T>,
     widened: Vec<f64>,
 }
@@ -88,7 +89,7 @@ struct NumberSet<T> {
 impl<T: Number + TryFrom<i64>> NumberSet<T> {
     /// Builds the set of an int column of type `T`. An int literal that `T`
     /// cannot hold equals no row and is dropped.
-    fn for_int(kept: &[&Literal]) -> Self {
+    pub(super) fn for_int(kept: &[&Literal]) -> Self {
         let mut values = Vec::new();
         let mut widened = Vec::new();
         for literal in kept {
@@ -100,7 +101,7 @@ impl<T: Number + TryFrom<i64>> NumberSet<T> {
                 }
                 Literal::Float(x) => widened.push(x),
                 Literal::Bool(_) | Literal::Text(_) => {
-                    unreachable!("`bind_member` keeps only numbers for a number column")
+                    unreachable!("the caller keeps only numbers for a number column")
                 }
             }
         }
@@ -115,14 +116,14 @@ impl<T: Number> NumberSet<T> {
     /// Builds the set of a float column of type `T`. Each literal rounds to
     /// the nearest value of `T`, as the literal of `x == 0.1` does
     /// (ADR-0041).
-    fn for_float(kept: &[&Literal]) -> Self {
+    pub(super) fn for_float(kept: &[&Literal]) -> Self {
         let values = kept
             .iter()
             .map(|literal| match **literal {
                 Literal::Int(i) => convert::<i64, T>(i),
                 Literal::Float(x) => convert::<f64, T>(x),
                 Literal::Bool(_) | Literal::Text(_) => {
-                    unreachable!("`bind_member` keeps only numbers for a number column")
+                    unreachable!("the caller keeps only numbers for a number column")
                 }
             })
             .collect();
@@ -133,7 +134,7 @@ impl<T: Number> NumberSet<T> {
     }
 
     /// Whether no row can be in the set.
-    fn is_empty(&self) -> bool {
+    pub(super) fn is_empty(&self) -> bool {
         self.values.is_empty() && self.widened.is_empty()
     }
 }
@@ -225,21 +226,22 @@ fn flags_loop(f: usize, kept: &[&Literal]) -> ChunkLoop {
     }
 }
 
-/// The texts of a membership step in both encodings, each list sorted, so
-/// that a row is looked up in the list of its column's encoding.
-struct TextSet {
+/// The texts of a membership step or a list search in both encodings, each
+/// list sorted, so that a row is looked up in the list of its column's
+/// encoding.
+pub(super) struct TextSet {
     utf8: Vec<Box<[u8]>>,
     utf32: Vec<Box<[u32]>>,
 }
 
 impl TextSet {
     /// Builds the set of the text literals in `kept`.
-    fn of(kept: &[&Literal]) -> Self {
+    pub(super) fn of(kept: &[&Literal]) -> Self {
         let texts: Vec<_> = kept
             .iter()
             .map(|l| match l {
                 Literal::Text(t) => t,
-                _ => unreachable!("`bind_member` keeps only texts for a text column"),
+                _ => unreachable!("the caller keeps only texts for a text column"),
             })
             .collect();
         let mut utf8: Vec<Box<[u8]>> = texts.iter().map(|t| Box::from(t.utf8())).collect();

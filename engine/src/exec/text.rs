@@ -25,7 +25,7 @@ pub(super) trait Encoded: Unit + Ord {
     fn of(literal: &TextLiteral) -> &[Self];
 
     /// Picks the list in this encoding from a set of texts that a membership
-    /// step holds in both encodings.
+    /// step or a list search holds in both encodings.
     fn pick<'s>(utf8: &'s [Box<[u8]>], utf32: &'s [Box<[u32]>]) -> &'s [Box<[Self]>];
 
     /// Returns the text `units` tagged with its encoding.
@@ -33,6 +33,7 @@ pub(super) trait Encoded: Unit + Ord {
 }
 
 /// The units of a text, tagged with their encoding.
+#[derive(Clone, Copy)]
 pub(super) enum Form<'a> {
     Utf8(&'a [u8]),
     Utf32(&'a [u32]),
@@ -146,7 +147,7 @@ pub(super) fn fields_equal(l: usize, r: usize, equal: bool) -> ChunkLoop {
 
 /// Returns whether two texts hold the same characters, in whatever
 /// encodings they come.
-fn same_text(left: Form<'_>, right: Form<'_>) -> bool {
+pub(super) fn same_text(left: Form<'_>, right: Form<'_>) -> bool {
     match (left, right) {
         // Within one encoding, two texts are equal when their units are.
         (Form::Utf8(a), Form::Utf8(b)) => a == b,
@@ -180,5 +181,25 @@ pub(super) fn texts_of<'a>(cols: &[Option<Column<'a>>], f: usize) -> Text<'a> {
         // whose column has another type. A field without a column gets no
         // loop, because bind makes its step a constant.
         _ => unreachable!("run checked the type of the column"),
+    }
+}
+
+/// What `pack` runs to compare each element of a text column with one
+/// needle text. A list search takes the needle text from the needle field of
+/// each record.
+pub(super) struct EqualsText<'n> {
+    pub(super) needle: Form<'n>,
+}
+
+impl<'a, T: Texts<'a, Unit: Encoded + 'a>> Test<TextRows<'a, T>> for EqualsText<'_> {
+    // As for `AgainstText`, `pack` reads every row through `one`.
+    fn lanes(&self, (): ()) -> u64 {
+        unreachable!("a text source is never contiguous")
+    }
+
+    fn one(&self, element: &'a [T::Unit]) -> bool {
+        // An element without a value compares whatever units it holds, and
+        // the scan of the list drops its answer.
+        same_text(self.needle, T::Unit::form(element))
     }
 }

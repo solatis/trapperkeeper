@@ -82,6 +82,25 @@ impl StepResult {
         }
     }
 
+    /// Returns the result of a search over the rows of `known`, where every
+    /// field of the search has a value. A row of `known` is true when it is in
+    /// `matched`, unknown when it is only in `undecided`, the rows that a null
+    /// element left open, and false otherwise. The rows outside `known` are
+    /// unknown.
+    pub(crate) fn searched(matched: &Present, undecided: &Present, known: Present) -> Self {
+        // A matched row is true even when another element is a null, as for
+        // `any` (ADR-0005), so only an undecided row without a match leaves
+        // `known`.
+        let known = zip(&known, &zip(undecided, matched, |u, m| u & !m), |k, u| {
+            k & !u
+        });
+        Self {
+            true_rows: zip(matched, &known, |m, k| m & k),
+            known,
+            fault: NONE,
+        }
+    }
+
     /// Returns the result of `x is None` on the first `rows` rows of a
     /// chunk, where `present` marks the rows on which `x` has a value. It is
     /// true on the rows without a value, false on the others, and never

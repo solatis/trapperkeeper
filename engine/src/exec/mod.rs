@@ -8,6 +8,7 @@ mod number;
 mod outcome;
 mod result;
 mod run;
+mod search;
 mod text;
 
 pub use bind::{BindError, Bound};
