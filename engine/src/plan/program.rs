@@ -1,4 +1,6 @@
-//! The program of a rule set: its steps, and the planner that makes them.
+//! The planner. It turns the expression trees of a rule set into a
+//! `Program`: one flat list of simple steps that the executor runs from first
+//! to last.
 
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -12,55 +14,68 @@ use crate::exec::Fault;
 use crate::expr::Expr;
 use crate::rule::Rule;
 
-/// A rule set planned into one list of steps. Each step writes the slot with
-/// its own number, and the result of each rule is the slot of its expression.
+/// A rule set turned into a list of steps that the executor runs in order.
+///
+/// Each step computes one value per row, such as the result of `x > 5`, and
+/// stores it under its own index in the list. That index is the step's
+/// *slot*. A later step reads the result of an earlier one by its slot, so
+/// `x > 5 and y` becomes three steps: slot 0 holds `x > 5`, slot 1 holds
+/// `y`, and slot 2 holds `and(0, 1)`. The result of a rule is the slot of the
+/// last step of its expression.
 #[derive(Debug, Clone)]
 pub struct Program {
     fields: FieldTree,
     steps: Vec<Step>,
-    // The id of each rule with the slot that holds its result, in the order
-    // of the rule set.
+    // For each rule, in the order of the rule set: its id and the slot that
+    // holds its result.
     rules: Vec<(Uuid, usize)>,
 }
 
-/// One step of a program. A step reads fields by their numbers and the
-/// results of earlier steps by their slots, and a comparison may hold a
-/// literal.
+/// One step of a program. A step refers to a field by the field's number
+/// (see `FieldTree`) and to an earlier step by that step's slot.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum Step {
-    // A result that no field decides, the same on every row.
+    // The same result on every row, such as the literal `True`, or `1 < 2`
+    // after the planner computed it.
     Constant(Constant),
-    // One of the six comparisons of a field with a literal or with another
-    // field. A field is always on the left.
+    // `field op literal` or `field op field`, such as `x > 5` or `x < y`.
+    // The planner always puts a field on the left, so `5 < x` is stored as
+    // `x > 5`.
     Compare {
         op: Comparison,
         left: Operand,
         right: Operand,
     },
-    // A field where a condition is expected. It faults on a row whose value
-    // is not a boolean.
+    // A field used on its own as a condition, as `x` is in `x and y`. It is
+    // the field's boolean value, and a fault on a row whose value is not a
+    // boolean.
     Condition(usize),
-    // `x is None` for the field with this number. It is true or false on
-    // every row and never unknown (ADR-0005). `x is not None` is a `Not`
-    // over this step.
+    // `x is None` for the field with this number: true on the rows where the
+    // field has no value, false elsewhere, and never unknown (ADR-0005).
+    // `x is not None` is a `Not` over this step.
     IsNull(usize),
-    // `not`, `and` and `or` of ADR-0005 over the results of earlier steps,
-    // with true, false and unknown. `And` and `Or` hold their operands in
-    // written order, because a fault of the right operand does not count
-    // where the left one decided the result.
+    // `not`, `and` and `or` over the results of earlier steps, by their
+    // slots. They follow the three-valued logic of ADR-0005, where a row is
+    // true, false or unknown. `And` and `Or` keep the operands in the order
+    // the rule wrote them, because that order decides which fault counts:
+    // in `a and b`, a fault of `b` is ignored on rows where `a` is false.
     Not(usize),
     And(usize, usize),
     Or(usize, usize),
 }
 
-/// What a comparison compares: a field by its number, or a literal.
+/// One side of a comparison: a field, by its number, or a literal.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum Operand {
     Field(usize),
     Literal(Literal),
 }
 
-/// A literal that a comparison holds.
+/// A constant value in a comparison, such as the `5` in `x > 5`.
+///
+/// `None` is not a literal here. The planner turns `x == None` into a null
+/// test (`Step::IsNull`) before it builds a comparison. Text and list
+/// literals are not compared yet, so `plan` refuses a rule that compares one.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Literal {
     Int(i64),
@@ -68,9 +83,11 @@ pub(crate) enum Literal {
     Bool(bool),
 }
 
-// Two literals are one step when their bits are equal, so `0.0` and `-0.0`
-// are two steps. `Eq` asks that every value equals itself. Equal bits give
-// that, while `==` on an `f64` does not for a NaN.
+// The planner shares a step between rules when the steps are equal, and it
+// finds equal steps through a `HashMap`, which needs `Eq` and `Hash`. `f64`
+// has neither, because NaN != NaN. So two float literals count as equal
+// when their bits are equal. The only cost is that `x > 0.0` and `x > -0.0`
+// are two steps.
 impl PartialEq for Literal {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -94,7 +111,7 @@ impl Hash for Literal {
     }
 }
 
-/// The six comparisons.
+/// The comparison operator: `==`, `!=`, `<`, `<=`, `>` or `>=`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum Comparison {
     Eq,
@@ -106,7 +123,8 @@ pub(crate) enum Comparison {
 }
 
 impl Comparison {
-    /// The comparison with its operands swapped, so `5 < x` becomes `x > 5`.
+    /// The operator to use when the two sides swap places: `5 < x` means the
+    /// same as `x > 5`, so `Lt` flips to `Gt`.
     fn flip(self) -> Self {
         match self {
             Self::Lt => Self::Gt,
@@ -117,12 +135,13 @@ impl Comparison {
         }
     }
 
-    /// Whether the comparison orders its operands, which only numbers allow.
+    /// Whether the operator is `<`, `<=`, `>` or `>=`. Only numbers can be
+    /// compared with these.
     pub(crate) fn is_ordering(self) -> bool {
         !matches!(self, Self::Eq | Self::Ne)
     }
 
-    /// Whether the comparison holds for two values whose order is `order`.
+    /// Whether `a op b` is true, given how `a` and `b` compare.
     pub(crate) fn holds(self, order: Ordering) -> bool {
         match self {
             Self::Eq => order.is_eq(),
@@ -135,8 +154,7 @@ impl Comparison {
     }
 }
 
-/// A result that every row of a chunk shares. A chunk is the rows that the
-/// executor runs at once.
+/// A result that is the same on every row.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum Constant {
     True,
@@ -146,26 +164,29 @@ pub(crate) enum Constant {
 }
 
 impl Constant {
+    /// `True` or `False`.
     pub(crate) fn of(b: bool) -> Self {
         if b { Self::True } else { Self::False }
     }
 }
 
-/// Plans `rules` into one program. Fails on the first rule that holds a kind
-/// of expression this version does not plan.
+/// Turns `rules` into one program. Fails on the first rule that uses an
+/// expression this version cannot run yet, such as arithmetic.
 ///
 /// # Errors
 ///
 /// `Unsupported` with the rule's id and the JSON key of the kind.
 pub fn plan(rules: &[Rule]) -> Result<Program, Unsupported> {
-    // The function collects the fields of every rule, then plans the
-    // expression of each rule into steps and records the slot of its result.
+    // Each rule's expression is a tree, as the parser built it. Planning
+    // flattens each tree into the one list of steps, children before their
+    // parent, so a step only reads slots that come before it and the
+    // executor can run the list from front to back. The tree already settled
+    // precedence, so `a or b and c` arrives as `or(a, and(b, c))`.
     //
-    // 1. It builds the tree of fields from all the rules first, so that the
-    //    number of a field does not depend on which rule the planner reaches
-    //    first.
-    // 2. It plans the rules one after another into one list of steps, so a
-    //    later rule reuses a step that an earlier rule planned.
+    // 1. Number the fields of all rules first, so that a field's number does
+    //    not depend on the order in which the rules are planned.
+    // 2. Flatten the rules one after another into the same list, so a later
+    //    rule can reuse a step that an earlier rule already added.
 
     // 1. build the tree of fields
     let fields = FieldTree::of(rules.iter().map(|r| &r.expression));
@@ -180,8 +201,8 @@ pub fn plan(rules: &[Rule]) -> Result<Program, Unsupported> {
         .iter()
         .map(|r| match planner.expr(&r.expression) {
             Ok(slot) => Ok((r.rule_id, slot)),
-            // The planner reports the kind, and only this loop knows the
-            // rule's id.
+            // The planner returns only the JSON key of the expression it
+            // refused, so the rule's id is added here.
             Err(key) => Err(Unsupported {
                 rule_id: r.rule_id,
                 key,
@@ -196,39 +217,44 @@ pub fn plan(rules: &[Rule]) -> Result<Program, Unsupported> {
     })
 }
 
-/// The state of `plan` while it plans: the tree of fields, the steps so far,
-/// and the slot of each step that it has planned.
+/// The state of `plan` while it flattens the rules.
 struct Planner<'f> {
     fields: &'f FieldTree,
+    // The steps added so far, each at the index of its slot.
     steps: Vec<Step>,
+    // The slot of each step in `steps`, to find an equal step quickly.
     seen: HashMap<Step, usize>,
 }
 
 impl Planner<'_> {
-    /// Plans `e` where a condition is expected, and returns the slot of its
-    /// result. Fails with the JSON key of the first kind of node that it does
-    /// not plan.
+    /// Adds the steps that compute `e` as a condition, true, false or unknown
+    /// per row, and returns the slot of the result. Fails with the JSON key
+    /// of the first expression in `e` that this version cannot run.
     fn expr(&mut self, e: &Expr) -> Result<usize, &'static str> {
-        // The function tests the kind of `e` in a match, and the first arm
-        // that applies plans it. A comparison with the literal `None` comes
-        // before the other comparisons, because `x == None` is a test for a
-        // null and no comparison (ADR-0005).
+        // One match arm per kind of expression. The arms for `== None` and
+        // `!= None` must come before the plain `Eq` and `Ne` arms, because
+        // `x == None` is a null test and not a comparison of values
+        // (ADR-0005).
         let step = match e {
             Expr::Bool(b) => Step::Constant(Constant::of(*b)),
             Expr::Field(path) => Step::Condition(self.fields.field_of(path)),
-            // A null where a condition is expected is unknown (ADR-0005).
+            // `None` used as a condition is unknown (ADR-0005).
             Expr::None => Step::Constant(Constant::Unknown),
-            // The language has no truthiness (ADR-0041), so any other literal
-            // where a condition is expected is a fault on every record.
+            // A number, text or list used as a condition, as in `5 and x`, is
+            // a fault on every record, because the language does not treat
+            // non-booleans as true or false (ADR-0041).
             Expr::Int(_) | Expr::Float(_) | Expr::Text(_) | Expr::List(_) => {
                 Step::Constant(Constant::Fault(Fault::NotBoolean))
             }
+            // The `?` adds the steps of `x` first, so `Not` reads a slot that
+            // is already in the list.
             Expr::Not(x) => Step::Not(self.expr(x)?),
             Expr::And(items) => return self.chain(items, Constant::True, Step::And),
             Expr::Or(items) => return self.chain(items, Constant::False, Step::Or),
             Expr::IsNone(x) => return self.null_test(x),
             Expr::IsNotNone(x) => Step::Not(self.null_test(x)?),
-            // `x == None` is `x is None`, and `x != None` is `x is not None`.
+            // `x == None` means `x is None`, and `x != None` means
+            // `x is not None`. `None` may stand on either side.
             Expr::Eq(l, r) if **r == Expr::None => return self.null_test(l),
             Expr::Eq(l, r) if **l == Expr::None => return self.null_test(r),
             Expr::Ne(l, r) if **r == Expr::None => Step::Not(self.null_test(l)?),
@@ -239,28 +265,30 @@ impl Planner<'_> {
             Expr::Le(l, r) => return self.compare(Comparison::Le, l, r),
             Expr::Gt(l, r) => return self.compare(Comparison::Gt, l, r),
             Expr::Ge(l, r) => return self.compare(Comparison::Ge, l, r),
-            // Any other kind, such as arithmetic, a quantifier or a text
-            // method, is not planned yet.
+            // Arithmetic, quantifiers and text methods are not supported
+            // yet.
             _ => return Err(e.key()),
         };
         Ok(self.push(step))
     }
 
-    /// Plans the operands of an `and` or an `or` and joins them with `join`,
-    /// or returns `empty` for a node without operands.
+    /// Adds the steps of an `and` or an `or` over `items`, where `join`
+    /// builds the `And` or `Or` step, and returns the slot of the result.
+    /// With no items, the result is `empty` on every row.
     fn chain(
         &mut self,
         items: &[Expr],
         empty: Constant,
         join: fn(usize, usize) -> Step,
     ) -> Result<usize, &'static str> {
-        // The JSON form reads an `and` or an `or` without operands. It gives
-        // what Python's `all` and `any` give for an empty list.
+        // The JSON form allows an `and` or an `or` with no operands. It gives
+        // what Python's `all([])` and `any([])` give: true and false.
         let Some((first, rest)) = items.split_first() else {
             return Ok(self.push(Step::Constant(empty)));
         };
-        // The chain groups from the left, so `a and b and c` reads as
-        // `(a and b) and c` and keeps the written order of ADR-0005.
+        // `a and b and c` becomes `(a and b) and c`, so each `And` step has
+        // the earlier operands on its left, in the order the rule wrote them
+        // (ADR-0005).
         let mut slot = self.expr(first)?;
         for item in rest {
             let right = self.expr(item)?;
@@ -269,23 +297,28 @@ impl Planner<'_> {
         Ok(slot)
     }
 
-    /// Plans `e is None` and returns the slot of its result. Fails with the
-    /// JSON key of `e` when `e` is a kind of expression that this version
-    /// cannot test for a null, such as arithmetic.
+    /// Adds the step for `e is None` and returns its slot. Fails with the
+    /// JSON key of `e` when this version cannot test `e` for a null, such as
+    /// when `e` is arithmetic.
     fn null_test(&mut self, e: &Expr) -> Result<usize, &'static str> {
         let step = match e {
+            // A field is tested per row, in the executor.
             Expr::Field(path) => Step::IsNull(self.fields.field_of(path)),
+            // `None is None` is true.
             Expr::None => Step::Constant(Constant::True),
-            // A literal other than `None` is never a null.
+            // Any other literal, such as `5 is None`, is false, because only
+            // `None` is a null.
             Expr::Bool(_) | Expr::Int(_) | Expr::Float(_) | Expr::Text(_) | Expr::List(_) => {
                 Step::Constant(Constant::False)
             }
+            // Arithmetic and the other kinds that the planner does not
+            // support yet.
             _ => return Err(e.key()),
         };
         Ok(self.push(step))
     }
 
-    /// Plans a comparison of `left` with `right`.
+    /// Adds the step for `left op right` and returns its slot.
     fn compare(
         &mut self,
         op: Comparison,
@@ -293,10 +326,11 @@ impl Planner<'_> {
         right: &Expr,
     ) -> Result<usize, &'static str> {
         let step = match (self.operand(left)?, self.operand(right)?) {
-            // No row can change the result of two literals, so the planner
-            // compares them itself.
+            // `1 < 2` is the same on every row, so the planner computes it
+            // now and stores the result as a constant.
             (Operand::Literal(l), Operand::Literal(r)) => Step::Constant(fold(op, l, r)),
-            // The executor's loops hold the field on the left.
+            // `5 < x` becomes `x > 5`, because the executor's loops expect
+            // the field on the left.
             (literal @ Operand::Literal(_), field @ Operand::Field(_)) => Step::Compare {
                 op: op.flip(),
                 left: field,
@@ -314,26 +348,27 @@ impl Planner<'_> {
         Ok(self.push(step))
     }
 
-    /// What `e` is as an operand of a comparison. Fails with the JSON key of a
-    /// kind that this version does not compare.
+    /// Converts one side of a comparison: a field becomes its number, and an
+    /// int, float or boolean becomes a `Literal`. Fails with the JSON key of
+    /// `e` for anything else, such as a text literal or arithmetic.
     fn operand(&self, e: &Expr) -> Result<Operand, &'static str> {
         match e {
             Expr::Field(path) => Ok(Operand::Field(self.fields.field_of(path))),
             Expr::Int(i) => Ok(Operand::Literal(Literal::Int(*i))),
             Expr::Float(x) => Ok(Operand::Literal(Literal::Float(*x))),
             Expr::Bool(b) => Ok(Operand::Literal(Literal::Bool(*b))),
-            // Arithmetic, a function or a text is not compared yet. `None`
-            // beside an ordering lands here too, which validation refuses
-            // before a rule reaches the planner.
+            // Text, lists, arithmetic and function calls are not compared
+            // yet. `None < x` would land here too, but validation already
+            // refuses it before the rule reaches the planner.
             _ => Err(e.key()),
         }
     }
 
-    /// Appends `step` and returns its slot, or returns the slot of an equal
-    /// step that it has planned.
+    /// Adds `step` to the list and returns its slot. When an equal step is
+    /// already in the list, it returns that step's slot instead, so two
+    /// rules that both test `x > 5` share one step and the executor computes
+    /// `x > 5` once.
     fn push(&mut self, step: Step) -> usize {
-        // An equal step reads the same slots and fields, so it gives the same
-        // result, and several rules share it.
         if let Some(&slot) = self.seen.get(&step) {
             return slot;
         }
@@ -343,26 +378,27 @@ impl Planner<'_> {
     }
 }
 
-/// The result of comparing two literals.
+/// Computes `left op right` for two literals, such as `1 < 2.5`.
 fn fold(op: Comparison, left: Literal, right: Literal) -> Constant {
-    // The function tests the pair of literals in a chain, and the first case
-    // that applies gives the order. The boolean cases come before the number
-    // cases, because the last number case widens any pair it gets to floats.
+    // The boolean arms come first, because the last arm converts whatever
+    // reaches it to `f64`, and a boolean must not reach it.
     let order = match (left, right) {
-        // An ordering is for numbers only (ADR-0041).
+        // `True < False` is a fault, because only numbers can be ordered
+        // (ADR-0041).
         (Literal::Bool(_), Literal::Bool(_)) if op.is_ordering() => {
             return Constant::Fault(Fault::Unordered);
         }
         (Literal::Bool(l), Literal::Bool(r)) => l.cmp(&r),
-        // A boolean and a number have types that do not compare.
+        // `True == 1` is a fault, because a boolean and a number cannot be
+        // compared.
         (Literal::Bool(_), _) | (_, Literal::Bool(_)) => {
             return Constant::Fault(Fault::Incompatible);
         }
         (Literal::Int(l), Literal::Int(r)) => l.cmp(&r),
-        // `partial_cmp` compares as IEEE 754 does, so `-0.0` equals `0.0`. It
-        // gives an order for any two finite floats. A float literal is finite,
-        // because JSON has no form for a NaN or an infinity and the parser
-        // builds neither.
+        // At least one side is a float, so both compare as `f64`, as in
+        // `1 < 2.5`. `partial_cmp` follows IEEE 754, so `-0.0 == 0.0` holds.
+        // It fails only for a NaN, and a literal is never NaN or infinite,
+        // because JSON cannot write either.
         (l, r) => as_f64(l)
             .partial_cmp(&as_f64(r))
             .expect("a float literal is finite"),
@@ -370,10 +406,11 @@ fn fold(op: Comparison, left: Literal, right: Literal) -> Constant {
     Constant::of(op.holds(order))
 }
 
-/// A number literal as a float.
+/// Converts an int or float literal to `f64`.
 fn as_f64(l: Literal) -> f64 {
     match l {
-        // An int above 2^53 rounds to the nearest float.
+        // An int above 2^53 rounds to the nearest `f64`, which the language
+        // accepts for a comparison of an int with a float.
         #[expect(
             clippy::cast_precision_loss,
             reason = "an int widens to a float (ADR-0041)"
@@ -384,11 +421,13 @@ fn as_f64(l: Literal) -> f64 {
     }
 }
 
-/// A rule that holds a kind of expression this version does not plan.
+/// The error of `plan`: a rule uses an expression that this version cannot
+/// run yet.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Unsupported {
     pub rule_id: Uuid,
-    /// The JSON key of the kind that the planner refused, such as `add`.
+    /// The JSON key of the expression that the planner refused, such as
+    /// `add`.
     pub key: &'static str,
 }
 
@@ -405,8 +444,8 @@ impl fmt::Display for Unsupported {
 impl std::error::Error for Unsupported {}
 
 impl Program {
-    /// The fields that the rules read, as a tree of paths. A caller asks its
-    /// adapter for these fields and hands their columns over in the order of
+    /// The fields that the rules read. The caller must find a column for
+    /// each of them and pass the columns to `bind` and `run` in the order of
     /// `FieldTree::paths`.
     #[must_use]
     pub fn fields(&self) -> &FieldTree {
@@ -418,7 +457,7 @@ impl Program {
         &self.steps
     }
 
-    /// The id of each rule with the slot of its result.
+    /// For each rule: its id and the slot that holds its result.
     pub(crate) fn rules(&self) -> &[(Uuid, usize)] {
         &self.rules
     }
