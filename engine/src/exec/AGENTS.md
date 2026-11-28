@@ -41,7 +41,8 @@ executor knows no rule text.
 
 - The program, the three bitmaps of a step's result, bind once per schema
   and the caller's interface: `doc/adr/0035-vectorized-evaluation-with-a-planner.md`.
-- How numbers convert and compare: `doc/adr/0041-the-rule-language.md`.
+- How values convert and compare, which types can be equal, and how a UTF-8
+  text compares with a UTF-32 text: `doc/adr/0041-the-rule-language.md`.
 - Nulls, NaNs and faults: `doc/adr/0005-one-vocabulary-for-failure-behavior.md`.
 - The three outcomes of a record: `doc/adr/0006-conformance-fixtures-are-the-evaluation-spec.md`.
 
