@@ -130,29 +130,30 @@ pub fn present_from_bits(bits: Bits<'_>, start: usize, rows: usize, out: &mut Pr
     }
 }
 
-/// Where `pack` reads the rows of a chunk.
+/// Something `pack` can read rows from: one column, or two columns side by
+/// side for a comparison such as `x < y`.
 pub(crate) trait Source: Copy {
-    /// 64 rows of the source, as `Test::lanes` takes them.
+    /// 64 rows loaded into SIMD registers, such as a `Simd<i32, 64>`.
     type Lanes;
-    /// One row of the source, as `Test::one` takes it.
+    /// One row, such as an `i32`.
     type One;
 
     /// The number of rows.
     fn len(&self) -> usize;
 
-    /// Whether the values lie one after the other, so that `lanes` can load
-    /// them.
+    /// Whether the values sit next to each other in memory. Only then can
+    /// `lanes` load 64 of them at once.
     fn is_contiguous(&self) -> bool;
 
-    /// The 64 rows from `row` on.
+    /// Loads the 64 rows that start at `row`.
     ///
     /// # Panics
     ///
-    /// Panics when the values do not lie one after the other or the rows reach
-    /// past the end.
+    /// Panics when the values are not next to each other in memory, or when
+    /// the 64 rows reach past the end.
     fn lanes(&self, row: usize) -> Self::Lanes;
 
-    /// The row `row`, without the bound check.
+    /// Reads one row, without checking that `row` is in range.
     ///
     /// # Safety
     ///
@@ -183,7 +184,8 @@ impl<T: SimdElement> Source for Strided<'_, T> {
     }
 }
 
-/// Two runs that a comparison of two fields reads side by side, row by row.
+/// Two columns read side by side, so that row `i` gives the pair of the two
+/// values in row `i`. A comparison of two fields, as in `x < y`, reads one.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Pair<'a, L, R> {
     left: Strided<'a, L>,
@@ -191,14 +193,14 @@ pub(crate) struct Pair<'a, L, R> {
 }
 
 impl<'a, L: Copy, R: Copy> Pair<'a, L, R> {
-    /// The pair of `left` and `right`.
+    /// Pairs the rows of `left` with the rows of `right`.
     ///
     /// # Panics
     ///
     /// Panics when the two runs hold different numbers of values.
     pub(crate) fn new(left: Strided<'a, L>, right: Strided<'a, R>) -> Self {
-        // `pack` bounds its unchecked reads by `len`, which is the length of
-        // the left run, so the right run must be as long.
+        // `len` is the length of `left`, and `pack` reads every row below
+        // `len` without a bound check, so `right` must not be shorter.
         assert_eq!(
             left.len(),
             right.len(),
@@ -231,16 +233,19 @@ impl<L: SimdElement, R: SimdElement> Source for Pair<'_, L, R> {
     }
 }
 
-/// A test that `pack` applies to each row of a chunk.
-// An impl gives the same answer in both methods for the same row, because
-// `pack` takes the vector arm for a source whose values lie one after the
-// other and the scalar arm otherwise. The tests run both arms over the same
-// data, with strides of one to three values. A comparison of the executor may
-// answer differently for a row without a value, whose result it clears.
+/// A yes-or-no question that `pack` asks of each row, such as "is this
+/// value a NaN?" or "is `x < y`?". It answers either 64 rows at once with
+/// SIMD, or one row at a time.
+// `pack` uses `lanes` where it can and `one` elsewhere, so both methods must
+// give the same answer for the same row. The column tests check this by
+// running both over the same data, with values one, two and three positions
+// apart. The executor's comparisons are allowed to differ on rows without a
+// value, because the executor throws away the result of those rows.
 pub(crate) trait Test<S: Source> {
-    /// The answers for 64 rows, with the answer for lane `i` in bit `i`.
+    /// Answers for 64 rows at once and returns one bit per row, row `i` in
+    /// bit `i`.
     fn lanes(&self, rows: S::Lanes) -> u64;
-    /// The answer for one row.
+    /// Answers for one row.
     fn one(&self, row: S::One) -> bool;
 }
 
@@ -257,9 +262,10 @@ impl Test<Strided<'_, u8>> for ZeroByte {
     }
 }
 
-/// Writes into `out` the bitmap of the rows `start .. start + rows` of
-/// `source`, with a bit set where `test` says so. Every word of `out` is
-/// written, and the bits from `rows` on are 0.
+/// Asks `test` about each row in `start .. start + rows` of `source` and
+/// writes the answers into `out`, one bit per row, with row `start` in bit
+/// 0. Every word of `out` is written, and the bits from `rows` on are 0.
+/// This is the loop that every comparison and every marking runs.
 ///
 /// # Panics
 ///
@@ -272,8 +278,8 @@ pub(crate) fn pack<S: Source, X: Test<S>>(
     out: &mut Present,
     test: &X,
 ) {
-    // The bound keeps the chunk inside `out` and inside `source`, and the
-    // unchecked reads of the scalar loop trust it.
+    // The chunk must fit in `out` and in `source`. The row-by-row loop below
+    // reads without bound checks and relies on this assertion.
     assert!(
         rows <= CHUNK_ROWS
             && start
@@ -282,20 +288,22 @@ pub(crate) fn pack<S: Source, X: Test<S>>(
         "a chunk of {rows} rows from row {start} of {}",
         source.len()
     );
-    // The loops below write only the words that hold rows.
+    // The loops below only write the words that hold rows, and the
+    // row-by-row loop sets bits with `|=`, so `out` starts at zero.
     out.fill(0);
-    // Values that lie one after the other load 64 at a time into a vector,
-    // and `Test::lanes` gives one word per load. The rows after the last full
-    // group of 64 are left to the scalar loop, so no load reads past the
-    // chunk.
+    // When the values are next to each other in memory, load them 64 at a
+    // time and get one word of answers per load. The rows after the last
+    // full group of 64 go to the row-by-row loop, so no load reads past the
+    // chunk. `first` is the first row that the row-by-row loop handles.
     let first = if source.is_contiguous() {
         for (k, word) in out.iter_mut().take(rows / 64).enumerate() {
             *word = test.lanes(source.lanes(start + 64 * k));
         }
         rows / 64 * 64
     } else {
-        // A strided source reads every row in the scalar loop, because its
-        // values are not adjacent in memory.
+        // Values with gaps between them, such as one field of an array of
+        // structs, cannot be loaded 64 at a time, so every row goes to the
+        // row-by-row loop.
         0
     };
     for row in first..rows {
@@ -347,9 +355,10 @@ impl Test<Strided<'_, f64>> for NotNan {
 /// a NaN when its bits without the sign lie above these.
 const F16_INFINITY: u16 = f16::INFINITY.to_bits();
 
-// The test of a half-precision float compares its 16 bits as an int, so no
-// target converts a lane. A test of `f16` lanes would widen each lane on
-// aarch64 without its half-precision extension.
+// The NaN test for `f16` works on the raw 16 bits as an int instead of on
+// `f16` values. On aarch64 without the half-precision extension, an `f16`
+// comparison converts every value to `f32` first, and the int test avoids
+// that cost on every target.
 impl Test<Strided<'_, u16>> for NotNan {
     fn lanes(&self, values: Simd<u16, 64>) -> u64 {
         // `0x7fff` clears the sign bit, so a negative NaN tests like a
@@ -368,18 +377,18 @@ impl Test<Strided<'_, u16>> for NotNan {
 mod sealed {
     use super::{Present, Strided};
 
-    /// The part of `Float` that only this crate can name, so no crate outside
-    /// the engine implements `Float` for a type of its own.
+    /// The part of `Float` that only this crate can see. Other crates can
+    /// use `Float` but cannot implement it for their own types.
     pub trait Sealed: Copy + Sized {
-        /// Writes into `out` the bitmap of the rows of the chunk whose float is
-        /// not a NaN.
+        /// Writes into `out` one bit per row of the chunk, set where the
+        /// value is not a NaN.
         fn not_nan(values: Strided<'_, Self>, start: usize, rows: usize, out: &mut Present);
     }
 }
 
-/// A float type that a column can hold.
-// The trait is sealed, because the engine owns the closed list of float types
-// and no other crate extends it (ADR-0036).
+/// A float type that a column can hold: `f16`, `f32` or `f64`.
+// Other crates cannot add a float type, because the engine's loops only
+// exist for these three (ADR-0036).
 pub trait Float: Number + sealed::Sealed {}
 
 impl sealed::Sealed for f16 {
