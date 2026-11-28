@@ -685,8 +685,8 @@ impl LentTexts<'_> {
                 Text::Pieces(run)
             }
             Buffers::Bytes { width, step, .. } => {
-                // `byte_cells` holds the one promise that these bytes are
-                // UTF-8.
+                // `byte_cells` makes the `unsafe` promise that these bytes are
+                // UTF-8, so this arm makes none of its own.
                 let (units, _) = self.buffers.byte_cells().expect("a bytes layout");
                 Text::Bytes(
                     Fixed::new(*width, step * width, rows, units)
