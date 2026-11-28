@@ -118,6 +118,25 @@ fn an_unsupported_kind_is_refused_with_its_rule() {
     );
 }
 
+/// The planner refuses a list inside a membership list, with the key of the
+/// inner list.
+#[test]
+fn a_list_inside_a_membership_list_is_refused() {
+    let id = Uuid::from_u128(7);
+    let inner = Expr::List(vec![Expr::Int(1)]);
+    let rule = Expr::In(
+        Box::new(Expr::Field(vec![Segment::Key("x".into())])),
+        Box::new(Expr::List(vec![Expr::Int(2), inner])),
+    );
+    assert_eq!(
+        plan(&[observing(id, rule)]).err(),
+        Some(Unsupported {
+            rule_id: id,
+            key: "list"
+        })
+    );
+}
+
 /// Two rules that make the same comparison share one step for it.
 #[test]
 fn rules_share_an_equal_comparison() {

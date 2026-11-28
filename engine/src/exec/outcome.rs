@@ -4,10 +4,8 @@
 /// Why a rule could not be evaluated on a record (ADR-0005).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Fault {
-    /// Two values of types that cannot be compared, as in `"a" == 5`.
-    Incompatible,
-    /// `<`, `<=`, `>` or `>=` on values that are not numbers, as in
-    /// `True < False`.
+    /// `<`, `<=`, `>` or `>=` with an operand that is not a number, as in
+    /// `True < False`, or `x > 5` where `x` holds a text.
     Unordered,
     /// A value that is not a boolean used as a condition, as `x` is in
     /// `x and y` when `x` holds a number.

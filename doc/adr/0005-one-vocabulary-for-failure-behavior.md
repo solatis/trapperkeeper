@@ -1,6 +1,6 @@
 # 0005. One vocabulary for failure behavior
 
-Date: 2026-11-27.
+Date: 2026-11-28.
 
 ## Context
 
@@ -69,12 +69,17 @@ of `in`, as in `None in tags`, the test is true when the list `tags` holds a
 null element (owner, 2026-11-16). Only the literal `None` has this meaning.
 `a == b` on two fields that both hold a null gives unknown.
 
+The meaning of `in` follows the type of its right side. When the rule writes
+the list, as in `x in [1, 2]`, `in` tests membership. When the right side is a
+field that holds a text, `in` searches the text for a substring, and when the
+field holds a list, `in` searches its elements (owner, 2026-11-28).
+
 Validation (`adr/0033`) refuses the literal `None` beside an ordering or an
 arithmetic operator, under a minus, and after `in` and `not in`, because such a
 rule could never match. A field that holds a null there is data, so `x + 1` is a
-null and `x < y` is unknown (owner, 2026-11-14). `x in y` gives unknown only
-when `y` is a field that should hold a list and holds a null (owner,
-2026-11-16).
+null and `x < y` is unknown (owner, 2026-11-14). A search `x in y`, where `y`
+is a field, gives unknown only when `y` should hold a list and holds a null
+(owner, 2026-11-16).
 
 A rule differs from SQL in three places. The first is the literal `None`.
 Under `==`, under `!=`, in a membership list and on the left of `in` it tests
@@ -88,11 +93,16 @@ answers, and they differ on a division by zero.
 A fault is an operation that cannot be done on values that are there (owner,
 2026-11-13, 2026-11-27):
 
-- two values have incompatible types
-- an ordering compares values that are not numbers, such as text or booleans
+- an ordering compares a value that is not a number, such as a text or a
+  boolean
 - a division by zero
 - an integer overflow
 - a value that is no boolean where a condition is expected
+
+`==` compares values of any two types, as in Python, and a text never equals
+an int. So `x == 5` is
+false and `x != 5` true where `x` holds a text (owner, 2026-11-28). An int and
+a float can be equal, and a boolean never equals a number (`adr/0041`).
 
 A rule that meets a fault on a record does not apply to that record. The rule
 is off for that record. The rule behaves as if it did not exist for that
@@ -165,6 +175,11 @@ would never match.
 An equality in which two nulls are equal, because `a == b` would then match
 every record that has neither field.
 
+A fault for `==` between values of types that cannot be equal, because the
+order of a membership list would then decide the result. `x in ["a", 1]`
+would fault on every int record, and `x in [1, "a"]` would match the records
+that hold 1.
+
 `isinstance` on a null as unknown, because `not isinstance(x, int)` is the
 way to find the records whose value has another type or is absent.
 
@@ -229,9 +244,10 @@ gives unknown for every record and matches nothing in silence. A check of
 types, which is to be built together with the planner of `adr/0035`, would
 refuse these forms (owner, 2026-11-16).
 
-An adapter keeps the rows whose value has another type beside the column
-(`adr/0036`), so a rule that reads the column is off for those records alone
-and not for the whole batch.
+An adapter puts the rows whose value has a type other than the column's into
+a second column (`adr/0036`). A rule gives each such record what its
+operator gives for the record's own type. So `x == "a"` is false for a record
+that holds an int, and `x > 5` is a fault for a record that holds a text.
 
 The fixtures and every SDK must use the vocabulary of this record and cite it:
 `pass-through`, `halt`, `cached`, null, unknown, fault and off.

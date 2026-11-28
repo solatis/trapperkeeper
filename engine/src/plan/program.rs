@@ -6,6 +6,7 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt;
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
 use uuid::Uuid;
 
@@ -54,6 +55,14 @@ pub(crate) enum Step {
     // field has no value, false elsewhere, and never unknown (ADR-0005).
     // `x is not None` is a `Not` over this step.
     IsNull(usize),
+    // The literals of a membership list, such as the `1, 2` of
+    // `x in [1, 2, y]`: true where the field equals one of them, and unknown
+    // where it has no value. The fields and the `None` of the list become
+    // steps of their own, which `Or` steps join with this one.
+    Member {
+        field: usize,
+        values: Vec<Literal>,
+    },
     // `not`, `and` and `or` over the results of earlier steps, by their
     // slots. They follow the three-valued logic of ADR-0005, where a row is
     // true, false or unknown. `And` and `Or` keep the operands in the order
@@ -71,16 +80,49 @@ pub(crate) enum Operand {
     Literal(Literal),
 }
 
-/// A constant value in a comparison, such as the `5` in `x > 5`.
+/// A constant value in a comparison or a membership list, such as the `5` in
+/// `x > 5`.
 ///
 /// `None` is not a literal here. The planner turns `x == None` into a null
-/// test (`Step::IsNull`) before it builds a comparison. Text and list
-/// literals are not compared yet, so `plan` refuses a rule that compares one.
-#[derive(Debug, Clone, Copy)]
+/// test (`Step::IsNull`) before it builds a comparison. List literals are not
+/// compared yet, so `plan` refuses a rule that compares one.
+#[derive(Debug, Clone)]
 pub(crate) enum Literal {
     Int(i64),
     Float(f64),
     Bool(bool),
+    // The planner clones a step into its map of shared steps, and `Arc`
+    // makes the clone of a long text cheap.
+    Text(Arc<TextLiteral>),
+}
+
+/// A text literal of a rule, held in UTF-8 and in UTF-32, so that a loop
+/// compares it with a column in the column's own encoding (ADR-0041).
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub(crate) struct TextLiteral {
+    utf8: Box<str>,
+    // numpy's `U` cells are UTF-32, and a loop over them compares units.
+    utf32: Box<[u32]>,
+}
+
+impl TextLiteral {
+    /// Encodes `text` in both encodings.
+    pub(crate) fn new(text: &str) -> Self {
+        Self {
+            utf8: text.into(),
+            utf32: text.chars().map(u32::from).collect(),
+        }
+    }
+
+    /// Returns the literal in UTF-8.
+    pub(crate) fn utf8(&self) -> &[u8] {
+        self.utf8.as_bytes()
+    }
+
+    /// Returns the literal in UTF-32, one unit per character.
+    pub(crate) fn utf32(&self) -> &[u32] {
+        &self.utf32
+    }
 }
 
 // The planner shares a step between rules when the steps are equal, and it
@@ -94,6 +136,7 @@ impl PartialEq for Literal {
             (Self::Int(a), Self::Int(b)) => a == b,
             (Self::Float(a), Self::Float(b)) => a.to_bits() == b.to_bits(),
             (Self::Bool(a), Self::Bool(b)) => a == b,
+            (Self::Text(a), Self::Text(b)) => a == b,
             _ => false,
         }
     }
@@ -107,6 +150,7 @@ impl Hash for Literal {
             Self::Int(i) => (0u8, *i).hash(state),
             Self::Float(x) => (1u8, x.to_bits()).hash(state),
             Self::Bool(b) => (2u8, *b).hash(state),
+            Self::Text(t) => (3u8, &**t).hash(state),
         }
     }
 }
@@ -265,6 +309,20 @@ impl Planner<'_> {
             Expr::Le(l, r) => return self.compare(Comparison::Le, l, r),
             Expr::Gt(l, r) => return self.compare(Comparison::Gt, l, r),
             Expr::Ge(l, r) => return self.compare(Comparison::Ge, l, r),
+            // `x in [...]` with a list that the rule writes is membership.
+            // `x in y` with any other right side, such as a field, is a
+            // substring search or a list search, which this version does not
+            // run.
+            Expr::In(needle, list) => match &**list {
+                Expr::List(items) => return self.membership(needle, items),
+                _ => return Err(e.key()),
+            },
+            // `x not in [...]` is the opposite of the same membership, and
+            // `not` keeps unknown as it is (ADR-0005).
+            Expr::NotIn(needle, list) => match &**list {
+                Expr::List(items) => Step::Not(self.membership(needle, items)?),
+                _ => return Err(e.key()),
+            },
             // Arithmetic, quantifiers and text methods are not supported
             // yet.
             _ => return Err(e.key()),
@@ -295,6 +353,92 @@ impl Planner<'_> {
             slot = self.push(join(slot, right));
         }
         Ok(slot)
+    }
+
+    /// Adds the steps of `needle in list`, where `list` holds the items of a
+    /// list that the rule writes, and returns the slot of the result. Fails
+    /// with the JSON key of a list item or a needle that this version cannot
+    /// test, such as a list inside the list.
+    fn membership(&mut self, needle: &Expr, list: &[Expr]) -> Result<usize, &'static str> {
+        // The test is `needle == a or needle == b ...` (ADR-0005). An
+        // equality never faults, so the order of the items does not change
+        // the result, and the function groups the items by kind.
+        //
+        // 1. It gathers the literals of the list into one membership step
+        //    when the needle is a field, so that all of them share one
+        //    lookup per row. A literal needle has no column, so each literal
+        //    becomes an equality that `fold` computes now.
+        // 2. It turns each `None` into a null test of the needle and each
+        //    field into an equality with the needle. A needle `None` turns
+        //    every item into a null test of that item instead, because
+        //    `None == a` tests `a` for a null (ADR-0005).
+        // 3. It joins the steps with `or`, and an empty list gives false, as
+        //    `x in []` does in Python.
+
+        // A needle that is neither a field nor a literal, such as `x + 1`, has
+        // no step that this version can build.
+        if !matches!(
+            needle,
+            Expr::Field(_)
+                | Expr::None
+                | Expr::Bool(_)
+                | Expr::Int(_)
+                | Expr::Float(_)
+                | Expr::Text(_)
+        ) {
+            return Err(needle.key());
+        }
+        // Under a needle `None` no item counts as a literal, because each
+        // item becomes a null test of its own.
+        let (literals, others): (Vec<&Expr>, Vec<&Expr>) = list.iter().partition(|item| {
+            *needle != Expr::None
+                && matches!(
+                    item,
+                    Expr::Bool(_) | Expr::Int(_) | Expr::Float(_) | Expr::Text(_)
+                )
+        });
+
+        // 1. gather the literals
+        let mut slots = Vec::new();
+        if let Expr::Field(path) = needle {
+            let values = literals
+                .iter()
+                .map(|item| match self.operand(item)? {
+                    Operand::Literal(l) => Ok(l),
+                    Operand::Field(_) => unreachable!("the partition keeps only literals here"),
+                })
+                .collect::<Result<Vec<_>, &'static str>>()?;
+            if !values.is_empty() {
+                let field = self.fields.field_of(path);
+                slots.push(self.push(Step::Member { field, values }));
+            }
+        } else {
+            for item in literals {
+                slots.push(self.compare(Comparison::Eq, needle, item)?);
+            }
+        }
+
+        // 2. the null tests and the field equalities
+        for item in others {
+            let slot = match (needle, item) {
+                (Expr::None, _) => self.null_test(item)?,
+                (_, Expr::None) => self.null_test(needle)?,
+                (_, Expr::Field(_)) => self.compare(Comparison::Eq, needle, item)?,
+                // A list inside the list, or an expression such as `y + 1`, has
+                // no step that this version can build.
+                _ => return Err(item.key()),
+            };
+            slots.push(slot);
+        }
+
+        // 3. join with or
+        let Some((first, rest)) = slots.split_first() else {
+            return Ok(self.push(Step::Constant(Constant::False)));
+        };
+        // The steps join from the left, as `chain` joins an `or`.
+        Ok(rest
+            .iter()
+            .fold(*first, |left, &right| self.push(Step::Or(left, right))))
     }
 
     /// Adds the step for `e is None` and returns its slot. Fails with the
@@ -328,7 +472,7 @@ impl Planner<'_> {
         let step = match (self.operand(left)?, self.operand(right)?) {
             // `1 < 2` is the same on every row, so the planner computes it
             // now and stores the result as a constant.
-            (Operand::Literal(l), Operand::Literal(r)) => Step::Constant(fold(op, l, r)),
+            (Operand::Literal(l), Operand::Literal(r)) => Step::Constant(fold(op, &l, &r)),
             // `5 < x` becomes `x > 5`, because the executor's loops expect
             // the field on the left.
             (literal @ Operand::Literal(_), field @ Operand::Field(_)) => Step::Compare {
@@ -348,18 +492,22 @@ impl Planner<'_> {
         Ok(self.push(step))
     }
 
-    /// Converts one side of a comparison: a field becomes its number, and an
-    /// int, float or boolean becomes a `Literal`. Fails with the JSON key of
-    /// `e` for anything else, such as a text literal or arithmetic.
+    /// Converts one side of a comparison: a field becomes the number that
+    /// `FieldTree` gives it, and an int, float, boolean or text becomes a
+    /// `Literal`. Fails with the JSON key of `e` for anything else, such as a
+    /// list literal or arithmetic.
     fn operand(&self, e: &Expr) -> Result<Operand, &'static str> {
         match e {
             Expr::Field(path) => Ok(Operand::Field(self.fields.field_of(path))),
             Expr::Int(i) => Ok(Operand::Literal(Literal::Int(*i))),
             Expr::Float(x) => Ok(Operand::Literal(Literal::Float(*x))),
             Expr::Bool(b) => Ok(Operand::Literal(Literal::Bool(*b))),
-            // Text, lists, arithmetic and function calls are not compared
-            // yet. `None < x` would land here too, but validation already
-            // refuses it before the rule reaches the planner.
+            Expr::Text(t) => Ok(Operand::Literal(Literal::Text(Arc::new(TextLiteral::new(
+                t,
+            ))))),
+            // Lists, arithmetic and function calls are not compared yet.
+            // `None < x` would land here too, but validation already refuses
+            // it before the rule reaches the planner.
             _ => Err(e.key()),
         }
     }
@@ -379,22 +527,25 @@ impl Planner<'_> {
 }
 
 /// Computes `left op right` for two literals, such as `1 < 2.5`.
-fn fold(op: Comparison, left: Literal, right: Literal) -> Constant {
-    // The boolean arms come first, because the last arm converts whatever
-    // reaches it to `f64`, and a boolean must not reach it.
+fn fold(op: Comparison, left: &Literal, right: &Literal) -> Constant {
+    // The arms for booleans and texts come first, because the last arm
+    // converts whatever reaches it to `f64`, and neither may reach it.
     let order = match (left, right) {
-        // `True < False` is a fault, because only numbers can be ordered
-        // (ADR-0041).
-        (Literal::Bool(_), Literal::Bool(_)) if op.is_ordering() => {
+        // `True < False`, `True < 1` and `"a" < "b"` are a fault, because
+        // only numbers can be ordered (ADR-0041).
+        (Literal::Bool(_) | Literal::Text(_), _) | (_, Literal::Bool(_) | Literal::Text(_))
+            if op.is_ordering() =>
+        {
             return Constant::Fault(Fault::Unordered);
         }
-        (Literal::Bool(l), Literal::Bool(r)) => l.cmp(&r),
-        // `True == 1` is a fault, because a boolean and a number cannot be
-        // compared.
-        (Literal::Bool(_), _) | (_, Literal::Bool(_)) => {
-            return Constant::Fault(Fault::Incompatible);
+        (Literal::Bool(l), Literal::Bool(r)) => l.cmp(r),
+        (Literal::Text(l), Literal::Text(r)) => l.utf8().cmp(r.utf8()),
+        // `True == 1` and `"1" == 1` are false, and `!=` is true, because a
+        // boolean or a text never equals a value of another type (ADR-0041).
+        (Literal::Bool(_) | Literal::Text(_), _) | (_, Literal::Bool(_) | Literal::Text(_)) => {
+            return Constant::of(op == Comparison::Ne);
         }
-        (Literal::Int(l), Literal::Int(r)) => l.cmp(&r),
+        (Literal::Int(l), Literal::Int(r)) => l.cmp(r),
         // At least one side is a float, so both compare as `f64`, as in
         // `1 < 2.5`. `partial_cmp` follows IEEE 754, so `-0.0 == 0.0` holds.
         // It fails only for a NaN, and a literal is never NaN or infinite,
@@ -407,7 +558,7 @@ fn fold(op: Comparison, left: Literal, right: Literal) -> Constant {
 }
 
 /// Converts an int or float literal to `f64`.
-fn as_f64(l: Literal) -> f64 {
+fn as_f64(l: &Literal) -> f64 {
     match l {
         // An int above 2^53 rounds to the nearest `f64`, which the language
         // accepts for a comparison of an int with a float.
@@ -415,9 +566,11 @@ fn as_f64(l: Literal) -> f64 {
             clippy::cast_precision_loss,
             reason = "an int widens to a float (ADR-0041)"
         )]
-        Literal::Int(i) => i as f64,
-        Literal::Float(x) => x,
-        Literal::Bool(_) => unreachable!("`fold` handles a boolean before it widens"),
+        Literal::Int(i) => *i as f64,
+        Literal::Float(x) => *x,
+        Literal::Bool(_) | Literal::Text(_) => {
+            unreachable!("`fold` handles a boolean and a text before it widens")
+        }
     }
 }
 

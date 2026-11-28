@@ -10,14 +10,16 @@ executor knows no rule text.
 
 **Map**:
 
-| File         | What                                                                                                                                    | When to read                                                                                                                           |
-| ------------ | --------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `mod.rs`     | the module and what it exports                                                                                                          | what a caller of the executor can reach                                                                                                |
-| `bind.rs`    | `Program::bind`, `Bound`, the column type of a field, and the choice of loop for each step                                              | how a comparison gets its loop; how a literal converts to the column's type; which comparisons are a type fault; how booleans are read |
-| `run.rs`     | `Bound::run`: the check of a batch, the loop over chunks, and the lookup of a faulted record's fault                                    | how a batch runs chunk by chunk; what `run` checks about a batch                                                                       |
-| `number.rs`  | the six operators as types, such as `Less`, the loops that compare numbers, and the type in which two number columns compare (`Common`) | writing a loop that compares numbers; why `x < 300` on a `u8` column needs no loop over values; in which type `x < y` compares         |
-| `result.rs`  | `StepResult`, what one step computed for each row of a chunk, and the `not`, `and` and `or` that combine results                        | how true, false, unknown and fault are stored; how `and` and `or` ignore a fault on the right                                          |
-| `outcome.rs` | `Outcomes`, `RuleOutcome`, `Outcome` and `Fault`                                                                                        | what a run returns; the kinds of fault                                                                                                 |
+| File         | What                                                                                                                                    | When to read                                                                                                                                             |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mod.rs`     | the module and what it exports                                                                                                          | what a caller of the executor can reach                                                                                                                  |
+| `bind.rs`    | `Program::bind`, `Bound`, the column type of a field, and the choice of loop for each step                                              | how a comparison gets its loop; how a literal converts to the column's type; which comparisons fault and which can never be equal; how booleans are read |
+| `run.rs`     | `Bound::run`: the check of a batch, the loop over chunks, and the lookup of a faulted record's fault                                    | how a batch runs chunk by chunk; what `run` checks about a batch                                                                                         |
+| `number.rs`  | the six operators as types, such as `Less`, the loops that compare numbers, and the type in which two number columns compare (`Common`) | writing a loop that compares numbers; why `x < 300` on a `u8` column needs no loop over values; in which type `x < y` compares                           |
+| `text.rs`    | the loops that compare texts, in the encodings of the columns and across UTF-8 and UTF-32                                               | comparing a text with a literal or another text; how a UTF-8 text compares with a UTF-32 text                                                            |
+| `result.rs`  | `StepResult`, what one step computed for each row of a chunk, and the `not`, `and` and `or` that combine results                        | how true, false, unknown and fault are stored; how `and` and `or` ignore a fault on the right                                                            |
+| `member.rs`  | the sets of a membership list, built at bind for the column's type, and the tests that look a row up in them                            | how `x in [...]` runs; how a long list is searched                                                                                                       |
+| `outcome.rs` | `Outcomes`, `RuleOutcome`, `Outcome` and `Fault`                                                                                        | what a run returns; the kinds of fault                                                                                                                   |
 
 **Invariants**:
 
@@ -39,7 +41,8 @@ executor knows no rule text.
 
 - The program, the three bitmaps of a step's result, bind once per schema
   and the caller's interface: `doc/adr/0035-vectorized-evaluation-with-a-planner.md`.
-- How numbers convert and compare: `doc/adr/0041-the-rule-language.md`.
+- How values convert and compare, which types can be equal, and how a UTF-8
+  text compares with a UTF-32 text: `doc/adr/0041-the-rule-language.md`.
 - Nulls, NaNs and faults: `doc/adr/0005-one-vocabulary-for-failure-behavior.md`.
 - The three outcomes of a record: `doc/adr/0006-conformance-fixtures-are-the-evaluation-spec.md`.
 

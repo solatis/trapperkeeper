@@ -131,9 +131,8 @@ fn run_step(
             chunk(columns, start, rows, &mut true_rows);
             StepResult::compared(&true_rows, all_present(present, fields))
         }
-        // A type fault, such as text compared with a number, only happens
-        // where the values are there (ADR-0005). Rows where a field has no
-        // value stay unknown.
+        // A fault such as an ordering on text only happens where the values
+        // are there (ADR-0005). Rows where a field has no value stay unknown.
         BoundStep::Faulted { fields, .. } => StepResult::faulted(all_present(present, fields)),
         BoundStep::IsNull(f) => StepResult::null_test(&present[*f], rows),
         BoundStep::Not(a) => results[*a].not(),
@@ -159,7 +158,7 @@ fn fault_of(steps: &[BoundStep], results: &[StepResult], slot: usize, row: usize
     // loop walks down from the rule's last step to the step where the fault
     // started: a `not` leads to its operand, an `and` or `or` leads to the
     // operand whose fault counts, and the walk stops at a fault constant or a
-    // type fault, which hold the kind.
+    // comparison that faults, which hold the kind.
     let mut slot = slot;
     loop {
         match &steps[slot] {

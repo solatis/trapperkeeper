@@ -3,10 +3,12 @@
 //! batch, `CHUNK_ROWS` rows at a time. ADR-0035 gives the reasons.
 
 mod bind;
+mod member;
 mod number;
 mod outcome;
 mod result;
 mod run;
+mod text;
 
 pub use bind::{BindError, Bound};
 pub use outcome::{Fault, Outcome, Outcomes, RuleOutcome};
