@@ -18,16 +18,20 @@ use super::bind::ChunkLoop;
 
 /// A unit of text in which a text literal has a form of its own: a byte of
 /// UTF-8 or a unit of UTF-32.
-trait Encoded: Unit {
+pub(super) trait Encoded: Unit + Ord {
     /// Returns `literal` in this encoding.
     fn of(literal: &TextLiteral) -> &[Self];
+
+    /// Returns the list of texts in this encoding, out of the same texts in
+    /// UTF-8 and in UTF-32.
+    fn pick<'s>(utf8: &'s [Box<[u8]>], utf32: &'s [Box<[u32]>]) -> &'s [Box<[Self]>];
 
     /// Returns the text `units` tagged with its encoding.
     fn form(units: &[Self]) -> Form<'_>;
 }
 
 /// The units of a text, tagged with their encoding.
-enum Form<'a> {
+pub(super) enum Form<'a> {
     Utf8(&'a [u8]),
     Utf32(&'a [u32]),
 }
@@ -40,6 +44,10 @@ impl Encoded for u8 {
     fn form(units: &[Self]) -> Form<'_> {
         Form::Utf8(units)
     }
+
+    fn pick<'s>(utf8: &'s [Box<[u8]>], _: &'s [Box<[u32]>]) -> &'s [Box<[Self]>] {
+        utf8
+    }
 }
 
 impl Encoded for u32 {
@@ -49,6 +57,10 @@ impl Encoded for u32 {
 
     fn form(units: &[Self]) -> Form<'_> {
         Form::Utf32(units)
+    }
+
+    fn pick<'s>(_: &'s [Box<[u8]>], utf32: &'s [Box<[u32]>]) -> &'s [Box<[Self]>] {
+        utf32
     }
 }
 
@@ -152,7 +164,7 @@ fn same_code_points(bytes: &[u8], units: &[u32]) -> bool {
 }
 
 /// Returns the layout of text field `f`.
-fn texts_of<'a>(cols: &[Option<Column<'a>>], f: usize) -> Text<'a> {
+pub(super) fn texts_of<'a>(cols: &[Option<Column<'a>>], f: usize) -> Text<'a> {
     match cols[f].as_ref().map(Column::kind) {
         Some(Kind::Text(t, _)) => *t,
         // Bind made this loop for a text column, and `run` refuses a batch

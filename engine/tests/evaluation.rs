@@ -394,6 +394,70 @@ fn a_utf8_text_equals_its_utf32_cells() {
     );
 }
 
+/// Builds the expression `x in items`.
+fn x_in(items: Vec<Expr>) -> Expr {
+    Expr::In(Box::new(x()), Box::new(Expr::List(items)))
+}
+
+#[test]
+fn a_membership_list_matches_in_any_order() {
+    let values = [1i64, 2];
+    let column =
+        Column::ints(Ints::I64(Strided::from_slice(&values)), Marking::Never).expect("unmarked");
+    let (a, one) = (Expr::Text("a".into()), Expr::Int(1));
+    // A text never equals an int, so the text adds nothing in either place
+    // and neither order faults.
+    assert_eq!(
+        outcomes(x_in(vec![a.clone(), one.clone()]), Some(column)),
+        [Matched, NotMatched]
+    );
+    assert_eq!(
+        outcomes(x_in(vec![one, a]), Some(column)),
+        [Matched, NotMatched]
+    );
+}
+
+#[test]
+fn a_none_in_the_list_matches_a_null() {
+    let bitmap = packed(&[true, false, true], 0);
+    let column = ints(&[1, 2, 3], &bitmap);
+    // The second row has no value, which the `None` of the list matches.
+    assert_eq!(
+        outcomes(x_in(vec![Expr::Int(1), Expr::None]), Some(column)),
+        [Matched, Matched, NotMatched]
+    );
+    // Without the `None`, the row without a value is unknown, and so is its
+    // `not in`.
+    assert_eq!(
+        outcomes(
+            Expr::NotIn(Box::new(x()), Box::new(Expr::List(vec![Expr::Int(1)]))),
+            Some(column)
+        ),
+        [NotMatched, NotMatched, Matched]
+    );
+}
+
+#[test]
+fn a_long_list_finds_its_values_by_binary_search() {
+    let values: Vec<i32> = (0..100).collect();
+    let column =
+        Column::ints(Ints::I32(Strided::from_slice(&values)), Marking::Never).expect("unmarked");
+    // The twelve even numbers from 10 to 32 lie above the eight values that
+    // a vector compare takes, so each row is looked up in the sorted list.
+    // The list is written in descending order, and the set sorts it.
+    let list = (5..17).rev().map(|i| Expr::Int(2 * i)).collect();
+    let expected: Vec<Outcome> = (0..100)
+        .map(|v| {
+            if (10..=32).contains(&v) && v % 2 == 0 {
+                Matched
+            } else {
+                NotMatched
+            }
+        })
+        .collect();
+    assert_eq!(outcomes(x_in(list), Some(column)), expected);
+}
+
 #[test]
 fn a_negative_int_orders_below_every_u64() {
     let signed = [-1i8, 5, 5];
@@ -596,8 +660,27 @@ fn reference(e: &Expr, record: &[Value]) -> Tri {
         Expr::Le(l, r) => compare(l, r, record, Ordering::is_le, true),
         Expr::Gt(l, r) => compare(l, r, record, Ordering::is_gt, true),
         Expr::Ge(l, r) => compare(l, r, record, Ordering::is_ge, true),
+        // `x in [a, b]` is `x == a or x == b` (ADR-0005), so the arm builds
+        // that `or` and evaluates it with the arms above.
+        Expr::In(needle, list) => reference(&either_equal(needle, list), record),
+        Expr::NotIn(needle, list) => {
+            reference(&Expr::Not(Box::new(either_equal(needle, list))), record)
+        }
         _ => unreachable!("the generated rules hold no other kind"),
     }
+}
+
+/// Builds `needle == a or needle == b ...` for the items of the list `list`.
+fn either_equal(needle: &Expr, list: &Expr) -> Expr {
+    let Expr::List(items) = list else {
+        unreachable!("a generated membership has a list on its right")
+    };
+    Expr::Or(
+        items
+            .iter()
+            .map(|item| Expr::Eq(Box::new(needle.clone()), Box::new(item.clone())))
+            .collect(),
+    )
 }
 
 /// Whether `e`, a field or a literal, is a null on `record`.
@@ -1169,8 +1252,8 @@ fn field_named(i: usize) -> Expr {
 }
 
 /// Generates a condition over `n` fields, built from the expressions this
-/// version supports: comparisons, null tests, `not`, `and`, `or`, fields and
-/// literals.
+/// version supports: comparisons, null tests, membership in a written list,
+/// `not`, `and`, `or`, fields and literals.
 fn condition(n: usize) -> impl Strategy<Value = Expr> {
     // `==` and `!=` from `BINARY`, and the four orderings from `NUMERIC`.
     let ops: Vec<_> = BINARY[..2].iter().chain(&NUMERIC[..4]).copied().collect();
@@ -1204,6 +1287,26 @@ fn condition(n: usize) -> impl Strategy<Value = Expr> {
             _ => Expr::Ne(none, x),
         }
     });
+    // A list of two to four items drawn from literals, `None` and fields,
+    // searched for a field, a literal or `None`.
+    let item = prop_oneof![
+        3 => literal(),
+        1 => Just(Expr::None),
+        2 => (0..n).prop_map(field_named),
+    ];
+    let needle = prop_oneof![
+        4 => (0..n).prop_map(field_named),
+        1 => literal(),
+        1 => Just(Expr::None),
+    ];
+    let membership = (needle, vec(item, 2..5), any::<bool>()).prop_map(|(x, items, negated)| {
+        let (x, list) = (Box::new(x), Box::new(Expr::List(items)));
+        if negated {
+            Expr::NotIn(x, list)
+        } else {
+            Expr::In(x, list)
+        }
+    });
     let leaf = prop_oneof![
         6 => comparison,
         3 => fields,
@@ -1211,6 +1314,7 @@ fn condition(n: usize) -> impl Strategy<Value = Expr> {
         1 => literal_condition,
         2 => field_condition,
         2 => null_test,
+        3 => membership,
     ];
     // Up to three levels of `not`, `and` and `or` over the leaves.
     // At most 24 nodes in all. An `and` or an `or` holds two or three items.

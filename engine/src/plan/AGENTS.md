@@ -10,11 +10,11 @@ field a number. It reads rules only and knows nothing about columns or types;
 
 **Map**:
 
-| File         | What                                                                  | When to read                                                                                                                                    |
-| ------------ | --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mod.rs`     | the module and what it exports                                        | what a caller of the planner can reach                                                                                                          |
-| `fields.rs`  | `FieldTree` and `FieldNode`: the paths that the rules read, as a tree | how fields get their numbers; how an adapter, the code that finds the columns of a source, learns which columns to find and in which order      |
-| `program.rs` | `Program`, its steps, `plan` and `Unsupported`                        | what a step is; how a comparison becomes a step; which expressions this version supports; how `1 < 2` is computed early; how rules share a step |
+| File         | What                                                                  | When to read                                                                                                                                                                    |
+| ------------ | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mod.rs`     | the module and what it exports                                        | what a caller of the planner can reach                                                                                                                                          |
+| `fields.rs`  | `FieldTree` and `FieldNode`: the paths that the rules read, as a tree | how fields get their numbers; how an adapter, the code that finds the columns of a source, learns which columns to find and in which order                                      |
+| `program.rs` | `Program`, its steps, `plan` and `Unsupported`                        | what a step is; how a comparison becomes a step; which expressions this version supports; how `1 < 2` is computed early; how rules share a step; how `x in [...]` becomes steps |
 
 **Invariants**:
 

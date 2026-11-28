@@ -18,6 +18,7 @@ use std::sync::Arc;
 
 use uuid::Uuid;
 
+use super::member;
 use super::number::{
     Converted, compare_columns, compare_widened, compare_with_literal, outside, with_order,
 };
@@ -162,6 +163,7 @@ fn bind_step(step: &Step, types: &[FieldType]) -> Result<BoundStep, BindError> {
         // is true everywhere.
         Step::IsNull(f) if types[*f] == FieldType::Absent => BoundStep::Constant(Constant::True),
         Step::IsNull(f) => BoundStep::IsNull(*f),
+        Step::Member { field, values } => member::bind_member(*field, types[*field], values),
         Step::Not(a) => BoundStep::Not(*a),
         Step::And(a, b) => BoundStep::And(*a, *b),
         Step::Or(a, b) => BoundStep::Or(*a, *b),
@@ -426,7 +428,7 @@ fn widened<T: Number>(op: Comparison, f: usize, x: f64) -> BoundStep {
 
 /// Builds the loop that marks the rows where boolean field `f` equals
 /// `value`.
-fn booleans_equal(f: usize, value: bool) -> ChunkLoop {
+pub(super) fn booleans_equal(f: usize, value: bool) -> ChunkLoop {
     Box::new(
         move |cols: &[Option<Column<'_>>], start: usize, rows: usize, out: &mut Present| {
             write_booleans(cols, f, start, rows, out);
@@ -477,7 +479,7 @@ fn invert(out: &mut Present, rows: usize) {
 }
 
 /// Converts `value` to `C` the way Rust's `as` would.
-fn convert<F: Number, C: Number>(value: F) -> C {
+pub(super) fn convert<F: Number, C: Number>(value: F) -> C {
     // This wrapper exists because `convert` sits on a private trait of
     // `column`. Called on a concrete type such as `i64`, the method is not
     // found here. Called through the bound `F: Number`, it is.
@@ -486,7 +488,7 @@ fn convert<F: Number, C: Number>(value: F) -> C {
 
 /// Builds a loop that ignores the columns and writes the same result,
 /// `holds`, for every row.
-fn constant_loop(holds: bool) -> ChunkLoop {
+pub(super) fn constant_loop(holds: bool) -> ChunkLoop {
     Box::new(
         move |_: &[Option<Column<'_>>], _: usize, rows: usize, out: &mut Present| {
             if holds {
@@ -499,7 +501,7 @@ fn constant_loop(holds: bool) -> ChunkLoop {
 }
 
 /// Returns the values of field `f`, read as type `T`.
-fn values_of<'a, T: Number>(
+pub(super) fn values_of<'a, T: Number>(
     cols: &[Option<Column<'a>>],
     f: usize,
 ) -> crate::column::Strided<'a, T> {

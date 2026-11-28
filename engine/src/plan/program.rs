@@ -55,6 +55,12 @@ pub(crate) enum Step {
     // field has no value, false elsewhere, and never unknown (ADR-0005).
     // `x is not None` is a `Not` over this step.
     IsNull(usize),
+    // The literals of a membership list, such as the `1, 2` of
+    // `x in [1, 2, y]`: true where the field equals one of them.
+    Member {
+        field: usize,
+        values: Vec<Literal>,
+    },
     // `not`, `and` and `or` over the results of earlier steps, by their
     // slots. They follow the three-valued logic of ADR-0005, where a row is
     // true, false or unknown. `And` and `Or` keep the operands in the order
@@ -72,7 +78,8 @@ pub(crate) enum Operand {
     Literal(Literal),
 }
 
-/// A constant value in a comparison, such as the `5` in `x > 5`.
+/// A constant value in a comparison or a membership list, such as the `5` in
+/// `x > 5`.
 ///
 /// `None` is not a literal here. The planner turns `x == None` into a null
 /// test (`Step::IsNull`) before it builds a comparison. List literals are not
@@ -300,6 +307,19 @@ impl Planner<'_> {
             Expr::Le(l, r) => return self.compare(Comparison::Le, l, r),
             Expr::Gt(l, r) => return self.compare(Comparison::Gt, l, r),
             Expr::Ge(l, r) => return self.compare(Comparison::Ge, l, r),
+            // `x in [...]` with a list that the rule writes is membership.
+            // `x in y` with any other right side, such as a field, stays
+            // refused until substring search and list search exist.
+            Expr::In(needle, list) => match &**list {
+                Expr::List(items) => return self.membership(needle, items),
+                _ => return Err(e.key()),
+            },
+            // `x not in [...]` is the opposite of the same membership, and
+            // `not` keeps unknown as it is (ADR-0005).
+            Expr::NotIn(needle, list) => match &**list {
+                Expr::List(items) => Step::Not(self.membership(needle, items)?),
+                _ => return Err(e.key()),
+            },
             // Arithmetic, quantifiers and text methods are not supported
             // yet.
             _ => return Err(e.key()),
@@ -330,6 +350,91 @@ impl Planner<'_> {
             slot = self.push(join(slot, right));
         }
         Ok(slot)
+    }
+
+    /// Adds the steps of `needle in list`, where `list` holds the items of a
+    /// list that the rule writes, and returns the slot of the result. Fails
+    /// with the JSON key of a list item or a needle that this version cannot
+    /// test, such as a list inside the list.
+    fn membership(&mut self, needle: &Expr, list: &[Expr]) -> Result<usize, &'static str> {
+        // The test is `needle == a or needle == b ...` (ADR-0005). No
+        // equality faults, so the order of the items does not change the
+        // result, and the function groups the items by kind.
+        //
+        // 1. It gathers the literals of the list into one membership step
+        //    when the needle is a field, so that all of them share one
+        //    lookup per row. A literal needle has no column, so each literal
+        //    becomes an equality that `fold` computes now.
+        // 2. It turns each `None` into a null test of the needle and each
+        //    field into an equality with the needle. A needle `None` turns
+        //    every item into a null test of that item instead, because
+        //    `None == a` tests `a` for a null (ADR-0005).
+        // 3. It joins the steps with `or`, and an empty list gives false, as
+        //    `x in []` does in Python.
+
+        // A needle that is neither a field nor a literal, such as `x + 1`, has
+        // no step that this version can build.
+        if !matches!(
+            needle,
+            Expr::Field(_)
+                | Expr::None
+                | Expr::Bool(_)
+                | Expr::Int(_)
+                | Expr::Float(_)
+                | Expr::Text(_)
+        ) {
+            return Err(needle.key());
+        }
+        // Under a needle `None` no item counts as a literal, because each
+        // item becomes a null test of its own in step 2.
+        let (literals, others): (Vec<&Expr>, Vec<&Expr>) = list.iter().partition(|item| {
+            *needle != Expr::None
+                && matches!(
+                    item,
+                    Expr::Bool(_) | Expr::Int(_) | Expr::Float(_) | Expr::Text(_)
+                )
+        });
+
+        // 1. gather the literals
+        let mut slots = Vec::new();
+        if let Expr::Field(path) = needle {
+            let values = literals
+                .iter()
+                .map(|item| match self.operand(item)? {
+                    Operand::Literal(l) => Ok(l),
+                    Operand::Field(_) => unreachable!("the partition keeps only literals here"),
+                })
+                .collect::<Result<Vec<_>, &'static str>>()?;
+            if !values.is_empty() {
+                let field = self.fields.field_of(path);
+                slots.push(self.push(Step::Member { field, values }));
+            }
+        } else {
+            for item in literals {
+                slots.push(self.compare(Comparison::Eq, needle, item)?);
+            }
+        }
+
+        // 2. the null tests and the field equalities
+        for item in others {
+            let slot = match (needle, item) {
+                (Expr::None, _) => self.null_test(item)?,
+                (_, Expr::None) => self.null_test(needle)?,
+                (_, Expr::Field(_)) => self.compare(Comparison::Eq, needle, item)?,
+                // A list inside the list, or an expression such as `y + 1`.
+                _ => return Err(item.key()),
+            };
+            slots.push(slot);
+        }
+
+        // 3. join with or
+        let Some((first, rest)) = slots.split_first() else {
+            return Ok(self.push(Step::Constant(Constant::False)));
+        };
+        // The steps join from the left, as `chain` joins an `or`.
+        Ok(rest
+            .iter()
+            .fold(*first, |left, &right| self.push(Step::Or(left, right))))
     }
 
     /// Adds the step for `e is None` and returns its slot. Fails with the

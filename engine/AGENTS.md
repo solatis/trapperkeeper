@@ -8,8 +8,10 @@ printed length, checks its patterns, and refuses the literal `None` beside an
 operator that cannot take it. The crate also parses a rule's text into the tree
 and prints a tree as text. It evaluates rules: it plans a rule set into one
 program, specializes the program for the column types of a schema, and runs
-it over the columns of each batch, which it describes in `src/column/`. It depends on no server, store or
-HTTP code.
+it over the columns of each batch, which it describes in `src/column/`. It
+evaluates comparisons of numbers, booleans and texts, null tests, membership
+in a list that the rule writes, and `not`, `and` and `or`. It depends on no
+server, store or HTTP code.
 
 **Map**:
 

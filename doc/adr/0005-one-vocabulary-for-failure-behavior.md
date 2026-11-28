@@ -69,6 +69,10 @@ of `in`, as in `None in tags`, the test is true when the list `tags` holds a
 null element (owner, 2026-11-16). Only the literal `None` has this meaning.
 `a == b` on two fields that both hold a null gives unknown.
 
+The meaning of `in` follows the type of its right side: a written list is
+membership, a text is substring search and a list is list search (owner,
+2026-11-28).
+
 Validation (`adr/0033`) refuses the literal `None` beside an ordering or an
 arithmetic operator, under a minus, and after `in` and `not in`, because such a
 rule could never match. A field that holds a null there is data, so `x + 1` is a
