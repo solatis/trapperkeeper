@@ -39,7 +39,8 @@ and `list` (owner, 2026-11-14). The pattern of `re.search`, `re.match` and
 `==` and `!=` compare values of any two types, and two values of types that
 cannot be equal are not equal (`adr/0005`). Ordering is for numbers only
 (owner, 2026-11-11, 2026-11-13, 2026-11-28). A boolean is a type of its own
-and never equals a number, so `True == 1` is false, which Python holds true.
+and never equals a number, so `True == 1` is false, while Python says it is
+true.
 A text from a numpy `U` array is UTF-32, and every other source holds UTF-8.
 A UTF-8 text and a UTF-32 text are equal when their code points are equal
 (owner, 2026-11-28).
