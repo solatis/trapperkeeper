@@ -96,8 +96,8 @@ pub enum BindError {
     /// The caller passed a different number of columns than the program has
     /// fields.
     Columns { expected: usize, given: usize },
-    /// The program compares two fields whose types this version cannot
-    /// compare yet, which are two list fields.
+    /// The program tests two fields for equality whose types this version
+    /// cannot compare yet, which are two list fields.
     Unsupported { left: usize, right: usize },
 }
 
@@ -268,8 +268,8 @@ fn bind_literal(op: Comparison, f: usize, t: FieldType, literal: &Literal) -> Bo
 }
 
 /// Specializes `x op y`, where `x` is field `l` with column type `lt` and `y`
-/// is field `r` with column type `rt`. Fails for two list fields, which this
-/// version cannot compare yet.
+/// is field `r` with column type `rt`. Fails for `==` and `!=` on two list
+/// fields, which this version cannot compare yet.
 fn bind_fields(
     op: Comparison,
     l: usize,
@@ -346,11 +346,12 @@ fn bind_fields(
             fields,
             chunk: text::fields_equal(l, r, op == Comparison::Eq),
         },
-        (FieldType::List, FieldType::List) => {
+        (FieldType::List, FieldType::List) if !op.is_ordering() => {
             return Err(BindError::Unsupported { left: l, right: r });
         }
-        // An ordering of any other pair, such as two texts or a number and a
-        // text, is a fault, because one side is not a number (ADR-0041).
+        // An ordering of any other pair, such as two texts, two lists or a
+        // number and a text, is a fault, because one side is not a number
+        // (ADR-0041).
         _ if op.is_ordering() => BoundStep::Faulted {
             fault: Fault::Unordered,
             fields,
