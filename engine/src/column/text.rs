@@ -516,6 +516,8 @@ impl<'a, L: Texts<'a, Unit: 'a>, R: Texts<'a, Unit: 'a>> Source for TextRowPair<
     type Lanes = ();
     type One = (&'a [L::Unit], &'a [R::Unit]);
 
+    // The two layouts are two columns of one batch, which `run` checked to
+    // have the same number of rows.
     fn len(&self) -> usize {
         self.0.len()
     }
