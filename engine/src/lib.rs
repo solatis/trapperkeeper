@@ -1,8 +1,11 @@
 //! The rule engine. It holds the rule and the tree of its expression with
 //! their JSON form, parses and prints a rule's text, and validates a rule. It
-//! also evaluates rules. `plan` turns a rule set into a program, `exec` binds
-//! the program to the columns of a schema and runs it over a batch, and
-//! `column` describes those columns.
+//! also evaluates rules:
+//!
+//! - `plan` turns a rule set into a program, a flat list of steps.
+//! - `exec` specializes the program for the column types of a schema and runs
+//!   it over the columns of each batch.
+//! - `column` describes those columns.
 
 // The half-precision float of numpy and pandas columns is nightly's `f16`,
 // and ADR-0036 names this feature, as ADR-0009 asks.
@@ -11,10 +14,10 @@
 // ADR-0035 names this feature.
 #![feature(portable_simd)]
 
-// An amd64 build without AVX2 and F16C means that a RUSTFLAGS in the
-// environment replaced the target CPU that `.cargo/config.toml` sets
-// (ADR-0045). Such a build would run SSE2 loops with nothing to show it, so
-// it fails here.
+// `.cargo/config.toml` builds for x86-64-v3 on amd64 (ADR-0045), but a
+// RUSTFLAGS set in the environment replaces that setting. The build would
+// then quietly use SSE2 instead of AVX2 in every loop, so it fails here
+// instead.
 #[cfg(all(
     target_arch = "x86_64",
     not(all(target_feature = "avx2", target_feature = "f16c"))
