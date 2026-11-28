@@ -21,8 +21,9 @@ workspace whose members are the engine and the server, and the root
 `Cargo.toml` lists them. Only directories that have code exist. The table names
 the other directories so that the layout is fixed before they arrive. A
 component directory has its own `AGENTS.md`, and inside `server/` each module
-directory gets one as it appears. The open milestone with the lowest number
-is the active one, and its goals decide the next issues.
+directory gets one as it appears. Of the milestones of this repository on
+GitHub, the open one with the lowest number is the active one, and its goals
+decide the next issues.
 
 | Directory      | What                                                                   | Exists                      |
 | -------------- | ---------------------------------------------------------------------- | --------------------------- |
@@ -58,8 +59,8 @@ is the active one, and its goals decide the next issues.
   a run takes hours.
 - Running Miri locally is out of scope for an agent. An agent starts the Miri
   workflow by hand (`gh workflow run miri.yml --ref <branch>`) only when a
-  change affects unsafe memory access, and only after the owner has signed
-  off on that run explicitly.
+  change affects unsafe memory access, and only after the owner, the
+  repository's maintainer, has signed off on that run explicitly.
 - The reasons behind the layout, the toolchain policy and the lint level are
   records `0010`, `0009` and `0011` in `doc/adr/`.
 
@@ -161,10 +162,11 @@ walkthrough, and notes at single lines.
    in the match matters. Such a construct gets a note when the reader would
    stop at it. The writer already knows what each line does and cannot see
    where a reader stops. It writes a note at each such construct whose
-   effect neither a name nor the line itself states. The note says what the line achieves in
-   the terms of the problem, or why the line is there. A note that repeats
-   its line in other words is deleted, and so is a note that explains what a
-   language feature does in general.
+   effect neither a name nor the line itself states, and a reader who has
+   not seen the change finds the lines that the writer missed. The note says
+   what the line achieves in the terms of the problem, or why the line is
+   there. A note that repeats its line in other words is deleted, and so is a
+   note that explains what a language feature does in general.
 8. A comment names one example input only where the effect is hard to see
    without one, as at a grammar rule, an alternative of a choice or a match
    arm whose case is not obvious. Most notes carry no example. A byte offset
@@ -207,7 +209,7 @@ walkthrough, and notes at single lines.
     holds no mark such as `(owner, 2026-11-10)`. The record in `doc/adr/`
     says how the decision was made, and it may carry that trace.
 
-This is the primary path: new code is written this way.
+New code is written this way.
 
 ## Prose
 
