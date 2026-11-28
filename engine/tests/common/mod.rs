@@ -503,6 +503,8 @@ enum Buffers {
         u64s: Vec<u64>,
         offset: OffsetType,
     },
+    // One view per row, and the two buffers that hold the texts longer than
+    // a view holds itself.
     Views {
         views: Vec<View>,
         long: [Vec<u8>; 2],
@@ -512,11 +514,14 @@ enum Buffers {
         texts: Vec<String>,
         step: usize,
     },
+    // The cells end to end, the width of a cell in bytes, and the number of
+    // cells from the start of one row to the start of the next.
     Bytes {
         bytes: Vec<u8>,
         width: usize,
         step: usize,
     },
+    // The same as `Bytes`, in units of UTF-32.
     Utf32 {
         units: Vec<u32>,
         width: usize,
@@ -537,75 +542,104 @@ fn offsets_as<O: TryFrom<usize>>(ends: &[usize]) -> Vec<O> {
         .collect()
 }
 
+/// Builds the bytes of `texts` end to end after `lead` bytes that belong to
+/// no text, and the offset of each text, in the four offset types.
+fn offsets_buffers(texts: &[String], lead: usize, offset: OffsetType) -> Buffers {
+    // The lead bytes belong to no text, so a reader that starts at byte 0
+    // reads them as the start of the first text.
+    let mut bytes = vec![b'x'; lead];
+    // The first text starts after the lead, and each text ends where the
+    // bytes end once it is appended, so `ends` holds one offset more than
+    // there are texts.
+    let mut ends = vec![lead];
+    for text in texts {
+        bytes.extend_from_slice(text.as_bytes());
+        ends.push(bytes.len());
+    }
+    Buffers::Offsets {
+        bytes,
+        i32s: offsets_as(&ends),
+        i64s: offsets_as(&ends),
+        u32s: offsets_as(&ends),
+        u64s: offsets_as(&ends),
+        offset,
+    }
+}
+
+/// Builds one view per text, and the two buffers that hold the long texts.
+fn views_buffers(texts: &[String]) -> Buffers {
+    let mut long = [Vec::new(), Vec::new()];
+    let mut views = Vec::new();
+    for (row, text) in texts.iter().enumerate() {
+        // A text of at most `INLINE` bytes lies in the view itself.
+        let view = if text.len() <= INLINE {
+            View::inline(text)
+        } else {
+            // A longer text goes to the end of the buffer of its row's
+            // parity, and the view names that buffer and the offset where
+            // the text starts in it.
+            let buffer = &mut long[row % 2];
+            let offset = u32::try_from(buffer.len()).expect("the buffer is small");
+            buffer.extend_from_slice(text.as_bytes());
+            View::outside(text, u32::try_from(row % 2).expect("0 or 1"), offset)
+        };
+        views.push(view.expect("the text fits a view"));
+    }
+    Buffers::Views { views, long }
+}
+
+/// Builds the numpy `S` cells of `texts`: one cell per row, as wide as the
+/// longest text plus `slack`, with `step - 1` cells of other bytes after each
+/// row.
+fn bytes_buffers(texts: &[String], slack: usize, step: usize) -> Buffers {
+    let width = texts.iter().map(String::len).max().unwrap_or(0) + slack;
+    let mut bytes = Vec::new();
+    for text in texts {
+        let start = bytes.len();
+        bytes.extend_from_slice(text.as_bytes());
+        // Zeros pad the text to the width of a cell, and filler bytes take
+        // the `step - 1` cells up to the next row.
+        bytes.resize(start + width, 0);
+        bytes.resize(start + step * width, b'y');
+    }
+    Buffers::Bytes { bytes, width, step }
+}
+
+/// Builds the numpy `U` cells of `texts`, one unit per character, laid out as
+/// `bytes_buffers` lays out bytes.
+fn utf32_buffers(texts: &[String], slack: usize, step: usize) -> Buffers {
+    let chars = texts
+        .iter()
+        .map(|t| t.chars().map(u32::from).collect::<Vec<_>>())
+        .collect::<Vec<_>>();
+    // A cell counts characters, so its width comes from the longest text in
+    // characters and not in bytes.
+    let width = chars.iter().map(Vec::len).max().unwrap_or(0) + slack;
+    let mut units = Vec::new();
+    for text in &chars {
+        let start = units.len();
+        units.extend_from_slice(text);
+        // Zeros and filler units, as for the byte cells.
+        units.resize(start + width, 0);
+        units.resize(start + step * width, u32::from('y'));
+    }
+    Buffers::Utf32 { units, width, step }
+}
+
 impl TextBuffers {
     /// Builds the buffers of a column of `texts` in `layout`.
     pub fn new(texts: &[String], layout: TextLayout) -> Self {
         let buffers = match layout {
-            TextLayout::Offsets { lead, offset } => {
-                let mut bytes = vec![b'x'; lead];
-                let mut ends = vec![lead];
-                for text in texts {
-                    bytes.extend_from_slice(text.as_bytes());
-                    ends.push(bytes.len());
-                }
-                Buffers::Offsets {
-                    bytes,
-                    i32s: offsets_as(&ends),
-                    i64s: offsets_as(&ends),
-                    u32s: offsets_as(&ends),
-                    u64s: offsets_as(&ends),
-                    offset,
-                }
-            }
-            TextLayout::Views => {
-                let mut long = [Vec::new(), Vec::new()];
-                let mut views = Vec::new();
-                for (row, text) in texts.iter().enumerate() {
-                    let view = if text.len() <= INLINE {
-                        View::inline(text)
-                    } else {
-                        let buffer = &mut long[row % 2];
-                        let offset = u32::try_from(buffer.len()).expect("the buffer is small");
-                        buffer.extend_from_slice(text.as_bytes());
-                        View::outside(text, u32::try_from(row % 2).expect("0 or 1"), offset)
-                    };
-                    views.push(view.expect("the text fits a view"));
-                }
-                Buffers::Views { views, long }
-            }
+            TextLayout::Offsets { lead, offset } => offsets_buffers(texts, lead, offset),
+            TextLayout::Views => views_buffers(texts),
+            // A piece borrows its text, so the buffers keep the texts, and
+            // `lend` makes the pieces.
             TextLayout::Pieces { step } => Buffers::Pieces {
                 texts: texts.to_vec(),
                 step,
             },
-            TextLayout::Bytes { slack, step } => {
-                let width = texts.iter().map(String::len).max().unwrap_or(0) + slack;
-                let mut bytes = Vec::new();
-                for text in texts {
-                    let start = bytes.len();
-                    bytes.extend_from_slice(text.as_bytes());
-                    // Zeros pad the text to the width of a cell, and filler
-                    // bytes take the `step - 1` cells up to the next row.
-                    bytes.resize(start + width, 0);
-                    bytes.resize(start + step * width, b'y');
-                }
-                Buffers::Bytes { bytes, width, step }
-            }
-            TextLayout::Utf32 { slack, step } => {
-                let chars = texts
-                    .iter()
-                    .map(|t| t.chars().map(u32::from).collect::<Vec<_>>())
-                    .collect::<Vec<_>>();
-                let width = chars.iter().map(Vec::len).max().unwrap_or(0) + slack;
-                let mut units = Vec::new();
-                for text in &chars {
-                    let start = units.len();
-                    units.extend_from_slice(text);
-                    // Zeros and filler units, as for the byte cells.
-                    units.resize(start + width, 0);
-                    units.resize(start + step * width, u32::from('y'));
-                }
-                Buffers::Utf32 { units, width, step }
-            }
+            TextLayout::Bytes { slack, step } => bytes_buffers(texts, slack, step),
+            TextLayout::Utf32 { slack, step } => utf32_buffers(texts, slack, step),
         };
         Self {
             rows: texts.len(),
@@ -618,8 +652,11 @@ impl TextBuffers {
         self.rows
     }
 
-    /// Borrows the buffers for a column.
+    /// Borrows the buffers for a column, and makes the parts that a layout
+    /// borrows in turn and that the buffers cannot hold themselves.
     pub fn lend(&self) -> LentTexts<'_> {
+        // Each text's piece is followed by `step - 1` filler pieces, so the
+        // run of pieces has the stride that `text` gives it.
         let pieces = match &self.buffers {
             Buffers::Pieces { texts, step } => texts
                 .iter()
@@ -630,6 +667,9 @@ impl TextBuffers {
                 .collect(),
             _ => Vec::new(),
         };
+        // `Views::new` takes a list of buffers, so the two buffers are lent as
+        // a list of slices. The other layouts need none and lend two empty
+        // slices.
         let long = match &self.buffers {
             Buffers::Views { long, .. } => [&long[0][..], &long[1][..]],
             _ => [&[][..], &[][..]],
@@ -664,8 +704,13 @@ pub struct LentTexts<'a> {
 impl LentTexts<'_> {
     /// Returns the layout of the column.
     pub fn text(&self) -> Text<'_> {
+        // Each arm wraps the buffers of one layout in the engine's description
+        // of that layout, over the memory that the buffers and the lent parts
+        // hold.
         let rows = self.buffers.rows;
         match &self.buffers.buffers {
+            // The buffers hold the offsets in all four types, and `offset`
+            // picks the one that this column takes.
             Buffers::Offsets { offset, .. } => {
                 let [i32s, i64s, u32s, u64s] = self.offsets().expect("an offsets layout");
                 Text::Offsets(match offset {
@@ -696,6 +741,8 @@ impl LentTexts<'_> {
                         .expect("the cells hold every row"),
                 )
             }
+            // Every `u32` is a valid unit, so `Units::utf32` needs no `unsafe`
+            // promise.
             Buffers::Utf32 { units, width, step } => Text::Utf32(
                 Fixed::new(*width, step * width, rows, Units::utf32(units))
                     .expect("the cells hold every row"),
