@@ -1,6 +1,10 @@
-//! The comparisons of number columns with a literal and with another number
-//! column of any type. Each comparison is a `Test` of `pack`, which the
-//! compiler instantiates per type and per operator.
+//! The loops that compare numbers: a number column with a literal, as in
+//! `x > 5`, and two number columns of any types, as in `x < y`.
+//!
+//! Each comparison is written once, generic over the column types and over
+//! the operator. The compiler then builds a separate SIMD loop for each
+//! combination that bind asks for. `pack` in `src/column/` runs the loop:
+//! it reads 64 rows at a time and turns the answers into one bit per row.
 
 use std::marker::PhantomData;
 use std::simd::Simd;
@@ -8,19 +12,26 @@ use std::simd::Simd;
 use crate::column::{Number, Pair, Present, Strided, Test, pack};
 use crate::plan::Comparison;
 
-/// One of the six comparisons, as a type, so that each loop is compiled for
-/// its operator.
-// `StepResult::compared` clears the result of a row without a value, such as a
-// NaN, so `<=` can be the negation of `>` and the impls need only the two lane
-// tests of `Number`. On a NaN, `lanes` and `one` then answer differently.
+/// A comparison operator as a type, such as `Less` for `<`.
+///
+/// Making the operator a type parameter, instead of a value the loop checks
+/// on every row, lets the compiler build one loop per operator with the
+/// operator's instruction inlined.
+// Each operator is built from just two SIMD tests, `<` and `==`: `x <= y`
+// is computed as "not `y < x`". That is wrong for a NaN, where both `<=`
+// and `>` are false. It does not matter here, because a NaN counts as a
+// row without a value, and `StepResult::compared` throws away the result of
+// such rows. On a NaN, `lanes` and `one` may give different answers for the
+// same reason.
 pub(crate) trait Order {
-    /// For 64 lanes, whether the comparison holds, with lane `i` in bit `i`.
+    /// Compares 64 pairs of values at once and returns one bit per pair, set
+    /// where `left op right` is true. Pair `i` is bit `i`.
     fn lanes<T: Number>(left: Simd<T, 64>, right: Simd<T, 64>) -> u64;
-    /// Whether the comparison holds for one pair of values.
+    /// Returns `left op right` for one pair of values.
     fn one<T: PartialOrd>(left: T, right: T) -> bool;
 }
 
-// The orders as types. `with_order!` picks one from a `Comparison`.
+// One type per operator. `with_order!` picks the type for a `Comparison`.
 pub(crate) struct Equal;
 pub(crate) struct NotEqual;
 pub(crate) struct Less;
@@ -88,7 +99,11 @@ impl Order for GreaterEqual {
     }
 }
 
-/// Runs `$body` with `$O` as the type of the order `$op`.
+/// Turns a `Comparison`, which is only known at run time, into an operator
+/// type that the compiler sees. `with_order!(op, |O| body)` expands to a
+/// `match` on `op` with one arm per operator, and each arm compiles `body`
+/// with `O` set to that operator's type, such as `Less` for `Lt`. So a loop
+/// written once, generic over `O`, gets one compiled copy per operator.
 macro_rules! with_order {
     ($op:expr, |$O:ident| $body:expr) => {
         match $op {
@@ -121,7 +136,8 @@ macro_rules! with_order {
 }
 pub(crate) use with_order;
 
-/// The test of `pack` that compares each value with a literal of its own type.
+/// What `pack` runs to compute `x op literal`, where the literal already has
+/// the column's type `T`.
 struct AgainstLiteral<T, O> {
     literal: T,
     order: PhantomData<O>,
@@ -137,8 +153,8 @@ impl<T: Number, O: Order> Test<Strided<'_, T>> for AgainstLiteral<T, O> {
     }
 }
 
-/// The test of `pack` that widens each int to `f64` and compares it with a
-/// float literal.
+/// What `pack` runs to compute `x op literal` for an int column and a float
+/// literal: each int converts to `f64` first.
 struct AgainstFloat<O> {
     literal: f64,
     order: PhantomData<O>,
@@ -154,8 +170,8 @@ impl<T: Number, O: Order> Test<Strided<'_, T>> for AgainstFloat<O> {
     }
 }
 
-/// Writes into `out` whether each of the rows `start .. start + rows` of
-/// `values` compares with `literal` as `O` says.
+/// Computes `x op literal` for the rows `start .. start + rows` of `values`
+/// and writes one bit per row into `out`, set where it is true.
 pub(crate) fn compare_with_literal<T: Number, O: Order>(
     values: Strided<'_, T>,
     literal: T,
@@ -170,8 +186,9 @@ pub(crate) fn compare_with_literal<T: Number, O: Order>(
     pack(values, start, rows, out, &test);
 }
 
-/// Writes into `out` whether each of the rows `start .. start + rows` of an
-/// int column, widened to `f64`, compares with a float literal as `O` says.
+/// Computes `x op literal` for the rows `start .. start + rows` of an int
+/// column and a float literal, converting each int to `f64`, and writes one
+/// bit per row into `out`.
 pub(crate) fn compare_widened<T: Number, O: Order>(
     values: Strided<'_, T>,
     literal: f64,
@@ -186,15 +203,19 @@ pub(crate) fn compare_widened<T: Number, O: Order>(
     pack(values, start, rows, out, &test);
 }
 
-/// The value of an int column's type that a literal converts to, or the side
-/// of the type where the literal lies when the type cannot hold it.
+/// An int literal converted to an int column's type `T`.
+///
+/// `Within` holds the converted value. `Outside` means that `T` cannot hold
+/// the literal, as for 300 and a `u8` column, and says whether the literal is
+/// below or above every value of `T`.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Converted<T> {
     Within(T),
     Outside(Side),
 }
 
-/// The side of an int type where a literal that the type cannot hold lies.
+/// Where a literal lies that an int type cannot hold: below its smallest
+/// value or above its largest.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Side {
     Below,
@@ -202,68 +223,87 @@ pub(crate) enum Side {
 }
 
 impl<T: TryFrom<i64>> Converted<T> {
-    /// Converts `literal` to `T`, or says on which side of the type it lies
-    /// when `T` cannot hold it.
+    /// Converts `literal` to `T`. When `T` cannot hold it, returns on which
+    /// side of `T`'s range it lies.
     pub(crate) fn of(literal: i64) -> Self {
         match T::try_from(literal) {
             Ok(v) => Self::Within(v),
-            // A literal that fails to convert lies below the type when it is
-            // negative, because every int type holds 0.
+            // A literal that does not fit is below the range when it is
+            // negative and above it otherwise, because every int type's range
+            // contains 0.
             Err(_) if literal < 0 => Self::Outside(Side::Below),
             Err(_) => Self::Outside(Side::Above),
         }
     }
 }
 
-/// The result of `column op literal` on every row with a value, for a
-/// literal that lies on `side` of the column's type.
+/// Returns the result of `x op literal` for a literal outside the column's
+/// range. It is the same for every value of the column: `x < 300` on a `u8`
+/// column is true on every row, and `x == 300` false.
 pub(crate) fn outside(op: Comparison, side: Side) -> bool {
     let above = matches!(side, Side::Above);
     match op {
         Comparison::Eq => false,
-        // No value of the column equals a literal outside its type, so `!=`
-        // holds on both sides.
+        // No value of the column equals the literal, so `==` is always false
+        // and `!=` always true, on either side.
         Comparison::Ne => true,
         Comparison::Lt | Comparison::Le => above,
         Comparison::Gt | Comparison::Ge => !above,
     }
 }
 
-/// The type in which two number columns compare, which the pair of their types
-/// decides.
+/// The type in which two number columns of types `L` and `R` are compared.
+///
+/// Both columns convert to one type, and the loop compares in that type. The
+/// type is chosen so that it holds every value of both columns exactly, or,
+/// when an int meets a float, so that the int widens to `f64` as the
+/// language says (ADR-0041). Examples:
+///
+/// - `f16` and `f32` compare as `f32`, so the `f16` side widens.
+/// - `i8` and `i32` compare as `i32`, `u8` and `u64` as `u64`.
+/// - `i8` and `u8` compare as `i16`, which holds -128 and 255.
+/// - `i32` and `u32` compare as `i64`, and `i64` and `u32` also as `i64`.
+/// - `i64` and `u64` have no common int type, because no Rust int holds both
+///   -1 and `u64::MAX`. See `SignedU64`.
+/// - Any int and any float compare as `f64`.
 #[derive(Debug, Clone, Copy)]
 enum Common {
-    // The type of the left column, or of the right one, holds every value of
-    // the other.
+    // Compare in the type of the left column, or of the right one, because
+    // it holds every value of the other.
     Left,
     Right,
+    // An int against a float.
     F64,
-    // A signed type wider than both, for a signed and an unsigned int, such
-    // as `i16` for an `i8` against a `u8`.
+    // A signed int against an unsigned int, compared in a signed type wide
+    // enough for both, such as `i16` for an `i8` against a `u8`.
     I16,
     I32,
     I64,
-    // A signed int against a `u64`, which no int type holds both of. `true`
-    // when the signed int is on the left.
+    // A signed int against a `u64`. A row where the signed value is
+    // negative needs no comparison, because a negative number is below
+    // every `u64`. The other rows compare as `u64`, which holds both values
+    // there. The flag is true when the signed column is on the left.
     SignedU64(bool),
 }
 
-/// The common type of a column of `L` and a column of `R`.
+/// Picks the type in which a column of `L` and a column of `R` compare (see
+/// `Common` for examples). It runs at compile time, once per pair of types.
 const fn common<L: Number, R: Number>() -> Common {
     let (l, r) = (size_of::<L>(), size_of::<R>());
     match (L::FLOAT, R::FLOAT) {
-        // The wider float type holds every value of the narrower one.
+        // Two floats: the wider type holds every value of the narrower one.
         (true, true) => wider(l, r),
-        // An int widens to a float64 (ADR-0041).
+        // An int and a float: the int widens to `f64` (ADR-0041).
         (true, false) | (false, true) => Common::F64,
-        // The wider int type of one signedness holds every value of the
-        // narrower one.
+        // Two signed or two unsigned ints: the wider type holds every value
+        // of the narrower one.
         (false, false) if L::SIGNED == R::SIGNED => wider(l, r),
         (false, false) => {
-            // A signed type twice as wide as an unsigned one holds every value
-            // of it. The signed type of the pair may already be wider, and
-            // then it holds both. No int type holds every value of a `u64`
-            // and of a signed type.
+            // A signed and an unsigned int. A signed type twice as wide as
+            // the unsigned one holds all its values: `i16` holds every
+            // `u8`. If the signed column is wider still, its own type is
+            // enough. Only for a `u64` would twice its width be 16 bytes,
+            // and Rust's SIMD has no such type, so that case is `SignedU64`.
             let (signed, unsigned) = if L::SIGNED { (l, r) } else { (r, l) };
             let width = if 2 * unsigned > signed {
                 2 * unsigned
@@ -280,18 +320,20 @@ const fn common<L: Number, R: Number>() -> Common {
     }
 }
 
-/// The side of a pair whose type is `l` bytes wide on the left and `r` on the
-/// right, whichever is wider.
+/// Returns `Left` when the left type, `l` bytes wide, is at least as wide as
+/// the right type, `r` bytes wide, and `Right` otherwise.
 const fn wider(l: usize, r: usize) -> Common {
     if l >= r { Common::Left } else { Common::Right }
 }
 
-/// The result of `O` for a row whose signed value is negative. The signed
-/// value is the left operand when `signed_left` is true, and the right one
-/// otherwise. A negative value orders below every `u64`.
+/// Returns the result of `left op right` on a row where the signed value is
+/// negative and the other value is a `u64`. The negative value is below the
+/// `u64`, whatever the two values are. `signed_left` says whether the signed
+/// value is `left`.
 fn negative_side<O: Order>(signed_left: bool) -> bool {
-    // The booleans stand in for the two values, because `false` orders below
-    // `true` as the negative value orders below the `u64`.
+    // Only the order of the two values matters, so any two values in that
+    // order give the answer. `false < true`, so `false` stands in for the
+    // negative value and `true` for the `u64`.
     let (negative, unsigned) = (false, true);
     if signed_left {
         O::one(negative, unsigned)
@@ -300,34 +342,49 @@ fn negative_side<O: Order>(signed_left: bool) -> bool {
     }
 }
 
-/// The test of `pack` that compares the values of two number columns in the
-/// common type of their pair.
+/// What `pack` runs to compute `x op y` for two number columns, converting
+/// both sides to the type that `common` picks.
 struct Columns<L, R, O> {
     order: PhantomData<(L, R, O)>,
 }
 
 impl<L: Number, R: Number, O: Order> Test<Pair<'_, L, R>> for Columns<L, R, O> {
     fn lanes(&self, (left, right): (Simd<L, 64>, Simd<R, 64>)) -> u64 {
+        // `const` makes the compiler evaluate `common` once per pair of types,
+        // so in each compiled loop the other arms are dead code that the
+        // optimizer removes.
         match const { common::<L, R>() } {
+            // The left type holds every right value: convert the right side.
             Common::Left => O::lanes(left, R::convert_lanes(right)),
+            // The right type holds every left value: convert the left side.
             Common::Right => O::lanes(L::convert_lanes(left), right),
+            // Neither type holds the other: convert both sides to a third
+            // type.
             Common::F64 => in_type::<f64, L, R, O>(left, right),
             Common::I16 => in_type::<i16, L, R, O>(left, right),
             Common::I32 => in_type::<i32, L, R, O>(left, right),
             Common::I64 => in_type::<i64, L, R, O>(left, right),
+            // A signed int against a `u64`. The loop computes two answers for
+            // all 64 rows, and then picks per row: the fixed answer for the
+            // rows with a negative value, and the `u64` comparison for the
+            // rest. Picking with bit masks avoids a branch per row.
             Common::SignedU64(signed_left) => {
+                // One bit per row, set where the signed value is below 0.
                 let negative = if signed_left {
                     L::lt_lanes(left, Simd::splat(L::default()))
                 } else {
                     R::lt_lanes(right, Simd::splat(R::default()))
                 };
-                // The order decides a row with a negative value, and the
-                // other rows compare as `u64`.
+                // The answer on a negative row is the same for every such
+                // row, so it is all ones or all zeros.
                 let below = if negative_side::<O>(signed_left) {
                     u64::MAX
                 } else {
                     0
                 };
+                // The comparison as `u64`. It is wrong on the negative rows,
+                // where a negative value wraps to a large `u64`, and the mask
+                // below discards it there.
                 let rest = in_type::<u64, L, R, O>(left, right);
                 negative & below | !negative & rest
             }
@@ -335,6 +392,9 @@ impl<L: Number, R: Number, O: Order> Test<Pair<'_, L, R>> for Columns<L, R, O> {
     }
 
     fn one(&self, (left, right): (L, R)) -> bool {
+        // The same choice as `lanes`, for one pair of values. `pack` uses
+        // this for the rows after the last full group of 64, and for columns
+        // whose values are not next to each other in memory.
         match const { common::<L, R>() } {
             Common::Left => O::one(left, right.convert()),
             Common::Right => O::one(left.convert(), right),
@@ -343,11 +403,14 @@ impl<L: Number, R: Number, O: Order> Test<Pair<'_, L, R>> for Columns<L, R, O> {
             Common::I32 => O::one::<i32>(left.convert(), right.convert()),
             Common::I64 => O::one::<i64>(left.convert(), right.convert()),
             Common::SignedU64(signed_left) => {
+                // Is the signed value below 0?
                 let negative = if signed_left {
                     left < L::default()
                 } else {
                     right < R::default()
                 };
+                // A negative value is below every `u64`, so the answer is
+                // fixed. Otherwise both values fit in a `u64`.
                 if negative {
                     negative_side::<O>(signed_left)
                 } else {
@@ -358,8 +421,8 @@ impl<L: Number, R: Number, O: Order> Test<Pair<'_, L, R>> for Columns<L, R, O> {
     }
 }
 
-/// The comparison of 64 lanes of `L` with 64 lanes of `R`, both converted to
-/// `C`.
+/// Converts 64 values of `L` and 64 values of `R` to `C`, compares them
+/// pairwise with `O`, and returns one bit per pair.
 fn in_type<C: Number, L: Number, R: Number, O: Order>(
     left: Simd<L, 64>,
     right: Simd<R, 64>,
@@ -367,9 +430,10 @@ fn in_type<C: Number, L: Number, R: Number, O: Order>(
     O::lanes(L::convert_lanes::<C>(left), R::convert_lanes::<C>(right))
 }
 
-/// Writes into `out` whether each of the rows `start .. start + rows` of
-/// `left` compares with the same row of `right` as `O` says, both converted to
-/// the common type of their pair.
+/// Computes `x op y` row by row for the rows `start .. start + rows` of the
+/// columns `left` and `right`, and writes one bit per row into `out`, set
+/// where it is true. Both values of a row convert to the type that `common`
+/// picks.
 ///
 /// # Panics
 ///
