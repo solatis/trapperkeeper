@@ -69,9 +69,10 @@ of `in`, as in `None in tags`, the test is true when the list `tags` holds a
 null element (owner, 2026-11-16). Only the literal `None` has this meaning.
 `a == b` on two fields that both hold a null gives unknown.
 
-The meaning of `in` follows the type of its right side: a written list is
-membership, a text is substring search and a list is list search (owner,
-2026-11-28).
+The meaning of `in` follows the type of its right side. A list that the rule
+writes, as in `x in [1, 2]`, is a test of membership. A field that holds a
+text is a search for a substring, and a field that holds a list is a search
+among its elements (owner, 2026-11-28).
 
 Validation (`adr/0033`) refuses the literal `None` beside an ordering or an
 arithmetic operator, under a minus, and after `in` and `not in`, because such a
@@ -100,7 +101,8 @@ A fault is an operation that cannot be done on values that are there (owner,
 
 `==` compares values of any two types, and values of types that cannot be
 equal, such as an int and a text, are not equal, as in Python. So `x == 5` is
-false and `x != 5` true where `x` holds a text (owner, 2026-11-28).
+false and `x != 5` true where `x` holds a text (owner, 2026-11-28). An int and
+a float can be equal, and a boolean never equals a number (`adr/0041`).
 
 A rule that meets a fault on a record does not apply to that record. The rule
 is off for that record. The rule behaves as if it did not exist for that
@@ -173,9 +175,10 @@ would never match.
 An equality in which two nulls are equal, because `a == b` would then match
 every record that has neither field.
 
-A fault for `==` between values of types that cannot be equal, because a
-membership list such as `x in ["a", 1]` would then fault on every int record
-in one order and match in the other.
+A fault for `==` between values of types that cannot be equal, because the
+order of a membership list would then decide the result. `x in ["a", 1]`
+would fault on every int record, and `x in [1, "a"]` would match the records
+that hold 1.
 
 `isinstance` on a null as unknown, because `not isinstance(x, int)` is the
 way to find the records whose value has another type or is absent.
@@ -241,9 +244,10 @@ gives unknown for every record and matches nothing in silence. A check of
 types, which is to be built together with the planner of `adr/0035`, would
 refuse these forms (owner, 2026-11-16).
 
-An adapter keeps the rows whose value has another type beside the column
-(`adr/0036`), so each operator gives those records what it gives for their
-type: false under `==`, and a fault under an ordering.
+An adapter keeps the rows whose value has another type than the column in a
+column of their own (`adr/0036`). A rule gives each such record what its
+operator gives for the record's own type. So `x == "a"` is false for a record
+that holds an int, and `x > 5` is a fault for a record that holds a text.
 
 The fixtures and every SDK must use the vocabulary of this record and cite it:
 `pass-through`, `halt`, `cached`, null, unknown, fault and off.
