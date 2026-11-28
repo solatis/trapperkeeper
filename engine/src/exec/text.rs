@@ -16,8 +16,8 @@ use crate::plan::TextLiteral;
 
 use super::bind::ChunkLoop;
 
-/// A unit of text in which a text literal has a form of its own: a byte of
-/// UTF-8 or a unit of UTF-32.
+/// A unit of text, a byte of UTF-8 or a unit of UTF-32. A text literal is
+/// held in both, so that a loop compares it in the column's encoding.
 // `Ord` lets the text set of a membership step sort its texts and search
 // them.
 pub(super) trait Encoded: Unit + Ord {
@@ -98,7 +98,8 @@ pub(super) fn equals_literal(f: usize, literal: Arc<TextLiteral>, equal: bool) -
     Box::new(
         move |cols: &[Option<Column<'_>>], start: usize, rows: usize, out: &mut Present| {
             // Bind only knows that the column holds texts. Each batch may hold
-            // them in another layout, so the loop picks the layout per chunk.
+            // them in another layout, so the loop picks the layout each time it
+            // runs, which is once per chunk.
             with_texts!(texts_of(cols, f), |t| pack(
                 TextRows::new(t),
                 start,
@@ -163,8 +164,8 @@ fn same_text(left: Form<'_>, right: Form<'_>) -> bool {
 /// Returns whether the UTF-8 text `bytes` holds the code points `units`, in
 /// order.
 fn same_code_points(bytes: &[u8], units: &[u32]) -> bool {
-    // A text layout of bytes holds UTF-8 in every row, so the decode cannot
-    // fail.
+    // Every text layout whose units are bytes holds UTF-8 in every row, also
+    // in a row without a value (`Texts`), so the decode cannot fail.
     let text = str::from_utf8(bytes).expect("a text layout of bytes holds UTF-8");
     // A UTF-32 unit that is no code point, such as a lone surrogate, equals
     // no character.
