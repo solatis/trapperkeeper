@@ -59,20 +59,20 @@ pub(crate) enum FieldType {
     Absent,
 }
 
-/// A step of a program after bind: each comparison now holds the loop that
-/// computes it.
+/// A step of a program after bind: each comparison and each search now holds
+/// the loop that computes it.
 pub(crate) enum BoundStep {
     Constant(Constant),
-    // A comparison and its loop. The loop writes the rows where the
-    // comparison is true. On a row where one of `fields` has no value, the
+    // A comparison or a substring search and its loop. The loop writes the
+    // rows where it is true. On a row where one of `fields` has no value, the
     // result is unknown whatever the loop wrote.
     Loop {
         fields: Vec<usize>,
         chunk: ChunkLoop,
     },
-    // A comparison that cannot be done, such as an ordering on text. It is a
-    // fault on the rows where all `fields` have a value, and unknown on the
-    // rows where one of them has none (ADR-0005).
+    // A comparison or a search that cannot be done, such as an ordering on
+    // text or `5 in "abc"`. It is a fault on the rows where all `fields` have
+    // a value, and unknown on the rows where one of them has none (ADR-0005).
     Faulted {
         fault: Fault,
         fields: Vec<usize>,
@@ -95,10 +95,10 @@ pub(crate) enum BoundStep {
     Or(usize, usize),
 }
 
-/// The compiled loop of a comparison. A call gets the columns of a batch,
-/// the first row `start` of a chunk and the chunk's row count `rows`. It
-/// writes a bitmap with one bit per row of the chunk, set where the
-/// comparison is true, with row `start` at bit 0.
+/// The compiled loop of a comparison or a substring search. A call gets the
+/// columns of a batch, the first row `start` of a chunk and the chunk's row
+/// count `rows`. It writes a bitmap with one bit per row of the chunk, set
+/// where the comparison or the search is true, with row `start` at bit 0.
 pub(crate) type ChunkLoop =
     Box<dyn Fn(&[Option<Column<'_>>], usize, usize, &mut Present) + Send + Sync>;
 
@@ -115,8 +115,8 @@ pub enum BindError {
     /// The caller passed a different number of columns than the program has
     /// fields.
     Columns { expected: usize, given: usize },
-    /// The program compares two list fields with `==` or `!=`, which this
-    /// version cannot do yet.
+    /// The program compares two list fields with `==` or `!=`, or searches for
+    /// a list field with `in`, which this version cannot do yet.
     Unsupported { left: usize, right: usize },
 }
 
@@ -148,8 +148,8 @@ impl Program {
     /// # Errors
     ///
     /// `BindError::Columns` when `columns` does not have one entry per field,
-    /// and `BindError::Unsupported` when the program compares two fields
-    /// whose types this version cannot compare yet.
+    /// and `BindError::Unsupported` when the program compares or searches two
+    /// fields whose types this version cannot handle yet.
     pub fn bind(&self, columns: &[Option<Column<'_>>]) -> Result<Bound, BindError> {
         let expected = self.fields().paths().len();
         if columns.len() != expected {
@@ -173,7 +173,8 @@ impl Program {
 }
 
 /// Specializes one step for the field types `types`. Fails when the step
-/// compares two fields whose types this version cannot compare yet.
+/// compares or searches two fields whose types this version cannot handle
+/// yet.
 fn bind_step(step: &Step, types: &[FieldType]) -> Result<BoundStep, BindError> {
     Ok(match step {
         Step::Constant(c) => BoundStep::Constant(*c),
