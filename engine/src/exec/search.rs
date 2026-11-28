@@ -36,7 +36,7 @@ pub(super) fn bind_search(
     // applies returns. The fields without a column come first, because a
     // search of a null, or for a null, is unknown whatever the other side is
     // (ADR-0005). A list field as the needle comes next, so that bind refuses
-    // it whatever `y` is.
+    // it whatever `y` holds when `y` has a column.
     let needle_type = match needle {
         Operand::Field(n) => Some(types[*n]),
         Operand::Literal(_) => None,
@@ -242,6 +242,8 @@ impl Needle {
         // A record of depth 1 holds scalars. A deeper record holds lists, and
         // no scalar equals a list.
         let scalar = (shape.depth == 1).then_some(shape.scalar);
+        // A boolean never equals a number, for a literal and for a field, so
+        // `1 in [True]` is false, while Python says it is true (ADR-0041).
         let can_equal = match (needle, needle_type) {
             (Operand::Literal(l), _) => matches!(
                 (scalar, l),
@@ -251,8 +253,6 @@ impl Needle {
                 ) | (Some(Scalar::Bool), Literal::Bool(_))
                     | (Some(Scalar::Text), Literal::Text(_))
             ),
-            // A boolean never equals a number, so `1 in [True]` is false,
-            // while Python says it is true (ADR-0041).
             (Operand::Field(_), t) => matches!(
                 (scalar, t),
                 (
@@ -424,8 +424,9 @@ fn number_type(c: &Column<'_>) -> NumberType {
 
 /// Searches the rows `range` of the element column `elements` with `test`,
 /// and returns whether an element matched and whether an element is a null.
-/// The scan stops at the first match, so the second answer covers only the
-/// elements before it, and a match decides the search on its own.
+/// The scan stops after the part that holds the first match, so the second
+/// answer covers the elements up to the end of that part, and a match decides
+/// the search on its own.
 fn scan(elements: &Column<'_>, range: Range<usize>, test: &ElementTest<'_>) -> (bool, bool) {
     // A list may hold more elements than a chunk has rows, so the range is
     // read in parts of up to `CHUNK_ROWS`, and the scan stops at the first
