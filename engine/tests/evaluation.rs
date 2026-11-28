@@ -1149,7 +1149,7 @@ impl ListValues {
         column.expect("one mask byte per element")
     }
 
-    /// Returns the shape of an element.
+    /// Returns the scalar type of the elements.
     fn scalar(&self) -> Scalar {
         match self.elements {
             Elements::Ints(_) => Scalar::Int,
@@ -1702,7 +1702,7 @@ fn field_named(i: usize) -> Expr {
 
 /// Generates a condition over `n` fields, built from the expressions this
 /// version supports: comparisons, null tests, membership in a written list,
-/// `not`, `and`, `or`, fields and literals.
+/// the search of a field with `in`, `not`, `and`, `or`, fields and literals.
 fn condition(n: usize) -> impl Strategy<Value = Expr> {
     // `==` and `!=` from `BINARY`, and the four orderings from `NUMERIC`.
     let ops: Vec<_> = BINARY[..2].iter().chain(&NUMERIC[..4]).copied().collect();
