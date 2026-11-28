@@ -310,8 +310,9 @@ impl Planner<'_> {
             Expr::Gt(l, r) => return self.compare(Comparison::Gt, l, r),
             Expr::Ge(l, r) => return self.compare(Comparison::Ge, l, r),
             // `x in [...]` with a list that the rule writes is membership.
-            // `x in y` with any other right side, such as a field, stays
-            // refused until substring search and list search exist.
+            // `x in y` with any other right side, such as a field, is a
+            // substring search or a list search, which this version does not
+            // run.
             Expr::In(needle, list) => match &**list {
                 Expr::List(items) => return self.membership(needle, items),
                 _ => return Err(e.key()),
@@ -388,7 +389,7 @@ impl Planner<'_> {
             return Err(needle.key());
         }
         // Under a needle `None` no item counts as a literal, because each
-        // item becomes a null test of its own in step 2.
+        // item becomes a null test of its own.
         let (literals, others): (Vec<&Expr>, Vec<&Expr>) = list.iter().partition(|item| {
             *needle != Expr::None
                 && matches!(
@@ -423,7 +424,8 @@ impl Planner<'_> {
                 (Expr::None, _) => self.null_test(item)?,
                 (_, Expr::None) => self.null_test(needle)?,
                 (_, Expr::Field(_)) => self.compare(Comparison::Eq, needle, item)?,
-                // A list inside the list, or an expression such as `y + 1`.
+                // A list inside the list, or an expression such as `y + 1`, has
+                // no step that this version can build.
                 _ => return Err(item.key()),
             };
             slots.push(slot);
@@ -492,8 +494,8 @@ impl Planner<'_> {
 
     /// Converts one side of a comparison: a field becomes the number that
     /// `FieldTree` gives it, and an int, float, boolean or text becomes a
-    /// `Literal`. Fails with the JSON
-    /// key of `e` for anything else, such as a list literal or arithmetic.
+    /// `Literal`. Fails with the JSON key of `e` for anything else, such as a
+    /// list literal or arithmetic.
     fn operand(&self, e: &Expr) -> Result<Operand, &'static str> {
         match e {
             Expr::Field(path) => Ok(Operand::Field(self.fields.field_of(path))),
