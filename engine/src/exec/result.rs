@@ -8,7 +8,7 @@ use crate::plan::Constant;
 /// unknown or faulted. A true row is known, and a faulted row is neither known
 /// nor true.
 #[derive(Debug, Clone)]
-pub(crate) struct Truth {
+pub(crate) struct StepResult {
     // A row whose bit is clear here and in `fault` is unknown, the null of a
     // boolean (ADR-0005).
     known: Present,
@@ -19,7 +19,7 @@ pub(crate) struct Truth {
 /// A bitmap with no row set.
 const NONE: Present = [0; CHUNK_WORDS];
 
-impl Truth {
+impl StepResult {
     /// A result with no row true, false or faulted, which a logic step fills
     /// word by word.
     const EMPTY: Self = Self {
@@ -55,13 +55,13 @@ impl Truth {
     }
 
     /// The result of a comparison whose `ChunkLoop` wrote the true rows into
-    /// `truth`, where `known` is the rows on which every field of the
+    /// `true_rows`, where `known` is the rows on which every field of the
     /// comparison has a value.
-    pub(crate) fn compared(truth: &Present, known: Present) -> Self {
+    pub(crate) fn compared(true_rows: &Present, known: Present) -> Self {
         Self {
             // A loop also compares the values of the rows without a value,
             // and the result of such a row is unknown.
-            true_rows: zip(truth, &known, |t, k| t & k),
+            true_rows: zip(true_rows, &known, |t, k| t & k),
             known,
             fault: NONE,
         }

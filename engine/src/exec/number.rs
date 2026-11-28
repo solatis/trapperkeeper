@@ -10,7 +10,7 @@ use crate::plan::Comparison;
 
 /// One of the six comparisons, as a type, so that each loop is compiled for
 /// its operator.
-// `Truth::compared` clears the result of a row without a value, such as a
+// `StepResult::compared` clears the result of a row without a value, such as a
 // NaN, so `<=` can be the negation of `>` and the impls need only the two lane
 // tests of `Number`. On a NaN, `lanes` and `one` then answer differently.
 pub(crate) trait Order {
