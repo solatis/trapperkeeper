@@ -67,8 +67,9 @@ Five tests are never unknown: `is None`, `is not None`, `x == None`,
 `x == "paid" or x == None` (owner, 2026-11-14). With the literal on the left
 of `in`, as in `None in tags`, the test is true when the list `tags` holds a
 null element (owner, 2026-11-16). A list search follows `any` over the
-equalities of the elements, so a needle that no element can equal is found
-nowhere (owner, 2026-11-28). Only the literal `None` has this meaning.
+equalities of the elements, so a needle that no element can equal gives
+false, or unknown where an element is a null (owner, 2026-11-28). Only the
+literal `None` has this meaning.
 `a == b` on two fields that both hold a null gives unknown.
 
 The meaning of `in` follows the type of its right side. When the rule writes
@@ -80,8 +81,9 @@ Validation (`adr/0033`) refuses the literal `None` beside an ordering or an
 arithmetic operator, under a minus, and after `in` and `not in`, because such a
 rule could never match. A field that holds a null there is data, so `x + 1` is a
 null and `x < y` is unknown (owner, 2026-11-14). A search `x in y`, where `y`
-is a field, gives unknown only when `y` should hold a list and holds a null
-(owner, 2026-11-16).
+is a field, gives unknown when `y` holds a null (owner, 2026-11-16). A list
+search also gives unknown when no element equals the needle and an element is
+a null, as `any` does.
 
 A rule differs from SQL in three places. The first is the literal `None`.
 Under `==`, under `!=`, in a membership list and on the left of `in` it tests
