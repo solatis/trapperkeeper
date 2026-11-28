@@ -380,19 +380,19 @@ impl Planner<'_> {
 
 /// Computes `left op right` for two literals, such as `1 < 2.5`.
 fn fold(op: Comparison, left: Literal, right: Literal) -> Constant {
-    // The boolean arms come first, because the last arm converts whatever
-    // reaches it to `f64`, and a boolean must not reach it.
+    // The arms for booleans come first, because the last arm converts
+    // whatever reaches it to `f64`, and a boolean must not reach it.
     let order = match (left, right) {
-        // `True < False` is a fault, because only numbers can be ordered
-        // (ADR-0041).
-        (Literal::Bool(_), Literal::Bool(_)) if op.is_ordering() => {
+        // `True < False` and `True < 1` are a fault, because only numbers can
+        // be ordered (ADR-0041).
+        (Literal::Bool(_), _) | (_, Literal::Bool(_)) if op.is_ordering() => {
             return Constant::Fault(Fault::Unordered);
         }
         (Literal::Bool(l), Literal::Bool(r)) => l.cmp(&r),
-        // `True == 1` is a fault, because a boolean and a number cannot be
-        // compared.
+        // `True == 1` is false and `True != 1` true, because a boolean never
+        // equals a number (ADR-0041).
         (Literal::Bool(_), _) | (_, Literal::Bool(_)) => {
-            return Constant::Fault(Fault::Incompatible);
+            return Constant::of(op == Comparison::Ne);
         }
         (Literal::Int(l), Literal::Int(r)) => l.cmp(&r),
         // At least one side is a float, so both compare as `f64`, as in

@@ -183,20 +183,27 @@ fn a_field_that_the_source_lacks_matches_no_record() {
 }
 
 #[test]
-fn a_number_against_a_text_field_faults_where_the_text_is_there() {
+fn a_number_never_equals_a_text() {
     let pieces = [Piece::new("a"), Piece::new("b")];
     let bitmap = packed(&[true, false], 0);
     let marking = Marking::Bitmap(Bits::new(&bitmap, 0, 2).expect("one bit per row"));
     let column = Column::text(Text::Pieces(Strided::from_slice(&pieces)), marking)
         .expect("one bit per text");
-    // The second row has no text, so the comparison is unknown there and
-    // nothing faults.
     assert_eq!(
         outcomes(
             Expr::Eq(Box::new(x()), Box::new(Expr::Int(1))),
             Some(column)
         ),
-        [NotEvaluated(Fault::Incompatible), NotMatched]
+        [NotMatched, NotMatched]
+    );
+    // The second row has no text, so `!=` is unknown there and does not
+    // match. Only this check tells that row apart from a false one.
+    assert_eq!(
+        outcomes(
+            Expr::Ne(Box::new(x()), Box::new(Expr::Int(1))),
+            Some(column)
+        ),
+        [Matched, NotMatched]
     );
 }
 
@@ -283,11 +290,11 @@ fn a_false_left_operand_of_and_keeps_the_fault_on_its_right_from_happening() {
     let t =
         Column::text(Text::Pieces(Strided::from_slice(&pieces)), Marking::Never).expect("unmarked");
     let named = |name: &str| Box::new(Expr::Field(vec![Segment::Key(name.into())]));
-    // `y != 0 and t == 1`, where `t` holds text, so its comparison faults on
+    // `y != 0 and t > 1`, where `t` holds text, so its ordering faults on
     // every row.
     let rule = Expr::And(vec![
         Expr::Ne(named("y"), Box::new(Expr::Int(0))),
-        Expr::Eq(named("t"), Box::new(Expr::Int(1))),
+        Expr::Gt(named("t"), Box::new(Expr::Int(1))),
     ]);
     let program = plan(&[observing(Uuid::from_u128(1), rule)]).expect("the rule plans");
     // The planner numbers the fields in the order that the rule first reads
@@ -299,14 +306,14 @@ fn a_false_left_operand_of_and_keeps_the_fault_on_its_right_from_happening() {
         .run(3, &columns)
         .expect("the batch fits the bind");
     // The first row has `y == 0`, so the `and` is false there and the fault
-    // of `t == 1` is ignored.
+    // of `t > 1` is ignored.
     let got: Vec<Outcome> = (0..3).map(|row| run.rules()[0].outcome(row)).collect();
     assert_eq!(
         got,
         [
             NotMatched,
-            NotEvaluated(Fault::Incompatible),
-            NotEvaluated(Fault::Incompatible)
+            NotEvaluated(Fault::Unordered),
+            NotEvaluated(Fault::Unordered)
         ]
     );
 }
@@ -447,8 +454,9 @@ enum Value {
     Int(i128),
     Float(f64, Width),
     Bool(bool),
-    // The interpreter ignores what a text says, because this version faults
-    // or refuses every comparison with a text.
+    // The interpreter ignores what a text says, because the generated rules
+    // compare a text only with a number or a boolean, and bind refuses two
+    // text fields.
     Text,
     Null,
 }
@@ -559,6 +567,13 @@ fn compare(
     holds: fn(Ordering) -> bool,
     ordering: bool,
 ) -> Tri {
+    let (lk, rk) = (kind(l, record), kind(r, record));
+    // Values of two kinds, such as an int and a text, are never equal, as in
+    // Python, so `==` is false and `!=` true. A null has no kind and stays
+    // unknown below.
+    if !ordering && lk.zip(rk).is_some_and(|(a, b)| a != b) {
+        return Tri::of(!holds(Ordering::Equal));
+    }
     let order = match (l, r) {
         (Expr::Field(a), Expr::Field(b)) => {
             order_of_fields(record[field_number(a)], record[field_number(b)], ordering)
@@ -577,8 +592,33 @@ fn compare(
     }
 }
 
+/// The kinds of value that can be equal to each other: an int equals a float,
+/// and a boolean or a text equals only its own kind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Kind {
+    Number,
+    Bool,
+    Text,
+}
+
+/// Returns the kind of `e`, a field or a literal, on `record`. `None` for a
+/// null.
+fn kind(e: &Expr, record: &[Value]) -> Option<Kind> {
+    match e {
+        Expr::Field(p) => match record[field_number(p)] {
+            Value::Int(_) | Value::Float(..) => Some(Kind::Number),
+            Value::Bool(_) => Some(Kind::Bool),
+            Value::Text => Some(Kind::Text),
+            Value::Null => None,
+        },
+        Expr::Int(_) | Expr::Float(_) => Some(Kind::Number),
+        Expr::Bool(_) => Some(Kind::Bool),
+        _ => unreachable!("a generated operand is a field or a literal"),
+    }
+}
+
 /// Compares the field value `v` with `literal`. Returns `None` when `v` is
-/// a null, and a fault when the two cannot be compared. `ordering` is true
+/// a null, and a fault when the pair cannot be ordered. `ordering` is true
 /// for `<`, `<=`, `>` and `>=`.
 fn order_with_literal(v: Value, literal: &Expr, ordering: bool) -> Result<Option<Ordering>, Fault> {
     let order = match (v, literal) {
@@ -592,15 +632,16 @@ fn order_with_literal(v: Value, literal: &Expr, ordering: bool) -> Result<Option
         (Value::Float(f, w), Expr::Int(j)) => ieee(f, int_as(*j, w)),
         (Value::Float(f, w), Expr::Float(x)) => ieee(f, float_as(*x, w)),
         // `literal()` never makes `None`, so no generated rule has `None < x`,
-        // which validation would refuse. Every other pair that gets here
-        // cannot be compared.
-        _ => return Err(Fault::Incompatible),
+        // which validation would refuse. `compare` decides the equality of
+        // two kinds, so only an ordering with a value that is not a number
+        // gets here.
+        _ => return Err(Fault::Unordered),
     };
     Ok(Some(order))
 }
 
 /// Compares the values of two fields. Returns `None` when either is a
-/// null, and a fault when the two cannot be compared. `ordering` is true
+/// null, and a fault when the pair cannot be ordered. `ordering` is true
 /// for `<`, `<=`, `>` and `>=`.
 fn order_of_fields(a: Value, b: Value, ordering: bool) -> Result<Option<Ordering>, Fault> {
     let order = match (a, b) {
@@ -612,19 +653,22 @@ fn order_of_fields(a: Value, b: Value, ordering: bool) -> Result<Option<Ordering
         (Value::Float(x, _), Value::Float(y, _)) => ieee(x, y),
         (Value::Int(i), Value::Float(y, _)) => ieee(i as f64, y),
         (Value::Float(x, _), Value::Int(j)) => ieee(x, j as f64),
-        _ => return Err(Fault::Incompatible),
+        // An ordering with a value that is not a number. Two texts never get
+        // here, because bind refuses to compare two text fields.
+        _ => return Err(Fault::Unordered),
     };
     Ok(Some(order))
 }
 
 /// Compares two literals, converting an int to `f64` when needed, or
-/// returns a fault when they cannot be compared. A generated rule may
+/// returns a fault when the pair cannot be ordered. A generated rule may
 /// compare two literals, which the planner computes ahead of time.
 /// `ordering` is true for `<`, `<=`, `>` and `>=`.
 fn order_of_literals(a: &Expr, b: &Expr, ordering: bool) -> Result<Ordering, Fault> {
     match (a, b) {
         (Expr::Bool(x), Expr::Bool(y)) => booleans(*x, *y, ordering),
-        (Expr::Bool(_), _) | (_, Expr::Bool(_)) => Err(Fault::Incompatible),
+        // `compare` decides `True == 1`, so only an ordering gets here.
+        (Expr::Bool(_), _) | (_, Expr::Bool(_)) => Err(Fault::Unordered),
         (Expr::Int(i), Expr::Int(j)) => Ok(i.cmp(j)),
         _ => Ok(ieee(number(a), number(b))),
     }

@@ -8,9 +8,10 @@
 //! `i32` column `x`, `x > 5` gets the `i32` loop, with 5 stored as an `i32`.
 //!
 //! Bind also decides everything else that depends only on the types, once
-//! per schema instead of once per batch: which comparisons are a type fault,
-//! such as a text field compared with a number, how a literal converts to
-//! the column's type, and which literals no value of the column can reach.
+//! per schema instead of once per batch. It decides which comparisons fault,
+//! such as an ordering on a text field, and which pairs of types can never be
+//! equal, such as a number and a text. It also decides how a literal converts
+//! to the column's type, and which literals no value of the column can reach.
 
 use std::fmt;
 
@@ -62,9 +63,9 @@ pub(crate) enum BoundStep {
         fields: Vec<usize>,
         chunk: ChunkLoop,
     },
-    // A comparison whose types cannot be compared, such as text with a
-    // number. It is a fault on the rows where all `fields` have a value, and
-    // unknown on the rows where one of them has none (ADR-0005).
+    // A comparison that cannot be done, such as an ordering on text. It is a
+    // fault on the rows where all `fields` have a value, and unknown on the
+    // rows where one of them has none (ADR-0005).
     Faulted {
         fault: Fault,
         fields: Vec<usize>,
@@ -203,34 +204,38 @@ fn bind_condition(f: usize, t: FieldType) -> BoundStep {
 /// type `t`.
 fn bind_literal(op: Comparison, f: usize, t: FieldType, literal: Literal) -> BoundStep {
     // The arms test the pair (column type, literal) from the most specific
-    // case to the least. The arms for a missing field and for booleans must
-    // come first, because the number arms at the end accept any number
-    // column with any literal that reaches them.
+    // case to the least. The missing field, the orderings that fault, the
+    // booleans and the pairs that can never be equal come first, because the
+    // number arms at the end accept any number column with any literal that
+    // reaches them.
     match (t, literal) {
         // A missing field is null on every row, and a comparison with a null
         // is unknown (ADR-0005).
         (FieldType::Absent, _) => BoundStep::Constant(Constant::Unknown),
-        // `x < True` is a fault, because only numbers can be ordered
-        // (ADR-0041).
-        (FieldType::Bool, Literal::Bool(_)) if op.is_ordering() => BoundStep::Faulted {
-            fault: Fault::Unordered,
-            fields: vec![f],
-        },
-        // Only `==` and `!=` get here. The loop marks the rows where `x`
-        // holds the boolean that makes the comparison true: `x == True` and
-        // `x != False` look for true, and `x == False` and `x != True` look
-        // for false.
+        // `x < True`, and `x > 5` on a text column, are a fault, because only
+        // numbers can be ordered (ADR-0041).
+        (FieldType::Bool | FieldType::Text | FieldType::List, _) | (_, Literal::Bool(_))
+            if op.is_ordering() =>
+        {
+            BoundStep::Faulted {
+                fault: Fault::Unordered,
+                fields: vec![f],
+            }
+        }
+        // The loop marks the rows where `x` holds the boolean that makes the
+        // comparison true: `x == True` and `x != False` look for true, and
+        // `x == False` and `x != True` look for false.
         (FieldType::Bool, Literal::Bool(b)) => BoundStep::Loop {
             fields: vec![f],
             chunk: booleans_equal(f, b == (op == Comparison::Eq)),
         },
-        // `x == True` on a number, text or list column, and `x > 5` on a
-        // boolean, text or list column, compare types that cannot be
-        // compared, which is a fault.
+        // A pair that can never be equal, such as `x == True` on a number
+        // column or `x == 5` on a text column. `==` is false and `!=` true on
+        // every row with a value, as Python compares an int with a text.
         (_, Literal::Bool(_)) | (FieldType::Bool | FieldType::Text | FieldType::List, _) => {
-            BoundStep::Faulted {
-                fault: Fault::Incompatible,
+            BoundStep::Loop {
                 fields: vec![f],
+                chunk: constant_loop(op == Comparison::Ne),
             }
         }
         // An int column against a float literal, as in `x > 2.5`: each int
@@ -331,11 +336,16 @@ fn bind_fields(
         (FieldType::Text, FieldType::Text) | (FieldType::List, FieldType::List) => {
             return Err(BindError::Unsupported { left: l, right: r });
         }
-        // Any other pair, such as a number and a text or a boolean and a
-        // number, cannot be compared, which is a fault (ADR-0005).
-        _ => BoundStep::Faulted {
-            fault: Fault::Incompatible,
+        // Any other pair, such as a number and a text, can never be equal, so
+        // `==` is false and `!=` true. An ordering of it is a fault, because
+        // one side is not a number (ADR-0041).
+        _ if op.is_ordering() => BoundStep::Faulted {
+            fault: Fault::Unordered,
             fields,
+        },
+        _ => BoundStep::Loop {
+            fields,
+            chunk: constant_loop(op == Comparison::Ne),
         },
     })
 }

@@ -88,11 +88,15 @@ answers, and they differ on a division by zero.
 A fault is an operation that cannot be done on values that are there (owner,
 2026-11-13, 2026-11-27):
 
-- two values have incompatible types
-- an ordering compares values that are not numbers, such as text or booleans
+- an ordering compares a value that is not a number, such as a text or a
+  boolean
 - a division by zero
 - an integer overflow
 - a value that is no boolean where a condition is expected
+
+`==` compares values of any two types, and values of types that cannot be
+equal, such as an int and a text, are not equal, as in Python. So `x == 5` is
+false and `x != 5` true where `x` holds a text (owner, 2026-11-28).
 
 A rule that meets a fault on a record does not apply to that record. The rule
 is off for that record. The rule behaves as if it did not exist for that
@@ -165,6 +169,10 @@ would never match.
 An equality in which two nulls are equal, because `a == b` would then match
 every record that has neither field.
 
+A fault for `==` between values of types that cannot be equal, because a
+membership list such as `x in ["a", 1]` would then fault on every int record
+in one order and match in the other.
+
 `isinstance` on a null as unknown, because `not isinstance(x, int)` is the
 way to find the records whose value has another type or is absent.
 
@@ -230,8 +238,8 @@ types, which is to be built together with the planner of `adr/0035`, would
 refuse these forms (owner, 2026-11-16).
 
 An adapter keeps the rows whose value has another type beside the column
-(`adr/0036`), so a rule that reads the column is off for those records alone
-and not for the whole batch.
+(`adr/0036`), so each operator gives those records what it gives for their
+type: false under `==`, and a fault under an ordering.
 
 The fixtures and every SDK must use the vocabulary of this record and cite it:
 `pass-through`, `halt`, `cached`, null, unknown, fault and off.

@@ -30,8 +30,8 @@ for the other rules of the thrown row (owner, 2026-11-16).
 ## Rejected alternatives
 
 Turning a rule off for a whole batch because of one record, because one
-record on which the rule meets a fault, such as a value of another type, would
-change the outcome of the other records of its batch.
+record on which the rule meets a fault, such as a text where an ordering
+expects a number, would change the outcome of the other records of its batch.
 
 An exception that names the throwing rules only, because the result exists
 anyway and the caller can use it.
