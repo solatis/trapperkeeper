@@ -35,8 +35,8 @@ executor knows no rule text.
 - `run` refuses a batch whose column types or row counts differ from what
   bind saw, because the loops read a column's memory as the type that bind
   picked.
-- The meaning of `x in y` with a field `y` comes from the type of `y` at bind:
-  a text is searched for a substring, and a list for an element.
+- Bind picks the meaning of `x in y` with a field `y` from the type of `y`. It
+  searches a text for a substring and a list for an element.
 - A literal converts to the type of the column it is compared with, once, at
   bind.
 
@@ -47,9 +47,7 @@ executor knows no rule text.
 - How values convert and compare, which types can be equal, and how a UTF-8
   text compares with a UTF-32 text: `doc/adr/0041-the-rule-language.md`.
 - Nulls, NaNs and faults: `doc/adr/0005-one-vocabulary-for-failure-behavior.md`.
-- A literal needle in a UTF-8 text is found with the `regex` crate, which the
-  engine already depends on, so no new dependency enters a crate that
-  pipelines embed.
+- Why substring search uses `regex`: `engine/Cargo.toml`.
 - The three outcomes of a record: `doc/adr/0006-conformance-fixtures-are-the-evaluation-spec.md`.
 
 **How to**:
