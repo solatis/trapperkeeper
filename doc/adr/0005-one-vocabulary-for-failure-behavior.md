@@ -66,10 +66,11 @@ Five tests are never unknown: `is None`, `is not None`, `x == None`,
 `None` in a membership list matches a null, so `x in ("paid", None)` means
 `x == "paid" or x == None` (owner, 2026-11-14). With the literal on the left
 of `in`, as in `None in tags`, the test is true when the list `tags` holds a
-null element (owner, 2026-11-16). A list search follows `any` over the
-equalities of the elements, so a needle that no element can equal gives
-false, or unknown where an element is a null (owner, 2026-11-28). Only the
-literal `None` has this meaning.
+null element (owner, 2026-11-16). A search of a field that holds a list, as
+in `5 in tags`, is true when an element equals the value on the left of `in`.
+When no element can equal that value, the search is false, or unknown where an
+element is a null, as `any` over the equalities of the elements gives (owner,
+2026-11-28). Only the literal `None` has this meaning.
 `a == b` on two fields that both hold a null gives unknown.
 
 The meaning of `in` follows the type of its right side. When the rule writes
