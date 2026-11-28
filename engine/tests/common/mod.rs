@@ -583,6 +583,8 @@ impl TextBuffers {
                 for text in texts {
                     let start = bytes.len();
                     bytes.extend_from_slice(text.as_bytes());
+                    // Zeros pad the text to the width of a cell, and filler
+                    // bytes take the `step - 1` cells up to the next row.
                     bytes.resize(start + width, 0);
                     bytes.resize(start + step * width, b'y');
                 }
@@ -598,6 +600,7 @@ impl TextBuffers {
                 for text in &chars {
                     let start = units.len();
                     units.extend_from_slice(text);
+                    // Zeros and filler units, as for the byte cells.
                     units.resize(start + width, 0);
                     units.resize(start + step * width, u32::from('y'));
                 }
@@ -638,8 +641,8 @@ impl TextBuffers {
         }
     }
 
-    /// The units and the width of the cells of a `Bytes` layout, and `None`
-    /// for any other layout.
+    /// Returns the units and the width of the cells of a `Bytes` layout, and
+    /// `None` for any other layout.
     pub fn byte_cells(&self) -> Option<(Units<'_, u8>, usize)> {
         match &self.buffers {
             // SAFETY: every cell holds a text, which is UTF-8, padded with
