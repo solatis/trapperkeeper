@@ -1178,6 +1178,54 @@ fn texts_elements(texts: Vec<String>) -> Elements {
     Elements::Texts(texts, bytes, ends)
 }
 
+#[test]
+fn the_same_rule_searches_a_text_on_one_schema_and_a_list_on_another() {
+    // One program runs over two schemas, where `y` holds a text in the first
+    // and a list of texts in the second.
+    //
+    // 1. It plans `x in y` once.
+    // 2. It binds the program to a text column `y`, where `in` searches for a
+    //    substring, so `"a"` is found in `"cat"`.
+    // 3. It binds the same program to a list column `y`, where `in` searches
+    //    for an element, so `"a"` is found only where an element is `"a"`.
+
+    // 1. plan once
+    let named = |name: &str| Box::new(Expr::Field(vec![Segment::Key(name.into())]));
+    let rule = Expr::In(named("x"), named("y"));
+    let program = plan(&[observing(Uuid::from_u128(1), rule)]).expect("the rule plans");
+    let needles = [Piece::new("a"), Piece::new("a")];
+    let x = Column::text(Text::Pieces(Strided::from_slice(&needles)), Marking::Never)
+        .expect("unmarked");
+    let run = |y: Column<'_>| {
+        let columns = [Some(x), Some(y)];
+        let run = program
+            .bind(&columns)
+            .expect("one column per field")
+            .run(2, &columns)
+            .expect("the batch fits the bind");
+        (0..2)
+            .map(|row| run.rules()[0].outcome(row))
+            .collect::<Vec<_>>()
+    };
+
+    // 2. search a text
+    let texts = [Piece::new("cat"), Piece::new("dog")];
+    let y =
+        Column::text(Text::Pieces(Strided::from_slice(&texts)), Marking::Never).expect("unmarked");
+    assert_eq!(run(y), [Matched, NotMatched]);
+
+    // 3. search a list
+    // The records are `["cat", "a"]` and `["cat"]`.
+    let elements = texts_elements(vec!["cat".into(), "a".into(), "cat".into()]);
+    let values = ListValues::new(elements, &[true; 3], &[2, 1], false);
+    let column = values.elements(0..3);
+    // SAFETY: the ends are in order, start at 0 and end at the number of
+    // elements.
+    let layout = unsafe { Offsets::new(&values.ends, &column) };
+    let y = Column::list(List::Offsets(AnyOffsets::U64(layout)), Marking::Never).expect("unmarked");
+    assert_eq!(run(y), [Matched, NotMatched]);
+}
+
 /// The borrowed buffers of a field whose column borrows parts that the field
 /// does not hold itself.
 enum Lent<'a> {
@@ -1653,8 +1701,9 @@ fn condition(n: usize) -> impl Strategy<Value = Expr> {
             Expr::In(x, list)
         }
     });
-    // A search of a field for a literal.
-    let search = (literal(), 0..n, any::<bool>()).prop_map(|(x, y, negated)| {
+    // A search of a field for a literal or for another field.
+    let sought = prop_oneof![literal(), (0..n).prop_map(field_named)];
+    let search = (sought, 0..n, any::<bool>()).prop_map(|(x, y, negated)| {
         let (x, y) = (Box::new(x), Box::new(field_named(y)));
         if negated {
             Expr::NotIn(x, y)
@@ -1724,8 +1773,8 @@ proptest! {
         let columns = t.columns(&lent, program.fields());
         let bound = match program.bind(&columns) {
             // A generated rule may compare two list fields, or search for a
-            // field, which this version does not run, and that rule set does
-            // not run.
+            // list field, which this version does not run, and that rule set
+            // does not run.
             Err(BindError::Unsupported { .. }) => return Ok(()),
             other => other?,
         };
@@ -1768,8 +1817,8 @@ proptest! {
         let columns = t.columns(&lent, program.fields());
         let bound = match program.bind(&columns) {
             // A generated rule may compare two list fields, or search for a
-            // field, which this version does not run, and that rule set does
-            // not run.
+            // list field, which this version does not run, and that rule set
+            // does not run.
             Err(BindError::Unsupported { .. }) => return Ok(()),
             other => other?,
         };

@@ -3,6 +3,7 @@
 //! the type of `y` in each schema, so one rule may search a text on one
 //! schema and a list on another.
 
+use std::cell::RefCell;
 use std::ops::Range;
 
 use regex::bytes::Regex;
@@ -11,53 +12,70 @@ use super::bind::{
     BindError, BoundStep, ChunkLoop, FieldType, SearchLoop, invert, write_booleans_of,
 };
 use super::member::{NumberSet, TextSet};
+use super::number::EqualsNumber;
 use super::outcome::Fault;
-use super::text::{Encoded, Form, texts_of};
+use super::text::{Encoded, EqualsText, Form, texts_of};
 use crate::column::{
-    AnyOffsets, AnySized, CHUNK_ROWS, CHUNK_WORDS, Column, Kind, List, Lists, Number, Present,
-    Scalar, Shape, Test, TextRows, Texts, pack, present_all, with_float, with_int, with_texts,
+    AnyOffsets, AnySized, Booleans, CHUNK_ROWS, CHUNK_WORDS, Column, Kind, List, Lists, Number,
+    NumberType, Present, Scalar, Shape, Test, TextRowPair, TextRows, Texts, pack, present_all,
+    with_float, with_int, with_number, with_texts,
 };
 use crate::plan::{Constant, Literal, Operand, TextLiteral};
 
 /// Builds the step of `needle in y`, where `y` is field `haystack` and
 /// `types` holds the column type of each field. The step searches the text or
 /// the elements of `y`, and faults where `y` holds a value that cannot be
-/// searched for the needle. Fails for a needle field, which this version
-/// cannot search for yet.
+/// searched for the needle. Fails for a needle that is a list field, because
+/// list equality does not exist.
 pub(super) fn bind_search(
     needle: &Operand,
     haystack: usize,
     types: &[FieldType],
 ) -> Result<BoundStep, BindError> {
-    // The cases are the types of `y`, and the first that applies returns.
-    // The missing field comes first, because a search of a null is unknown
-    // whatever the needle is (ADR-0005).
-    let fields = vec![haystack];
-    Ok(match (needle, types[haystack]) {
-        (_, FieldType::Absent) => BoundStep::Constant(Constant::Unknown),
-        (Operand::Literal(Literal::Text(text)), FieldType::Text) => BoundStep::Loop {
-            fields,
-            chunk: substring_literal(haystack, text),
-        },
-        (Operand::Field(n), _) => {
+    // The cases are the types of the needle and of `y`, and the first that
+    // applies returns. The missing fields come first, because a search of a
+    // null, or for a null, is unknown whatever the other side is (ADR-0005).
+    // The list needle comes next, so that `[1] in 5` is refused like
+    // `[1] in tags`.
+    let needle_type = match needle {
+        Operand::Field(n) => Some(types[*n]),
+        Operand::Literal(_) => None,
+    };
+    // The search reads the haystack and a needle field, and a row where one
+    // of them has no value stays unknown.
+    let fields = match needle {
+        Operand::Field(n) => vec![*n, haystack],
+        Operand::Literal(_) => vec![haystack],
+    };
+    Ok(match (needle, needle_type, types[haystack]) {
+        (_, _, FieldType::Absent) | (_, Some(FieldType::Absent), _) => {
+            BoundStep::Constant(Constant::Unknown)
+        }
+        (Operand::Field(n), Some(FieldType::List(_)), _) => {
             return Err(BindError::Unsupported {
                 left: *n,
                 right: haystack,
             });
         }
-        (Operand::Literal(literal), FieldType::List(shape)) => BoundStep::Search {
+        (Operand::Literal(Literal::Text(text)), _, FieldType::Text) => BoundStep::Loop {
             fields,
-            chunk: list_search(haystack, Needle::of(literal, shape)),
+            chunk: substring_literal(haystack, text),
+        },
+        (Operand::Field(n), Some(FieldType::Text), FieldType::Text) => BoundStep::Loop {
+            fields,
+            chunk: substring_field(*n, haystack),
+        },
+        (_, _, FieldType::List(shape)) => BoundStep::Search {
+            fields,
+            chunk: list_search(haystack, Needle::of(needle, needle_type, shape)),
         },
         // A text cannot be searched for a needle that is no text, and a
         // number or a boolean cannot be searched at all, as Python raises a
         // type error for `5 in "abc"` and for `5 in 3`.
-        (Operand::Literal(_), FieldType::Text | FieldType::Number(_) | FieldType::Bool) => {
-            BoundStep::Faulted {
-                fault: Fault::Incompatible,
-                fields,
-            }
-        }
+        (_, _, FieldType::Text | FieldType::Number(_) | FieldType::Bool) => BoundStep::Faulted {
+            fault: Fault::Incompatible,
+            fields,
+        },
     })
 }
 
@@ -118,6 +136,69 @@ fn substring_literal(f: usize, needle: &TextLiteral) -> ChunkLoop {
     )
 }
 
+/// What `pack` runs to find the text of a needle field in the text of a
+/// haystack field, row by row.
+struct ContainsField {
+    // A UTF-8 text decodes into these units when the other side is UTF-32.
+    // The buffer lives across the rows of a chunk, so a row allocates only
+    // when its text is longer than every text before it.
+    units: RefCell<Vec<u32>>,
+}
+
+impl<'a, N, H> Test<TextRowPair<'a, N, H>> for ContainsField
+where
+    N: Texts<'a, Unit: Encoded + 'a>,
+    H: Texts<'a, Unit: Encoded + 'a>,
+{
+    // As for `AgainstText` in `text.rs`, `pack` reads every row through `one`.
+    fn lanes(&self, (): ()) -> u64 {
+        unreachable!("a text source is never contiguous")
+    }
+
+    fn one(&self, (needle, haystack): (&'a [N::Unit], &'a [H::Unit])) -> bool {
+        let mut units = self.units.borrow_mut();
+        match (N::Unit::form(needle), H::Unit::form(haystack)) {
+            (Form::Utf8(n), Form::Utf8(h)) => utf8(h).contains(utf8(n)),
+            (Form::Utf32(n), Form::Utf32(h)) => contains_units(h, n),
+            (Form::Utf8(n), Form::Utf32(h)) => contains_units(h, decoded(n, &mut units)),
+            (Form::Utf32(n), Form::Utf8(h)) => contains_units(decoded(h, &mut units), n),
+        }
+    }
+}
+
+/// Returns the UTF-8 text `bytes` as a `str`.
+fn utf8(bytes: &[u8]) -> &str {
+    // Every text layout whose units are bytes holds UTF-8 in every row, so
+    // the check passes. It keeps the loop free of `unsafe`, which
+    // `from_utf8_unchecked` would need.
+    str::from_utf8(bytes).expect("a text layout of bytes holds UTF-8")
+}
+
+/// Decodes the UTF-8 text `bytes` into `units`, one unit per character, and
+/// returns them.
+fn decoded<'u>(bytes: &[u8], units: &'u mut Vec<u32>) -> &'u [u32] {
+    units.clear();
+    units.extend(utf8(bytes).chars().map(u32::from));
+    units
+}
+
+/// Builds the loop that marks the rows where the text of field `n` occurs in
+/// the text of field `h`.
+fn substring_field(n: usize, h: usize) -> ChunkLoop {
+    Box::new(
+        move |cols: &[Option<Column<'_>>], start: usize, rows: usize, out: &mut Present| {
+            let test = ContainsField {
+                units: RefCell::new(Vec::new()),
+            };
+            // The two layouts are known only per batch, so the loop is
+            // compiled for each pair of layouts and picks its pair per chunk.
+            with_texts!(texts_of(cols, n), |x| with_texts!(texts_of(cols, h), |y| {
+                pack(TextRowPair::new(x, y), start, rows, out, &test);
+            }));
+        },
+    )
+}
+
 /// What a list search compares each element with.
 #[derive(Debug, Clone)]
 enum Needle {
@@ -125,27 +206,40 @@ enum Needle {
     // the search only looks for null elements.
     Never,
     Literal(Literal),
+    // A field, whose value on each record is the needle of that record.
+    Field(usize),
 }
 
 impl Needle {
-    /// Returns what a search for `literal` compares with the elements of a
-    /// list whose records have shape `shape`.
-    fn of(literal: &Literal, shape: Shape) -> Self {
+    /// Returns what a search for `needle`, whose column type is `needle_type`
+    /// when it is a field, compares with the elements of a list whose
+    /// records have shape `shape`.
+    fn of(needle: &Operand, needle_type: Option<FieldType>, shape: Shape) -> Self {
         // A record of depth 1 holds scalars. A deeper record holds lists, and
-        // no literal equals a list.
+        // no scalar equals a list.
         let scalar = (shape.depth == 1).then_some(shape.scalar);
-        let can_equal = matches!(
-            (scalar, literal),
-            (
-                Some(Scalar::Int | Scalar::Float),
-                Literal::Int(_) | Literal::Float(_)
-            ) | (Some(Scalar::Bool), Literal::Bool(_))
-                | (Some(Scalar::Text), Literal::Text(_))
-        );
-        if can_equal {
-            Self::Literal(literal.clone())
-        } else {
-            Self::Never
+        let can_equal = match (needle, needle_type) {
+            (Operand::Literal(l), _) => matches!(
+                (scalar, l),
+                (
+                    Some(Scalar::Int | Scalar::Float),
+                    Literal::Int(_) | Literal::Float(_)
+                ) | (Some(Scalar::Bool), Literal::Bool(_))
+                    | (Some(Scalar::Text), Literal::Text(_))
+            ),
+            (Operand::Field(_), t) => matches!(
+                (scalar, t),
+                (
+                    Some(Scalar::Int | Scalar::Float),
+                    Some(FieldType::Number(_))
+                ) | (Some(Scalar::Bool), Some(FieldType::Bool))
+                    | (Some(Scalar::Text), Some(FieldType::Text))
+            ),
+        };
+        match needle {
+            _ if !can_equal => Self::Never,
+            Operand::Literal(l) => Self::Literal(l.clone()),
+            Operand::Field(n) => Self::Field(*n),
         }
     }
 }
@@ -154,12 +248,31 @@ impl Needle {
 /// rows` whose element equals the needle.
 type ElementTest<'c> = Box<dyn Fn(usize, usize, &mut Present) + 'c>;
 
-/// Returns the test of the element column `elements` against `needle`.
-fn element_test<'c>(needle: &Needle, elements: &'c Column<'c>) -> ElementTest<'c> {
-    let never: ElementTest<'c> = Box::new(|_, _, out: &mut Present| out.fill(0));
-    let Needle::Literal(literal) = needle else {
-        return never;
-    };
+/// Returns the test of the element column `elements` against `needle`. A
+/// needle field takes its value from row `row` of `cols`, where it has one.
+fn element_test<'c>(
+    needle: &Needle,
+    cols: &[Option<Column<'c>>],
+    row: usize,
+    elements: &'c Column<'c>,
+) -> ElementTest<'c> {
+    match needle {
+        Needle::Never => never(),
+        Needle::Literal(literal) => literal_test(literal, elements),
+        // Bind made a field needle for a field that has a column.
+        Needle::Field(n) => {
+            field_test(cols[*n].as_ref().expect("bind saw a column"), row, elements)
+        }
+    }
+}
+
+/// Returns the test that marks no element.
+fn never<'c>() -> ElementTest<'c> {
+    Box::new(|_, _, out: &mut Present| out.fill(0))
+}
+
+/// Returns the test of the element column `elements` against `literal`.
+fn literal_test<'c>(literal: &Literal, elements: &'c Column<'c>) -> ElementTest<'c> {
     // The sets of `member.rs` convert the literal to the element type as
     // `==` does, so a list search and a membership agree on every pair.
     let kept = [literal];
@@ -178,15 +291,7 @@ fn element_test<'c>(needle: &Needle, elements: &'c Column<'c>) -> ElementTest<'c
                 NumberSet::<T>::for_float(&kept)
             ))
         }
-        (Kind::Booleans(..), Literal::Bool(b)) => {
-            let value = *b;
-            Box::new(move |start, rows, out: &mut Present| {
-                write_booleans_of(elements, start, rows, out);
-                if !value {
-                    invert(out, rows);
-                }
-            })
-        }
+        (Kind::Booleans(..), Literal::Bool(b)) => booleans_test(elements, *b),
         (Kind::Text(text, _), Literal::Text(_)) => {
             let (text, set) = (*text, TextSet::of(&kept));
             Box::new(move |start, rows, out: &mut Present| {
@@ -194,17 +299,94 @@ fn element_test<'c>(needle: &Needle, elements: &'c Column<'c>) -> ElementTest<'c
             })
         }
         // `Needle::of` keeps a literal only for elements of its kind.
-        _ => never,
+        _ => never(),
     }
 }
 
 /// Returns the test that marks the number elements found in `set`.
 fn number_test<'c, T: Number>(elements: &'c Column<'c>, set: NumberSet<T>) -> ElementTest<'c> {
     if set.is_empty() {
-        return Box::new(|_, _, out: &mut Present| out.fill(0));
+        return never();
     }
     let values = T::values(elements.kind()).expect("the set was built for the element type");
     Box::new(move |start, rows, out: &mut Present| pack(values, start, rows, out, &set))
+}
+
+/// Returns the test that marks the boolean elements equal to `value`.
+fn booleans_test<'c>(elements: &'c Column<'c>, value: bool) -> ElementTest<'c> {
+    Box::new(move |start, rows, out: &mut Present| {
+        write_booleans_of(elements, start, rows, out);
+        if !value {
+            invert(out, rows);
+        }
+    })
+}
+
+/// Returns the test of the element column `elements` against the value of
+/// row `row` of the needle column `needle`.
+fn field_test<'c>(needle: &Column<'c>, row: usize, elements: &'c Column<'c>) -> ElementTest<'c> {
+    match (needle.kind(), elements.kind()) {
+        (Kind::Ints(..) | Kind::Floats(..), Kind::Ints(..) | Kind::Floats(..)) => {
+            // `with_number!` expands into one arm per number type, so the
+            // comparison is compiled for the needle's type `L` and the
+            // elements' type `R`, as `x == y` on two number fields is.
+            with_number!(number_type(needle), |L| needle_number::<L>(
+                needle, row, elements
+            ))
+        }
+        (Kind::Booleans(b, _), Kind::Booleans(..)) => {
+            // A byte that is not zero is true, as `write_booleans_of` reads it.
+            let value = match b {
+                Booleans::Bits(bits) => bits.get(row),
+                Booleans::Bytes(bytes) => bytes.get(row) != 0,
+            };
+            booleans_test(elements, value)
+        }
+        (Kind::Text(n, _), Kind::Text(e, _)) => {
+            let (n, e) = (*n, *e);
+            Box::new(move |start, rows, out: &mut Present| {
+                // The needle keeps its own encoding, and `EqualsText` compares
+                // it with each element in any pair of encodings.
+                with_texts!(n, |t| {
+                    let test = EqualsText {
+                        needle: Encoded::form(Texts::get(&t, row)),
+                    };
+                    with_texts!(e, |u| pack(TextRows::new(u), start, rows, out, &test));
+                });
+            })
+        }
+        // `Needle::of` keeps a field only for elements of its kind.
+        _ => never(),
+    }
+}
+
+/// Returns the test of the number elements `elements` against row `row` of
+/// the needle column `needle`, which holds numbers of type `L`.
+fn needle_number<'c, L: Number>(
+    needle: &Column<'c>,
+    row: usize,
+    elements: &'c Column<'c>,
+) -> ElementTest<'c> {
+    let value = L::values(needle.kind()).expect("a number column").get(row);
+    with_number!(number_type(elements), |R| pair_test::<L, R>(
+        value, elements
+    ))
+}
+
+/// Returns the test that marks the elements of type `R` that equal `value`.
+fn pair_test<'c, L: Number, R: Number>(value: L, elements: &'c Column<'c>) -> ElementTest<'c> {
+    let values = R::values(elements.kind()).expect("a number column");
+    let test = EqualsNumber::<L, R>::new(value);
+    Box::new(move |start, rows, out: &mut Present| pack(values, start, rows, out, &test))
+}
+
+/// Returns the number type of a number column.
+fn number_type(c: &Column<'_>) -> NumberType {
+    match c.kind() {
+        Kind::Ints(v, _) => v.number_type(),
+        Kind::Floats(v, _) => v.number_type(),
+        _ => unreachable!("the caller checked that the column holds numbers"),
+    }
 }
 
 /// Searches the rows `range` of the element column `elements` with `test`,
@@ -250,7 +432,14 @@ fn list_search(haystack: usize, needle: Needle) -> SearchLoop {
                 matched[row / 64] |= u64::from(hit) << (row % 64);
                 undecided[row / 64] |= u64::from(!hit && null) << (row % 64);
             };
-            for_each_record(lists_of(cols, haystack), start, rows, &needle, &mut mark);
+            for_each_record(
+                cols,
+                lists_of(cols, haystack),
+                start,
+                rows,
+                &needle,
+                &mut mark,
+            );
         },
     )
 }
@@ -258,28 +447,37 @@ fn list_search(haystack: usize, needle: Needle) -> SearchLoop {
 /// Scans the elements of each record in `start .. start + rows` of `list`
 /// for `needle`, and passes the record's row in the chunk and the result of
 /// `scan` to `mark`.
-fn for_each_record(
-    list: List<'_>,
+fn for_each_record<'c>(
+    cols: &[Option<Column<'c>>],
+    list: List<'c>,
     start: usize,
     rows: usize,
     needle: &Needle,
     mark: &mut impl FnMut(usize, (bool, bool)),
 ) {
     match list {
-        List::Offsets(AnyOffsets::I32(o)) => shared(o, o.storage(), start, rows, needle, mark),
-        List::Offsets(AnyOffsets::I64(o)) => shared(o, o.storage(), start, rows, needle, mark),
-        List::Offsets(AnyOffsets::U32(o)) => shared(o, o.storage(), start, rows, needle, mark),
-        List::Offsets(AnyOffsets::U64(o)) => shared(o, o.storage(), start, rows, needle, mark),
-        List::Fixed(f) => shared(f, f.storage(), start, rows, needle, mark),
-        List::Sized(AnySized::I32(s)) => shared(s, s.elements(), start, rows, needle, mark),
-        List::Sized(AnySized::I64(s)) => shared(s, s.elements(), start, rows, needle, mark),
-        List::Sized(AnySized::U32(s)) => shared(s, s.elements(), start, rows, needle, mark),
-        List::Sized(AnySized::U64(s)) => shared(s, s.elements(), start, rows, needle, mark),
+        List::Offsets(AnyOffsets::I32(o)) => {
+            shared(cols, o, o.storage(), start, rows, needle, mark);
+        }
+        List::Offsets(AnyOffsets::I64(o)) => {
+            shared(cols, o, o.storage(), start, rows, needle, mark);
+        }
+        List::Offsets(AnyOffsets::U32(o)) => {
+            shared(cols, o, o.storage(), start, rows, needle, mark);
+        }
+        List::Offsets(AnyOffsets::U64(o)) => {
+            shared(cols, o, o.storage(), start, rows, needle, mark);
+        }
+        List::Fixed(f) => shared(cols, f, f.storage(), start, rows, needle, mark),
+        List::Sized(AnySized::I32(s)) => shared(cols, s, s.elements(), start, rows, needle, mark),
+        List::Sized(AnySized::I64(s)) => shared(cols, s, s.elements(), start, rows, needle, mark),
+        List::Sized(AnySized::U32(s)) => shared(cols, s, s.elements(), start, rows, needle, mark),
+        List::Sized(AnySized::U64(s)) => shared(cols, s, s.elements(), start, rows, needle, mark),
         // Each record is a column of its own, which gets a test of its own.
         List::PerRecord(p) => {
             for row in 0..rows {
                 let record = p.get(start + row);
-                let test = element_test(needle, record);
+                let test = element_test(needle, cols, start + row, record);
                 mark(row, scan(record, 0..record.rows(), &test));
             }
         }
@@ -287,8 +485,9 @@ fn for_each_record(
 }
 
 /// Scans the records of a layout whose records are ranges of one element
-/// column, `elements`, which gets one test for the whole chunk.
+/// column, `elements`.
 fn shared<'a, L: Lists<'a, Record = Range<usize>>>(
+    cols: &[Option<Column<'a>>],
     layout: L,
     elements: &'a Column<'a>,
     start: usize,
@@ -296,9 +495,20 @@ fn shared<'a, L: Lists<'a, Record = Range<usize>>>(
     needle: &Needle,
     mark: &mut impl FnMut(usize, (bool, bool)),
 ) {
-    let test = element_test(needle, elements);
+    // A literal needle is the same on every record, so the chunk builds its
+    // test once. A needle field gives each record a test of its own value.
+    let once = match needle {
+        Needle::Field(_) => None,
+        _ => Some(element_test(needle, cols, start, elements)),
+    };
     for row in 0..rows {
-        mark(row, scan(elements, layout.get(start + row), &test));
+        let range = layout.get(start + row);
+        if let Some(test) = &once {
+            mark(row, scan(elements, range, test));
+        } else {
+            let test = element_test(needle, cols, start + row, elements);
+            mark(row, scan(elements, range, &test));
+        }
     }
 }
 
