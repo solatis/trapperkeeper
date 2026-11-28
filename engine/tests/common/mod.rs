@@ -441,8 +441,9 @@ pub enum OffsetType {
 /// could get wrong.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TextLayout {
-    /// Texts end to end after `lead` other bytes, as in a slice of a longer
-    /// column, so a reader that assumes a first offset of zero shows.
+    /// Texts end to end, after `lead` bytes that belong to no text, as in a
+    /// slice of a longer column. A reader that assumes a first offset of zero
+    /// then reads the wrong bytes.
     Offsets { lead: usize, offset: OffsetType },
     /// Views of 16 bytes. A long text goes to the buffer of its row's parity,
     /// so the buffer number of a view is read and not assumed to be 0.
@@ -461,6 +462,9 @@ pub enum TextLayout {
 }
 
 /// Generates any layout of a text column.
+// A step of 1 lays the rows end to end, and a step of 2 or 3 puts other
+// values between them. A slack of 0 lets the longest text fill its cell
+// with no zero after it.
 pub fn text_layout() -> impl Strategy<Value = TextLayout> {
     let offset = select(vec![
         OffsetType::I32,
@@ -488,8 +492,9 @@ pub struct TextBuffers {
 /// The buffers of each layout.
 #[derive(Debug, Clone)]
 enum Buffers {
-    // The ends of the texts in each of the four offset types, and the type
-    // that `Text::Offsets` takes.
+    // The ends of the texts in each of the four offset types, because
+    // `offsets` gives all four layouts to the column tests. `offset` names
+    // the one that `text` takes.
     Offsets {
         bytes: Vec<u8>,
         i32s: Vec<i32>,
@@ -680,6 +685,8 @@ impl LentTexts<'_> {
                 Text::Pieces(run)
             }
             Buffers::Bytes { width, step, .. } => {
+                // `byte_cells` holds the one promise that these bytes are
+                // UTF-8.
                 let (units, _) = self.buffers.byte_cells().expect("a bytes layout");
                 Text::Bytes(
                     Fixed::new(*width, step * width, rows, units)
@@ -693,8 +700,9 @@ impl LentTexts<'_> {
         }
     }
 
-    /// The four offsets layouts over the bytes of an `Offsets` layout, in the
-    /// order `i32`, `i64`, `u32` and `u64`, and `None` for any other layout.
+    /// Returns the four offsets layouts of an `Offsets` layout, one per
+    /// offset type, in the order `i32`, `i64`, `u32` and `u64`, and `None` for
+    /// any other layout.
     pub fn offsets(&self) -> Option<[AnyOffsets<'_, Utf8<'_>>; 4]> {
         let Buffers::Offsets {
             bytes,
