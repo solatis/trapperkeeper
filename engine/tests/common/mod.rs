@@ -1,6 +1,6 @@
 //! Strategies for the engine's tests: expression trees, and rules that hold
 //! them. The module also holds the helpers that build and check the bitmap of
-//! a chunk.
+//! a chunk, and the texts and buffers of a text column in each layout.
 
 // Each test crate compiles this module and uses only part of it.
 #![allow(dead_code)]
@@ -11,7 +11,10 @@ use proptest::collection::{btree_map, vec};
 use proptest::prelude::*;
 use proptest::sample::{Index, select};
 use proptest::test_runner::TestCaseError;
-use trapperkeeper_engine::column::{CHUNK_ROWS, CHUNK_WORDS, Present};
+use trapperkeeper_engine::column::{
+    AnyOffsets, CHUNK_ROWS, CHUNK_WORDS, Fixed, INLINE, Offsets, Piece, Present, Strided, Text,
+    Units, Utf8, View, Views,
+};
 use trapperkeeper_engine::expr::{Expr, Segment, TypeName};
 use trapperkeeper_engine::limits::{MAX_SCOPE_TAGS, MAX_TAG_LENGTH};
 use trapperkeeper_engine::{Action, Rule};
@@ -406,4 +409,314 @@ pub fn packed(bools: &[bool], offset: usize) -> Vec<u8> {
         bytes[at / 8] |= u8::from(bit) << (at % 8);
     }
     bytes
+}
+
+/// Generates one text for a text column: empty, of one to four bytes per
+/// character, and on both sides of the 12 bytes that a view holds itself. No
+/// text holds U+0000, which a fixed-width cell cannot keep at the end of a
+/// value.
+pub fn column_text() -> impl Strategy<Value = String> {
+    // The class draws ASCII without U+0000 and one character each of two,
+    // three and four bytes, so the ends of the texts fall after every width
+    // of character. Up to 30 characters put texts below, at and above 12
+    // bytes.
+    "[\\x01-\\x7f\u{e9}\u{20ac}\u{1f600}]{0,30}"
+}
+
+/// Generates the texts of a text column of up to 39 rows.
+pub fn texts() -> impl Strategy<Value = Vec<String>> {
+    vec(column_text(), 0..40)
+}
+
+/// The type of the offsets of an offsets layout.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OffsetType {
+    I32,
+    I64,
+    U32,
+    U64,
+}
+
+/// A layout of a text column, with the parts of its buffers that a reader
+/// could get wrong.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TextLayout {
+    /// Texts end to end after `lead` other bytes, as in a slice of a longer
+    /// column, so a reader that assumes a first offset of zero shows.
+    Offsets { lead: usize, offset: OffsetType },
+    /// Views of 16 bytes. A long text goes to the buffer of its row's parity,
+    /// so the buffer number of a view is read and not assumed to be 0.
+    Views,
+    /// Pieces, where each text's piece is followed by `step - 1` pieces of
+    /// other texts, as a field of a struct is followed by the struct's other
+    /// fields.
+    Pieces { step: usize },
+    /// numpy `S` cells with the bytes of the longest text plus `slack`, and
+    /// `step - 1` cells of other bytes between two rows, as in a stepped
+    /// numpy view.
+    Bytes { slack: usize, step: usize },
+    /// numpy `U` cells with the characters of the longest text plus `slack`.
+    Utf32 { slack: usize },
+}
+
+/// Generates any layout of a text column.
+pub fn text_layout() -> impl Strategy<Value = TextLayout> {
+    let offset = select(vec![
+        OffsetType::I32,
+        OffsetType::I64,
+        OffsetType::U32,
+        OffsetType::U64,
+    ]);
+    prop_oneof![
+        (0usize..5, offset).prop_map(|(lead, offset)| TextLayout::Offsets { lead, offset }),
+        Just(TextLayout::Views),
+        (1usize..4).prop_map(|step| TextLayout::Pieces { step }),
+        (0usize..3, 1usize..3).prop_map(|(slack, step)| TextLayout::Bytes { slack, step }),
+        (0usize..3).prop_map(|slack| TextLayout::Utf32 { slack }),
+    ]
+}
+
+/// The buffers of a text column in one layout, which own every byte that the
+/// column reads. `lend` borrows them for a column.
+#[derive(Debug, Clone)]
+pub struct TextBuffers {
+    rows: usize,
+    buffers: Buffers,
+}
+
+/// The buffers of each layout.
+#[derive(Debug, Clone)]
+enum Buffers {
+    // The ends of the texts in each of the four offset types, and the type
+    // that `Text::Offsets` takes.
+    Offsets {
+        bytes: Vec<u8>,
+        i32s: Vec<i32>,
+        i64s: Vec<i64>,
+        u32s: Vec<u32>,
+        u64s: Vec<u64>,
+        offset: OffsetType,
+    },
+    Views {
+        views: Vec<View>,
+        long: [Vec<u8>; 2],
+    },
+    // A piece borrows its text, so `lend` makes the pieces.
+    Pieces {
+        texts: Vec<String>,
+        step: usize,
+    },
+    Bytes {
+        bytes: Vec<u8>,
+        width: usize,
+        step: usize,
+    },
+    Utf32 {
+        units: Vec<u32>,
+        width: usize,
+    },
+}
+
+/// Converts the ends of the texts to the offset type `O`.
+fn offsets_as<O: TryFrom<usize>>(ends: &[usize]) -> Vec<O> {
+    ends.iter()
+        .map(|n| {
+            // `expect` needs a `Debug` error, which `O::Error` need not be,
+            // so the error is dropped.
+            O::try_from(*n)
+                .map_err(|_| ())
+                .expect("every end fits the offset type")
+        })
+        .collect()
+}
+
+impl TextBuffers {
+    /// Builds the buffers of a column of `texts` in `layout`.
+    pub fn new(texts: &[String], layout: TextLayout) -> Self {
+        let buffers = match layout {
+            TextLayout::Offsets { lead, offset } => {
+                let mut bytes = vec![b'x'; lead];
+                let mut ends = vec![lead];
+                for text in texts {
+                    bytes.extend_from_slice(text.as_bytes());
+                    ends.push(bytes.len());
+                }
+                Buffers::Offsets {
+                    bytes,
+                    i32s: offsets_as(&ends),
+                    i64s: offsets_as(&ends),
+                    u32s: offsets_as(&ends),
+                    u64s: offsets_as(&ends),
+                    offset,
+                }
+            }
+            TextLayout::Views => {
+                let mut long = [Vec::new(), Vec::new()];
+                let mut views = Vec::new();
+                for (row, text) in texts.iter().enumerate() {
+                    let view = if text.len() <= INLINE {
+                        View::inline(text)
+                    } else {
+                        let buffer = &mut long[row % 2];
+                        let offset = u32::try_from(buffer.len()).expect("the buffer is small");
+                        buffer.extend_from_slice(text.as_bytes());
+                        View::outside(text, u32::try_from(row % 2).expect("0 or 1"), offset)
+                    };
+                    views.push(view.expect("the text fits a view"));
+                }
+                Buffers::Views { views, long }
+            }
+            TextLayout::Pieces { step } => Buffers::Pieces {
+                texts: texts.to_vec(),
+                step,
+            },
+            TextLayout::Bytes { slack, step } => {
+                let width = texts.iter().map(String::len).max().unwrap_or(0) + slack;
+                let mut bytes = Vec::new();
+                for text in texts {
+                    let start = bytes.len();
+                    bytes.extend_from_slice(text.as_bytes());
+                    bytes.resize(start + width, 0);
+                    bytes.resize(start + step * width, b'y');
+                }
+                Buffers::Bytes { bytes, width, step }
+            }
+            TextLayout::Utf32 { slack } => {
+                let chars = texts
+                    .iter()
+                    .map(|t| t.chars().map(u32::from).collect::<Vec<_>>())
+                    .collect::<Vec<_>>();
+                let width = chars.iter().map(Vec::len).max().unwrap_or(0) + slack;
+                let mut units = Vec::new();
+                for text in &chars {
+                    let start = units.len();
+                    units.extend_from_slice(text);
+                    units.resize(start + width, 0);
+                }
+                Buffers::Utf32 { units, width }
+            }
+        };
+        Self {
+            rows: texts.len(),
+            buffers,
+        }
+    }
+
+    /// The number of texts.
+    pub fn rows(&self) -> usize {
+        self.rows
+    }
+
+    /// Borrows the buffers for a column.
+    pub fn lend(&self) -> LentTexts<'_> {
+        let pieces = match &self.buffers {
+            Buffers::Pieces { texts, step } => texts
+                .iter()
+                .flat_map(|t| {
+                    std::iter::once(Piece::new(t))
+                        .chain(std::iter::repeat_n(Piece::new("x"), step - 1))
+                })
+                .collect(),
+            _ => Vec::new(),
+        };
+        let long = match &self.buffers {
+            Buffers::Views { long, .. } => [&long[0][..], &long[1][..]],
+            _ => [&[][..], &[][..]],
+        };
+        LentTexts {
+            buffers: self,
+            pieces,
+            long,
+        }
+    }
+
+    /// The units and the width of the cells of a `Bytes` layout, and `None`
+    /// for any other layout.
+    pub fn byte_cells(&self) -> Option<(Units<'_, u8>, usize)> {
+        match &self.buffers {
+            // SAFETY: every cell holds a text, which is UTF-8, padded with
+            // zeros, and the bytes between the cells are ASCII.
+            Buffers::Bytes { bytes, width, .. } => Some((unsafe { Units::utf8(bytes) }, *width)),
+            _ => None,
+        }
+    }
+}
+
+/// The buffers of a text column, borrowed for a column, with the pieces and
+/// the list of buffers that a layout borrows in turn.
+pub struct LentTexts<'a> {
+    buffers: &'a TextBuffers,
+    pieces: Vec<Piece<'a>>,
+    long: [&'a [u8]; 2],
+}
+
+impl LentTexts<'_> {
+    /// Returns the layout of the column.
+    pub fn text(&self) -> Text<'_> {
+        let rows = self.buffers.rows;
+        match &self.buffers.buffers {
+            Buffers::Offsets { offset, .. } => {
+                let all = self.offsets().expect("an offsets layout");
+                let at = match offset {
+                    OffsetType::I32 => 0,
+                    OffsetType::I64 => 1,
+                    OffsetType::U32 => 2,
+                    OffsetType::U64 => 3,
+                };
+                Text::Offsets(all[at])
+            }
+            // SAFETY: each long view names the buffer and the offset that its
+            // text was copied to, and the texts are UTF-8.
+            Buffers::Views { views, .. } => Text::Views(unsafe { Views::new(views, &self.long) }),
+            Buffers::Pieces { step, .. } => {
+                // SAFETY: the pointer is the vector's, the stride is `step`
+                // pieces in bytes, and the count is the number of texts, each
+                // of which has `step` pieces in the vector.
+                let run = unsafe {
+                    Strided::from_raw(self.pieces.as_ptr(), step * size_of::<Piece<'_>>(), rows)
+                };
+                Text::Pieces(run)
+            }
+            Buffers::Bytes { width, step, .. } => {
+                let (units, _) = self.buffers.byte_cells().expect("a bytes layout");
+                Text::Bytes(
+                    Fixed::new(*width, step * width, rows, units)
+                        .expect("the cells hold every row"),
+                )
+            }
+            Buffers::Utf32 { units, width } => Text::Utf32(
+                Fixed::new(*width, *width, rows, Units::utf32(units))
+                    .expect("the cells hold every row"),
+            ),
+        }
+    }
+
+    /// The four offsets layouts over the bytes of an `Offsets` layout, in the
+    /// order `i32`, `i64`, `u32` and `u64`, and `None` for any other layout.
+    pub fn offsets(&self) -> Option<[AnyOffsets<'_, Utf8<'_>>; 4]> {
+        let Buffers::Offsets {
+            bytes,
+            i32s,
+            i64s,
+            u32s,
+            u64s,
+            ..
+        } = &self.buffers.buffers
+        else {
+            return None;
+        };
+        // SAFETY: every range between two ends is one of the texts, which are
+        // UTF-8.
+        let utf8 = unsafe { Utf8::new(bytes) };
+        // SAFETY: the offsets are the ends of the texts, in order, and the
+        // last is the length of the bytes.
+        Some(unsafe {
+            [
+                AnyOffsets::I32(Offsets::new(i32s, utf8)),
+                AnyOffsets::I64(Offsets::new(i64s, utf8)),
+                AnyOffsets::U32(Offsets::new(u32s, utf8)),
+                AnyOffsets::U64(Offsets::new(u64s, utf8)),
+            ]
+        })
+    }
 }

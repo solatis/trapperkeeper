@@ -11,15 +11,16 @@ mod common;
 use std::mem::size_of;
 use std::ops::Range;
 
-use common::{MAX_ROWS, assert_bitmap, chunk_of, packed};
+use common::{
+    MAX_ROWS, OffsetType, TextBuffers, TextLayout, assert_bitmap, chunk_of, packed, texts,
+};
 use proptest::collection::vec;
 use proptest::prelude::*;
 use proptest::sample::Index;
 use trapperkeeper_engine::column::{
-    AnyOffsets, AnySized, Bits, CHUNK_ROWS, CHUNK_WORDS, Column, Fixed, Float, Floats, INLINE,
-    Ints, Kind, List, Lists, Marking, Mismatch, Offsets, PerRecord, Piece, Present, Scalar, Shape,
-    SizedLists, Strided, Text, Texts, Units, Utf8, View, Views, clear_nan, present_all,
-    present_from_bits, present_from_mask,
+    AnyOffsets, AnySized, Bits, CHUNK_ROWS, CHUNK_WORDS, Column, Fixed, Float, Floats, Ints, Kind,
+    List, Lists, Marking, Mismatch, Offsets, PerRecord, Present, Scalar, Shape, SizedLists,
+    Strided, Text, Texts, Utf8, clear_nan, present_all, present_from_bits, present_from_mask,
 };
 
 /// The bitmap of a chunk of `values` after its marking `present`, with the rows
@@ -41,18 +42,6 @@ fn nan_cleared<T: Float>(
     present_from_bits(present, start, rows, &mut out);
     clear_nan(run, start, rows, &mut out);
     out
-}
-
-/// Texts for the layouts: empty texts, texts of one to four bytes per
-/// character, and texts on both sides of the 12 bytes that a view holds
-/// itself. No text holds U+0000, which a fixed-width cell cannot keep at the
-/// end of a value.
-fn texts() -> impl Strategy<Value = Vec<String>> {
-    // The class draws ASCII without U+0000 and one character each of two,
-    // three and four bytes, so the ends of the texts fall after every width
-    // of character. Up to 30 characters put texts below, at and above 12
-    // bytes.
-    vec("[\\x01-\\x7f\u{e9}\u{20ac}\u{1f600}]{0,30}", 0..40)
 }
 
 /// Checks that every row of `layout` gives the bytes of `expected`, as UTF-8
@@ -272,36 +261,19 @@ proptest! {
     /// types, from a buffer that has other bytes before the first text.
     #[test]
     fn offsets_read_back_their_texts(texts in texts(), lead in 0usize..5) {
-        // The first offset is `lead`, as in a slice of a longer column, so a
-        // reader that assumes it is zero shows.
-        let mut bytes = vec![b'x'; lead];
-        let mut ends = vec![lead];
-        for text in &texts {
-            bytes.extend_from_slice(text.as_bytes());
-            ends.push(bytes.len());
+        let buffers = TextBuffers::new(&texts, TextLayout::Offsets { lead, offset: OffsetType::U64 });
+        let lent = buffers.lend();
+        for layout in lent.offsets().expect("an offsets layout") {
+            match layout {
+                AnyOffsets::I32(o) => assert_texts(o, &texts)?,
+                AnyOffsets::I64(o) => assert_texts(o, &texts)?,
+                AnyOffsets::U32(o) => assert_texts(o, &texts)?,
+                AnyOffsets::U64(o) => assert_texts(o, &texts)?,
+            }
         }
-        // SAFETY: every range between two ends is one of the texts, which are
-        // UTF-8.
-        let utf8 = unsafe { Utf8::new(&bytes) };
-        let (i32s, i64s) = (offsets_of::<i32>(&ends), offsets_of::<i64>(&ends));
-        let (u32s, u64s) = (offsets_of::<u32>(&ends), offsets_of::<u64>(&ends));
-        // SAFETY: the offsets are the ends of the texts, in order, and the
-        // last is the length of the bytes.
-        let (a, b, c, d) = unsafe {
-            (
-                Offsets::new(&i32s, utf8),
-                Offsets::new(&i64s, utf8),
-                Offsets::new(&u32s, utf8),
-                Offsets::new(&u64s, utf8),
-            )
-        };
-        assert_texts(a, &texts)?;
-        assert_texts(b, &texts)?;
-        assert_texts(c, &texts)?;
-        assert_texts(d, &texts)?;
         // The column takes one of the four layouts, which is enough to check
         // that `Column::text` counts the rows of an offsets layout.
-        let column = Column::text(Text::Offsets(AnyOffsets::U64(d)), Marking::Never);
+        let column = Column::text(lent.text(), Marking::Never);
         prop_assert_eq!(column.map(|c| c.rows()), Ok(texts.len()));
     }
 
@@ -309,25 +281,9 @@ proptest! {
     /// and the long ones from one of two buffers.
     #[test]
     fn views_read_back_their_texts(texts in texts()) {
-        // A long text goes to the buffer of its row's parity, so the buffer
-        // number of a view is read and not assumed to be 0.
-        let mut buffers = [Vec::new(), Vec::new()];
-        let mut views = Vec::new();
-        for (row, text) in texts.iter().enumerate() {
-            let view = if text.len() <= INLINE {
-                View::inline(text)
-            } else {
-                let buffer = &mut buffers[row % 2];
-                let offset = u32::try_from(buffer.len()).expect("the buffer is small");
-                buffer.extend_from_slice(text.as_bytes());
-                View::outside(text, u32::try_from(row % 2).expect("0 or 1"), offset)
-            };
-            views.push(view.expect("the text fits a view"));
-        }
-        let lent = [&buffers[0][..], &buffers[1][..]];
-        // SAFETY: each long view names the buffer and the offset that its text
-        // was copied to, and the texts are UTF-8.
-        let layout = unsafe { Views::new(&views, &lent) };
+        let buffers = TextBuffers::new(&texts, TextLayout::Views);
+        let lent = buffers.lend();
+        let Text::Views(layout) = lent.text() else { unreachable!("a views layout") };
         assert_texts(layout, &texts)?;
         let column = Column::text(Text::Views(layout), Marking::Never);
         prop_assert_eq!(column.map(|c| c.rows()), Ok(texts.len()));
@@ -336,16 +292,9 @@ proptest! {
     /// A run of pieces reads back its texts, contiguous and strided.
     #[test]
     fn pieces_read_back_their_texts(texts in texts(), step in 1usize..4) {
-        // Each text's piece is followed by `step - 1` pieces of other texts, as
-        // a field of a struct is followed by the struct's other fields.
-        let pieces = texts
-            .iter()
-            .flat_map(|t| std::iter::once(Piece::new(t)).chain(std::iter::repeat_n(Piece::new("x"), step - 1)))
-            .collect::<Vec<_>>();
-        // SAFETY: the pointer is the vector's, the stride is `step` pieces in
-        // bytes, and the count is the number of texts, each of which has
-        // `step` pieces in the vector.
-        let run = unsafe { Strided::from_raw(pieces.as_ptr(), step * size_of::<Piece<'_>>(), texts.len()) };
+        let buffers = TextBuffers::new(&texts, TextLayout::Pieces { step });
+        let lent = buffers.lend();
+        let Text::Pieces(run) = lent.text() else { unreachable!("a pieces layout") };
         assert_texts(run, &texts)?;
         let column = Column::text(Text::Pieces(run), Marking::Never);
         prop_assert_eq!(column.map(|c| c.rows()), Ok(texts.len()));
@@ -356,25 +305,15 @@ proptest! {
     /// `Fixed::new` refuses one row too many and a step below the width.
     #[test]
     fn byte_cells_read_back_their_texts(texts in texts(), slack in 0usize..3, step in 1usize..3) {
-        // A cell has the bytes of the longest text plus `slack`, so the
-        // longest text fills its cell with no zero after it when `slack` is 0.
-        let width = texts.iter().map(String::len).max().unwrap_or(0) + slack;
-        let mut bytes = Vec::new();
-        for text in &texts {
-            let start = bytes.len();
-            bytes.extend_from_slice(text.as_bytes());
-            bytes.resize(start + width, 0);
-            // `step - 1` cells of other bytes lie between two rows, as in a
-            // stepped numpy view.
-            bytes.resize(start + step * width, b'y');
-        }
-        // SAFETY: every cell that the layout names holds a text, which is
-        // UTF-8, padded with zeros.
-        let units = unsafe { Units::utf8(&bytes) };
-        let layout = Fixed::new(width, step * width, texts.len(), units).expect("the cells hold every row");
+        // With a `slack` of 0, the longest text fills its cell with no zero
+        // after it.
+        let buffers = TextBuffers::new(&texts, TextLayout::Bytes { slack, step });
+        let lent = buffers.lend();
+        let Text::Bytes(layout) = lent.text() else { unreachable!("a bytes layout") };
         assert_texts(layout, &texts)?;
         // One more row would reach past the bytes, and a step below the width
         // would overlap the cells, so both are refused when a cell has bytes.
+        let (units, width) = buffers.byte_cells().expect("a bytes layout");
         if width > 0 {
             prop_assert!(Fixed::new(width, step * width, texts.len() + 1, units).is_none());
             prop_assert!(Fixed::new(width, width - 1, texts.len(), units).is_none());
@@ -389,14 +328,9 @@ proptest! {
         // A text is compared as the `u32` values of its characters, because
         // the reader returns units and no `char`.
         let expected = texts.iter().map(|t| t.chars().map(u32::from).collect::<Vec<_>>()).collect::<Vec<_>>();
-        let width = expected.iter().map(Vec::len).max().unwrap_or(0) + slack;
-        let mut units = Vec::new();
-        for text in &expected {
-            let start = units.len();
-            units.extend_from_slice(text);
-            units.resize(start + width, 0);
-        }
-        let layout = Fixed::new(width, width, texts.len(), Units::utf32(&units)).expect("the cells hold every row");
+        let buffers = TextBuffers::new(&texts, TextLayout::Utf32 { slack });
+        let lent = buffers.lend();
+        let Text::Utf32(layout) = lent.text() else { unreachable!("a UTF-32 layout") };
         prop_assert_eq!(layout.len(), expected.len());
         for (row, text) in expected.iter().enumerate() {
             prop_assert_eq!(layout.get(row), text.as_slice(), "row {}", row);
