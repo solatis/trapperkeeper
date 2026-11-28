@@ -381,7 +381,8 @@ fn a_utf8_text_equals_its_utf32_cells() {
             cells[4 * row + at] = u32::from(c);
         }
     }
-    // Three rows of four units, four units apart.
+    // The layout has three rows of four units, and each row starts four
+    // units after the one before.
     let layout = Fixed::new(4, 4, 3, Units::utf32(&cells)).expect("the cells hold every row");
     let utf32 = Column::text(Text::Utf32(layout), Marking::Never).expect("unmarked");
     // `é` is two bytes in UTF-8 and one unit in UTF-32, and the emoji four
@@ -410,8 +411,7 @@ fn a_membership_list_matches_in_any_order() {
         Column::ints(Ints::I64(Strided::from_slice(&values)), Marking::Never).expect("unmarked");
     let (a, one) = (Expr::Text("a".into()), Expr::Int(1));
     // A text never equals an int, so the text adds nothing in either place
-    // and neither order faults. If that equality faulted, the `or` behind
-    // `in` would count the fault only where the int did not match first.
+    // and neither order faults.
     assert_eq!(
         outcomes(x_in(vec![a.clone(), one.clone()]), Some(column)),
         [Matched, NotMatched]
@@ -442,15 +442,15 @@ fn a_none_in_the_list_matches_a_null() {
     );
 }
 
+/// A membership set of more than eight values, the engine's `SPLAT_LIMIT`,
+/// looks each row up by binary search.
 #[test]
 fn a_long_list_finds_its_values_by_binary_search() {
     let values: Vec<i32> = (0..100).collect();
     let column =
         Column::ints(Ints::I32(Strided::from_slice(&values)), Marking::Never).expect("unmarked");
-    // The list holds the twelve even numbers from 10 to 32. A membership set
-    // of more than eight values, the engine's `SPLAT_LIMIT`, looks each row
-    // up by binary search. The list is written in descending order, and the
-    // membership step sorts its values at bind.
+    // The list holds the twelve even numbers from 10 to 32, in descending
+    // order, which the membership step sorts at bind.
     let list = (5..17).rev().map(|i| Expr::Int(2 * i)).collect();
     let expected: Vec<Outcome> = (0..100)
         .map(|v| {
@@ -745,8 +745,8 @@ enum Kind {
     Text,
 }
 
-/// Returns the kind of `e`, a field or a literal, on `record`. `None` for a
-/// null.
+/// Returns the kind of `e`, a field or a literal, on `record`, or `None` when
+/// it is a null.
 fn kind(e: &Expr, record: &[Value]) -> Option<Kind> {
     match e {
         Expr::Field(p) => match record[field_number(p)] {
@@ -783,10 +783,9 @@ fn order_with_literal(
         // Two texts are equal when their characters are, whatever layout
         // the column has. An ordering of texts falls through to the fault.
         (Value::Text(a), Expr::Text(b)) if !ordering => a.cmp(b),
-        // `literal()` never makes `None`, so no generated rule has `None < x`,
-        // which validation would refuse. `compare` decides the equality of
-        // two kinds, so only an ordering with a value that is not a number
-        // gets here.
+        // `reference` turns every `== None` into a null test, so no `None`
+        // gets here. `compare` decides the equality of two kinds, so only an
+        // ordering with a value that is not a number gets here.
         _ => return Err(Fault::Unordered),
     };
     Ok(Some(order))
@@ -948,8 +947,8 @@ fn strided<T: Copy>(buffer: &[T], step: usize, rows: usize) -> Strided<'_, T> {
 }
 
 impl Field {
-    /// Borrows the buffers of a text field for its column, and `None` for a
-    /// field of any other type. A text column borrows the pieces and the list
+    /// Borrows the buffers of a text field for its column. Returns `None` for
+    /// a field of any other type. A text column borrows the pieces and the list
     /// of buffers that `LentTexts` holds, so they must live longer than the
     /// column, and `column` cannot make them itself.
     fn lend(&self) -> Option<LentTexts<'_>> {
@@ -1298,8 +1297,8 @@ fn condition(n: usize) -> impl Strategy<Value = Expr> {
             _ => Expr::Ne(none, x),
         }
     });
-    // A list of two to four items drawn from literals, `None` and fields,
-    // searched for a field, a literal or `None`.
+    // A membership tests a field, a literal or `None` against a list of two
+    // to four items drawn from literals, `None` and fields.
     let item = prop_oneof![
         3 => literal(),
         1 => Just(Expr::None),
