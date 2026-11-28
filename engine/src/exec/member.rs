@@ -46,6 +46,9 @@ pub(super) fn bind_member(f: usize, t: FieldType, values: &[Literal]) -> BoundSt
 
     // 3. build the set and its loop
     let chunk = match t {
+        // `with_float!` and `with_int!` expand into a match with one arm per
+        // number type, and each arm sets `T` to that type, so the set and its
+        // loop are compiled for the column's type.
         FieldType::Number(n) if n.is_float() => {
             with_float!(n, |T| number_loop(f, NumberSet::<T>::for_float(&kept)))
         }
@@ -157,7 +160,8 @@ fn contains<U: Number>(set: &[U], v: U) -> bool {
 fn lanes_in<U: Number>(set: &[U], lanes: Simd<U, 64>) -> u64 {
     // A short set compares all 64 lanes with each of its values, which costs
     // a few vector compares. A longer set looks each lane up by binary
-    // search, which costs the same whatever the length of the set.
+    // search, which costs one search per lane and grows only with the log of
+    // the set's length.
     if set.len() <= SPLAT_LIMIT {
         set.iter()
             .fold(0, |hits, &x| hits | U::eq_lanes(lanes, Simd::splat(x)))
@@ -174,7 +178,7 @@ impl<T: Number> Test<crate::column::Strided<'_, T>> for NumberSet<T> {
     fn lanes(&self, lanes: Simd<T, 64>) -> u64 {
         let mut hits = lanes_in(&self.values, lanes);
         // The float literals of an int column compare with each row widened
-        // to `f64`.
+        // to `f64`. A column without them skips the widening of its rows.
         if !self.widened.is_empty() {
             hits |= lanes_in(&self.widened, T::convert_lanes::<f64>(lanes));
         }
@@ -182,6 +186,7 @@ impl<T: Number> Test<crate::column::Strided<'_, T>> for NumberSet<T> {
     }
 
     fn one(&self, v: T) -> bool {
+        // The guard skips the widening, as in `lanes`.
         contains(&self.values, v)
             || (!self.widened.is_empty() && contains(&self.widened, v.convert()))
     }
@@ -211,6 +216,8 @@ fn flags_loop(f: usize, kept: &[&Literal]) -> ChunkLoop {
         // Both booleans are in the list, so every row with a value is in it.
         (true, true) => constant_loop(true),
         (false, false) => constant_loop(false),
+        // One boolean is in the list. `value` is true when that boolean is
+        // `True`, and the loop marks the rows that hold it.
         (value, _) => booleans_equal(f, value),
     }
 }
@@ -243,6 +250,9 @@ impl TextSet {
 }
 
 impl<'a, T: Texts<'a, Unit: Encoded + 'a>> Test<TextRows<'a, T>> for TextSet {
+    // A text source has no lanes, because `TextRows` tells `pack` that its
+    // rows do not lie next to each other, so `pack` reads every row through
+    // `one`.
     fn lanes(&self, (): ()) -> u64 {
         unreachable!("a text source is never contiguous")
     }
@@ -257,11 +267,15 @@ impl<'a, T: Texts<'a, Unit: Encoded + 'a>> Test<TextRows<'a, T>> for TextSet {
 /// Builds the loop that marks the rows of text field `f` whose text is in
 /// `set`.
 fn text_loop(f: usize, set: TextSet) -> ChunkLoop {
+    // Both lists hold the same texts, so one of them tells whether the set
+    // is empty.
     if set.utf8.is_empty() {
         return constant_loop(false);
     }
     Box::new(
         move |cols: &[Option<Column<'_>>], start: usize, rows: usize, out: &mut Present| {
+            // Picks the layout of this batch's column, and runs the `pack`
+            // that was compiled for that layout.
             with_texts!(texts_of(cols, f), |t| pack(
                 TextRows::new(t),
                 start,
