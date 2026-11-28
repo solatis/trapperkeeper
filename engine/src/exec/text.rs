@@ -25,7 +25,7 @@ pub(super) trait Encoded: Unit + Ord {
     fn of(literal: &TextLiteral) -> &[Self];
 
     /// Picks the list in this encoding from a set of texts that a membership
-    /// step holds in both encodings.
+    /// step or a list search holds in both encodings.
     fn pick<'s>(utf8: &'s [Box<[u8]>], utf32: &'s [Box<[u32]>]) -> &'s [Box<[Self]>];
 
     /// Returns the text `units` tagged with its encoding.
