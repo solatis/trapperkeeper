@@ -11,7 +11,8 @@
 //! per schema instead of once per batch. It decides which comparisons fault,
 //! such as an ordering on a text field, and which pairs of types can never be
 //! equal, such as a number and a text. It also decides how a literal converts
-//! to the column's type, and which literals no value of the column can reach.
+//! to the column's type, and which literals no value of the column can
+//! equal, such as 300 on a `u8` column.
 
 use std::fmt;
 use std::sync::Arc;
