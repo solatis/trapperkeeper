@@ -56,7 +56,9 @@ pub(crate) enum Step {
     // `x is not None` is a `Not` over this step.
     IsNull(usize),
     // The literals of a membership list, such as the `1, 2` of
-    // `x in [1, 2, y]`: true where the field equals one of them.
+    // `x in [1, 2, y]`: true where the field equals one of them, and unknown
+    // where it has no value. The fields and the `None` of the list become
+    // steps of their own, which `Or` steps join with this one.
     Member {
         field: usize,
         values: Vec<Literal>,
@@ -112,12 +114,12 @@ impl TextLiteral {
         }
     }
 
-    /// The literal in UTF-8.
+    /// Returns the literal in UTF-8.
     pub(crate) fn utf8(&self) -> &[u8] {
         self.utf8.as_bytes()
     }
 
-    /// The literal in UTF-32, one unit per character.
+    /// Returns the literal in UTF-32, one unit per character.
     pub(crate) fn utf32(&self) -> &[u32] {
         &self.utf32
     }
@@ -357,9 +359,9 @@ impl Planner<'_> {
     /// with the JSON key of a list item or a needle that this version cannot
     /// test, such as a list inside the list.
     fn membership(&mut self, needle: &Expr, list: &[Expr]) -> Result<usize, &'static str> {
-        // The test is `needle == a or needle == b ...` (ADR-0005). No
-        // equality faults, so the order of the items does not change the
-        // result, and the function groups the items by kind.
+        // The test is `needle == a or needle == b ...` (ADR-0005). An
+        // equality never faults, so the order of the items does not change
+        // the result, and the function groups the items by kind.
         //
         // 1. It gathers the literals of the list into one membership step
         //    when the needle is a field, so that all of them share one
@@ -488,8 +490,9 @@ impl Planner<'_> {
         Ok(self.push(step))
     }
 
-    /// Converts one side of a comparison: a field becomes its number, and an
-    /// int, float, boolean or text becomes a `Literal`. Fails with the JSON
+    /// Converts one side of a comparison: a field becomes the number that
+    /// `FieldTree` gives it, and an int, float, boolean or text becomes a
+    /// `Literal`. Fails with the JSON
     /// key of `e` for anything else, such as a list literal or arithmetic.
     fn operand(&self, e: &Expr) -> Result<Operand, &'static str> {
         match e {
