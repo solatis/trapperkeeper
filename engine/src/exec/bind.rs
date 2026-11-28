@@ -1,5 +1,16 @@
-//! Bind: it turns a `Program` and the column types of one schema into a
-//! `Bound`, with one compiled loop per comparison.
+//! Bind: specializes a program for the column types of one schema.
+//!
+//! The rule language is untyped, and so is a `Program`: `x > 5` says nothing
+//! about whether `x` is an `i8` or an `f64`. The Rust code that compares
+//! values must know the type, because each type has its own SIMD
+//! instructions. Bind looks at the actual type of each column and, for each
+//! comparison, picks a loop that was compiled for exactly that type. For an
+//! `i32` column `x`, `x > 5` gets the `i32` loop, with 5 stored as an `i32`.
+//!
+//! Bind also decides everything else that depends only on the types, once
+//! per schema instead of once per batch: which comparisons are a type fault,
+//! such as a text field compared with a number, how a literal converts to
+//! the column's type, and which literals no value of the column can reach.
 
 use std::fmt;
 
@@ -15,40 +26,45 @@ use crate::column::{
 };
 use crate::plan::{Comparison, Constant, Literal, Operand, Program, Step};
 
-/// A program bound to the column types of one schema. It runs over every
-/// batch whose columns have those types.
+/// A program specialized for the column types of one schema. `Bound::run`
+/// runs it over any batch whose columns have those types.
 pub struct Bound {
-    // The type of each field that bind saw, which `run` compares with the
-    // columns of each batch.
+    // The column type of each field at bind. `run` checks each batch against
+    // these, because the loops read a column's memory as this type.
     pub(super) types: Vec<FieldType>,
     pub(super) steps: Vec<BoundStep>,
-    // The id of each rule with the slot that holds its result, from the
-    // program.
+    // For each rule: its id and the slot that holds its result, copied from
+    // the program.
     pub(super) rules: Vec<(Uuid, usize)>,
 }
 
-/// The type of a field's column as bind sees it.
+/// The type of a field's column, which decides how bind compiles each step
+/// that reads the field.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum FieldType {
     Number(NumberType),
     Bool,
     Text,
     List,
-    // A field that the source lacks.
+    // The source has no column for the field, so it has no value on any
+    // row.
     Absent,
 }
 
-/// A step of a program with the loop that bind picked for it.
+/// A step of a program after bind: each comparison now holds the loop that
+/// computes it.
 pub(crate) enum BoundStep {
     Constant(Constant),
-    // A comparison whose loop writes the true rows. A row is known where all
-    // `fields` have a value.
+    // A comparison and its loop. The loop writes the rows where the
+    // comparison is true. On a row where one of `fields` has no value, the
+    // result is unknown whatever the loop wrote.
     Loop {
         fields: Vec<usize>,
         chunk: ChunkLoop,
     },
-    // A type fault, which faults on the rows where all `fields` have a value
-    // and is unknown on the others.
+    // A comparison whose types cannot be compared, such as text with a
+    // number. It is a fault on the rows where all `fields` have a value, and
+    // unknown on the rows where one of them has none (ADR-0005).
     Faulted {
         fault: Fault,
         fields: Vec<usize>,
@@ -56,26 +72,28 @@ pub(crate) enum BoundStep {
     // `x is None` for the field with this number: true on the rows where the
     // field has no value.
     IsNull(usize),
-    // The logic of ADR-0005 over the results of earlier steps, by their
-    // slots.
+    // `not`, `and` and `or` over the results of earlier steps, by their
+    // slots, as in `Step`.
     Not(usize),
     And(usize, usize),
     Or(usize, usize),
 }
 
-/// The loop of a step. It takes the columns of a batch, the first row `start`
-/// of a chunk and its row count `rows`, and writes into its bitmap the true
-/// rows of the chunk, with row `start` at bit 0.
+/// The compiled loop of a comparison. A call gets the columns of a batch,
+/// the first row `start` of a chunk and the chunk's row count `rows`. It
+/// writes a bitmap with one bit per row of the chunk, set where the
+/// comparison is true, with row `start` at bit 0.
 pub(crate) type ChunkLoop =
     Box<dyn Fn(&[Option<Column<'_>>], usize, usize, &mut Present) + Send + Sync>;
 
-/// Why `bind` refused a program.
+/// The error of `bind`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BindError {
-    /// The columns are not one per field of the program.
+    /// The caller passed a different number of columns than the program has
+    /// fields.
     Columns { expected: usize, given: usize },
-    /// A comparison of two fields whose types this version does not compare,
-    /// such as two text fields.
+    /// The program compares two fields whose types this version cannot
+    /// compare yet, such as two text fields.
     Unsupported { left: usize, right: usize },
 }
 
@@ -99,14 +117,16 @@ impl fmt::Display for BindError {
 impl std::error::Error for BindError {}
 
 impl Program {
-    /// Binds the program to the types of `columns`, one per field in the order
-    /// of `FieldTree::paths`, where `None` is a field that the source lacks.
+    /// Specializes the program for the types of `columns`. `columns` holds
+    /// one entry per field, in the order of `FieldTree::paths`, and `None`
+    /// for a field that the source does not have. Bind reads only the types
+    /// of the columns, so any batch of the same schema can stand in.
     ///
     /// # Errors
     ///
-    /// `BindError::Columns` when the columns are not one per field, and
-    /// `BindError::Unsupported` for a comparison of two fields whose types
-    /// this version does not compare.
+    /// `BindError::Columns` when `columns` does not have one entry per field,
+    /// and `BindError::Unsupported` when the program compares two fields
+    /// whose types this version cannot compare yet.
     pub fn bind(&self, columns: &[Option<Column<'_>>]) -> Result<Bound, BindError> {
         let expected = self.fields().paths().len();
         if columns.len() != expected {
@@ -129,13 +149,14 @@ impl Program {
     }
 }
 
-/// Binds `step` to the field types `types`. Fails for a comparison of two
-/// fields whose types this version does not compare.
+/// Specializes one step for the field types `types`. Fails when the step
+/// compares two fields whose types this version cannot compare yet.
 fn bind_step(step: &Step, types: &[FieldType]) -> Result<BoundStep, BindError> {
     Ok(match step {
         Step::Constant(c) => BoundStep::Constant(*c),
         Step::Condition(f) => bind_condition(*f, types[*f]),
-        // A field that the source lacks is a null on every row.
+        // A field without a column has no value on any row, so `x is None`
+        // is true everywhere.
         Step::IsNull(f) if types[*f] == FieldType::Absent => BoundStep::Constant(Constant::True),
         Step::IsNull(f) => BoundStep::IsNull(*f),
         Step::Not(a) => BoundStep::Not(*a),
@@ -158,15 +179,19 @@ fn bind_step(step: &Step, types: &[FieldType]) -> Result<BoundStep, BindError> {
     })
 }
 
-/// Binds field `f`, of type `t`, where a condition is expected.
+/// Specializes a field `f` of type `t` that is used on its own as a
+/// condition, as `x` is in `x and y`.
 fn bind_condition(f: usize, t: FieldType) -> BoundStep {
     match t {
-        // A null where a condition is expected is unknown (ADR-0005).
+        // A missing field is null on every row, and a null used as a
+        // condition is unknown (ADR-0005).
         FieldType::Absent => BoundStep::Constant(Constant::Unknown),
+        // A boolean field as a condition means `x == True`.
         FieldType::Bool => BoundStep::Loop {
             fields: vec![f],
             chunk: booleans_equal(f, true),
         },
+        // A number, text or list as a condition is a fault (ADR-0041).
         _ => BoundStep::Faulted {
             fault: Fault::NotBoolean,
             fields: vec![f],
@@ -174,54 +199,64 @@ fn bind_condition(f: usize, t: FieldType) -> BoundStep {
     }
 }
 
-/// Binds a comparison of field `f`, of type `t`, with `literal`.
+/// Specializes `x op literal`, where `x` is field `f` and its column has
+/// type `t`.
 fn bind_literal(op: Comparison, f: usize, t: FieldType, literal: Literal) -> BoundStep {
-    // The function tests the pair of the field's type and the literal in a
-    // chain, and the first case that applies gives the step. The absent field
-    // and the boolean cases come before the number cases, because the number
-    // cases take every other pair.
+    // The arms test the pair (column type, literal) from the most specific
+    // case to the least. The arms for a missing field and for booleans must
+    // come first, because the number arms at the end accept any number
+    // column with any literal that reaches them.
     match (t, literal) {
-        // A field without a value on any row makes the comparison unknown on
-        // every row (ADR-0005).
+        // A missing field is null on every row, and a comparison with a null
+        // is unknown (ADR-0005).
         (FieldType::Absent, _) => BoundStep::Constant(Constant::Unknown),
-        // An ordering is for numbers only (ADR-0041).
+        // `x < True` is a fault, because only numbers can be ordered
+        // (ADR-0041).
         (FieldType::Bool, Literal::Bool(_)) if op.is_ordering() => BoundStep::Faulted {
             fault: Fault::Unordered,
             fields: vec![f],
         },
-        // The arm before takes the orderings, so `op` is `==` or `!=` here.
-        // `x == False` holds where `x` is false, and `x != True` too.
+        // Only `==` and `!=` get here. The loop marks the rows where `x`
+        // holds the boolean that makes the comparison true: `x == True` and
+        // `x != False` look for true, and `x == False` and `x != True` look
+        // for false.
         (FieldType::Bool, Literal::Bool(b)) => BoundStep::Loop {
             fields: vec![f],
             chunk: booleans_equal(f, b == (op == Comparison::Eq)),
         },
-        // A boolean literal against a number, a text or a list field, and a
-        // number literal against a boolean, a text or a list field, compare
-        // values of types that do not compare.
+        // `x == True` on a number, text or list column, and `x > 5` on a
+        // boolean, text or list column, compare types that cannot be
+        // compared, which is a fault.
         (_, Literal::Bool(_)) | (FieldType::Bool | FieldType::Text | FieldType::List, _) => {
             BoundStep::Faulted {
                 fault: Fault::Incompatible,
                 fields: vec![f],
             }
         }
-        // An int widens to a float (ADR-0041), so the column's ints widen to
-        // the float literal.
+        // An int column against a float literal, as in `x > 2.5`: each int
+        // converts to `f64`, because an int compared with a float compares
+        // as a float (ADR-0041). Converting 2.5 to an int instead would make
+        // `x == 2.5` true where `x` is 2.
         (FieldType::Number(n), Literal::Float(x)) if !n.is_float() => {
             with_int!(n, |T| widened::<T>(op, f, x))
         }
+        // An int column against an int literal, as in `x > 5`: the literal
+        // converts to the column's type once, here.
         (FieldType::Number(n), Literal::Int(i)) if !n.is_float() => {
             with_int!(n, |T| int_literal::<T>(op, f, i))
         }
-        // The literal, int or float, converts to the column's float type.
+        // A float column against any number literal: the literal converts
+        // to the column's float type once, here, and the loop compares in
+        // that type.
         (FieldType::Number(n), literal) => {
             with_float!(n, |T| float_literal::<T>(op, f, literal))
         }
     }
 }
 
-/// Binds a comparison of field `l`, of type `lt`, with field `r`, of type
-/// `rt`. Fails for two text fields or two list fields, which this version
-/// does not compare.
+/// Specializes `x op y`, where `x` is field `l` with column type `lt` and `y`
+/// is field `r` with column type `rt`. Fails for two text fields or two list
+/// fields, which this version cannot compare yet.
 fn bind_fields(
     op: Comparison,
     l: usize,
@@ -231,12 +266,20 @@ fn bind_fields(
 ) -> Result<BoundStep, BindError> {
     let fields = vec![l, r];
     Ok(match (lt, rt) {
-        // A field without a value on any row makes the comparison unknown on
-        // every row (ADR-0005), whatever the other field holds, so this arm
-        // comes before the arms that fault or refuse a pair of types.
+        // A missing field makes the comparison unknown on every row
+        // (ADR-0005), whatever type the other field has. So this arm comes
+        // first, before the arms that fault or refuse a pair of types.
         (FieldType::Absent, _) | (_, FieldType::Absent) => BoundStep::Constant(Constant::Unknown),
-        // The macros write one arm per pair of number types, so the compiler
-        // instantiates one loop per pair and operator.
+        // Two number columns. `ln` and `rn` are only known at run time, but
+        // the loop must be compiled for concrete types. `with_number!`
+        // expands into a `match` with one arm per number type and sets `L`
+        // to that type in its arm, `with_number!` again does the same for
+        // `R`, and `with_order!` does it for the operator `O`. So this
+        // expression is a `match` over all 11 x 11 x 6 = 726 combinations,
+        // and each arm holds a closure that calls `compare_columns` with its
+        // own `L`, `R` and `O`. The compiler builds one SIMD loop per arm,
+        // and the arm that matches the actual types is the closure that bind
+        // keeps. `run` then calls it once per chunk.
         (FieldType::Number(ln), FieldType::Number(rn)) => {
             let chunk: ChunkLoop =
                 with_number!(ln, |L| with_number!(rn, |R| with_order!(op, |O| {
@@ -257,11 +300,14 @@ fn bind_fields(
                 })));
             BoundStep::Loop { fields, chunk }
         }
-        // An ordering is for numbers only (ADR-0041).
+        // `x < y` on two boolean columns is a fault, because only numbers
+        // can be ordered (ADR-0041).
         (FieldType::Bool, FieldType::Bool) if op.is_ordering() => BoundStep::Faulted {
             fault: Fault::Unordered,
             fields,
         },
+        // `x == y` or `x != y` on two boolean columns. The loop reads both
+        // columns as bitmaps and compares 64 rows per instruction.
         (FieldType::Bool, FieldType::Bool) => {
             let equal = op == Comparison::Eq;
             let chunk: ChunkLoop = Box::new(
@@ -269,10 +315,12 @@ fn bind_fields(
                     let mut right = [0; CHUNK_WORDS];
                     write_booleans(cols, l, start, rows, out);
                     write_booleans(cols, r, start, rows, &mut right);
-                    // A set bit marks the rows whose two booleans differ.
+                    // XOR sets the bit of each row where `x` and `y` differ,
+                    // which is the result of `x != y`.
                     for (word, other) in out.iter_mut().zip(right) {
                         *word ^= other;
                     }
+                    // `x == y` is the opposite.
                     if equal {
                         invert(out, rows);
                     }
@@ -284,7 +332,7 @@ fn bind_fields(
             return Err(BindError::Unsupported { left: l, right: r });
         }
         // Any other pair, such as a number and a text or a boolean and a
-        // number, holds types that do not compare (ADR-0005).
+        // number, cannot be compared, which is a fault (ADR-0005).
         _ => BoundStep::Faulted {
             fault: Fault::Incompatible,
             fields,
@@ -292,16 +340,20 @@ fn bind_fields(
     })
 }
 
-/// The step that compares int field `f` with the literal `i`, converted to the
-/// field's type.
+/// Builds the step for `x op i`, where `x` is field `f`, its column holds the
+/// int type `T`, and `i` is an int literal.
 fn int_literal<T: Number + TryFrom<i64>>(op: Comparison, f: usize, i: i64) -> BoundStep {
     let chunk: ChunkLoop = match Converted::<T>::of(i) {
+        // `with_order!` turns the operator into a type `O`, so the loop is
+        // compiled for that operator.
         Converted::Within(literal) => with_order!(op, |O| Box::new(
             move |cols: &[Option<Column<'_>>], start: usize, rows: usize, out: &mut Present| {
                 compare_with_literal::<T, O>(values_of(cols, f), literal, start, rows, out);
             }
         )),
-        // A literal outside the type decides the comparison for every value.
+        // When `T` cannot hold the literal, as in `x < 300` on a `u8`
+        // column, every value of the column lies on the same side of it, so
+        // the result is the same on every row and no values are read.
         Converted::Outside(side) => constant_loop(outside(op, side)),
     };
     BoundStep::Loop {
@@ -310,12 +362,13 @@ fn int_literal<T: Number + TryFrom<i64>>(op: Comparison, f: usize, i: i64) -> Bo
     }
 }
 
-/// The step that compares float field `f` with `literal`, converted to the
-/// field's type. A literal beyond the type's range converts to an infinity.
+/// Builds the step for `x op literal`, where `x` is field `f` and its column
+/// holds the float type `T`. A literal too large for `T` becomes an
+/// infinity, which still compares correctly with every finite value.
 fn float_literal<T: Number>(op: Comparison, f: usize, literal: Literal) -> BoundStep {
-    // The literal rounds to the column's type, so a value near the literal
-    // compares with the rounded literal. On an `f16` column, `x > 0.1`
-    // compares with the `f16` nearest to 0.1 (ADR-0041).
+    // The literal rounds to the nearest value of `T`, and the loop compares
+    // with that. On an `f16` column, `x > 0.1` compares with the `f16`
+    // closest to 0.1 (ADR-0041).
     let literal: T = match literal {
         Literal::Int(i) => convert(i),
         Literal::Float(x) => convert(x),
@@ -332,7 +385,9 @@ fn float_literal<T: Number>(op: Comparison, f: usize, literal: Literal) -> Bound
     }
 }
 
-/// The step that compares int field `f`, widened to `f64`, with the float `x`.
+/// Builds the step for `x op literal`, where `x` is field `f`, its column
+/// holds the int type `T`, and the literal is the float `x`. Each int
+/// converts to `f64` before the comparison.
 fn widened<T: Number>(op: Comparison, f: usize, x: f64) -> BoundStep {
     let chunk: ChunkLoop = with_order!(op, |O| Box::new(
         move |cols: &[Option<Column<'_>>], start: usize, rows: usize, out: &mut Present| {
@@ -345,7 +400,8 @@ fn widened<T: Number>(op: Comparison, f: usize, x: f64) -> BoundStep {
     }
 }
 
-/// The loop that writes the rows of boolean field `f` that hold `value`.
+/// Builds the loop that marks the rows where boolean field `f` equals
+/// `value`.
 fn booleans_equal(f: usize, value: bool) -> ChunkLoop {
     Box::new(
         move |cols: &[Option<Column<'_>>], start: usize, rows: usize, out: &mut Present| {
@@ -357,8 +413,8 @@ fn booleans_equal(f: usize, value: bool) -> ChunkLoop {
     )
 }
 
-/// Writes into `out` the rows `start .. start + rows` of boolean field `f`
-/// that are true.
+/// Sets the bit in `out` of each row in `start .. start + rows` where the
+/// boolean field `f` is true.
 fn write_booleans(
     cols: &[Option<Column<'_>>],
     f: usize,
@@ -368,16 +424,17 @@ fn write_booleans(
 ) {
     let booleans = match cols[f].as_ref().map(Column::kind) {
         Some(Kind::Booleans(b, _)) => *b,
-        // `run` checks each column against the type that bind saw, and bind
-        // made this loop for a boolean field.
+        // Bind made this loop for a boolean column, and `run` refuses a
+        // batch whose column has another type.
         _ => unreachable!("run checked the type of the column"),
     };
     match booleans {
-        // A bit-packed boolean column has the bit order of a chunk's bitmap,
-        // so the loop of a bitmap copies its true rows.
+        // Bit-packed booleans, as Arrow stores them, have the same layout as
+        // our bitmaps, so the bits are copied as they are.
         Booleans::Bits(bits) => present_from_bits(bits, start, rows, out),
-        // The loop of a byte mask sets the rows whose byte is zero, which are
-        // the false rows here.
+        // One byte per boolean, as numpy stores them. `present_from_mask`
+        // sets the bit of each row whose byte is zero, which here are the
+        // false rows, so the bits are inverted afterwards.
         Booleans::Bytes(bytes) => {
             present_from_mask(bytes, start, rows, out);
             invert(out, rows);
@@ -385,8 +442,8 @@ fn write_booleans(
     }
 }
 
-/// Swaps the set and the clear bits of the first `rows` rows of `out`, and
-/// leaves the bits from `rows` on clear.
+/// Flips the bits of the first `rows` rows of `out`. The bits from `rows`
+/// on stay clear, because they are past the end of the chunk.
 fn invert(out: &mut Present, rows: usize) {
     let mut all = [0; CHUNK_WORDS];
     present_all(rows, &mut all);
@@ -395,15 +452,16 @@ fn invert(out: &mut Present, rows: usize) {
     }
 }
 
-/// `value` converted to `C` as Rust's `as` converts it.
+/// Converts `value` to `C` the way Rust's `as` would.
 fn convert<F: Number, C: Number>(value: F) -> C {
-    // The sealed trait that holds `convert` cannot be named outside
-    // `column`, so a call on a concrete type finds no method. The bound
-    // `F: Number` brings it into reach.
+    // This wrapper exists because `convert` sits on a private trait of
+    // `column`. Called on a concrete type such as `i64`, the method is not
+    // found here. Called through the bound `F: Number`, it is.
     value.convert()
 }
 
-/// The loop that writes `holds` for every row of a chunk.
+/// Builds a loop that ignores the columns and writes the same result,
+/// `holds`, for every row.
 fn constant_loop(holds: bool) -> ChunkLoop {
     Box::new(
         move |_: &[Option<Column<'_>>], _: usize, rows: usize, out: &mut Present| {
@@ -416,7 +474,7 @@ fn constant_loop(holds: bool) -> ChunkLoop {
     )
 }
 
-/// The values of field `f` among `cols`, as a run of `T`.
+/// Returns the values of field `f`, read as type `T`.
 fn values_of<'a, T: Number>(
     cols: &[Option<Column<'a>>],
     f: usize,
@@ -424,13 +482,13 @@ fn values_of<'a, T: Number>(
     cols[f]
         .as_ref()
         .and_then(|c| T::values(c.kind()))
-        // `run` checks each column against the type that bind saw, and bind
-        // picked `T` from that type.
+        // Bind picked `T` from the column's type, and `run` refuses a batch
+        // whose column has another type.
         .expect("run checked the type of the column")
 }
 
 impl FieldType {
-    /// The type of `c`, or `Absent` for `None`.
+    /// Returns the type of column `c`, or `Absent` when there is no column.
     pub(crate) fn of(c: Option<&Column<'_>>) -> Self {
         let Some(c) = c else {
             return Self::Absent;
