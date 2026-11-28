@@ -137,6 +137,24 @@ fn a_list_inside_a_membership_list_is_refused() {
     );
 }
 
+/// The planner refuses a written list as the needle of a search, with the key
+/// of the list, because list equality does not exist.
+#[test]
+fn a_written_list_as_the_needle_is_refused() {
+    let id = Uuid::from_u128(7);
+    let rule = Expr::In(
+        Box::new(Expr::List(vec![Expr::Int(1), Expr::Int(2)])),
+        Box::new(Expr::Field(vec![Segment::Key("lol".into())])),
+    );
+    assert_eq!(
+        plan(&[observing(id, rule)]).err(),
+        Some(Unsupported {
+            rule_id: id,
+            key: "list"
+        })
+    );
+}
+
 /// Two rules that make the same comparison share one step for it.
 #[test]
 fn rules_share_an_equal_comparison() {

@@ -66,7 +66,9 @@ Five tests are never unknown: `is None`, `is not None`, `x == None`,
 `None` in a membership list matches a null, so `x in ("paid", None)` means
 `x == "paid" or x == None` (owner, 2026-11-14). With the literal on the left
 of `in`, as in `None in tags`, the test is true when the list `tags` holds a
-null element (owner, 2026-11-16). Only the literal `None` has this meaning.
+null element (owner, 2026-11-16). A list search follows `any` over the
+equalities of the elements, so a needle that no element can equal is found
+nowhere (owner, 2026-11-28). Only the literal `None` has this meaning.
 `a == b` on two fields that both hold a null gives unknown.
 
 The meaning of `in` follows the type of its right side. When the rule writes
@@ -98,6 +100,7 @@ A fault is an operation that cannot be done on values that are there (owner,
 - a division by zero
 - an integer overflow
 - a value that is no boolean where a condition is expected
+- `in` with a value that it cannot search, such as `5 in "abc"`
 
 `==` compares values of any two types, as in Python, and a text never equals
 an int. So `x == 5` is
