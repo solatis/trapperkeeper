@@ -55,42 +55,41 @@ sketch, except a claim that restates the values, names or calls of its step,
 which the audit drops (owner, 2026-11-16). When the owner remarks on comments,
 the plan stage rewrites every sketch the remark concerns (owner, 2026-11-14).
 
-A script in the doc-discipline skill, `check_steps.py`, checks the numbering
-of walkthroughs and back-references in any language, in code and in the fenced
-code blocks of Markdown. It also flags a comment that matches a pattern given
-with `--deny`. The build and merge stages pass the two patterns of the root
-`AGENTS.md`, which catch a path under `doc/adr/` and a who-decided mark, and
-run it on the whole of every file a branch changed. The plan stage runs it on
-each plan without `--deny`, so on a plan it checks the numbering only (owner,
-2026-11-14).
+A script, the step check, checks the numbering of walkthroughs and
+back-references in any language, in code and in the fenced code blocks of
+Markdown. It also flags a comment that matches a pattern it is given. The build
+and merge stages give it two patterns, which catch a path into the folder of
+decision records and a who-decided mark, and run it on the whole of every file
+a branch changed. The plan stage runs it on each plan without patterns, so on a
+plan it checks the numbering only (owner, 2026-11-14).
 
 The session that owns a change writes its comments and documents, from evidence
 it can name, and it asks the owner where it has none. After its last code
-commit, the build stage runs the step check. Then `/doc-read` gives each part of
-the change to a reader that has seen neither the plan nor the conversation, and
-the reader lists where it had to stop and each walkthrough item that repeats the
-code of its step (owner, 2026-11-16). It also lists each sentence of a doc
+commit, the build stage runs the step check. Then the cold read gives each part
+of the change to a reader that has seen neither the plan nor the conversation,
+and the reader lists where it had to stop and each walkthrough item that repeats
+the code of its step (owner, 2026-11-16). It also lists each sentence of a doc
 comment that it understood only after it had said the sentence to itself in
 plainer words, and the session rewrites that sentence (owner, 2026-11-21). The
 session closes each stop with a rename, a comment from evidence, a question to
-the owner, or a decline with its reason. A second round of `/doc-read` reads
-what the session changed to close the stops. Then `/doc-audit` checks the change
+the owner, or a decline with its reason. A second round of the cold read reads
+what the session changed to close the stops. Then the audit checks the change
 against the policy and reconciles it against the plan, and the session applies
-or declines each finding. The build stage saves the answers of `/doc-read` and
-`/doc-audit` under `.plans/`. The guided review shows the stops, the declines
-and the findings from those files (owner, 2026-11-14).
+or declines each finding. The build stage saves the answers of the readers and
+of the audit beside the plan, outside the checkout. The guided review shows the
+stops, the declines and the findings from those files (owner, 2026-11-14).
 
 The cold read takes a change in parts of about 300 changed lines, and one
-reader reads each part. The script `change_parts.py` in the doc-discipline
-skill lists the parts. The script also lists the parts of whole files given by
-path. A repair of existing code is read by path, so that a reader also reads
-the functions that the repair left as they were (owner, 2026-11-15).
+reader reads each part. A script lists the parts. It also lists the parts of
+whole files given by path. A repair of existing code is read by path, so that a
+reader also reads the functions that the repair left as they were (owner,
+2026-11-15).
 
-The doc-discipline skill is a guide that an agent loads once. It carries no
+The guide to these rules is a skill that an agent loads once. It carries no
 policy of this repository, and the root `AGENTS.md` holds that policy. The
-step check is a script that the stages run as a command. `/doc-read` and
-`/doc-audit` each run in a subagent of their own, which gets its whole task
-from the text of the skill and has no tool that writes (owner, 2026-11-14).
+step check is a script that the stages run as a command. The cold read and the
+audit each run in a subagent of their own, which gets its whole task from the
+text of its skill and has no tool that writes (owner, 2026-11-14).
 
 ## Rejected alternatives
 
@@ -137,7 +136,7 @@ that the repair changed. A function that the audit judges fine has no changed
 line, so only the auditor reads it, and the auditor has read the rules and the
 whole module.
 
-One doc-discipline skill invoked with mode words for each check. The harness
+One guide skill invoked with mode words for each check. The harness
 loads a skill as text, and a second invocation of a loaded skill adds only a
 note. An agent then carries out a mode in its head and leaves no output.
 
@@ -161,6 +160,6 @@ The step check cannot see a back-reference at the wrong line, a function that
 needs a walkthrough and has none, or a comment that is false. The reader and
 the audit are there for those.
 
-`/doc-read` and `/doc-audit` rest on one behavior of the harness that its
+The cold read and the audit rest on one behavior of the harness that its
 documentation does not confirm: a command line inside a skill that runs in its
 own subagent.
