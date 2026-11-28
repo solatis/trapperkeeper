@@ -217,8 +217,9 @@ fn bind_literal(op: Comparison, f: usize, t: FieldType, literal: &Literal) -> Bo
         // A missing field is null on every row, and a comparison with a null
         // is unknown (ADR-0005).
         (FieldType::Absent, _) => BoundStep::Constant(Constant::Unknown),
-        // `x < True`, `x < "a"`, and `x > 5` on a text column, are a fault,
-        // because only numbers can be ordered (ADR-0041).
+        // An ordering is a fault when either side is not a number, as in
+        // `x < True`, `x < "a"`, or `x > 5` on a text, boolean or list column
+        // (ADR-0041).
         (FieldType::Bool | FieldType::Text | FieldType::List, _)
         | (_, Literal::Bool(_) | Literal::Text(_))
             if op.is_ordering() =>
@@ -239,9 +240,9 @@ fn bind_literal(op: Comparison, f: usize, t: FieldType, literal: &Literal) -> Bo
             fields: vec![f],
             chunk: text::equals_literal(f, Arc::clone(text), op == Comparison::Eq),
         },
-        // A pair that can never be equal, such as `x == True` on a number
-        // column or `x == 5` on a text column. `==` is false and `!=` true on
-        // every row with a value, as Python compares an int with a text.
+        // The column and the literal have types that can never be equal, as
+        // in `x == True` on a number column or `x == 5` on a text column. `==`
+        // is false and `!=` true on every row with a value, as in Python.
         (_, Literal::Bool(_) | Literal::Text(_))
         | (FieldType::Bool | FieldType::Text | FieldType::List, _) => BoundStep::Loop {
             fields: vec![f],
