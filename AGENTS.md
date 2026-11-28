@@ -164,11 +164,10 @@ walkthrough, and notes at single lines.
    in the match matters. Such a construct gets a note when the reader would
    stop at it. The writer already knows what each line does and cannot see
    where a reader stops. It writes a note at each such construct whose
-   effect neither a name nor the line itself states, and a reader who has
-   not seen the change finds the lines that the writer missed. The note says
-   what the line achieves in the terms of the problem, or why the line is
-   there. A note that repeats its line in other words is deleted, and so is a
-   note that explains what a language feature does in general.
+   effect neither a name nor the line itself states. The note says what the
+   line achieves in the terms of the problem, or why the line is there. A
+   note that repeats its line in other words is deleted, and so is a note
+   that explains what a language feature does in general.
 8. A comment names one example input only where the effect is hard to see
    without one, as at a grammar rule, an alternative of a choice or a match
    arm whose case is not obvious. Most notes carry no example. A byte offset
