@@ -184,9 +184,9 @@ pub(super) fn texts_of<'a>(cols: &[Option<Column<'a>>], f: usize) -> Text<'a> {
     }
 }
 
-/// What `pack` runs to compute `element == needle` for each element of a
-/// text column and one needle text, which a list search takes from the needle
-/// field of a record.
+/// What `pack` runs to compare each element of a text column with one
+/// needle text. A list search takes the needle text from the needle field of
+/// each record.
 pub(super) struct EqualsText<'n> {
     pub(super) needle: Form<'n>,
 }
@@ -198,6 +198,8 @@ impl<'a, T: Texts<'a, Unit: Encoded + 'a>> Test<TextRows<'a, T>> for EqualsText<
     }
 
     fn one(&self, element: &'a [T::Unit]) -> bool {
+        // An element without a value compares whatever units it holds, and
+        // the scan of the list drops its answer.
         same_text(self.needle, T::Unit::form(element))
     }
 }
