@@ -36,10 +36,13 @@ Functions and methods come from a closed list. The functions are `len`,
 and `list` (owner, 2026-11-14). The pattern of `re.search`, `re.match` and
 `re.fullmatch` is a text literal.
 
-`==` and `!=` compare values of any two types. Ordering is for numbers only
-(owner, 2026-11-11, 2026-11-13, 2026-11-28). A boolean never equals a number,
-because there is no truthiness. A UTF-8 text and a UTF-32 text are equal when
-their code points are equal (owner, 2026-11-28).
+`==` and `!=` compare values of any two types, and two values of types that
+cannot be equal are not equal (`adr/0005`). Ordering is for numbers only
+(owner, 2026-11-11, 2026-11-13, 2026-11-28). A boolean is a type of its own
+and never equals a number, so `True == 1` is false, which Python holds true.
+A text from a numpy `U` array is UTF-32, and every other source holds UTF-8.
+A UTF-8 text and a UTF-32 text are equal when their code points are equal
+(owner, 2026-11-28).
 
 A literal converts to the type of the field it is compared with. So
 `x == 0.1` compares with 0.1 as a float32 where `x` holds float32 values, and
