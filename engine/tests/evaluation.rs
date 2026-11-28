@@ -1085,7 +1085,7 @@ struct ListValues {
     // `ends[i]` is the index of the first element of record `i`, and the last
     // entry is the number of elements. These are the offsets of an offsets
     // layout.
-    ends: Vec<u64>,
+    offsets: Vec<u64>,
     // Whether each record is a column of its own, as in a numpy array of
     // dtype `object`, or a range of one element column.
     per_record: bool,
@@ -1108,7 +1108,7 @@ impl ListValues {
     /// says which elements have a value, and record `i` holds `sizes[i]`
     /// elements.
     fn new(elements: Elements, present: &[bool], sizes: &[usize], per_record: bool) -> Self {
-        let ends = std::iter::once(0)
+        let offsets = std::iter::once(0)
             .chain(sizes.iter().scan(0, |end, n| {
                 *end += u64::try_from(*n).expect("a short list");
                 Some(*end)
@@ -1117,14 +1117,14 @@ impl ListValues {
         Self {
             elements,
             mask: present.iter().map(|&p| u8::from(!p)).collect(),
-            ends,
+            offsets,
             per_record,
         }
     }
 
     /// Returns the range of elements of record `row`.
     fn range(&self, row: usize) -> std::ops::Range<usize> {
-        let at = |i: usize| usize::try_from(self.ends[i]).expect("an end inside the elements");
+        let at = |i: usize| usize::try_from(self.offsets[i]).expect("an end inside the elements");
         at(row)..at(row + 1)
     }
 
@@ -1212,7 +1212,7 @@ fn none_in_a_list_finds_a_null_element() {
     let column = values.elements(0..3);
     // SAFETY: the ends are in order, start at 0 and end at the number of
     // elements.
-    let layout = unsafe { Offsets::new(&values.ends, &column) };
+    let layout = unsafe { Offsets::new(&values.offsets, &column) };
     let list =
         Column::list(List::Offsets(AnyOffsets::U64(layout)), Marking::Never).expect("unmarked");
     // `None in y` is true where an element is a null and false elsewhere,
@@ -1270,7 +1270,7 @@ fn the_same_rule_searches_a_text_on_one_schema_and_a_list_on_another() {
     let column = values.elements(0..3);
     // SAFETY: the ends are in order, start at 0 and end at the number of
     // elements.
-    let layout = unsafe { Offsets::new(&values.ends, &column) };
+    let layout = unsafe { Offsets::new(&values.offsets, &column) };
     let y = Column::list(List::Offsets(AnyOffsets::U64(layout)), Marking::Never).expect("unmarked");
     assert_eq!(run(y), [Matched, NotMatched]);
 }
@@ -1398,7 +1398,7 @@ impl Field {
                     // SAFETY: the ends are in order, start at 0 and end at the
                     // number of elements.
                     List::Offsets(AnyOffsets::U64(unsafe {
-                        Offsets::new(&l.ends, &columns[0])
+                        Offsets::new(&l.offsets, &columns[0])
                     }))
                 };
                 Column::list(list, marking)
