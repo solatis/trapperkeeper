@@ -82,9 +82,9 @@ impl StepResult {
         }
     }
 
-    /// Returns the result of a search: true on `matched`, unknown on
-    /// `undecided` and on the rows outside `known`, and false on the other rows
-    /// of `known`.
+    /// Returns the result of a search: true on `matched`, unknown on the
+    /// other rows of `undecided` and on the rows outside `known`, and false on
+    /// the rest of `known`.
     pub(crate) fn searched(matched: &Present, undecided: &Present, known: Present) -> Self {
         // A matched row is true even when another element is a null, as for
         // `any` (ADR-0005), so only an undecided row without a match leaves
