@@ -459,7 +459,7 @@ pub(crate) struct EqualsNumber<L, R> {
 }
 
 impl<L: Number, R: Number> EqualsNumber<L, R> {
-    /// Compares the elements with `needle`.
+    /// Builds the test of the elements against `needle`.
     pub(crate) fn new(needle: L) -> Self {
         Self {
             needle,
@@ -469,9 +469,8 @@ impl<L: Number, R: Number> EqualsNumber<L, R> {
 }
 
 impl<L: Number, R: Number> Test<Strided<'_, R>> for EqualsNumber<L, R> {
-    // The needle stands on the left of every pair, so the pair compares in
-    // the type that `common` picks for `L` and `R`, as `x == y` on two number
-    // fields does.
+    // Each pair compares in the type that `common` picks for the needle's
+    // type and the elements' type, as `x == y` on two number fields does.
     fn lanes(&self, elements: Simd<R, 64>) -> u64 {
         let pairs = Columns::<L, R, Equal> { order: PhantomData };
         pairs.lanes((Simd::splat(self.needle), elements))
