@@ -22,8 +22,9 @@ workspace whose members are the engine and the server, and the root
 the other directories so that the layout is fixed before they arrive. A
 component directory has its own `AGENTS.md`, and inside `server/` each module
 directory gets one as it appears. Of the milestones of this repository on
-GitHub, the open one with the lowest number is the active one, and its goals
-decide the next issues.
+GitHub, the open one with the lowest number is the active one. Its description
+states a goal and the list of what is done when the goal is met, and the next
+issues come from what that list still lacks.
 
 | Directory      | What                                                                   | Exists                      |
 | -------------- | ---------------------------------------------------------------------- | --------------------------- |
