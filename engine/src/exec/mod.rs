@@ -1,6 +1,6 @@
-//! The executor. It binds a `Program` to the column types of a schema and
-//! runs the bound program over the columns of a batch, one chunk of
-//! `CHUNK_ROWS` rows at a time. ADR-0035 gives the reasons.
+//! The executor. `Program::bind` specializes a program for the column types
+//! of one schema, and `Bound::run` runs the result over the columns of a
+//! batch, `CHUNK_ROWS` rows at a time. ADR-0035 gives the reasons.
 
 mod bind;
 mod number;
