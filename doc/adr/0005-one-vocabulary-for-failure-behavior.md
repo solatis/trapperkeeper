@@ -1,6 +1,6 @@
 # 0005. One vocabulary for failure behavior
 
-Date: 2026-11-27.
+Date: 2026-11-28.
 
 ## Context
 
@@ -77,9 +77,9 @@ field holds a list, `in` searches its elements (owner, 2026-11-28).
 Validation (`adr/0033`) refuses the literal `None` beside an ordering or an
 arithmetic operator, under a minus, and after `in` and `not in`, because such a
 rule could never match. A field that holds a null there is data, so `x + 1` is a
-null and `x < y` is unknown (owner, 2026-11-14). `x in y` gives unknown only
-when `y` is a field that should hold a list and holds a null (owner,
-2026-11-16).
+null and `x < y` is unknown (owner, 2026-11-14). A search `x in y`, where `y`
+is a field, gives unknown only when `y` should hold a list and holds a null
+(owner, 2026-11-16).
 
 A rule differs from SQL in three places. The first is the literal `None`.
 Under `==`, under `!=`, in a membership list and on the left of `in` it tests
@@ -99,8 +99,8 @@ A fault is an operation that cannot be done on values that are there (owner,
 - an integer overflow
 - a value that is no boolean where a condition is expected
 
-`==` compares values of any two types, and values of types that cannot be
-equal, such as an int and a text, are not equal, as in Python. So `x == 5` is
+`==` compares values of any two types, as in Python, and a text never equals
+an int. So `x == 5` is
 false and `x != 5` true where `x` holds a text (owner, 2026-11-28). An int and
 a float can be equal, and a boolean never equals a number (`adr/0041`).
 
