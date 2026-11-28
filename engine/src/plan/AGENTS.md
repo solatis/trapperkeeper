@@ -24,7 +24,7 @@ columns of a schema and runs it.
   the children of a node in the order in which the rules first read them. A
   caller hands its columns over in that order.
 - A comparison step holds its field on the left. The planner swaps a literal
-  on the left and mirrors the operator.
+  on the left and flips the operator.
 - `plan` refuses a rule set with a kind of node that it does not plan, and
   names the first rule that holds one, so no rule runs with a part skipped.
 

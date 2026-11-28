@@ -109,7 +109,7 @@ pub(crate) enum Comparison {
 
 impl Comparison {
     /// The comparison with its operands swapped, so `5 < x` becomes `x > 5`.
-    fn mirrored(self) -> Self {
+    fn flip(self) -> Self {
         match self {
             Self::Lt => Self::Gt,
             Self::Le => Self::Ge,
@@ -303,7 +303,7 @@ impl Planner<'_> {
             (Operand::Literal(l), Operand::Literal(r)) => Step::Constant(fold(op, l, r)),
             // The executor's loops hold the field on the left.
             (literal @ Operand::Literal(_), field @ Operand::Field(_)) => Step::Compare {
-                op: op.mirrored(),
+                op: op.flip(),
                 left: field,
                 right: literal,
             },
