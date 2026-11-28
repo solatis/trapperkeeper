@@ -142,6 +142,8 @@ fn a_list_inside_a_membership_list_is_refused() {
 #[test]
 fn a_written_list_as_the_needle_is_refused() {
     let id = Uuid::from_u128(7);
+    // The planner knows no types, so it refuses the needle whatever `tags`
+    // holds.
     let rule = Expr::In(
         Box::new(Expr::List(vec![Expr::Int(1), Expr::Int(2)])),
         Box::new(Expr::Field(vec![Segment::Key("tags".into())])),
