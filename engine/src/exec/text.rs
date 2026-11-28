@@ -1,10 +1,17 @@
-//! The loops that compare texts. Each reads a text column through
-//! `TextRows`, so `pack` runs it like any other comparison, and compares the
-//! units of each row in the column's own encoding.
+//! The loops that compare texts, one per pair of encodings. Each reads its
+//! text columns through `TextRows` or `TextRowPair`, so `pack` runs it like
+//! any other comparison.
+//!
+//! A text literal has a form in each encoding, so a loop compares it with a
+//! column's units as they are. Two columns of the same encoding compare their
+//! units too. A UTF-8 column and a UTF-32 column compare code points, which
+//! decodes the UTF-8 side of each row.
 
 use std::sync::Arc;
 
-use crate::column::{Column, Kind, Present, Test, Text, TextRows, Texts, Unit, pack, with_texts};
+use crate::column::{
+    Column, Kind, Present, Test, Text, TextRowPair, TextRows, Texts, Unit, pack, with_texts,
+};
 use crate::plan::TextLiteral;
 
 use super::bind::ChunkLoop;
@@ -14,17 +21,34 @@ use super::bind::ChunkLoop;
 trait Encoded: Unit {
     /// Returns `literal` in this encoding.
     fn of(literal: &TextLiteral) -> &[Self];
+
+    /// Returns the text `units` tagged with its encoding.
+    fn form(units: &[Self]) -> Form<'_>;
+}
+
+/// The units of a text, tagged with their encoding.
+enum Form<'a> {
+    Utf8(&'a [u8]),
+    Utf32(&'a [u32]),
 }
 
 impl Encoded for u8 {
     fn of(literal: &TextLiteral) -> &[Self] {
         literal.utf8()
     }
+
+    fn form(units: &[Self]) -> Form<'_> {
+        Form::Utf8(units)
+    }
 }
 
 impl Encoded for u32 {
     fn of(literal: &TextLiteral) -> &[Self] {
         literal.utf32()
+    }
+
+    fn form(units: &[Self]) -> Form<'_> {
+        Form::Utf32(units)
     }
 }
 
@@ -66,6 +90,65 @@ pub(super) fn equals_literal(f: usize, literal: Arc<TextLiteral>, equal: bool) -
             ));
         },
     )
+}
+
+/// What `pack` runs to compute `x == y` or `x != y` on two text columns.
+struct BetweenTexts {
+    equal: bool,
+}
+
+impl<'a, L, R> Test<TextRowPair<'a, L, R>> for BetweenTexts
+where
+    L: Texts<'a, Unit: Encoded + 'a>,
+    R: Texts<'a, Unit: Encoded + 'a>,
+{
+    fn lanes(&self, (): ()) -> u64 {
+        unreachable!("a text source is never contiguous")
+    }
+
+    fn one(&self, (left, right): (&'a [L::Unit], &'a [R::Unit])) -> bool {
+        same_text(L::Unit::form(left), R::Unit::form(right)) == self.equal
+    }
+}
+
+/// Builds the loop that marks the rows where text fields `l` and `r` are
+/// equal, or differ when `equal` is false.
+pub(super) fn fields_equal(l: usize, r: usize, equal: bool) -> ChunkLoop {
+    let test = BetweenTexts { equal };
+    Box::new(
+        move |cols: &[Option<Column<'_>>], start: usize, rows: usize, out: &mut Present| {
+            // The two layouts are known only per batch, so the loop is
+            // compiled for each pair of layouts and picks its pair per chunk.
+            with_texts!(texts_of(cols, l), |x| with_texts!(texts_of(cols, r), |y| {
+                pack(TextRowPair::new(x, y), start, rows, out, &test);
+            }));
+        },
+    )
+}
+
+/// Whether two texts hold the same characters, in whatever encodings they
+/// come.
+fn same_text(left: Form<'_>, right: Form<'_>) -> bool {
+    match (left, right) {
+        // Within one encoding, two texts are equal when their units are.
+        (Form::Utf8(a), Form::Utf8(b)) => a == b,
+        (Form::Utf32(a), Form::Utf32(b)) => a == b,
+        // A UTF-8 text and a UTF-32 text are equal when their code points
+        // are, so equal texts are equal in any two sources (ADR-0041).
+        (Form::Utf8(bytes), Form::Utf32(units)) | (Form::Utf32(units), Form::Utf8(bytes)) => {
+            same_code_points(bytes, units)
+        }
+    }
+}
+
+/// Whether the UTF-8 text `bytes` holds the code points `units`, in order.
+fn same_code_points(bytes: &[u8], units: &[u32]) -> bool {
+    // A text layout of bytes holds UTF-8 in every row, so the decode cannot
+    // fail.
+    let text = str::from_utf8(bytes).expect("a text layout of bytes holds UTF-8");
+    // A UTF-32 unit that is no code point, such as a lone surrogate, equals
+    // no character.
+    text.chars().map(u32::from).eq(units.iter().copied())
 }
 
 /// Returns the layout of text field `f`.

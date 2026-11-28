@@ -499,6 +499,44 @@ impl<'a, T: Texts<'a, Unit: 'a>> Source for TextRows<'a, T> {
     }
 }
 
+/// The rows of two text layouts read side by side, so that row `i` gives the
+/// texts of both layouts in row `i`. A comparison of two text fields, as in
+/// `x == y`, reads one.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct TextRowPair<'a, L, R>(L, R, PhantomData<&'a ()>);
+
+impl<'a, L: Texts<'a>, R: Texts<'a>> TextRowPair<'a, L, R> {
+    /// Pairs the rows of `left` with the rows of `right`.
+    pub(crate) fn new(left: L, right: R) -> Self {
+        Self(left, right, PhantomData)
+    }
+}
+
+impl<'a, L: Texts<'a, Unit: 'a>, R: Texts<'a, Unit: 'a>> Source for TextRowPair<'a, L, R> {
+    type Lanes = ();
+    type One = (&'a [L::Unit], &'a [R::Unit]);
+
+    fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    // As for `TextRows`, no 64 texts load as one vector.
+    fn is_contiguous(&self) -> bool {
+        false
+    }
+
+    fn lanes(&self, _: usize) {
+        unreachable!("`pack` loads 64 rows only from a contiguous source")
+    }
+
+    // `Texts::get` checks the row itself, so the call needs no `unsafe`
+    // block, and a right layout with fewer rows panics instead of reading
+    // past its end.
+    unsafe fn one(&self, row: usize) -> Self::One {
+        (self.0.get(row), self.1.get(row))
+    }
+}
+
 /// Runs `$body` with `$t` bound to the layout of the text column `$text`, so
 /// that a loop written once against `Texts` runs on each layout. The body is
 /// compiled once per layout.

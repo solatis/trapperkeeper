@@ -22,9 +22,9 @@ use proptest::prelude::*;
 use proptest::sample::select;
 use trapperkeeper_engine::Rule;
 use trapperkeeper_engine::column::{
-    Bits, Booleans, Column, Floats, Ints, Marking, Piece, Strided, Text,
+    Bits, Booleans, Column, Fixed, Floats, Ints, Marking, Piece, Strided, Text, Units,
 };
-use trapperkeeper_engine::exec::{BindError, Fault, Outcome, SchemaMismatch};
+use trapperkeeper_engine::exec::{Fault, Outcome, SchemaMismatch};
 use trapperkeeper_engine::expr::{Expr, Segment};
 use trapperkeeper_engine::plan::{FieldTree, plan};
 use uuid::Uuid;
@@ -362,6 +362,39 @@ fn a_with_b(op: fn(Box<Expr>, Box<Expr>) -> Expr) -> Expr {
 }
 
 #[test]
+fn a_utf8_text_equals_its_utf32_cells() {
+    let texts = [
+        "caf\u{e9}".to_string(),
+        "\u{1f600}".to_string(),
+        "x".to_string(),
+    ];
+    let pieces: Vec<Piece<'_>> = texts.iter().map(|t| Piece::new(t)).collect();
+    let utf8 =
+        Column::text(Text::Pieces(Strided::from_slice(&pieces)), Marking::Never).expect("unmarked");
+    // The cells hold the same texts as the pieces, except the last row, whose
+    // `y` differs from `x`.
+    let mut cells = vec![0u32; 3 * 4];
+    for (row, text) in ["caf\u{e9}", "\u{1f600}", "y"].iter().enumerate() {
+        for (at, c) in text.chars().enumerate() {
+            cells[4 * row + at] = u32::from(c);
+        }
+    }
+    let layout = Fixed::new(4, 4, 3, Units::utf32(&cells)).expect("the cells hold every row");
+    let utf32 = Column::text(Text::Utf32(layout), Marking::Never).expect("unmarked");
+    // `é` is two bytes in UTF-8 and one unit in UTF-32, and the emoji four
+    // bytes and one unit, so only a comparison of code points finds them
+    // equal.
+    assert_eq!(
+        outcomes_of_pair(a_with_b(Expr::Eq), utf8, utf32),
+        [Matched, Matched, NotMatched]
+    );
+    assert_eq!(
+        outcomes_of_pair(a_with_b(Expr::Ne), utf32, utf8),
+        [NotMatched, NotMatched, Matched]
+    );
+}
+
+#[test]
 fn a_negative_int_orders_below_every_u64() {
     let signed = [-1i8, 5, 5];
     let unsigned = [3u64, u64::MAX, 5];
@@ -683,8 +716,11 @@ fn order_of_fields(a: &Value, b: &Value, ordering: bool) -> Result<Option<Orderi
         (Value::Float(x, _), Value::Float(y, _)) => ieee(*x, *y),
         (Value::Int(i), Value::Float(y, _)) => ieee(*i as f64, *y),
         (Value::Float(x, _), Value::Int(j)) => ieee(*x, *j as f64),
-        // An ordering with a value that is not a number. Two texts never get
-        // here, because bind refuses to compare two text fields.
+        // Two texts are equal when their characters are, whatever layouts
+        // and encodings the two columns have.
+        (Value::Text(x), Value::Text(y)) if !ordering => x.cmp(y),
+        // `compare` decides the equality of two kinds, so only an ordering
+        // with a value that is not a number gets here.
         _ => return Err(Fault::Unordered),
     };
     Ok(Some(order))
@@ -1226,12 +1262,7 @@ proptest! {
         let program = plan(&rules).expect("the generated kinds plan");
         let lent = t.lend();
         let columns = t.columns(&lent, program.fields());
-        let bound = match program.bind(&columns) {
-            // A generated rule may compare two fields whose types this
-            // version does not compare, and that rule set does not run.
-            Err(BindError::Unsupported { .. }) => return Ok(()),
-            other => other?,
-        };
+        let bound = program.bind(&columns)?;
         let outcomes = bound.run(t.rows, &columns)?;
 
         // 2. check each record against the reference
@@ -1268,12 +1299,7 @@ proptest! {
         let program = plan(&rules).expect("the generated kinds plan");
         let lent = t.lend();
         let columns = t.columns(&lent, program.fields());
-        let bound = match program.bind(&columns) {
-            // A generated rule may compare two fields whose types this
-            // version does not compare, and that rule set does not run.
-            Err(BindError::Unsupported { .. }) => return Ok(()),
-            other => other?,
-        };
+        let bound = program.bind(&columns)?;
         let whole = bound.run(t.rows, &columns)?;
 
         // 2. run each record alone

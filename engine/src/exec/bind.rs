@@ -96,7 +96,7 @@ pub enum BindError {
     /// fields.
     Columns { expected: usize, given: usize },
     /// The program compares two fields whose types this version cannot
-    /// compare yet, such as two text fields.
+    /// compare yet, which are two list fields.
     Unsupported { left: usize, right: usize },
 }
 
@@ -266,8 +266,8 @@ fn bind_literal(op: Comparison, f: usize, t: FieldType, literal: &Literal) -> Bo
 }
 
 /// Specializes `x op y`, where `x` is field `l` with column type `lt` and `y`
-/// is field `r` with column type `rt`. Fails for two text fields or two list
-/// fields, which this version cannot compare yet.
+/// is field `r` with column type `rt`. Fails for two list fields, which this
+/// version cannot compare yet.
 fn bind_fields(
     op: Comparison,
     l: usize,
@@ -339,16 +339,22 @@ fn bind_fields(
             );
             BoundStep::Loop { fields, chunk }
         }
-        (FieldType::Text, FieldType::Text) | (FieldType::List, FieldType::List) => {
+        // `x == y` or `x != y` on two text columns, in any two layouts.
+        (FieldType::Text, FieldType::Text) if !op.is_ordering() => BoundStep::Loop {
+            fields,
+            chunk: text::fields_equal(l, r, op == Comparison::Eq),
+        },
+        (FieldType::List, FieldType::List) => {
             return Err(BindError::Unsupported { left: l, right: r });
         }
-        // Any other pair, such as a number and a text, can never be equal, so
-        // `==` is false and `!=` true. An ordering of it is a fault, because
-        // one side is not a number (ADR-0041).
+        // An ordering of any other pair, such as two texts or a number and a
+        // text, is a fault, because one side is not a number (ADR-0041).
         _ if op.is_ordering() => BoundStep::Faulted {
             fault: Fault::Unordered,
             fields,
         },
+        // The pairs left under `==` and `!=`, such as a number and a text,
+        // can never be equal, so `==` is false and `!=` true.
         _ => BoundStep::Loop {
             fields,
             chunk: constant_loop(op == Comparison::Ne),
