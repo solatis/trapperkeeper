@@ -16,6 +16,7 @@ executor knows no rule text.
 | `bind.rs`    | `Program::bind`, `Bound`, the column type of a field, and the choice of loop for each step                                              | how a comparison gets its loop; how a literal converts to the column's type; which comparisons fault and which can never be equal; how booleans are read |
 | `run.rs`     | `Bound::run`: the check of a batch, the loop over chunks, and the lookup of a faulted record's fault                                    | how a batch runs chunk by chunk; what `run` checks about a batch                                                                                         |
 | `number.rs`  | the six operators as types, such as `Less`, the loops that compare numbers, and the type in which two number columns compare (`Common`) | writing a loop that compares numbers; why `x < 300` on a `u8` column needs no loop over values; in which type `x < y` compares                           |
+| `search.rs`  | substring search and list search, and the choice between them from the type of the right side of `in`                                   | how `x in y` runs when `y` is a field; why the same rule searches a text or a list                                                                       |
 | `text.rs`    | the loops that compare texts, in the encodings of the columns and across UTF-8 and UTF-32                                               | comparing a text with a literal or another text; how a UTF-8 text compares with a UTF-32 text                                                            |
 | `result.rs`  | `StepResult`, what one step computed for each row of a chunk, and the `not`, `and` and `or` that combine results                        | how true, false, unknown and fault are stored; how `and` and `or` ignore a fault on the right                                                            |
 | `member.rs`  | the sets of a membership list, built at bind for the column's type, and the tests that look a row up in them                            | how `x in [...]` runs; how a long list is searched                                                                                                       |
@@ -34,6 +35,8 @@ executor knows no rule text.
 - `run` refuses a batch whose column types or row counts differ from what
   bind saw, because the loops read a column's memory as the type that bind
   picked.
+- The meaning of `x in y` with a field `y` comes from the type of `y` at bind:
+  a text is searched for a substring, and a list for an element.
 - A literal converts to the type of the column it is compared with, once, at
   bind.
 
@@ -44,6 +47,9 @@ executor knows no rule text.
 - How values convert and compare, which types can be equal, and how a UTF-8
   text compares with a UTF-32 text: `doc/adr/0041-the-rule-language.md`.
 - Nulls, NaNs and faults: `doc/adr/0005-one-vocabulary-for-failure-behavior.md`.
+- A literal needle in a UTF-8 text is found with the `regex` crate, which the
+  engine already depends on, so no new dependency enters a crate that
+  pipelines embed.
 - The three outcomes of a record: `doc/adr/0006-conformance-fixtures-are-the-evaluation-spec.md`.
 
 **How to**:

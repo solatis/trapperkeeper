@@ -4,6 +4,9 @@
 /// Why a rule could not be evaluated on a record (ADR-0005).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Fault {
+    /// `in` with a value that it cannot search, as in `5 in "abc"` or
+    /// `"a" in 5`.
+    Incompatible,
     /// `<`, `<=`, `>` or `>=` with an operand that is not a number, as in
     /// `True < False`, or `x > 5` where `x` holds a text.
     Unordered,

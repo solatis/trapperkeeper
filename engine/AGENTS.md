@@ -10,7 +10,8 @@ and prints a tree as text. It evaluates rules: it plans a rule set into one
 program, specializes the program for the column types of a schema, and runs
 it over the columns of each batch, which it describes in `src/column/`. It
 evaluates comparisons of numbers, booleans and texts, null tests, membership
-in a list that the rule writes, and `not`, `and` and `or`. It depends on no
+in a list that the rule writes, the search of a text for a substring and of a
+list for an element, and `not`, `and` and `or`. It depends on no
 server, store or HTTP code.
 
 **Map**:

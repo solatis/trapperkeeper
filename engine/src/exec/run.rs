@@ -134,6 +134,11 @@ fn run_step(
         // A fault such as an ordering on text only happens where the values
         // are there (ADR-0005). Rows where a field has no value stay unknown.
         BoundStep::Faulted { fields, .. } => StepResult::faulted(all_present(present, fields)),
+        BoundStep::Search { fields, chunk } => {
+            let (mut matched, mut undecided) = ([0; CHUNK_WORDS], [0; CHUNK_WORDS]);
+            chunk(columns, start, rows, &mut matched, &mut undecided);
+            StepResult::searched(&matched, &undecided, all_present(present, fields))
+        }
         BoundStep::IsNull(f) => StepResult::null_test(&present[*f], rows),
         BoundStep::Not(a) => results[*a].not(),
         BoundStep::And(a, b) => results[*a].and(&results[*b]),
@@ -173,7 +178,10 @@ fn fault_of(steps: &[BoundStep], results: &[StepResult], slot: usize, row: usize
             }
             // These steps never produce a fault, so the walk cannot reach
             // them.
-            BoundStep::Constant(_) | BoundStep::Loop { .. } | BoundStep::IsNull(_) => {
+            BoundStep::Constant(_)
+            | BoundStep::Loop { .. }
+            | BoundStep::Search { .. }
+            | BoundStep::IsNull(_) => {
                 unreachable!("a step that never faults has no faulted row")
             }
         }

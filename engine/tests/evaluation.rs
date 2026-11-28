@@ -22,9 +22,10 @@ use proptest::prelude::*;
 use proptest::sample::select;
 use trapperkeeper_engine::Rule;
 use trapperkeeper_engine::column::{
-    Bits, Booleans, Column, Fixed, Floats, Ints, Marking, Piece, Strided, Text, Units,
+    AnyOffsets, Bits, Booleans, Column, Fixed, Floats, Ints, List, Marking, Offsets, PerRecord,
+    Piece, Scalar, Shape, Strided, Text, Units, Utf8,
 };
-use trapperkeeper_engine::exec::{Fault, Outcome, SchemaMismatch};
+use trapperkeeper_engine::exec::{BindError, Fault, Outcome, SchemaMismatch};
 use trapperkeeper_engine::expr::{Expr, Segment};
 use trapperkeeper_engine::plan::{FieldTree, plan};
 use uuid::Uuid;
@@ -464,6 +465,81 @@ fn a_long_list_finds_its_values_by_binary_search() {
     assert_eq!(outcomes(x_in(list), Some(column)), expected);
 }
 
+/// Builds the expression `needle in x`.
+fn in_x(needle: Expr) -> Expr {
+    Expr::In(Box::new(needle), Box::new(x()))
+}
+
+#[test]
+fn a_text_literal_is_found_in_utf8_and_utf32_cells() {
+    let texts = ["caf\u{e9}".to_string(), "cafe".to_string()];
+    let needle = || in_x(Expr::Text("\u{e9}".into()));
+    let pieces = TextBuffers::new(&texts, TextLayout::Pieces { step: 1 });
+    let cells = TextBuffers::new(&texts, TextLayout::Utf32 { slack: 1, step: 1 });
+    for buffers in [pieces, cells] {
+        let lent = buffers.lend();
+        let column = Column::text(lent.text(), Marking::Never).expect("unmarked");
+        assert_eq!(outcomes(needle(), Some(column)), [Matched, NotMatched]);
+    }
+}
+
+#[test]
+fn an_empty_needle_is_found_in_every_text() {
+    let pieces = [Piece::new(""), Piece::new("abc"), Piece::new("x")];
+    let bitmap = packed(&[true, true, false], 0);
+    let marking = Marking::Bitmap(Bits::new(&bitmap, 0, 3).expect("one bit per row"));
+    let column = Column::text(Text::Pieces(Strided::from_slice(&pieces)), marking)
+        .expect("one bit per text");
+    // The empty text holds the empty needle too, as `"" in ""` is true in
+    // Python. The third row has no text, so its search is unknown.
+    assert_eq!(
+        outcomes(in_x(Expr::Text(String::new())), Some(column)),
+        [Matched, Matched, NotMatched]
+    );
+}
+
+#[test]
+fn a_needle_of_another_type_is_found_in_no_list() {
+    // Three records: `[1, 2]`, `[]` and `[None]`.
+    let values = [1i64, 2, 0];
+    let mask = [0u8, 0, 1];
+    let ends = [0u64, 2, 2, 3];
+    let elements = Column::ints(
+        Ints::I64(Strided::from_slice(&values)),
+        Marking::ByteMask(Strided::from_slice(&mask)),
+    )
+    .expect("one mask byte per element");
+    // SAFETY: the ends are in order, start at 0 and end at the number of
+    // elements.
+    let layout = unsafe { Offsets::new(&ends, &elements) };
+    let column =
+        Column::list(List::Offsets(AnyOffsets::U64(layout)), Marking::Never).expect("unmarked");
+    let not_in = Expr::NotIn(Box::new(Expr::Text("a".into())), Box::new(x()));
+    // A text never equals an int, so the search is false where every
+    // element has a value, also for the empty list. The null element of the
+    // third record could be anything, so the search is unknown there, and
+    // so is its `not in`.
+    assert_eq!(
+        outcomes(not_in, Some(column)),
+        [Matched, Matched, NotMatched]
+    );
+}
+
+#[test]
+fn a_number_in_a_text_faults() {
+    let pieces = [Piece::new("5"), Piece::new("x")];
+    let bitmap = packed(&[true, false], 0);
+    let marking = Marking::Bitmap(Bits::new(&bitmap, 0, 2).expect("one bit per row"));
+    let column = Column::text(Text::Pieces(Strided::from_slice(&pieces)), marking)
+        .expect("one bit per text");
+    // The second row has no text, so its search is unknown and does not
+    // fault.
+    assert_eq!(
+        outcomes(in_x(Expr::Int(5)), Some(column)),
+        [NotEvaluated(Fault::Incompatible), NotMatched]
+    );
+}
+
 #[test]
 fn a_negative_int_orders_below_every_u64() {
     let signed = [-1i8, 5, 5];
@@ -579,6 +655,8 @@ enum Value {
     Float(f64, Width),
     Bool(bool),
     Text(String),
+    // The elements of a list, where `Null` is an element without a value.
+    List(Vec<Value>),
     Null,
 }
 
@@ -668,12 +746,83 @@ fn reference(e: &Expr, record: &[Value]) -> Tri {
         Expr::Ge(l, r) => compare(l, r, record, Ordering::is_ge, true),
         // `x in [a, b]` is `x == a or x == b` (ADR-0005), so the arm builds
         // that `or` and evaluates it with the arms above.
+        // `x in y` with a field `y` searches the value of `y`.
+        Expr::In(needle, y) if matches!(**y, Expr::Field(_)) => search(needle, y, record),
+        Expr::NotIn(needle, y) if matches!(**y, Expr::Field(_)) => {
+            match search(needle, y, record) {
+                Tri::True => Tri::False,
+                Tri::False => Tri::True,
+                other => other,
+            }
+        }
         Expr::In(needle, list) => reference(&either_equal(needle, list), record),
         Expr::NotIn(needle, list) => {
             reference(&Expr::Not(Box::new(either_equal(needle, list))), record)
         }
         _ => unreachable!("the generated rules hold no other kind"),
     }
+}
+
+/// Evaluates `needle in y`, where `y` is a field, on `record`. A text is
+/// searched for the needle as a substring, and a list for an element that
+/// equals the needle (ADR-0005).
+fn search(needle: &Expr, y: &Expr, record: &[Value]) -> Tri {
+    let needle = match needle {
+        Expr::Field(p) => record[field_number(p)].clone(),
+        literal => value_of(literal),
+    };
+    match (&record[field_number_of(y)], &needle) {
+        // A search of a null, or for a null field, is unknown.
+        (Value::Null, _) | (_, Value::Null) => Tri::Unknown,
+        (Value::Text(text), Value::Text(n)) => Tri::of(text.contains(n.as_str())),
+        // A list search is `any` over the equalities of its elements: true
+        // when one matches, unknown when none does and one is a null, and
+        // false otherwise, also for an empty list.
+        (Value::List(items), n) => {
+            if items.iter().any(|item| equal(n, item)) {
+                Tri::True
+            } else if items.contains(&Value::Null) {
+                Tri::Unknown
+            } else {
+                Tri::False
+            }
+        }
+        // A text searched for a needle that is no text, and a number or a
+        // boolean, cannot be searched, as Python raises a type error.
+        _ => Tri::Fault(Fault::Incompatible),
+    }
+}
+
+/// Returns the number of the field `y`.
+fn field_number_of(y: &Expr) -> usize {
+    match y {
+        Expr::Field(p) => field_number(p),
+        _ => unreachable!("a generated search has a field on its right"),
+    }
+}
+
+/// Returns the value of a number, boolean or text literal. A float literal
+/// takes the width of the list elements, which are `f64`.
+fn value_of(literal: &Expr) -> Value {
+    match literal {
+        Expr::Int(i) => Value::Int((*i).into()),
+        Expr::Float(x) => Value::Float(*x, Width::F64),
+        Expr::Bool(b) => Value::Bool(*b),
+        Expr::Text(t) => Value::Text(t.clone()),
+        _ => unreachable!("a generated needle is a field or a literal"),
+    }
+}
+
+/// Whether the needle `n` equals the element `item`, which has a value.
+fn equal(n: &Value, item: &Value) -> bool {
+    let kind = |v: &Value| match v {
+        Value::Int(_) | Value::Float(..) => Some(Kind::Number),
+        Value::Bool(_) => Some(Kind::Bool),
+        Value::Text(_) => Some(Kind::Text),
+        Value::List(_) => Some(Kind::List),
+        Value::Null => None,
+    };
+    kind(n) == kind(item) && order_of_fields(n, item, false) == Ok(Some(Ordering::Equal))
 }
 
 /// Builds `needle == a or needle == b ...` for the items of the list `list`.
@@ -743,6 +892,7 @@ enum Kind {
     Number,
     Bool,
     Text,
+    List,
 }
 
 /// Returns the kind of `e`, a field or a literal, on `record`, or `None` when
@@ -753,6 +903,7 @@ fn kind(e: &Expr, record: &[Value]) -> Option<Kind> {
             Value::Int(_) | Value::Float(..) => Some(Kind::Number),
             Value::Bool(_) => Some(Kind::Bool),
             Value::Text(_) => Some(Kind::Text),
+            Value::List(_) => Some(Kind::List),
             Value::Null => None,
         },
         Expr::Int(_) | Expr::Float(_) => Some(Kind::Number),
@@ -899,6 +1050,140 @@ enum Values {
     BoolBits(Vec<bool>, Vec<u8>),
     // The texts, and their buffers in one layout.
     Text(Vec<String>, TextLayout, TextBuffers),
+    List(ListValues),
+}
+
+/// The values of a generated list field: the elements of all records end to
+/// end, which elements have a value, and where each record ends.
+#[derive(Debug, Clone)]
+struct ListValues {
+    elements: Elements,
+    // One byte per element, 1 for an element without a value.
+    mask: Vec<u8>,
+    // The end of each record in the elements, after a 0, which are the
+    // offsets of an offsets layout.
+    ends: Vec<u64>,
+    // Whether each record is a column of its own, as in a numpy array of
+    // dtype `object`, or a range of one element column.
+    per_record: bool,
+}
+
+/// The elements of a generated list field, of one type.
+#[derive(Debug, Clone)]
+enum Elements {
+    Ints(Vec<i64>),
+    Floats(Vec<f64>),
+    // One byte per element, where a byte that is not zero is true.
+    Bools(Vec<u8>),
+    // The texts, their bytes end to end and the end of each text after a 0.
+    Texts(Vec<String>, Vec<u8>, Vec<u32>),
+}
+
+impl ListValues {
+    /// Builds the values of records whose elements are `elements`, `present`
+    /// says which elements have a value, and record `i` holds `sizes[i]`
+    /// elements.
+    fn new(elements: Elements, present: &[bool], sizes: &[usize], per_record: bool) -> Self {
+        let ends = std::iter::once(0)
+            .chain(sizes.iter().scan(0, |end, n| {
+                *end += u64::try_from(*n).expect("a short list");
+                Some(*end)
+            }))
+            .collect();
+        Self {
+            elements,
+            mask: present.iter().map(|&p| u8::from(!p)).collect(),
+            ends,
+            per_record,
+        }
+    }
+
+    /// Returns the range of elements of record `row`.
+    fn range(&self, row: usize) -> std::ops::Range<usize> {
+        let at = |i: usize| usize::try_from(self.ends[i]).expect("an end inside the elements");
+        at(row)..at(row + 1)
+    }
+
+    /// Builds the column of the elements in `range`.
+    fn elements(&self, range: std::ops::Range<usize>) -> Column<'_> {
+        let marking = Marking::ByteMask(Strided::from_slice(&self.mask[range.clone()]));
+        let column = match &self.elements {
+            Elements::Ints(v) => Column::ints(Ints::I64(Strided::from_slice(&v[range])), marking),
+            Elements::Floats(v) => {
+                Column::floats(Floats::F64(Strided::from_slice(&v[range])), marking)
+            }
+            Elements::Bools(v) => {
+                Column::booleans(Booleans::Bytes(Strided::from_slice(&v[range])), marking)
+            }
+            Elements::Texts(_, bytes, ends) => {
+                // SAFETY: the bytes are the texts end to end, which are UTF-8,
+                // and the ends of the texts in the range are in order inside
+                // the bytes.
+                let texts =
+                    unsafe { Offsets::new(&ends[range.start..=range.end], Utf8::new(bytes)) };
+                Column::text(Text::Offsets(AnyOffsets::U32(texts)), marking)
+            }
+        };
+        column.expect("one mask byte per element")
+    }
+
+    /// Returns the shape of an element.
+    fn scalar(&self) -> Scalar {
+        match self.elements {
+            Elements::Ints(_) => Scalar::Int,
+            Elements::Floats(_) => Scalar::Float,
+            Elements::Bools(_) => Scalar::Bool,
+            Elements::Texts(..) => Scalar::Text,
+        }
+    }
+
+    /// Returns the elements of record `row` for the reference interpreter.
+    fn record(&self, row: usize) -> Vec<Value> {
+        self.range(row)
+            .map(|i| match &self.elements {
+                _ if self.mask[i] != 0 => Value::Null,
+                Elements::Ints(v) => Value::Int(v[i].into()),
+                // A NaN element is a null, as a NaN row is.
+                Elements::Floats(v) if v[i].is_nan() => Value::Null,
+                Elements::Floats(v) => Value::Float(v[i], Width::F64),
+                Elements::Bools(v) => Value::Bool(v[i] != 0),
+                Elements::Texts(texts, ..) => Value::Text(texts[i].clone()),
+            })
+            .collect()
+    }
+
+    /// Builds the values of record `row` alone.
+    fn alone(&self, row: usize) -> Self {
+        let range = self.range(row);
+        let elements = match &self.elements {
+            Elements::Ints(v) => Elements::Ints(v[range.clone()].to_vec()),
+            Elements::Floats(v) => Elements::Floats(v[range.clone()].to_vec()),
+            Elements::Bools(v) => Elements::Bools(v[range.clone()].to_vec()),
+            Elements::Texts(texts, ..) => texts_elements(texts[range.clone()].to_vec()),
+        };
+        let present: Vec<bool> = self.mask[range.clone()].iter().map(|&m| m == 0).collect();
+        Self::new(elements, &present, &[range.len()], self.per_record)
+    }
+}
+
+/// Builds the text elements of `texts`, with their bytes end to end.
+fn texts_elements(texts: Vec<String>) -> Elements {
+    let bytes: Vec<u8> = texts.concat().into_bytes();
+    let ends = std::iter::once(0)
+        .chain(texts.iter().scan(0, |end, t| {
+            *end += u32::try_from(t.len()).expect("a short text");
+            Some(*end)
+        }))
+        .collect();
+    Elements::Texts(texts, bytes, ends)
+}
+
+/// The borrowed buffers of a field whose column borrows parts that the field
+/// does not hold itself.
+enum Lent<'a> {
+    Texts(LentTexts<'a>),
+    // The element column of an offsets layout, or one column per record.
+    Elements(Vec<Column<'a>>),
 }
 
 /// How a generated field marks its rows without a value.
@@ -951,16 +1236,22 @@ impl Field {
     /// a field of any other type. A text column borrows the pieces and the list
     /// of buffers that `LentTexts` holds, so they must live longer than the
     /// column, and `column` cannot make them itself.
-    fn lend(&self) -> Option<LentTexts<'_>> {
+    fn lend(&self) -> Option<Lent<'_>> {
         match &self.values {
-            Values::Text(_, _, buffers) => Some(buffers.lend()),
+            Values::Text(_, _, buffers) => Some(Lent::Texts(buffers.lend())),
+            Values::List(l) if l.per_record => Some(Lent::Elements(
+                (0..self.present.len())
+                    .map(|r| l.elements(l.range(r)))
+                    .collect(),
+            )),
+            Values::List(l) => Some(Lent::Elements(vec![l.elements(0..l.mask.len())])),
             _ => None,
         }
     }
 
     /// Builds the column that describes this field's buffers. `lent` holds
     /// the borrowed buffers of a text field, as `lend` gives them.
-    fn column<'a>(&'a self, lent: Option<&'a LentTexts<'a>>) -> Column<'a> {
+    fn column<'a>(&'a self, lent: Option<&'a Lent<'a>>) -> Column<'a> {
         let rows = self.present.len();
         let marking = match self.mark {
             Mark::Never => Marking::Never,
@@ -987,7 +1278,29 @@ impl Field {
                 Booleans::Bits(Bits::new(bytes, 0, rows).expect("one bit per row")),
                 marking,
             ),
-            Values::Text(..) => Column::text(lent.expect("a text field is lent").text(), marking),
+            Values::Text(..) => match lent {
+                Some(Lent::Texts(t)) => Column::text(t.text(), marking),
+                _ => unreachable!("a text field lends its texts"),
+            },
+            Values::List(l) => {
+                let Some(Lent::Elements(columns)) = lent else {
+                    unreachable!("a list field lends its elements")
+                };
+                let list = if l.per_record {
+                    let shape = Shape {
+                        scalar: l.scalar(),
+                        depth: 0,
+                    };
+                    List::PerRecord(PerRecord::new(columns, shape).expect("one shape"))
+                } else {
+                    // SAFETY: the ends are in order, start at 0 and end at the
+                    // number of elements.
+                    List::Offsets(AnyOffsets::U64(unsafe {
+                        Offsets::new(&l.ends, &columns[0])
+                    }))
+                };
+                Column::list(list, marking)
+            }
         };
         column.expect("the marking covers the rows")
     }
@@ -1022,6 +1335,7 @@ impl Field {
             // A bit-packed field has a step of 1, so its row is its index.
             Values::BoolBits(bools, _) => Value::Bool(bools[row]),
             Values::Text(texts, ..) => Value::Text(texts[row].clone()),
+            Values::List(l) => Value::List(l.record(row)),
         }
     }
 }
@@ -1056,6 +1370,7 @@ impl Field {
                 let one = [texts[row].clone()];
                 Values::Text(one.to_vec(), *layout, TextBuffers::new(&one, *layout))
             }
+            Values::List(l) => Values::List(l.alone(row)),
         };
         let present = vec![self.present[row]];
         let bitmap = match self.mark {
@@ -1098,7 +1413,7 @@ impl Table {
     /// Borrows the buffers of the text fields, one entry per field, for
     /// `columns`. The caller keeps the result in a binding of its own while
     /// it uses the columns.
-    fn lend(&self) -> Vec<Option<LentTexts<'_>>> {
+    fn lend(&self) -> Vec<Option<Lent<'_>>> {
         self.fields
             .iter()
             .map(|f| f.as_ref().and_then(Field::lend))
@@ -1109,7 +1424,7 @@ impl Table {
     /// holds the borrowed buffers that `lend` gives.
     fn columns<'a>(
         &'a self,
-        lent: &'a [Option<LentTexts<'a>>],
+        lent: &'a [Option<Lent<'a>>],
         fields: &FieldTree,
     ) -> Vec<Option<Column<'a>>> {
         fields
@@ -1170,7 +1485,25 @@ fn values(rows: usize, step: usize) -> impl Strategy<Value = Values> {
             let buffers = TextBuffers::new(&texts, layout);
             Values::Text(texts, layout, buffers)
         }),
+        list_values(rows),
     ]
+}
+
+/// Generates the lists of `rows` records: up to four elements each, of ints,
+/// floats, booleans or texts, with nulls among the elements and empty lists.
+fn list_values(rows: usize) -> impl Strategy<Value = Values> {
+    (vec(0usize..5, rows), any::<bool>(), 0..4usize).prop_flat_map(|(sizes, per_record, kind)| {
+        let n: usize = sizes.iter().sum();
+        let elements = match kind {
+            0 => vec(-6i64..6, n).prop_map(Elements::Ints).boxed(),
+            1 => vec(float(), n).prop_map(Elements::Floats).boxed(),
+            2 => vec(0u8..3, n).prop_map(Elements::Bools).boxed(),
+            _ => vec(text_value(), n).prop_map(texts_elements).boxed(),
+        };
+        (elements, vec(prop::bool::weighted(0.8), n)).prop_map(move |(e, present)| {
+            Values::List(ListValues::new(e, &present, &sizes, per_record))
+        })
+    })
 }
 
 /// The text literals of the generated rules: an empty text, a text of one
@@ -1201,7 +1534,10 @@ fn field(rows: usize) -> impl Strategy<Value = Field> {
             values(rows, step).prop_map(move |values| {
                 // A bit-packed boolean column has one bit per row and no
                 // stride, and a text layout makes its own stride.
-                let step = if matches!(values, Values::Text(..) | Values::BoolBits(..)) {
+                let step = if matches!(
+                    values,
+                    Values::Text(..) | Values::BoolBits(..) | Values::List(_)
+                ) {
                     1
                 } else {
                     step
@@ -1317,7 +1653,17 @@ fn condition(n: usize) -> impl Strategy<Value = Expr> {
             Expr::In(x, list)
         }
     });
+    // A search of a field for a literal.
+    let search = (literal(), 0..n, any::<bool>()).prop_map(|(x, y, negated)| {
+        let (x, y) = (Box::new(x), Box::new(field_named(y)));
+        if negated {
+            Expr::NotIn(x, y)
+        } else {
+            Expr::In(x, y)
+        }
+    });
     let leaf = prop_oneof![
+        3 => search,
         6 => comparison,
         3 => fields,
         1 => folded,
@@ -1376,7 +1722,13 @@ proptest! {
         let program = plan(&rules).expect("the generated kinds plan");
         let lent = t.lend();
         let columns = t.columns(&lent, program.fields());
-        let bound = program.bind(&columns)?;
+        let bound = match program.bind(&columns) {
+            // A generated rule may compare two list fields, or search for a
+            // field, which this version does not run, and that rule set does
+            // not run.
+            Err(BindError::Unsupported { .. }) => return Ok(()),
+            other => other?,
+        };
         let outcomes = bound.run(t.rows, &columns)?;
 
         // 2. check each record against the reference
@@ -1414,7 +1766,13 @@ proptest! {
         let program = plan(&rules).expect("the generated kinds plan");
         let lent = t.lend();
         let columns = t.columns(&lent, program.fields());
-        let bound = program.bind(&columns)?;
+        let bound = match program.bind(&columns) {
+            // A generated rule may compare two list fields, or search for a
+            // field, which this version does not run, and that rule set does
+            // not run.
+            Err(BindError::Unsupported { .. }) => return Ok(()),
+            other => other?,
+        };
         let whole = bound.run(t.rows, &columns)?;
 
         // 2. run each record alone

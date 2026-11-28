@@ -57,7 +57,7 @@ pub(super) fn bind_member(f: usize, t: FieldType, values: &[Literal]) -> BoundSt
         FieldType::Text => text_loop(f, TextSet::of(&kept)),
         // No literal can equal a list, so the filter kept none, and a missing
         // field returned before the filter.
-        FieldType::List | FieldType::Absent => constant_loop(false),
+        FieldType::List(_) | FieldType::Absent => constant_loop(false),
     };
     BoundStep::Loop {
         fields: vec![f],
@@ -80,7 +80,7 @@ fn can_equal(t: FieldType, literal: &Literal) -> bool {
 /// equal. `values` holds them in `T`. On an int column, `widened` holds the
 /// float literals, which compare with the row widened to `f64`, as in
 /// `x == 2.0` (ADR-0041).
-struct NumberSet<T> {
+pub(super) struct NumberSet<T> {
     values: Vec<T>,
     widened: Vec<f64>,
 }
@@ -88,7 +88,7 @@ struct NumberSet<T> {
 impl<T: Number + TryFrom<i64>> NumberSet<T> {
     /// Builds the set of an int column of type `T`. An int literal that `T`
     /// cannot hold equals no row and is dropped.
-    fn for_int(kept: &[&Literal]) -> Self {
+    pub(super) fn for_int(kept: &[&Literal]) -> Self {
         let mut values = Vec::new();
         let mut widened = Vec::new();
         for literal in kept {
@@ -115,7 +115,7 @@ impl<T: Number> NumberSet<T> {
     /// Builds the set of a float column of type `T`. Each literal rounds to
     /// the nearest value of `T`, as the literal of `x == 0.1` does
     /// (ADR-0041).
-    fn for_float(kept: &[&Literal]) -> Self {
+    pub(super) fn for_float(kept: &[&Literal]) -> Self {
         let values = kept
             .iter()
             .map(|literal| match **literal {
@@ -133,7 +133,7 @@ impl<T: Number> NumberSet<T> {
     }
 
     /// Whether no row can be in the set.
-    fn is_empty(&self) -> bool {
+    pub(super) fn is_empty(&self) -> bool {
         self.values.is_empty() && self.widened.is_empty()
     }
 }
@@ -227,14 +227,14 @@ fn flags_loop(f: usize, kept: &[&Literal]) -> ChunkLoop {
 
 /// The texts of a membership step in both encodings, each list sorted, so
 /// that a row is looked up in the list of its column's encoding.
-struct TextSet {
+pub(super) struct TextSet {
     utf8: Vec<Box<[u8]>>,
     utf32: Vec<Box<[u32]>>,
 }
 
 impl TextSet {
     /// Builds the set of the text literals in `kept`.
-    fn of(kept: &[&Literal]) -> Self {
+    pub(super) fn of(kept: &[&Literal]) -> Self {
         let texts: Vec<_> = kept
             .iter()
             .map(|l| match l {

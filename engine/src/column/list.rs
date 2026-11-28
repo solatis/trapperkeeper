@@ -130,6 +130,13 @@ impl<'a, O: Offset> SizedLists<'a, O> {
     }
 }
 
+impl<'a, O> SizedLists<'a, O> {
+    /// Returns the element column that the lists point into.
+    pub(crate) fn elements(&self) -> &'a Column<'a> {
+        self.elements
+    }
+}
+
 impl<O: Offset> sealed::Sealed for SizedLists<'_, O> {}
 
 impl<'a, O: Offset> Lists<'a> for SizedLists<'a, O> {

@@ -24,9 +24,10 @@ use super::number::{
     Converted, compare_columns, compare_widened, compare_with_literal, outside, with_order,
 };
 use super::outcome::Fault;
+use super::search;
 use super::text;
 use crate::column::{
-    Booleans, CHUNK_WORDS, Column, Kind, Number, NumberType, Present, present_all,
+    Booleans, CHUNK_WORDS, Column, Kind, Number, NumberType, Present, Shape, present_all,
     present_from_bits, present_from_mask, with_float, with_int, with_number,
 };
 use crate::plan::{Comparison, Constant, Literal, Operand, Program, Step};
@@ -50,7 +51,9 @@ pub(crate) enum FieldType {
     Number(NumberType),
     Bool,
     Text,
-    List,
+    // A list column and the shape of its records. Bind picks the loop over
+    // the elements from their shape, once per schema.
+    List(Shape),
     // The source has no column for the field, so it has no value on any
     // row.
     Absent,
@@ -74,6 +77,14 @@ pub(crate) enum BoundStep {
         fault: Fault,
         fields: Vec<usize>,
     },
+    // A search among the elements of a list and its loop. The loop writes
+    // the records that it matched and the records that it left undecided
+    // because of a null element. On a row where one of `fields` has no
+    // value, the result is unknown whatever the loop wrote.
+    Search {
+        fields: Vec<usize>,
+        chunk: SearchLoop,
+    },
     // `x is None` for the field with this number: true on the rows where the
     // field has no value.
     IsNull(usize),
@@ -90,6 +101,13 @@ pub(crate) enum BoundStep {
 /// comparison is true, with row `start` at bit 0.
 pub(crate) type ChunkLoop =
     Box<dyn Fn(&[Option<Column<'_>>], usize, usize, &mut Present) + Send + Sync>;
+
+/// The compiled loop of a list search. A call gets the columns of a batch,
+/// the first row `start` of a chunk and the chunk's row count `rows`. It
+/// writes two bitmaps with one bit per row of the chunk: the rows where an
+/// element matched, and the rows without a match where an element is a null.
+pub(crate) type SearchLoop =
+    Box<dyn Fn(&[Option<Column<'_>>], usize, usize, &mut Present, &mut Present) + Send + Sync>;
 
 /// The error of `bind`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -173,6 +191,7 @@ fn bind_step(step: &Step, types: &[FieldType]) -> Result<BoundStep, BindError> {
         Step::IsNull(f) if types[*f] == FieldType::Absent => BoundStep::Constant(Constant::True),
         Step::IsNull(f) => BoundStep::IsNull(*f),
         Step::Member { field, values } => member::bind_member(*field, types[*field], values),
+        Step::Search { needle, haystack } => search::bind_search(needle, *haystack, types)?,
         // `not`, `and` and `or` read the results of earlier steps by their
         // slots and no column, so they stay as the planner made them.
         Step::Not(a) => BoundStep::Not(*a),
@@ -233,7 +252,7 @@ fn bind_literal(op: Comparison, f: usize, t: FieldType, literal: &Literal) -> Bo
         // An ordering is a fault when either side is not a number, as in
         // `x < True`, `x < "a"`, or `x > 5` on a text, boolean or list column
         // (ADR-0041).
-        (FieldType::Bool | FieldType::Text | FieldType::List, _)
+        (FieldType::Bool | FieldType::Text | FieldType::List(_), _)
         | (_, Literal::Bool(_) | Literal::Text(_))
             if op.is_ordering() =>
         {
@@ -257,7 +276,7 @@ fn bind_literal(op: Comparison, f: usize, t: FieldType, literal: &Literal) -> Bo
         // in `x == True` on a number column or `x == 5` on a text column. `==`
         // is false and `!=` true on every row with a value, as in Python.
         (_, Literal::Bool(_) | Literal::Text(_))
-        | (FieldType::Bool | FieldType::Text | FieldType::List, _) => BoundStep::Loop {
+        | (FieldType::Bool | FieldType::Text | FieldType::List(_), _) => BoundStep::Loop {
             fields: vec![f],
             chunk: constant_loop(op == Comparison::Ne),
         },
@@ -363,7 +382,7 @@ fn bind_fields(
         },
         // Two lists can be equal, and this version has no loop that compares
         // them, so bind refuses the pair.
-        (FieldType::List, FieldType::List) if !op.is_ordering() => {
+        (FieldType::List(_), FieldType::List(_)) if !op.is_ordering() => {
             return Err(BindError::Unsupported { left: l, right: r });
         }
         // An ordering of any other pair, such as two texts, two lists or a
@@ -466,11 +485,19 @@ fn write_booleans(
     rows: usize,
     out: &mut Present,
 ) {
-    let booleans = match cols[f].as_ref().map(Column::kind) {
-        Some(Kind::Booleans(b, _)) => *b,
-        // Bind made this loop for a boolean column, and `run` refuses a
-        // batch whose column has another type.
-        _ => unreachable!("run checked the type of the column"),
+    // Bind made this loop for a boolean column, and `run` refuses a batch
+    // whose column has another type.
+    let column = cols[f]
+        .as_ref()
+        .expect("run checked the type of the column");
+    write_booleans_of(column, start, rows, out);
+}
+
+/// Sets the bit in `out` of each row in `start .. start + rows` where the
+/// boolean column `column` is true.
+pub(super) fn write_booleans_of(column: &Column<'_>, start: usize, rows: usize, out: &mut Present) {
+    let Kind::Booleans(booleans, _) = *column.kind() else {
+        unreachable!("the caller checked that the column holds booleans")
     };
     match booleans {
         // Bit-packed booleans, as Arrow stores them, have the same layout as
@@ -488,7 +515,7 @@ fn write_booleans(
 
 /// Flips the bits of the first `rows` rows of `out`. The bits from `rows`
 /// on stay clear, because they are past the end of the chunk.
-fn invert(out: &mut Present, rows: usize) {
+pub(super) fn invert(out: &mut Present, rows: usize) {
     let mut all = [0; CHUNK_WORDS];
     present_all(rows, &mut all);
     for (word, held) in out.iter_mut().zip(all) {
@@ -542,7 +569,7 @@ impl FieldType {
             Kind::Floats(v, _) => Self::Number(v.number_type()),
             Kind::Booleans(..) => Self::Bool,
             Kind::Text(..) => Self::Text,
-            Kind::List(..) => Self::List,
+            Kind::List(l, _) => Self::List(l.shape()),
         }
     }
 }

@@ -63,6 +63,13 @@ pub(crate) enum Step {
         field: usize,
         values: Vec<Literal>,
     },
+    // `x in y` with a field `y`, whose meaning bind picks from the type of
+    // `y`: a substring search for `"err" in message`, and a search among the
+    // elements for `5 in tags`.
+    Search {
+        needle: Operand,
+        haystack: usize,
+    },
     // `not`, `and` and `or` over the results of earlier steps, by their
     // slots. They follow the three-valued logic of ADR-0005, where a row is
     // true, false or unknown. `And` and `Or` keep the operands in the order
@@ -117,6 +124,11 @@ impl TextLiteral {
     /// Returns the literal in UTF-8.
     pub(crate) fn utf8(&self) -> &[u8] {
         self.utf8.as_bytes()
+    }
+
+    /// Returns the literal as a `str`.
+    pub(crate) fn utf8_str(&self) -> &str {
+        &self.utf8
     }
 
     /// Returns the literal in UTF-32, one unit per character.
@@ -309,20 +321,10 @@ impl Planner<'_> {
             Expr::Le(l, r) => return self.compare(Comparison::Le, l, r),
             Expr::Gt(l, r) => return self.compare(Comparison::Gt, l, r),
             Expr::Ge(l, r) => return self.compare(Comparison::Ge, l, r),
-            // `x in [...]` with a list that the rule writes is membership.
-            // `x in y` with any other right side, such as a field, is a
-            // substring search or a list search, which this version does not
-            // run.
-            Expr::In(needle, list) => match &**list {
-                Expr::List(items) => return self.membership(needle, items),
-                _ => return Err(e.key()),
-            },
-            // `x not in [...]` is the opposite of the same membership, and
-            // `not` keeps unknown as it is (ADR-0005).
-            Expr::NotIn(needle, list) => match &**list {
-                Expr::List(items) => Step::Not(self.membership(needle, items)?),
-                _ => return Err(e.key()),
-            },
+            Expr::In(needle, right) => return self.contains(e, needle, right),
+            // `x not in y` is the opposite of `x in y`, and `not` keeps unknown
+            // as it is (ADR-0005).
+            Expr::NotIn(needle, right) => Step::Not(self.contains(e, needle, right)?),
             // Arithmetic, quantifiers and text methods are not supported
             // yet.
             _ => return Err(e.key()),
@@ -353,6 +355,27 @@ impl Planner<'_> {
             slot = self.push(join(slot, right));
         }
         Ok(slot)
+    }
+
+    /// Adds the steps of `needle in right`, the expression `e`, and returns the
+    /// slot of the result. Fails with the JSON key of an operand that this
+    /// version cannot test, or with the key of `e` when the right side is
+    /// neither a written list nor a field.
+    fn contains(&mut self, e: &Expr, needle: &Expr, right: &Expr) -> Result<usize, &'static str> {
+        match right {
+            // A list that the rule writes is a test of membership.
+            Expr::List(items) => self.membership(needle, items),
+            // Bind picks the meaning of a search from the type of `y`. A
+            // written list as the needle is refused with its key, because
+            // list equality does not exist.
+            Expr::Field(path) => {
+                let needle = self.operand(needle)?;
+                let haystack = self.fields.field_of(path);
+                Ok(self.push(Step::Search { needle, haystack }))
+            }
+            // A text literal on the right, as in `x in "abc"`, is not run.
+            _ => Err(e.key()),
+        }
     }
 
     /// Adds the steps of `needle in list`, where `list` holds the items of a
